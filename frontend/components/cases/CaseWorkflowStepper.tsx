@@ -178,41 +178,41 @@ export default function CaseWorkflowStepper({
         const circleClass = useRoseScheme
           ? [
               'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all',
-              isTerminalStep ? 'bg-rose-600 text-white shadow-[0_0_0_1px_rgba(244,63,94,0.35)]' : '',
-              roseDone ? 'bg-rose-600/20 text-rose-300 ring-1 ring-rose-500/45' : '',
-              tealEarlyDone || integralEarlyDone ? 'bg-teal-600 text-white' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isCurrent ? 'bg-teal-500/20 text-teal-400 ring-2 ring-teal-500/50' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isPending ? 'bg-slate-800 text-slate-600' : '',
+              isTerminalStep ? 'bg-error text-inverse shadow-sm' : '',
+              roseDone ? 'bg-error-hl text-error ring-1 ring-error/30' : '',
+              tealEarlyDone || integralEarlyDone ? 'bg-primary text-inverse' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isCurrent ? 'bg-primary-hl text-primary ring-2 ring-primary/30' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isPending ? 'bg-surface-2 text-faint' : '',
             ]
               .filter(Boolean)
               .join(' ')
           : [
               'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all',
-              isDone ? 'bg-teal-600 text-white' : '',
-              isCurrent && !isTerminalStep ? 'bg-teal-500/20 text-teal-400 ring-2 ring-teal-500/50' : '',
-              isTerminalStep ? 'bg-rose-500/20 text-rose-400 ring-2 ring-rose-500/40' : '',
-              isPending && !isTerminalStep ? 'bg-slate-800 text-slate-600' : '',
+              isDone ? 'bg-primary text-inverse' : '',
+              isCurrent && !isTerminalStep ? 'bg-primary-hl text-primary ring-2 ring-primary/30' : '',
+              isTerminalStep ? 'bg-error-hl text-error ring-2 ring-error/30' : '',
+              isPending && !isTerminalStep ? 'bg-surface-2 text-faint' : '',
             ]
               .filter(Boolean)
               .join(' ');
 
         const labelClass = useRoseScheme
           ? [
-              'text-[8px] font-black uppercase tracking-widest text-center leading-tight whitespace-nowrap',
-              isTerminalStep ? 'text-rose-500' : '',
-              roseDone ? 'text-rose-400/90' : '',
-              tealEarlyDone || integralEarlyDone ? 'text-teal-500' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isCurrent ? 'text-teal-300' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isPending ? 'text-slate-600' : '',
+              'text-[8px] font-bold uppercase tracking-wider text-center leading-tight whitespace-nowrap',
+              isTerminalStep ? 'text-error' : '',
+              roseDone ? 'text-error/90' : '',
+              tealEarlyDone || integralEarlyDone ? 'text-primary' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isCurrent ? 'text-primary' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isPending ? 'text-faint' : '',
             ]
               .filter(Boolean)
               .join(' ')
           : [
-              'text-[8px] font-black uppercase tracking-widest text-center leading-tight whitespace-nowrap',
-              isDone ? 'text-teal-500' : '',
-              isCurrent && !isTerminalStep ? 'text-teal-300' : '',
-              isTerminalStep ? 'text-rose-400' : '',
-              isPending && !isTerminalStep ? 'text-slate-600' : '',
+              'text-[8px] font-bold uppercase tracking-wider text-center leading-tight whitespace-nowrap',
+              isDone ? 'text-primary' : '',
+              isCurrent && !isTerminalStep ? 'text-primary' : '',
+              isTerminalStep ? 'text-error' : '',
+              isPending && !isTerminalStep ? 'text-faint' : '',
             ]
               .filter(Boolean)
               .join(' ');
@@ -239,7 +239,7 @@ export default function CaseWorkflowStepper({
               </div>
               <p className={labelClass}>{step.label}</p>
               {step.status === 'enEjecucion' && deadlineText && (
-                <p className="text-[7px] text-slate-400 text-center leading-tight whitespace-nowrap">
+                <p className="text-[7px] text-muted text-center leading-tight whitespace-nowrap">
                   Entrega: {deadlineText}
                 </p>
               )}
@@ -250,23 +250,23 @@ export default function CaseWorkflowStepper({
                   'h-px flex-1 mx-1 transition-all',
                   techRejected
                     ? idx === lastIdx - 1
-                      ? 'bg-rose-600/35'
+                      ? 'bg-error'
                       : connectorRose(idx)
-                        ? 'bg-rose-600/35'
+                        ? 'bg-error'
                         : idx < idxPropuesta
-                          ? 'bg-teal-600'
-                          : 'bg-slate-700'
+                          ? 'bg-primary'
+                          : 'bg-surface-off'
                     : integralTerminalReject
                       ? idx === lastIdx - 1
-                        ? 'bg-rose-600/35'
+                        ? 'bg-error'
                         : connectorRose(idx)
-                          ? 'bg-rose-600/35'
+                          ? 'bg-error'
                           : idx < idxPropuesta
-                            ? 'bg-teal-600'
-                            : 'bg-slate-700'
+                            ? 'bg-primary'
+                            : 'bg-surface-off'
                       : idx < currentIdx
-                        ? 'bg-teal-600'
-                        : 'bg-slate-700',
+                        ? 'bg-primary'
+                        : 'bg-surface-off',
                 ].join(' ')}
               />
             )}

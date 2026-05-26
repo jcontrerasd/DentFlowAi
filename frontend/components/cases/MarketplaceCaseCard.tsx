@@ -24,7 +24,7 @@ import { dispatchCaseHubToggle } from '@/lib/caseHubToggleEvent';
 
 /** Marco de ficha sobre fondo oscuro: borde + aro interior muy suave. */
 const CASE_CARD_SHELL =
-  'bg-slate-900/50 border border-slate-600/35 rounded-[1.5rem] shadow-sm shadow-black/40 ring-1 ring-inset ring-white/[0.07] transition-colors duration-150 hover:bg-white/5 hover:border-teal-500/35 hover:ring-teal-500/10 focus-within:outline-none focus-within:ring-2 focus-within:ring-teal-400/40';
+  'bg-surface border border-divider/35 rounded-[1.5rem] shadow-sm shadow-black/40 ring-1 ring-inset ring-white/[0.07] transition-colors duration-150 hover:bg-surface-off hover:border-primary/30 hover:ring-teal-500/10 focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/30';
 
 interface MarketplaceCaseCardProps {
   c: any;
@@ -100,7 +100,7 @@ export default function MarketplaceCaseCard({
         techStatusInput.caseStatus === 'propuestaLista') &&
         (techStatusInput.invitationStatus === 'accepted' ||
           techStatusInput.invitationStatus === 'confirmed'))) ? (
-      <div className="font-mono text-[11px] tabular-nums tracking-normal text-amber-400 opacity-90">
+      <div className="font-mono text-[11px] tabular-nums tracking-normal text-warning opacity-90">
         {countdownText}
       </div>
     ) : null;
@@ -177,7 +177,7 @@ export default function MarketplaceCaseCard({
           }
           router.push(`${casePath}?openHub=1`);
         }}
-        className="flex h-[42px] w-10 shrink-0 items-center justify-center rounded-xl border border-slate-700/80 bg-slate-950/80 text-slate-400 transition-colors duration-150 hover:bg-white/5 hover:border-teal-500/40 hover:text-teal-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+        className="flex h-[42px] w-10 shrink-0 items-center justify-center rounded-xl border border-divider/80 bg-background/80 text-muted transition-colors duration-150 hover:bg-surface-off hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         title={hubAriaLabel}
         aria-label={hubAriaLabel}
       >
@@ -188,7 +188,7 @@ export default function MarketplaceCaseCard({
   );
 
   const gestionarButtonClass =
-    'flex min-w-0 flex-1 items-center justify-center gap-1 px-2 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-[9px] font-black uppercase tracking-widest text-white hover:bg-teal-600 hover:border-teal-600 transition-all group/btn';
+    'flex min-w-0 flex-1 items-center justify-center gap-1 px-2 py-2.5 bg-surface border border-divider rounded-xl text-[9px] font-bold uppercase tracking-wider text-foreground hover:bg-primary hover:border-teal-600 transition-all group/btn';
 
   return (
     <motion.div 
@@ -201,32 +201,32 @@ export default function MarketplaceCaseCard({
         <div className="mb-4 flex-1">
           <div className="flex gap-4 items-start">
             {/* Mini Thumbnail */}
-            <div className="w-16 h-16 bg-slate-950 rounded-xl flex-shrink-0 border border-slate-800/40 relative overflow-hidden flex items-center justify-center">
+            <div className="w-16 h-16 bg-background rounded-xl flex-shrink-0 border border-divider relative overflow-hidden flex items-center justify-center">
               {imageUrl && (imageUrl.startsWith('http') || imageUrl.startsWith('/')) ? (
                 <Image src={imageUrl} alt={c.internalName} fill unoptimized className="object-cover group-hover:scale-105 transition-transform duration-500" />
               ) : stlUrl ? (
-                <div className="absolute inset-0 overflow-hidden rounded-[10px] bg-slate-900/70">
+                <div className="absolute inset-0 overflow-hidden rounded-[10px] bg-surface/70">
                   <STLThumbnail url={stlUrl} onGenerated={handleLazyThumbnail} />
                 </div>
               ) : (
-                <FileText className="w-5 h-5 text-slate-700" />
+                <FileText className="w-5 h-5 text-faint" />
               )}
             </div>
             
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-                <span className="text-[9px] font-black uppercase tracking-widest text-teal-500 bg-teal-500/10 px-1.5 py-0.5 rounded-md">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary-hl px-1.5 py-0.5 rounded-md">
                   {c.restorationType || 'General'}
                 </span>
-                <span className={`text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${c.urgency === 'Alta' || c.urgency === 'Urgente' ? 'bg-rose-500/10 text-rose-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${c.urgency === 'Alta' || c.urgency === 'Urgente' ? 'bg-error-hl text-error' : 'bg-primary-hl text-primary'}`}>
                   Prioridad {c.urgency || 'Normal'}
                 </span>
                 <CaseServiceTypeBadge serviceType={c.serviceType} />
               </div>
-              <h3 className="text-lg serif-font text-white group-hover:text-teal-400 transition-colors uppercase tracking-tight line-clamp-2 leading-tight">
+              <h3 className="text-lg serif-font text-foreground group-hover:text-primary transition-colors uppercase tracking-tight line-clamp-2 leading-tight">
                 {c.internalName || c.restorationType || 'Caso Dental'}
               </h3>
-              <p className="text-slate-500 text-[10px] mt-1 font-bold uppercase tracking-wide">
+              <p className="text-faint text-[10px] mt-1 font-bold uppercase tracking-wide">
                 {formatCaseIdAndPac(c.caseNumber, c.patientIdAnon)}
               </p>
             </div>
@@ -234,12 +234,12 @@ export default function MarketplaceCaseCard({
         </div>
 
         <div className="space-y-2 mb-6">
-          <div className="flex items-center gap-2 text-[10px] text-slate-400">
-             <Calendar className="w-3.5 h-3.5 text-teal-500/50" />
+          <div className="flex items-center gap-2 text-[10px] text-muted">
+             <Calendar className="w-3.5 h-3.5 text-primary/50" />
              <span>Publicado: {c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '---'}</span>
           </div>
-          <div className="flex items-center gap-2 text-[10px] text-slate-400">
-             <FileText className="w-3.5 h-3.5 text-teal-500/50" />
+          <div className="flex items-center gap-2 text-[10px] text-muted">
+             <FileText className="w-3.5 h-3.5 text-primary/50" />
              <span>Material: {c.material || 'No especificado'}</span>
           </div>
         </div>
@@ -267,32 +267,32 @@ export default function MarketplaceCaseCard({
         ) : isDentist ? (
           <div className="w-full flex flex-col gap-2">
             <div
-              className={`w-full h-10 flex items-center justify-between px-3 rounded-xl bg-slate-950 border text-[9px] font-black uppercase tracking-widest text-slate-500 ${
+              className={`w-full h-10 flex items-center justify-between px-3 rounded-xl bg-background border text-[9px] font-bold uppercase tracking-wider text-faint ${
                 c.status === 'enEvaluacion'
-                  ? 'border-amber-500/30 shadow-[0_0_15px_-5px_rgba(245,158,11,0.2)]'
+                  ? 'border-warning/20 shadow-[0_0_15px_-5px_rgba(245,158,11,0.2)]'
                   : c.status === 'propuestaLista' && proposalDeadlineMs != null
-                    ? 'border-amber-500/30 shadow-[0_0_15px_-5px_rgba(245,158,11,0.2)]'
-                    : 'border-slate-800'
+                    ? 'border-warning/20 shadow-[0_0_15px_-5px_rgba(245,158,11,0.2)]'
+                    : 'border-divider'
               }`}
             >
               {c.status === 'enEvaluacion' ? (
                 <>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border bg-amber-500/15 text-amber-300 border-amber-500/30">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border bg-warning-hl text-warning border-warning/20">
                     <DENTIST_FICHA_STRIPE.evaluandoCaso.icon className={`w-3 h-3 mr-1 ${remaining > 0 ? 'animate-pulse' : ''}`} />
                     {DENTIST_FICHA_STRIPE.evaluandoCaso.label}
                   </span>
                   {countdownText && (
-                    <div className="font-mono text-[11px] tabular-nums tracking-normal text-amber-400 opacity-90">{countdownText}</div>
+                    <div className="font-mono text-[11px] tabular-nums tracking-normal text-warning opacity-90">{countdownText}</div>
                   )}
                 </>
               ) : c.status === 'propuestaLista' && proposalDeadlineMs != null ? (
                 <>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border bg-amber-500/15 text-amber-300 border-amber-500/30">
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border bg-warning-hl text-warning border-warning/20">
                     <DENTIST_FICHA_STRIPE.elegirOferta.icon className={`w-3 h-3 mr-1 ${proposalRemaining > 0 ? 'animate-pulse' : ''}`} />
                     {DENTIST_FICHA_STRIPE.elegirOferta.label}
                   </span>
                   {proposalCountdownText && (
-                    <div className="font-mono text-[11px] tabular-nums tracking-normal text-amber-400 opacity-90">
+                    <div className="font-mono text-[11px] tabular-nums tracking-normal text-warning opacity-90">
                       {proposalCountdownText}
                     </div>
                   )}
@@ -301,7 +301,7 @@ export default function MarketplaceCaseCard({
                 <>
                   <StatusBadge status={c.status} />
                   {c.status === 'publicado' && (
-                    <div className="text-teal-400">
+                    <div className="text-primary">
                       {(() => {
                         const count = c.bids?.filter((b: any) => b.status === 'pending').length || 0;
                         return `${count} ${count === 1 ? 'Oferta' : 'Ofertas'}`;

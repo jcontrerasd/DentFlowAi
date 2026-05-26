@@ -38,21 +38,21 @@ function iconBtnClass(
   const base =
     'inline-flex items-center justify-center w-11 h-11 rounded-2xl transition-all border disabled:cursor-default';
   if (!enabled) {
-    return `${base} opacity-55 border-slate-600/50 text-slate-500 bg-slate-900/30`;
+    return `${base} opacity-55 border-divider text-faint bg-surface/30`;
   }
   if (active && accent === 'teal') {
-    return `${base} bg-teal-600 border-teal-500 text-white shadow-lg shadow-teal-900/30`;
+    return `${base} bg-primary border-primary/30 text-inverse shadow-lg shadow-sm`;
   }
   if (active && accent === 'red') {
-    return `${base} bg-red-600 border-red-500 text-white shadow-lg shadow-red-900/30`;
+    return `${base} bg-error border-error/30 text-inverse shadow-lg shadow-sm`;
   }
   if (accent === 'red') {
-    return `${base} bg-red-900/20 border-red-500/30 text-red-400 hover:bg-red-600 hover:text-white`;
+    return `${base} bg-error-hl border-error/20 text-error hover:bg-error hover:text-foreground`;
   }
   if (accent === 'teal') {
-    return `${base} bg-teal-600/20 border-teal-500/50 text-teal-400 hover:bg-teal-600 hover:text-white`;
+    return `${base} bg-primary/20 border-primary/30 text-primary hover:bg-primary hover:text-foreground`;
   }
-  return `${base} bg-slate-800/60 border-slate-600/50 text-slate-300 hover:border-slate-400 hover:text-white`;
+  return `${base} bg-surface-2/60 border-divider text-muted hover:border-border hover:text-foreground`;
 }
 
 function ManagementIconButton({
@@ -96,7 +96,7 @@ function ManagementIconButton({
 }
 
 function BarSeparator() {
-  return <span className="w-px h-8 bg-white/10 mx-0.5 hidden sm:block shrink-0" aria-hidden />;
+  return <span className="w-px h-8 bg-surface-off mx-0.5 hidden sm:block shrink-0" aria-hidden />;
 }
 
 export default function CaseDetailManagementBar({

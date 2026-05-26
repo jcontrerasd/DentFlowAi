@@ -1,6 +1,6 @@
 import { forwardRef, ButtonHTMLAttributes, ReactNode } from 'react';
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'destructive';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'jade';
 type Size = 'sm' | 'md' | 'lg';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -13,19 +13,21 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    'bg-teal-600 hover:bg-teal-500 text-white shadow-lg shadow-teal-900/40 disabled:opacity-40',
+    'bg-primary hover:opacity-90 text-primary-fg shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
   secondary:
-    'border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white bg-transparent disabled:opacity-40',
+    'bg-surface border border-divider hover:border-border text-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
   ghost:
-    'text-slate-400 hover:text-white bg-transparent hover:bg-slate-800 disabled:opacity-40',
+    'bg-transparent text-muted hover:text-foreground hover:bg-surface-off focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
   destructive:
-    'bg-red-700 hover:bg-red-600 text-white shadow-lg shadow-red-900/40 disabled:opacity-40',
+    'bg-error text-inverse hover:opacity-90 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/30',
+  jade:
+    'bg-jade text-inverse hover:opacity-90 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-jade/30',
 };
 
 const sizeClasses: Record<Size, string> = {
-  sm: 'px-3 py-1.5 text-[9px] rounded-xl',
-  md: 'px-5 py-2.5 text-[10px] rounded-2xl',
-  lg: 'px-7 py-3.5 text-[11px] rounded-2xl',
+  sm: 'px-3 py-1.5 text-[11px] rounded-md',
+  md: 'px-5 py-2.5 text-[13px] rounded-md',
+  lg: 'px-7 py-3 text-[14px] rounded-lg',
 };
 
 const Spinner = () => (
@@ -52,8 +54,9 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         className={[
           'inline-flex items-center justify-center gap-2',
-          'font-black uppercase tracking-widest',
-          'transition-all duration-150',
+          'font-semibold tracking-tight',
+          'transition-colors duration-150',
+          'disabled:opacity-50 disabled:pointer-events-none',
           variantClasses[variant],
           sizeClasses[size],
           className,

@@ -62,11 +62,11 @@ export default function UchDeliveryPanel({
 }: UchDeliveryPanelProps) {
   if (!expanded) {
     return (
-      <div data-testid="uch-delivery-collapsed" className="rounded-xl border border-teal-500/20 bg-[#111b21] px-3 py-2.5 transition-colors duration-150 hover:bg-white/[0.04] focus-within:bg-white/[0.06]">
+      <div data-testid="uch-delivery-collapsed" className="rounded-xl border border-primary/20 bg-[#111b21] px-3 py-2.5 transition-colors duration-150 hover:bg-surface-off/60 focus-within:bg-surface-off">
         <button
           type="button"
           onClick={onToggleExpanded}
-          className="w-full text-left text-[11px] font-semibold text-teal-200 hover:text-teal-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 rounded-sm"
+          className="w-full text-left text-[11px] font-semibold text-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 rounded-sm"
         >
           Enviar diseño para revisión — tocar para desplegar el formulario
         </button>
@@ -79,12 +79,12 @@ export default function UchDeliveryPanel({
       data-testid="uch-delivery-panel"
       role="region"
       aria-label="Entrega de diseño"
-      className="rounded-xl border border-teal-500/25 bg-slate-900/95 p-4 shadow-xl space-y-4"
+      className="rounded-xl border border-primary/30/25 bg-surface/95 p-4 shadow-xl space-y-4"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
-          <FileText className="w-5 h-5 text-teal-400 flex-shrink-0" />
-          <h2 className="text-sm font-semibold text-white truncate">Entrega de diseño</h2>
+          <FileText className="w-5 h-5 text-primary flex-shrink-0" />
+          <h2 className="text-sm font-semibold text-foreground truncate">Entrega de diseño</h2>
         </div>
         <button
           type="button"
@@ -94,21 +94,21 @@ export default function UchDeliveryPanel({
             onToggleExpanded();
           }}
           disabled={isUploadingFiles || isSendingDelivery}
-          className="rounded-full p-2 text-slate-500 hover:bg-white/10 hover:text-white disabled:opacity-30"
+          className="rounded-full p-2 text-faint hover:bg-surface-off hover:text-foreground disabled:opacity-30"
           aria-label="Cerrar"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      <p className="text-xs text-slate-400 leading-relaxed">
+      <p className="text-xs text-muted leading-relaxed">
         Sube al menos un archivo del diseño (STL, imágenes, PDF). El dentista debe poder descargarlos antes de aprobar o pedir ajustes.
       </p>
 
       <div className="space-y-2">
-        <span className="text-xs font-semibold text-teal-300 block">Archivos (obligatorio)</span>
+        <span className="text-xs font-semibold text-primary block">Archivos (obligatorio)</span>
         {!isUploadingFiles && !isSendingDelivery && (
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-teal-400 font-medium hover:text-teal-300 transition-colors w-fit">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-primary font-medium hover:text-primary transition-colors w-fit">
             <Paperclip className="w-4 h-4" />
             Elegir archivos ({deliveryFiles.length}/5)
             <input
@@ -127,16 +127,16 @@ export default function UchDeliveryPanel({
         {deliveryFiles.length > 0 && (
           <div className="flex flex-col gap-1.5 max-h-44 min-h-0 overflow-y-auto pr-0.5">
             {deliveryFiles.map(({ id, file }) => (
-              <div key={id} className="flex items-center gap-2 bg-slate-800/80 rounded-lg px-3 py-2 min-h-0 shrink-0">
-                <FileText className="w-3.5 h-3.5 text-teal-400 flex-shrink-0" />
-                <span className="text-xs text-slate-200 truncate flex-1 min-w-0" title={file.name}>
+              <div key={id} className="flex items-center gap-2 bg-surface-2 rounded-lg px-3 py-2 min-h-0 shrink-0">
+                <FileText className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                <span className="text-xs text-foreground truncate flex-1 min-w-0" title={file.name}>
                   {file.name}
                 </span>
                 <button
                   type="button"
                   onClick={() => setDeliveryFiles((prev) => prev.filter((e) => e.id !== id))}
                   disabled={isUploadingFiles || isSendingDelivery}
-                  className="text-slate-500 hover:text-rose-400 transition-colors flex-shrink-0 disabled:opacity-30 disabled:pointer-events-none"
+                  className="text-faint hover:text-error transition-colors flex-shrink-0 disabled:opacity-30 disabled:pointer-events-none"
                   aria-label="Quitar archivo"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -148,7 +148,7 @@ export default function UchDeliveryPanel({
       </div>
 
       <div>
-        <label htmlFor="uch-delivery-notes" className="text-xs font-semibold text-slate-400 block mb-1.5">
+        <label htmlFor="uch-delivery-notes" className="text-xs font-semibold text-muted block mb-1.5">
           Mensaje al dentista
         </label>
         <textarea
@@ -156,7 +156,7 @@ export default function UchDeliveryPanel({
           value={deliveryNotes}
           onChange={(e) => setDeliveryNotes(e.target.value)}
           placeholder="Describe el diseño, materiales, decisiones técnicas..."
-          className="w-full bg-slate-800/80 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-teal-500/50 outline-none min-h-[88px] resize-none placeholder-slate-600"
+          className="w-full bg-surface-2 border border-divider rounded-xl p-3 text-sm text-foreground focus:border-primary/30 outline-none min-h-[88px] resize-none placeholder-slate-600"
           disabled={isUploadingFiles || isSendingDelivery}
         />
       </div>
@@ -165,15 +165,15 @@ export default function UchDeliveryPanel({
         <div className="space-y-2">
           {deliveryFiles.map(({ id, file }, i) => (
             <div key={id} className="space-y-1">
-              <div className="flex justify-between text-xs text-slate-500 gap-2">
+              <div className="flex justify-between text-xs text-faint gap-2">
                 <span className="truncate min-w-0" title={file.name}>
                   {file.name}
                 </span>
                 <span className="flex-shrink-0 tabular-nums">{fileProgress[i] ?? 0}%</span>
               </div>
-              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-surface-2 rounded-full overflow-hidden">
                 <motion.div
-                  className="h-full bg-teal-500 rounded-full"
+                  className="h-full bg-primary rounded-full"
                   initial={{ width: 0 }}
                   animate={{ width: `${fileProgress[i] ?? 0}%` }}
                   transition={{ duration: 0.2 }}
@@ -185,7 +185,7 @@ export default function UchDeliveryPanel({
       )}
 
       {isSendingDelivery && (
-        <div className="flex items-center gap-2 text-sm text-teal-400 py-1">
+        <div className="flex items-center gap-2 text-sm text-primary py-1">
           <div className="w-4 h-4 border-2 border-teal-400/30 border-t-teal-400 rounded-full animate-spin flex-shrink-0" />
           Guardando entrega…
         </div>
@@ -200,7 +200,7 @@ export default function UchDeliveryPanel({
             onToggleExpanded();
           }}
           disabled={isUploadingFiles || isSendingDelivery}
-          className="flex-1 py-3 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl disabled:opacity-40"
+          className="flex-1 py-3 bg-surface-2 text-muted text-xs font-semibold rounded-xl disabled:opacity-40"
         >
           Cancelar
         </button>
@@ -263,15 +263,15 @@ export default function UchDeliveryPanel({
             }
           }}
           disabled={isUploadingFiles || isSendingDelivery || !deliveryNotes.trim() || deliveryFiles.length === 0}
-          className="flex-[2] py-3 bg-teal-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-teal-500/25 disabled:opacity-40 flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+          className="flex-[2] py-3 bg-primary text-inverse text-xs font-semibold rounded-xl shadow-lg shadow-sm disabled:opacity-40 flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
         >
           {isUploadingFiles ? (
             <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Subiendo…
+              <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" /> Subiendo…
             </>
           ) : isSendingDelivery ? (
             <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Guardando…
+              <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" /> Guardando…
             </>
           ) : (
             <>

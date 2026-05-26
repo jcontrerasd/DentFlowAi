@@ -43,6 +43,11 @@ vi.mock('@/components/profile/AvailabilityToggle', () => ({
   default: () => <div data-testid="availability-stub" />,
 }));
 
+vi.mock('@/components/profile/ThemeSelector', () => ({
+  __esModule: true,
+  default: () => <div data-testid="theme-selector-stub" />,
+}));
+
 import ProfilePage from '@/app/dashboard/profile/page';
 import { ToastProvider } from '@/context/ToastContext';
 

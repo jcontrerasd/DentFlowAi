@@ -23,7 +23,7 @@ export function TabClient({ config }: { config: any }) {
   return (
     <div className="flex flex-col gap-8">
       {/* Tab Navigation */}
-      <nav className="flex items-center gap-1 p-1 bg-slate-900/60 border border-slate-800/80 rounded-[2.5rem] self-start overflow-hidden backdrop-blur-md">
+      <nav className="flex items-center gap-1 p-1 bg-surface/60 border border-divider/80 rounded-[2.5rem] self-start overflow-hidden backdrop-blur-md">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -33,18 +33,18 @@ export function TabClient({ config }: { config: any }) {
               onClick={() => setActiveTab(tab.id as Tab)}
               className={`
                 flex items-center gap-3 px-6 py-3 rounded-full transition-all duration-300 relative
-                ${isActive ? 'text-white' : 'text-slate-500 hover:text-slate-300'}
+                ${isActive ? 'text-foreground' : 'text-faint hover:text-muted'}
               `}
             >
               {isActive && (
                 <motion.div
                   layoutId="activeTab"
-                  className="absolute inset-0 bg-slate-800 border border-slate-700/50 rounded-full"
+                  className="absolute inset-0 bg-surface-2 border border-divider rounded-full"
                   transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                 />
               )}
-              <Icon className={`w-4 h-4 shrink-0 relative z-10 ${isActive ? 'text-teal-400' : ''}`} />
-              <span className="text-[10px] font-black uppercase tracking-widest relative z-10 whitespace-nowrap">
+              <Icon className={`w-4 h-4 shrink-0 relative z-10 ${isActive ? 'text-primary' : ''}`} />
+              <span className="text-[10px] font-bold uppercase tracking-wider relative z-10 whitespace-nowrap">
                 {tab.label}
               </span>
             </button>
@@ -53,7 +53,7 @@ export function TabClient({ config }: { config: any }) {
       </nav>
 
       {/* Tab Content */}
-      <div className="bg-slate-900/20 border border-slate-800/40 rounded-[3rem] p-8 md:p-12 shadow-inner min-h-[500px]">
+      <div className="bg-surface/20 border border-divider rounded-[3rem] p-8 md:p-12 shadow-inner min-h-[500px]">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}

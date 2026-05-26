@@ -87,10 +87,10 @@ export default function UchDealSummary({
   if (!showPactada && !showTechQuote && !showWorkDeadline && !techRejectedSummary) {
     return (
       <div
-        className="mt-2 rounded-lg border border-white/[0.06] bg-slate-900/40 px-3 py-2"
+        className="mt-2 rounded-lg border border-divider bg-surface/40 px-3 py-2"
         data-testid="uch-deal-summary"
       >
-        <p className="text-[10px] text-slate-500 leading-snug">
+        <p className="text-[10px] text-faint leading-snug">
           {(actingAsDentista || viewingAsAdmin) && caseStatus === 'propuestaLista'
             ? 'El comparativo de ofertas está en el hilo. Al elegir una, el total pactado se mostrará aquí.'
             : 'La oferta y la fecha de entrega se mostrarán aquí cuando el caso avance en el flujo.'}
@@ -105,29 +105,29 @@ export default function UchDealSummary({
 
   return (
     <div
-      className="mt-2 grid gap-2 sm:grid-cols-2 rounded-lg border border-white/[0.08] bg-slate-900/50 px-3 py-2.5"
+      className="mt-2 grid gap-2 sm:grid-cols-2 rounded-lg border border-divider bg-surface px-3 py-2.5"
       data-testid="uch-deal-summary"
     >
       <div className="min-w-0 flex items-start gap-2 sm:col-span-1">
-        <FileText className="w-3.5 h-3.5 text-teal-400/90 flex-shrink-0 mt-0.5" aria-hidden />
+        <FileText className="w-3.5 h-3.5 text-primary/90 flex-shrink-0 mt-0.5" aria-hidden />
         <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">La oferta</p>
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-faint">La oferta</p>
 
           {showPactada && clinicalCase.proposedPrice != null && (
-            <p className="text-[11px] text-slate-100 leading-snug mt-1">
+            <p className="text-[11px] text-foreground leading-snug mt-1">
               {actingAsDentista ? (
                 <>
                   Total pactado{' '}
                   <span className="font-semibold tabular-nums">{formatUchQuoteClp(clinicalCase.proposedPrice)}</span>
                   {clinicalCase.proposedDeliveryDays != null && (
-                    <span className="text-slate-400"> · {clinicalCase.proposedDeliveryDays} días hábiles pactados</span>
+                    <span className="text-muted"> · {clinicalCase.proposedDeliveryDays} días hábiles pactados</span>
                   )}
                 </>
               ) : (
                 <>
                   <span className="font-semibold tabular-nums">{formatUchQuoteClp(clinicalCase.proposedPrice)}</span>
                   {clinicalCase.proposedDeliveryDays != null && (
-                    <span className="text-slate-400"> · plazo {clinicalCase.proposedDeliveryDays} días hábiles</span>
+                    <span className="text-muted"> · plazo {clinicalCase.proposedDeliveryDays} días hábiles</span>
                   )}
                 </>
               )}
@@ -137,7 +137,7 @@ export default function UchDealSummary({
           {showTechQuote && !showPactada && invitation && quotedPrice != null && (
             <div className="mt-1 space-y-1.5">
               {sentLabel ? (
-                <p className="text-[10px] text-slate-400 tabular-nums">{sentLabel}</p>
+                <p className="text-[10px] text-muted tabular-nums">{sentLabel}</p>
               ) : null}
               <UchQuoteBreakdown
                 quote={quoteDisplayFromInvitation(invitation)}
@@ -154,28 +154,28 @@ export default function UchDealSummary({
           )}
 
           {techRejectedSummary && !showTechQuoteRejectedOnly && (
-            <p className="text-[11px] text-slate-400 leading-snug mt-1">Solo lectura — no hay cotización registrada en tu invitación.</p>
+            <p className="text-[11px] text-muted leading-snug mt-1">Solo lectura — no hay cotización registrada en tu invitación.</p>
           )}
 
           {!showPactada && !showTechQuote && !showTechQuoteRejectedOnly && !techRejectedSummary && (
-            <p className="text-[10px] text-slate-500 mt-1">Se fijará al aceptar la propuesta.</p>
+            <p className="text-[10px] text-faint mt-1">Se fijará al aceptar la propuesta.</p>
           )}
         </div>
       </div>
 
-      <div className="min-w-0 sm:border-l sm:border-white/[0.06] sm:pl-3">
-        <p className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">Entrega del trabajo</p>
+      <div className="min-w-0 sm:border-l sm:border-divider sm:pl-3">
+        <p className="text-[9px] font-semibold uppercase tracking-wide text-faint">Entrega del trabajo</p>
         {techRejectedSummary ? (
-          <p className="text-[10px] text-slate-400 leading-snug">No Aplica</p>
+          <p className="text-[10px] text-muted leading-snug">No Aplica</p>
         ) : deadlineFmt ? (
-          <p className="text-[11px] text-slate-100 capitalize leading-snug" title={deadlineFmt.full}>
-            <span className="text-slate-400">{deadlineFmt.day}</span>
+          <p className="text-[11px] text-foreground capitalize leading-snug" title={deadlineFmt.full}>
+            <span className="text-muted">{deadlineFmt.day}</span>
             <br />
             <span className="font-medium tabular-nums">{deadlineFmt.date}</span>
-            <span className="text-slate-500"> · {deadlineFmt.time}</span>
+            <span className="text-faint"> · {deadlineFmt.time}</span>
           </p>
         ) : (
-          <p className="text-[10px] text-slate-500 leading-snug">
+          <p className="text-[10px] text-faint leading-snug">
             {showPactada && ['aceptadaPendienteInicio'].includes(caseStatus)
               ? 'Se definirá al iniciar el trabajo en laboratorio.'
               : actingAsDentista && caseStatus === 'propuestaLista'

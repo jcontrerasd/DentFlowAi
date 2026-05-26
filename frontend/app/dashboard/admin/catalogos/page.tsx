@@ -103,17 +103,17 @@ export default function AdminCatalogosPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6 md:p-10 space-y-6">
+    <div className="min-h-screen bg-background text-foreground p-6 md:p-10 space-y-6">
       <div className="flex items-center gap-3">
         <Link
           href="/dashboard/admin"
-          className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-teal-400"
+          className="p-2 bg-surface border border-divider rounded-xl text-muted hover:text-primary"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
           <h1 className="text-2xl font-black uppercase tracking-tighter">Catálogos UI</h1>
-          <p className="text-xs text-slate-500">Listas desplegables del wizard de creación de casos</p>
+          <p className="text-xs text-faint">Listas desplegables del wizard de creación de casos</p>
         </div>
       </div>
 
@@ -122,10 +122,10 @@ export default function AdminCatalogosPage() {
           <button
             key={t.key}
             onClick={() => setActiveTab(t.key)}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all ${
               activeTab === t.key
-                ? 'bg-teal-500/10 border-teal-500/40 text-teal-300'
-                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-primary-hl border-primary/30 text-primary'
+                : 'bg-surface border-divider text-muted hover:text-foreground'
             }`}
           >
             {t.label}
@@ -133,37 +133,37 @@ export default function AdminCatalogosPage() {
         ))}
       </div>
 
-      <div className="bg-slate-900/40 border border-slate-800/60 rounded-3xl p-5 space-y-4">
+      <div className="bg-surface/40 border border-divider rounded-3xl p-5 space-y-4">
         <div className="flex justify-between items-center">
-          <span className="text-[10px] uppercase tracking-widest text-slate-500 font-black">
+          <span className="text-[10px] uppercase tracking-widest text-faint font-black">
             {rows.length} opciones
           </span>
           <button
             onClick={() => setNewOpen((v) => !v)}
-            className="flex items-center gap-2 px-3 py-2 bg-teal-500/10 border border-teal-500/30 rounded-xl text-teal-300 text-xs font-bold hover:bg-teal-500/20"
+            className="flex items-center gap-2 px-3 py-2 bg-primary-hl border border-primary/30 rounded-xl text-primary text-xs font-bold hover:bg-primary-hl"
           >
             <Plus className="w-4 h-4" /> Agregar opción
           </button>
         </div>
 
         {newOpen && (
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-center bg-slate-950 border border-slate-800 rounded-2xl p-3">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-2 items-center bg-background border border-divider rounded-2xl p-3">
             <input
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
               placeholder="Etiqueta visible"
-              className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+              className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
             />
             <div className="flex gap-2">
               <button
                 onClick={handleCreate}
-                className="px-3 py-2 bg-teal-500/20 border border-teal-500/40 rounded-lg text-teal-300 text-xs font-bold"
+                className="px-3 py-2 bg-primary-hl border border-primary/30 rounded-lg text-primary text-xs font-bold"
               >
                 Guardar
               </button>
               <button
                 onClick={() => { setNewOpen(false); setNewLabel(''); }}
-                className="px-3 py-2 bg-slate-800 rounded-lg text-slate-400 text-xs"
+                className="px-3 py-2 bg-surface-2 rounded-lg text-muted text-xs"
               >
                 Cancelar
               </button>
@@ -172,7 +172,7 @@ export default function AdminCatalogosPage() {
         )}
 
         {loading ? (
-          <div className="py-16 text-center text-slate-500 text-sm">Cargando…</div>
+          <div className="py-16 text-center text-faint text-sm">Cargando…</div>
         ) : (
           <div className="divide-y divide-slate-800/60">
             {rows.map((row, index) => {
@@ -186,26 +186,26 @@ export default function AdminCatalogosPage() {
                     <button
                       onClick={() => handleMove(index, -1)}
                       disabled={index === 0}
-                      className="text-slate-500 hover:text-teal-400 disabled:opacity-30"
+                      className="text-faint hover:text-primary disabled:opacity-30"
                     >
                       <ArrowUp className="w-3 h-3" />
                     </button>
                     <button
                       onClick={() => handleMove(index, 1)}
                       disabled={index === rows.length - 1}
-                      className="text-slate-500 hover:text-teal-400 disabled:opacity-30"
+                      className="text-faint hover:text-primary disabled:opacity-30"
                     >
                       <ArrowDown className="w-3 h-3" />
                     </button>
                   </div>
-                  <span className="w-8 text-[10px] text-slate-500 font-mono">{row.sortOrder}</span>
-                  <span className="w-24 font-mono text-xs text-slate-500 truncate" title="Código opaco (system-generated)">{row.code}</span>
+                  <span className="w-8 text-[10px] text-faint font-mono">{row.sortOrder}</span>
+                  <span className="w-24 font-mono text-xs text-faint truncate" title="Código opaco (system-generated)">{row.code}</span>
                   <div className="flex-1">
                     {isEditing ? (
                       <input
                         value={editLabel}
                         onChange={(e) => setEditLabel(e.target.value)}
-                        className="w-full bg-slate-950 border border-teal-500/40 rounded-lg px-3 py-1.5 text-sm"
+                        className="w-full bg-background border border-primary/30 rounded-lg px-3 py-1.5 text-sm"
                       />
                     ) : (
                       <span className="text-sm">{row.label}</span>
@@ -215,13 +215,13 @@ export default function AdminCatalogosPage() {
                     <>
                       <button
                         onClick={() => handleSaveLabel(row.id)}
-                        className="p-2 text-teal-400 hover:bg-teal-500/10 rounded-lg"
+                        className="p-2 text-primary hover:bg-primary-hl rounded-lg"
                       >
                         <Save className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => setEditingId(null)}
-                        className="p-2 text-slate-500 hover:bg-slate-800 rounded-lg"
+                        className="p-2 text-faint hover:bg-surface-2 rounded-lg"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -229,7 +229,7 @@ export default function AdminCatalogosPage() {
                   ) : (
                     <button
                       onClick={() => { setEditingId(row.id); setEditLabel(row.label); }}
-                      className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-slate-400 hover:text-teal-400 font-black"
+                      className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-muted hover:text-primary font-black"
                     >
                       Editar
                     </button>
@@ -237,7 +237,7 @@ export default function AdminCatalogosPage() {
                   <button
                     onClick={() => handleToggleActive(row)}
                     className={`p-2 rounded-lg ${
-                      row.isActive ? 'text-teal-400 hover:bg-teal-500/10' : 'text-slate-500 hover:bg-slate-800'
+                      row.isActive ? 'text-primary hover:bg-primary-hl' : 'text-faint hover:bg-surface-2'
                     }`}
                     title={row.isActive ? 'Desactivar' : 'Activar'}
                   >
@@ -247,13 +247,13 @@ export default function AdminCatalogosPage() {
               );
             })}
             {rows.length === 0 && (
-              <div className="py-12 text-center text-slate-500 text-sm">Sin opciones</div>
+              <div className="py-12 text-center text-faint text-sm">Sin opciones</div>
             )}
           </div>
         )}
       </div>
 
-      <p className="text-[10px] text-slate-600 leading-relaxed">
+      <p className="text-[10px] text-faint leading-relaxed">
         Las opciones desactivadas dejan de aparecer en los selectores nuevos, pero los casos legacy que las usaban siguen mostrando el valor guardado.
       </p>
     </div>

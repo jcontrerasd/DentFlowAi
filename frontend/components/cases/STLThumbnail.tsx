@@ -168,8 +168,8 @@ export default function STLThumbnail({
       )}
 
       {/* Placeholder mientras carga/renderiza (mismo tono que la tarjeta, no negro puro) */}
-      <div className="w-full h-full bg-slate-800/40 flex items-center justify-center">
-        <div className="w-4 h-4 border-2 border-teal-500/30 border-t-teal-500 rounded-full animate-spin" />
+      <div className="w-full h-full bg-surface-2/40 flex items-center justify-center">
+        <div className="w-4 h-4 border-2 border-primary/30 border-t-teal-500 rounded-full animate-spin" />
       </div>
     </div>
   );

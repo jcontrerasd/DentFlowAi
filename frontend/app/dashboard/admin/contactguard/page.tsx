@@ -36,19 +36,19 @@ export default function AdminContactGuardPage() {
   }, [userProfile, router]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6 md:p-10 space-y-6">
+    <div className="min-h-screen bg-background text-foreground p-6 md:p-10 space-y-6">
       <div className="flex items-center gap-3">
         <Link
           href="/dashboard/admin"
-          className="p-2 bg-slate-900 border border-slate-800 rounded-xl text-slate-400 hover:text-teal-400"
+          className="p-2 bg-surface border border-divider rounded-xl text-muted hover:text-primary"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex items-center gap-3">
-          <Shield className="w-6 h-6 text-teal-400" />
+          <Shield className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-2xl font-black uppercase tracking-tighter">ContactGuard</h1>
-            <p className="text-xs text-slate-500">Reglas anti-desintermediación, couriers permitidos e historial de intentos</p>
+            <p className="text-xs text-faint">Reglas anti-desintermediación, couriers permitidos e historial de intentos</p>
           </div>
         </div>
       </div>
@@ -62,10 +62,10 @@ export default function AdminContactGuardPage() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border transition-all ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all ${
               tab === t.key
-                ? 'bg-teal-500/10 border-teal-500/40 text-teal-300'
-                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                ? 'bg-primary-hl border-primary/30 text-primary'
+                : 'bg-surface border-divider text-muted hover:text-foreground'
             }`}
           >
             {t.label}
@@ -183,26 +183,26 @@ function RulesTab({ showSuccess, showError }: { showSuccess: (m: string) => void
   };
 
   return (
-    <div className="bg-slate-900/40 border border-slate-800/60 rounded-3xl p-5 space-y-4">
+    <div className="bg-surface/40 border border-divider rounded-3xl p-5 space-y-4">
       <div className="flex justify-between items-center">
-        <span className="text-[10px] uppercase tracking-widest text-slate-500 font-black">
+        <span className="text-[10px] uppercase tracking-widest text-faint font-black">
           {rules.length} reglas
         </span>
         <button
           onClick={() => setNewOpen((v) => !v)}
-          className="flex items-center gap-2 px-3 py-2 bg-teal-500/10 border border-teal-500/30 rounded-xl text-teal-300 text-xs font-bold hover:bg-teal-500/20"
+          className="flex items-center gap-2 px-3 py-2 bg-primary-hl border border-primary/30 rounded-xl text-primary text-xs font-bold hover:bg-primary-hl"
         >
           <Plus className="w-4 h-4" /> Nueva regla
         </button>
       </div>
 
       {newOpen && (
-        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+        <div className="bg-background border border-divider rounded-2xl p-4 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
             <select
               value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value as any })}
-              className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+              className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
             >
               <option value="regex">regex</option>
               <option value="keyword">keyword</option>
@@ -211,43 +211,43 @@ function RulesTab({ showSuccess, showError }: { showSuccess: (m: string) => void
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="nombre (ej. email)"
-              className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm md:col-span-2"
+              className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm md:col-span-2"
             />
             <input
               value={form.flags}
               onChange={(e) => setForm({ ...form, flags: e.target.value })}
               placeholder="flags (i, ig)"
-              className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+              className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
             />
           </div>
           <input
             value={form.pattern}
             onChange={(e) => setForm({ ...form, pattern: e.target.value })}
             placeholder="patrón (regex o palabra)"
-            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono"
+            className="w-full bg-surface border border-divider rounded-lg px-3 py-2 text-sm font-mono"
           />
           <input
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             placeholder="descripción"
-            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+            className="w-full bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
           />
           <input
             value={form.appliesToFields}
             onChange={(e) => setForm({ ...form, appliesToFields: e.target.value })}
             placeholder="Aplica a campos (CSV opcional, vacío = todos)"
-            className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+            className="w-full bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
           />
           <div className="flex gap-2">
             <button
               onClick={handleCreate}
-              className="px-3 py-2 bg-teal-500/20 border border-teal-500/40 rounded-lg text-teal-300 text-xs font-bold"
+              className="px-3 py-2 bg-primary-hl border border-primary/30 rounded-lg text-primary text-xs font-bold"
             >
               Guardar
             </button>
             <button
               onClick={() => setNewOpen(false)}
-              className="px-3 py-2 bg-slate-800 rounded-lg text-slate-400 text-xs"
+              className="px-3 py-2 bg-surface-2 rounded-lg text-muted text-xs"
             >
               Cancelar
             </button>
@@ -256,7 +256,7 @@ function RulesTab({ showSuccess, showError }: { showSuccess: (m: string) => void
       )}
 
       {loading ? (
-        <div className="py-16 text-center text-slate-500 text-sm">Cargando…</div>
+        <div className="py-16 text-center text-faint text-sm">Cargando…</div>
       ) : (
         <div className="divide-y divide-slate-800/60">
           {rules.map((r) => {
@@ -265,44 +265,44 @@ function RulesTab({ showSuccess, showError }: { showSuccess: (m: string) => void
               <div key={r.id} className={`py-3 ${r.isActive ? '' : 'opacity-50'}`}>
                 {!isEdit ? (
                   <div className="flex items-center gap-3">
-                    <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded ${r.type === 'regex' ? 'bg-purple-500/10 text-purple-300' : 'bg-amber-500/10 text-amber-300'}`}>
+                    <span className={`text-[10px] uppercase font-black px-2 py-0.5 rounded ${r.type === 'regex' ? 'bg-primary-hl text-primary' : 'bg-warning-hl text-warning'}`}>
                       {r.type}
                     </span>
                     <span className="text-sm font-bold w-40 truncate">{r.name}</span>
-                    <code className="text-xs text-slate-400 font-mono flex-1 truncate" title={r.pattern}>{r.pattern}</code>
+                    <code className="text-xs text-muted font-mono flex-1 truncate" title={r.pattern}>{r.pattern}</code>
                     {r.appliesToFields && r.appliesToFields.length > 0 && (
-                      <span className="text-[10px] text-slate-500" title={r.appliesToFields.join(', ')}>
+                      <span className="text-[10px] text-faint" title={r.appliesToFields.join(', ')}>
                         {r.appliesToFields.length} campo(s)
                       </span>
                     )}
                     <button
                       onClick={() => { setEditing(r); setTestSample(''); setTestResult(null); }}
-                      className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-slate-400 hover:text-teal-400 font-black"
+                      className="px-3 py-1.5 text-[10px] uppercase tracking-widest text-muted hover:text-primary font-black"
                     >
                       Editar
                     </button>
                     <button
                       onClick={() => handleToggle(r)}
-                      className={`p-2 rounded-lg ${r.isActive ? 'text-teal-400 hover:bg-teal-500/10' : 'text-slate-500 hover:bg-slate-800'}`}
+                      className={`p-2 rounded-lg ${r.isActive ? 'text-primary hover:bg-primary-hl' : 'text-faint hover:bg-surface-2'}`}
                       title={r.isActive ? 'Desactivar' : 'Activar'}
                     >
                       {r.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                     </button>
                     <button
                       onClick={() => handleDelete(r)}
-                      className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg"
+                      className="p-2 text-error hover:bg-error-hl rounded-lg"
                       title="Eliminar"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 ) : (
-                  <div className="bg-slate-950 border border-teal-500/30 rounded-xl p-3 space-y-2">
+                  <div className="bg-background border border-primary/30 rounded-xl p-3 space-y-2">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
                       <select
                         value={editing.type}
                         onChange={(e) => setEditing({ ...editing, type: e.target.value as any })}
-                        className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+                        className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
                       >
                         <option value="regex">regex</option>
                         <option value="keyword">keyword</option>
@@ -310,24 +310,24 @@ function RulesTab({ showSuccess, showError }: { showSuccess: (m: string) => void
                       <input
                         value={editing.name}
                         onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                        className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm md:col-span-2"
+                        className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm md:col-span-2"
                       />
                       <input
                         value={editing.flags ?? 'i'}
                         onChange={(e) => setEditing({ ...editing, flags: e.target.value })}
-                        className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+                        className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
                       />
                     </div>
                     <input
                       value={editing.pattern}
                       onChange={(e) => setEditing({ ...editing, pattern: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono"
+                      className="w-full bg-surface border border-divider rounded-lg px-3 py-2 text-sm font-mono"
                     />
                     <input
                       value={editing.description ?? ''}
                       onChange={(e) => setEditing({ ...editing, description: e.target.value })}
                       placeholder="descripción"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+                      className="w-full bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
                     />
                     <input
                       value={(editing.appliesToFields ?? []).join(',')}
@@ -338,31 +338,31 @@ function RulesTab({ showSuccess, showError }: { showSuccess: (m: string) => void
                           : null,
                       })}
                       placeholder="Aplica a campos (CSV; vacío = todos)"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+                      className="w-full bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
                     />
                     <div className="flex gap-2">
                       <input
                         value={testSample}
                         onChange={(e) => setTestSample(e.target.value)}
                         placeholder="Probar contra texto…"
-                        className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+                        className="flex-1 bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
                       />
-                      <button onClick={handleTest} className="px-3 py-2 bg-slate-800 rounded-lg text-slate-300 text-xs">Probar</button>
+                      <button onClick={handleTest} className="px-3 py-2 bg-surface-2 rounded-lg text-muted text-xs">Probar</button>
                     </div>
                     {testResult !== null && (
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-[11px] text-muted">
                         {testResult.length > 0 ? (
-                          <>Matches: <code className="text-amber-300">{JSON.stringify(testResult)}</code></>
+                          <>Matches: <code className="text-warning">{JSON.stringify(testResult)}</code></>
                         ) : (
-                          <span className="text-slate-500">Sin matches</span>
+                          <span className="text-faint">Sin matches</span>
                         )}
                       </div>
                     )}
                     <div className="flex gap-2">
-                      <button onClick={handleSaveEdit} className="px-3 py-2 bg-teal-500/20 border border-teal-500/40 rounded-lg text-teal-300 text-xs font-bold flex items-center gap-1">
+                      <button onClick={handleSaveEdit} className="px-3 py-2 bg-primary-hl border border-primary/30 rounded-lg text-primary text-xs font-bold flex items-center gap-1">
                         <Save className="w-3 h-3" /> Guardar
                       </button>
-                      <button onClick={() => setEditing(null)} className="px-3 py-2 bg-slate-800 rounded-lg text-slate-400 text-xs flex items-center gap-1">
+                      <button onClick={() => setEditing(null)} className="px-3 py-2 bg-surface-2 rounded-lg text-muted text-xs flex items-center gap-1">
                         <X className="w-3 h-3" /> Cancelar
                       </button>
                     </div>
@@ -372,7 +372,7 @@ function RulesTab({ showSuccess, showError }: { showSuccess: (m: string) => void
             );
           })}
           {rules.length === 0 && (
-            <div className="py-12 text-center text-slate-500 text-sm">Sin reglas</div>
+            <div className="py-12 text-center text-faint text-sm">Sin reglas</div>
           )}
         </div>
       )}
@@ -408,8 +408,8 @@ function CouriersTab({ showSuccess, showError }: { showSuccess: (m: string) => v
   };
 
   return (
-    <div className="bg-slate-900/40 border border-slate-800/60 rounded-3xl p-5 space-y-4">
-      <p className="text-xs text-slate-500">
+    <div className="bg-surface/40 border border-divider rounded-3xl p-5 space-y-4">
+      <p className="text-xs text-faint">
         Dominios permitidos en el campo de tracking del despacho. URLs de estos dominios <strong>no</strong> disparan
         bloqueo aunque coincidan con la regla de URL.
       </p>
@@ -418,33 +418,33 @@ function CouriersTab({ showSuccess, showError }: { showSuccess: (m: string) => v
           value={newDomain}
           onChange={(e) => setNewDomain(e.target.value)}
           placeholder="dominio (ej. chilexpress.cl)"
-          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+          className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
         />
         <input
           value={newLabel}
           onChange={(e) => setNewLabel(e.target.value)}
           placeholder="etiqueta (ej. Chilexpress)"
-          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+          className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
         />
         <button
           onClick={handleCreate}
-          className="px-3 py-2 bg-teal-500/10 border border-teal-500/30 rounded-xl text-teal-300 text-xs font-bold"
+          className="px-3 py-2 bg-primary-hl border border-primary/30 rounded-xl text-primary text-xs font-bold"
         >
           <Plus className="w-4 h-4 inline" /> Agregar
         </button>
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-slate-500 text-sm">Cargando…</div>
+        <div className="py-16 text-center text-faint text-sm">Cargando…</div>
       ) : (
         <div className="divide-y divide-slate-800/60">
           {couriers.map((c) => (
             <div key={c.id} className={`flex items-center gap-3 py-3 ${c.isActive ? '' : 'opacity-50'}`}>
               <code className="text-sm font-mono flex-1">{c.domain}</code>
-              <span className="text-sm text-slate-400 w-48">{c.label}</span>
+              <span className="text-sm text-muted w-48">{c.label}</span>
               <button
                 onClick={async () => { const r = await setCourierAllowlistActiveAction(c.id, !c.isActive); if (r.success) load(); }}
-                className={`p-2 rounded-lg ${c.isActive ? 'text-teal-400 hover:bg-teal-500/10' : 'text-slate-500 hover:bg-slate-800'}`}
+                className={`p-2 rounded-lg ${c.isActive ? 'text-primary hover:bg-primary-hl' : 'text-faint hover:bg-surface-2'}`}
               >
                 {c.isActive ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
               </button>
@@ -454,14 +454,14 @@ function CouriersTab({ showSuccess, showError }: { showSuccess: (m: string) => v
                   const r = await deleteCourierAllowlistAction(c.id);
                   if (r.success) { showSuccess('Eliminado'); load(); }
                 }}
-                className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg"
+                className="p-2 text-error hover:bg-error-hl rounded-lg"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
           ))}
           {couriers.length === 0 && (
-            <div className="py-12 text-center text-slate-500 text-sm">Sin couriers</div>
+            <div className="py-12 text-center text-faint text-sm">Sin couriers</div>
           )}
         </div>
       )}
@@ -494,29 +494,29 @@ function AuditTab({ showError }: { showError: (m: string) => void }) {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="bg-slate-900/40 border border-slate-800/60 rounded-3xl p-5 space-y-4">
+    <div className="bg-surface/40 border border-divider rounded-3xl p-5 space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-[1fr_200px_auto] gap-2">
         <input
           value={filterUserId}
           onChange={(e) => setFilterUserId(e.target.value)}
           placeholder="Filtrar por userId"
-          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm font-mono"
+          className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm font-mono"
         />
         <select
           value={filterRole}
           onChange={(e) => setFilterRole(e.target.value)}
-          className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-sm"
+          className="bg-surface border border-divider rounded-lg px-3 py-2 text-sm"
         >
           <option value="">Todos los roles</option>
           <option value="dentista">Dentista</option>
           <option value="tecnico">Técnico</option>
           <option value="admin">Admin</option>
         </select>
-        <button onClick={load} className="px-3 py-2 bg-slate-800 rounded-lg text-slate-300 text-xs">Aplicar</button>
+        <button onClick={load} className="px-3 py-2 bg-surface-2 rounded-lg text-muted text-xs">Aplicar</button>
       </div>
 
       {loading ? (
-        <div className="py-16 text-center text-slate-500 text-sm">Cargando…</div>
+        <div className="py-16 text-center text-faint text-sm">Cargando…</div>
       ) : (
         <div className="divide-y divide-slate-800/60">
           {entries.map((e) => {
@@ -525,47 +525,47 @@ function AuditTab({ showError }: { showError: (m: string) => void }) {
               <div key={e.id} className="py-3 space-y-2">
                 <button
                   onClick={() => setExpanded(open ? null : e.id)}
-                  className="w-full flex items-start gap-3 text-left hover:bg-white/5 rounded-lg p-2 -m-2 transition-colors"
+                  className="w-full flex items-start gap-3 text-left hover:bg-surface-off rounded-lg p-2 -m-2 transition-colors"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-bold text-white">{e.userName ?? e.userEmail ?? e.userId}</span>
-                      <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                      <span className="text-sm font-bold text-foreground">{e.userName ?? e.userEmail ?? e.userId}</span>
+                      <span className="text-[10px] uppercase font-black px-2 py-0.5 rounded bg-surface-2 text-muted">
                         {e.userRole ?? '—'}
                       </span>
-                      <span className="text-[10px] text-amber-300">{e.user30dCount ?? 0} en 30d</span>
-                      {e.caseNumber && <span className="text-xs text-teal-300">{e.caseNumber}</span>}
+                      <span className="text-[10px] text-warning">{e.user30dCount ?? 0} en 30d</span>
+                      {e.caseNumber && <span className="text-xs text-primary">{e.caseNumber}</span>}
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">
+                    <div className="text-xs text-muted mt-1">
                       <span className="font-mono">{e.actionName}</span>
-                      <span className="mx-2 text-slate-600">·</span>
+                      <span className="mx-2 text-faint">·</span>
                       <span>{e.fieldName}</span>
-                      <span className="mx-2 text-slate-600">·</span>
+                      <span className="mx-2 text-faint">·</span>
                       <span>{new Date(e.createdAt).toLocaleString('es-CL')}</span>
                     </div>
-                    <div className="text-xs text-red-300 mt-1 truncate">
+                    <div className="text-xs text-error mt-1 truncate">
                       {e.violatedRules.map((v) => v.ruleName).join(', ')}
                     </div>
                   </div>
                 </button>
                 {open && (
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 space-y-2 ml-4">
+                  <div className="bg-background border border-divider rounded-xl p-3 space-y-2 ml-4">
                     <div>
-                      <div className="text-[10px] uppercase text-slate-500 font-black">Texto original</div>
-                      <div className="text-xs text-white whitespace-pre-wrap break-words mt-1">{e.originalText}</div>
+                      <div className="text-[10px] uppercase text-faint font-black">Texto original</div>
+                      <div className="text-xs text-foreground whitespace-pre-wrap break-words mt-1">{e.originalText}</div>
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase text-slate-500 font-black">Texto normalizado</div>
-                      <code className="text-xs text-slate-400 whitespace-pre-wrap break-words block mt-1">{e.normalizedText}</code>
+                      <div className="text-[10px] uppercase text-faint font-black">Texto normalizado</div>
+                      <code className="text-xs text-muted whitespace-pre-wrap break-words block mt-1">{e.normalizedText}</code>
                     </div>
                     <div>
-                      <div className="text-[10px] uppercase text-slate-500 font-black">Reglas violadas</div>
-                      <ul className="text-xs text-slate-300 mt-1 space-y-1">
+                      <div className="text-[10px] uppercase text-faint font-black">Reglas violadas</div>
+                      <ul className="text-xs text-muted mt-1 space-y-1">
                         {e.violatedRules.map((v, i) => (
                           <li key={i}>
-                            <span className="text-amber-300">{v.ruleName}</span>{' '}
-                            <span className="text-slate-500">({v.ruleType})</span>:{' '}
-                            <code className="text-red-300">{v.matchedText}</code>
+                            <span className="text-warning">{v.ruleName}</span>{' '}
+                            <span className="text-faint">({v.ruleType})</span>:{' '}
+                            <code className="text-error">{v.matchedText}</code>
                           </li>
                         ))}
                       </ul>
@@ -576,7 +576,7 @@ function AuditTab({ showError }: { showError: (m: string) => void }) {
             );
           })}
           {entries.length === 0 && (
-            <div className="py-12 text-center text-slate-500 text-sm">Sin intentos registrados</div>
+            <div className="py-12 text-center text-faint text-sm">Sin intentos registrados</div>
           )}
         </div>
       )}

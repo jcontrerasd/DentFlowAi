@@ -55,7 +55,7 @@ export default function DashboardRecentCasesSection({
     <div className="space-y-6">
       <motion.div className="flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4 flex-wrap">
-          <h2 className="text-2xl serif-font text-white">Casos Recientes</h2>
+          <h2 className="text-2xl serif-font text-foreground">Casos Recientes</h2>
           <AdvancedFiltersRow
             context="DASHBOARD"
             role={role}
@@ -68,7 +68,7 @@ export default function DashboardRecentCasesSection({
             <button
               type="button"
               onClick={() => scroll('left')}
-              className="w-10 h-10 rounded-full border border-slate-800 flex items-center justify-center text-slate-400 hover:text-teal-400 hover:border-teal-500/30 transition-all bg-slate-900/50"
+              className="w-10 h-10 rounded-full border border-divider flex items-center justify-center text-muted hover:text-primary hover:border-primary/30 transition-all bg-surface"
               aria-label="Desplazar casos a la izquierda"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -76,7 +76,7 @@ export default function DashboardRecentCasesSection({
             <button
               type="button"
               onClick={() => scroll('right')}
-              className="w-10 h-10 rounded-full border border-slate-800 flex items-center justify-center text-slate-400 hover:text-teal-400 hover:border-teal-500/30 transition-all bg-slate-900/50"
+              className="w-10 h-10 rounded-full border border-divider flex items-center justify-center text-muted hover:text-primary hover:border-primary/30 transition-all bg-surface"
               aria-label="Desplazar casos a la derecha"
             >
               <ChevronRight className="w-5 h-5" />
@@ -84,7 +84,7 @@ export default function DashboardRecentCasesSection({
           </motion.div>
           <Link
             href={viewAllHref}
-            className="text-teal-500 hover:text-teal-200 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/40 rounded-sm text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:gap-3 transition-all"
+            className="text-primary hover:text-primary hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 rounded-sm text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 hover:gap-3 transition-all"
           >
             Ver Todo <ArrowRight className="w-4 h-4" />
           </Link>
@@ -119,8 +119,8 @@ export default function DashboardRecentCasesSection({
           );
         })}
         {displayedCases.length === 0 && (
-          <div className="w-full py-16 text-center bg-slate-900/20 border border-dashed border-slate-800/40 rounded-[2.5rem]">
-            <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest">
+          <div className="w-full py-16 text-center bg-surface/20 border border-dashed border-divider rounded-[2.5rem]">
+            <p className="text-faint text-[10px] font-bold uppercase tracking-wider">
               No hay actividad reciente
             </p>
           </div>

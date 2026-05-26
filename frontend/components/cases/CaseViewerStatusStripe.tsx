@@ -11,7 +11,7 @@ import { es } from 'date-fns/locale';
 import { useEffect, useState } from 'react';
 
 const PILL_BASE =
-  'inline-flex items-center gap-x-1 flex-wrap px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border';
+  'inline-flex items-center gap-x-1 flex-wrap px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border';
 
 function SolicitudVigencia({ invitedAt }: { invitedAt: string | Date | null | undefined }) {
   const getLabel = () => {
@@ -72,10 +72,10 @@ export default function CaseViewerStatusStripe({
     return pill;
   }
 
-  const outer = `w-full min-h-10 flex items-center justify-between px-3 rounded-xl bg-slate-950 border text-[9px] font-black uppercase tracking-widest text-slate-500 ${
+  const outer = `w-full min-h-10 flex items-center justify-between px-3 rounded-xl bg-background border text-[9px] font-bold uppercase tracking-wider text-faint ${
     model.highlightEval
-      ? 'border-amber-500/30 shadow-[0_0_15px_-5px_rgba(245,158,11,0.2)]'
-      : 'border-slate-800'
+      ? 'border-warning/20 shadow-[0_0_15px_-5px_rgba(245,158,11,0.2)]'
+      : 'border-divider'
   }`;
 
   return (

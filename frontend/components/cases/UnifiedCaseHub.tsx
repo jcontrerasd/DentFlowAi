@@ -680,17 +680,17 @@ export default function UnifiedCaseHub({
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-slate-900/80 backdrop-blur-xl border border-slate-800/30 rounded-3xl shadow-2xl overflow-hidden">
+    <div className="flex flex-col h-full min-h-0 bg-surface backdrop-blur-xl border border-divider/30 rounded-3xl shadow-2xl overflow-hidden">
       {/* HEADER */}
-      <div className="px-6 py-4 bg-white/5 border-b border-white/8">
+      <div className="px-6 py-4 bg-surface-off border-b border-divider">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 flex items-center justify-center text-teal-400 border border-teal-500/30">
+            <div className="w-10 h-10 rounded-2xl bg-primary-hl flex items-center justify-center text-primary border border-primary/30">
               <Activity className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-white tracking-tight">Centro de control</h3>
-              <p className="text-[10px] text-slate-500 mt-0.5">Actividad del caso — flujo guiado</p>
+              <h3 className="text-sm font-semibold text-foreground tracking-tight">Centro de control</h3>
+              <p className="text-[10px] text-faint mt-0.5">Actividad del caso — flujo guiado</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -700,12 +700,12 @@ export default function UnifiedCaseHub({
                 aria-label="Plazo para elegir oferta"
                 title="Validez de propuesta (horas configuradas en Fauchard)"
               >
-                <span className="text-[8px] font-black text-amber-500/70 uppercase tracking-widest">
+                <span className="text-[8px] font-black text-warning/70 uppercase tracking-widest">
                   Plazo para elegir oferta
                 </span>
-                <motion.div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25">
-                  <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span className="text-[11px] font-mono font-black tabular-nums text-amber-200">
+                <motion.div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-warning-hl border border-warning/20">
+                  <Clock className="w-3.5 h-3.5 text-warning shrink-0" />
+                  <span className="text-[11px] font-mono font-black tabular-nums text-warning">
                     {formatCountdownHMS(headerCountdownRemainingMs)}
                   </span>
                 </motion.div>
@@ -714,7 +714,7 @@ export default function UnifiedCaseHub({
             <button
               onClick={onClose}
               aria-label="Cerrar Centro de Control"
-              className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-slate-500 hover:text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+              className="w-8 h-8 rounded-full hover:bg-surface-off flex items-center justify-center text-faint hover:text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <X className="w-4 h-4" />
             </button>
@@ -754,9 +754,9 @@ export default function UnifiedCaseHub({
             aria-label="Actividad del caso"
             className="flex flex-1 flex-col min-h-0 overflow-hidden bg-[#0b141a]"
           >
-            <div className="px-4 pt-2.5 pb-2 border-b border-white/[0.06] flex-shrink-0 bg-[#111b21]">
+            <div className="px-4 pt-2.5 pb-2 border-b border-divider flex-shrink-0 bg-[#111b21]">
               <>
-                <p className="text-[10px] text-slate-500 mb-1.5">Fase</p>
+                <p className="text-[10px] text-faint mb-1.5">Fase</p>
                 <div className="flex gap-0.5 bg-[#1f2c34] rounded-lg p-0.5">
                   {(['todos', 'propuesta', 'diseno', 'produccion'] as PhaseTab[]).map((tab) => {
                     const labels: Record<PhaseTab, string> = {
@@ -770,8 +770,8 @@ export default function UnifiedCaseHub({
                         key={tab}
                         type="button"
                         onClick={() => setPhaseTab(tab)}
-                        className={`flex-1 py-1.5 rounded-md text-[10px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 ${
-                          phaseTab === tab ? 'bg-[#2a3942] text-[#e9edef]' : 'text-slate-500 hover:text-slate-400 hover:bg-white/[0.04]'
+                        className={`flex-1 py-1.5 rounded-md text-[10px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                          phaseTab === tab ? 'bg-[#2a3942] text-[#e9edef]' : 'text-faint hover:text-muted hover:bg-surface-off/60'
                         }`}
                       >
                         {labels[tab]}
@@ -789,35 +789,35 @@ export default function UnifiedCaseHub({
               showUchInlineDeadlineBanner) && (
               <div
                 data-testid="uch-inline-alerts"
-                className="px-3 pt-2 pb-2 space-y-2 flex-shrink-0 border-b border-white/[0.06] bg-[#0b141a]"
+                className="px-3 pt-2 pb-2 space-y-2 flex-shrink-0 border-b border-divider bg-[#0b141a]"
               >
                 {showTechRevisionFromDeliveryBanner && techLatestRevisionComment && (
-                  <div className="rounded-lg border-l-2 border-amber-500/50 bg-white/[0.03] pl-3 pr-2 py-2">
-                    <p className="text-[10px] text-slate-500 mb-1">Ajustes solicitados</p>
-                    <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">{techLatestRevisionComment}</p>
+                  <div className="rounded-lg border-l-2 border-warning/20 bg-surface-off/40 pl-3 pr-2 py-2">
+                    <p className="text-[10px] text-faint mb-1">Ajustes solicitados</p>
+                    <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{techLatestRevisionComment}</p>
                   </div>
                 )}
                 {showTechCreationInstructionsBanner && (
-                  <div className="rounded-lg border-l-2 border-teal-500/50 bg-white/[0.03] pl-3 pr-2 py-2">
-                    <p className="text-[10px] text-slate-500 mb-1">Indicaciones del solicitante</p>
-                    <p className="text-xs text-slate-200 leading-relaxed whitespace-pre-wrap">{techCreationInstructions}</p>
+                  <div className="rounded-lg border-l-2 border-primary/30 bg-surface-off/40 pl-3 pr-2 py-2">
+                    <p className="text-[10px] text-faint mb-1">Indicaciones del solicitante</p>
+                    <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{techCreationInstructions}</p>
                   </div>
                 )}
                 {showDentistEvalBanner && (
                   <div className="rounded-xl px-3 py-2.5 border border-indigo-500/25 bg-indigo-500/10 flex items-center gap-2">
-                    <Activity className="w-3.5 h-3.5 text-indigo-300 flex-shrink-0 animate-pulse" />
+                    <Activity className="w-3.5 h-3.5 text-primary flex-shrink-0 animate-pulse" />
                     <div>
                       <p className="text-[9px] font-bold text-indigo-200 uppercase tracking-widest">Estamos analizando tu caso</p>
-                      {elapsedLabel ? <p className="text-[11px] text-slate-200">Publicado {elapsedLabel}</p> : null}
+                      {elapsedLabel ? <p className="text-[11px] text-foreground">Publicado {elapsedLabel}</p> : null}
                     </div>
                   </div>
                 )}
                 {showDentistPendingStartBanner && (
-                  <div className="rounded-xl px-3 py-2.5 border border-teal-500/25 bg-teal-500/10 flex items-start gap-2">
-                    <Clock className="w-3.5 h-3.5 text-teal-300 flex-shrink-0 mt-0.5" />
+                  <div className="rounded-xl px-3 py-2.5 border border-primary/30/25 bg-primary-hl flex items-start gap-2">
+                    <Clock className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[9px] font-bold text-teal-200 uppercase tracking-widest">Esperando confirmación de inicio</p>
-                      <p className="text-[11px] text-slate-200 leading-relaxed">
+                      <p className="text-[9px] font-bold text-primary uppercase tracking-widest">Esperando confirmación de inicio</p>
+                      <p className="text-[11px] text-foreground leading-relaxed">
                         Tu aceptación ya está registrada. Cuando el proveedor confirme el inicio del trabajo, verás aquí el avance y el plazo de entrega acordado.
                       </p>
                     </div>
@@ -837,20 +837,20 @@ export default function UnifiedCaseHub({
                   const deadlineTime = deadline.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
                   if (isOverdue) {
                     return (
-                      <div className="rounded-xl px-3 py-2.5 border border-rose-500/25 bg-rose-500/10 flex items-center gap-2">
-                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-rose-400" />
-                        <p className="text-[11px] font-semibold text-rose-200">El plazo de entrega ha vencido.</p>
+                      <div className="rounded-xl px-3 py-2.5 border border-error/20 bg-error flex items-center gap-2">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-error" />
+                        <p className="text-[11px] font-semibold text-error">El plazo de entrega ha vencido.</p>
                       </div>
                     );
                   }
                   return (
                     <div
-                      className={`rounded-xl px-3 py-2.5 border flex items-center gap-2 ${isAlert ? 'border-amber-500/20 bg-amber-500/10' : 'border-white/[0.08] bg-slate-900/35'}`}
+                      className={`rounded-xl px-3 py-2.5 border flex items-center gap-2 ${isAlert ? 'border-warning/20 bg-warning-hl' : 'border-divider bg-surface/35'}`}
                     >
-                      <Clock className={`w-3.5 h-3.5 flex-shrink-0 ${isAlert ? 'text-amber-300' : 'text-slate-500'}`} />
+                      <Clock className={`w-3.5 h-3.5 flex-shrink-0 ${isAlert ? 'text-warning' : 'text-faint'}`} />
                       <div className="min-w-0">
-                        <p className={`text-[10px] font-medium ${isAlert ? 'text-amber-100/90' : 'text-slate-500'}`}>Plazo de entrega</p>
-                        <p className="text-[11px] text-slate-100 capitalize leading-snug">
+                        <p className={`text-[10px] font-medium ${isAlert ? 'text-warning' : 'text-faint'}`}>Plazo de entrega</p>
+                        <p className="text-[11px] text-foreground capitalize leading-snug">
                           {deadlineLabel} · {deadlineTime}
                         </p>
                       </div>
@@ -1006,7 +1006,7 @@ export default function UnifiedCaseHub({
               })}
               {uchHasMoreOlder && onLoadOlderUchEvents && oldestLoadedEventId && (
                 <div
-                  className="flex justify-center py-2 mt-1 border-t border-white/[0.04]"
+                  className="flex justify-center py-2 mt-1 border-t border-divider"
                   data-testid="uch-load-older-wrap"
                 >
                   <button
@@ -1023,7 +1023,7 @@ export default function UnifiedCaseHub({
                         setLoadingOlderUch(false);
                       }
                     }}
-                    className="text-[11px] font-medium text-teal-400/90 hover:text-teal-300 hover:bg-white/5 hover:border-white/20 transition-colors duration-150 disabled:opacity-50 py-1.5 px-3 rounded-lg border border-white/10 bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+                    className="text-[11px] font-medium text-primary/90 hover:text-primary hover:bg-surface-off hover:border-border transition-colors duration-150 disabled:opacity-50 py-1.5 px-3 rounded-lg border border-divider bg-surface-off/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                   >
                     {loadingOlderUch ? 'Cargando…' : 'Cargar historial anterior'}
                   </button>
@@ -1034,14 +1034,14 @@ export default function UnifiedCaseHub({
           </div>
 
           {isLoser && !timelineHasTechOfferClosureEvent && (
-            <div className="px-5 py-4 bg-[#111b21] border-t border-white/10">
-              <div className="flex items-center gap-3 bg-rose-500/8 border border-rose-500/20 rounded-2xl px-4 py-3">
-                <div className="w-8 h-8 rounded-xl bg-rose-500/15 border border-rose-500/25 flex items-center justify-center flex-shrink-0">
-                  <XCircle className="w-4 h-4 text-rose-400" />
+            <div className="px-5 py-4 bg-[#111b21] border-t border-divider">
+              <div className="flex items-center gap-3 bg-error border border-error/20 rounded-2xl px-4 py-3">
+                <div className="w-8 h-8 rounded-xl bg-error-hl border border-error/20 flex items-center justify-center flex-shrink-0">
+                  <XCircle className="w-4 h-4 text-error" />
                 </div>
                 <div>
-                  <p className="text-xs font-black text-rose-300 leading-tight">Caso ya fue Asignado, Gracias por tu Oferta</p>
-                  <p className="text-[10px] text-slate-500 mt-0.5">Solo lectura — puedes consultar tu historial de cotizaciones.</p>
+                  <p className="text-xs font-black text-error leading-tight">Caso ya fue Asignado, Gracias por tu Oferta</p>
+                  <p className="text-[10px] text-faint mt-0.5">Solo lectura — puedes consultar tu historial de cotizaciones.</p>
                 </div>
               </div>
             </div>
@@ -1051,25 +1051,25 @@ export default function UnifiedCaseHub({
       {/* Confirmación envío oferta: sheet inferior (no modal centrado) */}
       <AnimatePresence>
         {showQuoteConfirm && (
-          <div className="fixed inset-0 z-[300] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[300] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm">
             <motion.div
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 40 }}
-              className="bg-slate-900 border border-teal-500/30 border-b-0 sm:border-b rounded-t-2xl sm:rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6 sm:mx-auto"
+              className="bg-surface border border-primary/30 border-b-0 sm:border-b rounded-t-2xl sm:rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6 sm:mx-auto"
               role="dialog"
               aria-modal="true"
               aria-labelledby="uch-quote-confirm-title"
             >
               <div className="text-center space-y-2">
-                <div className="w-14 h-14 bg-teal-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Send className="w-6 h-6 text-teal-400" />
+                <div className="w-14 h-14 bg-primary-hl rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Send className="w-6 h-6 text-primary" />
                 </div>
-                <h3 id="uch-quote-confirm-title" className="text-xl font-bold text-white">Confirmar envío de oferta</h3>
-                <p className="text-sm text-slate-400">Estás a punto de enviar esta oferta:</p>
+                <h3 id="uch-quote-confirm-title" className="text-xl font-bold text-foreground">Confirmar envío de oferta</h3>
+                <p className="text-sm text-muted">Estás a punto de enviar esta oferta:</p>
               </div>
 
-              <div className="bg-slate-800/50 rounded-2xl p-4 space-y-2">
+              <div className="bg-surface-2 rounded-2xl p-4 space-y-2">
                 {isIntegralCase ? (() => {
                   const dp = Number(quoteDesignPrice.replace(/\D/g, '')) || 0;
                   const fp = Number(quoteFabricationPrice.replace(/\D/g, '')) || 0;
@@ -1079,37 +1079,37 @@ export default function UnifiedCaseHub({
                   return (
                     <>
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Diseño</span>
-                        <span className="text-white font-bold">{fmt(dp)} · {quoteDesignDays} {quoteDesignDays === 1 ? 'día hábil' : 'días hábiles'}</span>
+                        <span className="text-faint">Diseño</span>
+                        <span className="text-foreground font-bold">{fmt(dp)} · {quoteDesignDays} {quoteDesignDays === 1 ? 'día hábil' : 'días hábiles'}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-slate-500">Fabricación</span>
-                        <span className="text-white font-bold">{fmt(fp)} · {quoteFabricationDays} {quoteFabricationDays === 1 ? 'día hábil' : 'días hábiles'}</span>
+                        <span className="text-faint">Fabricación</span>
+                        <span className="text-foreground font-bold">{fmt(fp)} · {quoteFabricationDays} {quoteFabricationDays === 1 ? 'día hábil' : 'días hábiles'}</span>
                       </div>
-                      <div className="flex justify-between text-sm pt-2 border-t border-white/10 mt-2">
-                        <span className="text-teal-400 font-bold">Total</span>
-                        <span className="text-teal-400 font-bold">{fmt(total)} · {totalDays} {totalDays === 1 ? 'día hábil' : 'días hábiles'}</span>
+                      <div className="flex justify-between text-sm pt-2 border-t border-divider mt-2">
+                        <span className="text-primary font-bold">Total</span>
+                        <span className="text-primary font-bold">{fmt(total)} · {totalDays} {totalDays === 1 ? 'día hábil' : 'días hábiles'}</span>
                       </div>
                     </>
                   );
                 })() : (
                   <>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Precio</span>
-                      <span className="text-white font-bold">
+                      <span className="text-faint">Precio</span>
+                      <span className="text-foreground font-bold">
                         {quotePrice ? new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(quotePrice)) : '—'}
                       </span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">Plazo</span>
-                      <span className="text-white font-bold">{quoteDays} {quoteDays === 1 ? 'día hábil' : 'días hábiles'}</span>
+                      <span className="text-faint">Plazo</span>
+                      <span className="text-foreground font-bold">{quoteDays} {quoteDays === 1 ? 'día hábil' : 'días hábiles'}</span>
                     </div>
                   </>
                 )}
                 {quoteNotes && (
-                  <div className="text-xs pt-1 border-t border-white/5 mt-2">
-                    <p className="text-slate-500 mb-1">Nota</p>
-                    <p className="text-slate-300 italic">"{quoteNotes}"</p>
+                  <div className="text-xs pt-1 border-t border-divider mt-2">
+                    <p className="text-faint mb-1">Nota</p>
+                    <p className="text-muted italic">"{quoteNotes}"</p>
                   </div>
                 )}
               </div>
@@ -1117,12 +1117,12 @@ export default function UnifiedCaseHub({
               <label className="flex items-start gap-3 cursor-pointer select-none">
                 <div
                   onClick={() => setQuoteConfirmChecked(v => !v)}
-                  className={`mt-0.5 w-5 h-5 rounded-lg border-2 flex-shrink-0 flex items-center justify-center transition-all ${quoteConfirmChecked ? 'bg-teal-500 border-teal-500' : 'border-slate-600'}`}
+                  className={`mt-0.5 w-5 h-5 rounded-lg border-2 flex-shrink-0 flex items-center justify-center transition-all ${quoteConfirmChecked ? 'bg-primary border-primary/30' : 'border-divider'}`}
                 >
-                  {quoteConfirmChecked && <CheckCircle2 className="w-3 h-3 text-slate-950" />}
+                  {quoteConfirmChecked && <CheckCircle2 className="w-3 h-3 text-inverse" />}
                 </div>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Entiendo que, una vez enviada, podré <strong className="text-white">retirarla desde este centro de control</strong> antes de que el dentista acepte una propuesta, y luego cotizar de nuevo si el plazo lo permite.
+                <p className="text-xs text-muted leading-relaxed">
+                  Entiendo que, una vez enviada, podré <strong className="text-foreground">retirarla desde este centro de control</strong> antes de que el dentista acepte una propuesta, y luego cotizar de nuevo si el plazo lo permite.
                 </p>
               </label>
 
@@ -1130,7 +1130,7 @@ export default function UnifiedCaseHub({
                 <button
                   onClick={() => { setShowQuoteConfirm(false); setQuoteConfirmChecked(false); }}
                   disabled={isSubmittingQuote}
-                  className="flex-1 py-3 bg-slate-800 text-slate-400 text-[10px] font-black uppercase rounded-2xl hover:bg-slate-700 transition-all disabled:opacity-50"
+                  className="flex-1 py-3 bg-surface-2 text-muted text-[10px] font-black uppercase rounded-2xl hover:bg-surface-off transition-all disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -1141,10 +1141,10 @@ export default function UnifiedCaseHub({
                     setQuoteConfirmChecked(false);
                   }}
                   disabled={!quoteConfirmChecked || isSubmittingQuote}
-                  className="flex-[2] py-3 bg-teal-500 hover:bg-teal-400 text-white text-[10px] font-black uppercase rounded-2xl shadow-lg shadow-teal-500/20 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+                  className="flex-[2] py-3 bg-primary hover:opacity-90 text-inverse text-[10px] font-black uppercase rounded-2xl shadow-lg shadow-sm disabled:opacity-40 transition-all flex items-center justify-center gap-2"
                 >
                   {isSubmittingQuote
-                    ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ? <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" />
                     : <Send className="w-4 h-4" />}
                   Confirmar y enviar
                 </button>

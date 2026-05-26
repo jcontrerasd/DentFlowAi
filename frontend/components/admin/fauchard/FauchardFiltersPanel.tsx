@@ -104,8 +104,8 @@ export default function FauchardFiltersPanel({ initialConfig }: FauchardFiltersP
             valueSuffix=" d"
             tooltip="Si un técnico no ha iniciado sesión ni interactuado en este número de días, es excluido de la selección temporalmente."
           />
-          <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 mt-2">
-            <p className="text-[10px] text-amber-500 leading-relaxed font-medium">
+          <div className="p-4 rounded-2xl bg-warning-hl border border-warning/20 mt-2">
+            <p className="text-[10px] text-warning leading-relaxed font-medium">
               Estos filtros se aplican antes del score. Técnicos que no cumplan son excluidos del pool inmediatamente.
             </p>
           </div>
@@ -194,7 +194,7 @@ export default function FauchardFiltersPanel({ initialConfig }: FauchardFiltersP
             exit={{ opacity: 0, scale: 0.95 }}
             className={`
               p-4 rounded-3xl border flex items-center gap-4
-              ${message.type === 'success' ? 'bg-teal-500/10 border-teal-500/20 text-teal-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}
+              ${message.type === 'success' ? 'bg-primary-hl border-primary/20 text-primary' : 'bg-error-hl border-error/30 text-error'}
             `}
           >
             {message.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
@@ -210,10 +210,10 @@ function Section({ title, icon, children }: { title: string; icon: React.ReactNo
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2 px-1">
-        <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700/50">
+        <div className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center text-muted border border-divider">
           {icon}
         </div>
-        <h3 className="text-sm font-black uppercase tracking-widest text-slate-200">{title}</h3>
+        <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">{title}</h3>
       </div>
       <div className="space-y-8 pl-1">
         {children}

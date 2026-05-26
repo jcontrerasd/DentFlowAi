@@ -26,10 +26,10 @@ describe('CaseWorkflowStepper', () => {
       />,
     );
     const connectors = container.querySelectorAll('.h-px.flex-1');
-    expect([...connectors].some((el) => el.className.includes('rose-600/35'))).toBe(true);
+    expect([...connectors].some((el) => el.className.includes('error'))).toBe(true);
     const rechazado = screen.getByText(/^rechazado$/i);
     const terminalCircle = rechazado.parentElement?.querySelector('.rounded-full');
-    expect(terminalCircle?.className).toContain('bg-rose-600 text-white');
+    expect(terminalCircle?.className).toContain('bg-error text-foreground');
   });
 
   it('variante techRejected: tramo propuesta–diseño usa círculos rose suaves (no sólidos como el terminal)', () => {
@@ -42,8 +42,8 @@ describe('CaseWorkflowStepper', () => {
     );
     const propuesta = screen.getByText('Propuesta lista');
     const circle = propuesta.parentElement?.querySelector('.rounded-full');
-    expect(circle?.className).toMatch(/rose-600\/20/);
-    expect(circle?.className).toMatch(/ring-rose-500\/45/);
+    expect(circle?.className).toMatch(/error-hl/);
+    expect(circle?.className).toMatch(/ring-error\/30/);
   });
 
   it('variante techRejected: expone data-variant para inspección en DevTools', () => {
@@ -93,10 +93,10 @@ describe('CaseWorkflowStepper', () => {
     );
     const esperando = screen.getByText('Esperando inicio');
     const circle = esperando.parentElement?.querySelector('.rounded-full');
-    expect(circle?.className).toMatch(/ring-teal-500/);
+    expect(circle?.className).toMatch(/ring-primary/);
     const borrador = screen.getByText('Borrador');
     const borradorCircle = borrador.parentElement?.querySelector('.rounded-full');
-    expect(borradorCircle?.className).toContain('bg-teal-600');
+    expect(borradorCircle?.className).toContain('bg-primary');
   });
 
   // ─── Fase 2 — Integral rechazado: fabricación en rosa ──────────────────────
@@ -113,8 +113,8 @@ describe('CaseWorkflowStepper', () => {
       const enviado = screen.getByText('Enviado');
       const fabCircle = enFabricacion.parentElement?.querySelector('.rounded-full');
       const envCircle = enviado.parentElement?.querySelector('.rounded-full');
-      expect(fabCircle?.className).toMatch(/rose-600\/20/);
-      expect(envCircle?.className).toMatch(/rose-600\/20/);
+      expect(fabCircle?.className).toMatch(/error-hl/);
+      expect(envCircle?.className).toMatch(/error-hl/);
     });
 
     it('último paso "Rechazado" se renderiza con XCircle y fondo rojo', () => {
@@ -127,10 +127,10 @@ describe('CaseWorkflowStepper', () => {
       );
       const rechazado = screen.getAllByText(/^rechazado$/i).at(-1);
       const circle = rechazado?.parentElement?.querySelector('.rounded-full');
-      expect(circle?.className).toContain('bg-rose-600 text-white');
+      expect(circle?.className).toContain('bg-error text-foreground');
       // Verifica presencia de algún conector rosa entre la banda terminal
       const connectors = container.querySelectorAll('.h-px.flex-1');
-      expect([...connectors].some((el) => el.className.includes('rose-600/35'))).toBe(true);
+      expect([...connectors].some((el) => el.className.includes('error'))).toBe(true);
     });
 
     it('solo diseño rechazado mantiene comportamiento previo (sin fabricación visible)', () => {
@@ -155,7 +155,7 @@ describe('CaseWorkflowStepper', () => {
       );
       const enFabricacion = screen.getByText('En fabricación');
       const circle = enFabricacion.parentElement?.querySelector('.rounded-full');
-      expect(circle?.className).not.toMatch(/rose-600\/20/);
+      expect(circle?.className).not.toMatch(/error-hl/);
     });
 
     it('completado: el hito final muestra check teal, no reloj de paso en curso', () => {
@@ -168,7 +168,7 @@ describe('CaseWorkflowStepper', () => {
       );
       const label = screen.getByText('Completado');
       const circle = label.parentElement?.querySelector('.rounded-full');
-      expect(circle?.className).toContain('bg-teal-600');
+      expect(circle?.className).toContain('bg-primary');
       expect(circle?.querySelector('.lucide-circle-check-big')).toBeTruthy();
       expect(circle?.querySelector('.lucide-clock')).toBeFalsy();
     });
@@ -189,7 +189,7 @@ describe('CaseWorkflowStepper', () => {
       expect(screen.queryByText('Diseño aprobado')).not.toBeInTheDocument();
       const propuesta = screen.getByText('Propuesta lista');
       const circle = propuesta.parentElement?.querySelector('.rounded-full');
-      expect(circle?.className).toMatch(/rose-600\/20/);
+      expect(circle?.className).toMatch(/error-hl/);
     });
 
     it('solo_fabricacion + techRejected: fabricación y enviado en rosa (banda de pérdida)', () => {
@@ -202,8 +202,8 @@ describe('CaseWorkflowStepper', () => {
       );
       const fab = screen.getByText('En fabricación');
       const env = screen.getByText('Enviado');
-      expect(fab.parentElement?.querySelector('.rounded-full')?.className).toMatch(/rose-600\/20/);
-      expect(env.parentElement?.querySelector('.rounded-full')?.className).toMatch(/rose-600\/20/);
+      expect(fab.parentElement?.querySelector('.rounded-full')?.className).toMatch(/error-hl/);
+      expect(env.parentElement?.querySelector('.rounded-full')?.className).toMatch(/error-hl/);
     });
 
     it('omite los pasos En ejecución / En revisión / Diseño aprobado', () => {
@@ -232,8 +232,8 @@ describe('CaseWorkflowStepper', () => {
       );
       const enFabricacion = screen.getByText('En fabricación');
       const enviado = screen.getByText('Enviado');
-      expect(enFabricacion.parentElement?.querySelector('.rounded-full')?.className).toMatch(/rose-600\/20/);
-      expect(enviado.parentElement?.querySelector('.rounded-full')?.className).toMatch(/rose-600\/20/);
+      expect(enFabricacion.parentElement?.querySelector('.rounded-full')?.className).toMatch(/error-hl/);
+      expect(enviado.parentElement?.querySelector('.rounded-full')?.className).toMatch(/error-hl/);
     });
   });
 });

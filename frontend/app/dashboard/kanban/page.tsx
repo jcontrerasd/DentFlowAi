@@ -52,8 +52,8 @@ export default function KanbanPage() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <Loader2 className="w-10 h-10 text-teal-500 animate-spin" />
-        <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+        <p className="text-[10px] text-faint uppercase font-black tracking-widest">
           Cargando Tablero de Producción...
         </p>
       </div>
@@ -65,43 +65,43 @@ export default function KanbanPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-4xl serif-font text-white">Tablero de Producción</h1>
-            <div className="px-3 py-1 bg-teal-500/10 border border-teal-500/20 rounded-full">
-              <span className="text-[9px] text-teal-400 font-black uppercase tracking-tighter italic">
+            <h1 className="text-4xl serif-font text-foreground">Tablero de Producción</h1>
+            <div className="px-3 py-1 bg-primary-hl border border-primary/20 rounded-full">
+              <span className="text-[9px] text-primary font-black uppercase tracking-tighter italic">
                 BETA Kanban
               </span>
             </div>
           </div>
-          <p className="text-slate-500 text-sm">
+          <p className="text-faint text-sm">
             {role === 'tecnico'
               ? 'Solo casos en los que eres el laboratorio asignado y trabajo en producción.'
               : 'Visualiza el flujo de trabajo de tus casos activos.'}
           </p>
         </div>
 
-        <div className="flex items-center bg-slate-900/60 p-1 rounded-2xl border border-white/5">
+        <div className="flex items-center bg-surface/60 p-1 rounded-2xl border border-divider">
           <button
             type="button"
-            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl shadow-lg shadow-teal-900/20 transition-all"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-inverse rounded-xl shadow-lg shadow-sm transition-all"
           >
             <KanbanIcon className="w-4 h-4" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Kanban</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Kanban</span>
           </button>
           <button
             type="button"
-            className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-white transition-all"
+            className="flex items-center gap-2 px-4 py-2 text-faint hover:text-foreground transition-all"
           >
             <List className="w-4 h-4" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Lista</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Lista</span>
           </button>
         </div>
       </div>
 
-      <div className="bg-amber-500/5 border border-amber-500/10 p-4 rounded-2xl flex items-center gap-4">
-        <div className="w-10 h-10 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center flex-shrink-0">
+      <div className="bg-warning-hl border border-warning/20 p-4 rounded-2xl flex items-center gap-4">
+        <div className="w-10 h-10 bg-warning-hl text-warning rounded-full flex items-center justify-center flex-shrink-0">
           <Info className="w-5 h-5" />
         </div>
-        <p className="text-[10px] text-amber-500/80 uppercase font-black tracking-widest leading-relaxed">
+        <p className="text-[10px] text-warning/80 uppercase font-black tracking-widest leading-relaxed">
           {role === 'tecnico'
             ? 'Solo casos en los que eres el laboratorio asignado. Haz clic en una tarjeta para abrir el caso.'
             : 'Haz clic en cualquier tarjeta para abrir el visor 3D y gestionar la entrega o revisión del caso.'}

@@ -20,31 +20,31 @@ type UchQuoteBreakdownProps = {
 function toneClasses(tone: UchQuoteBreakdownTone) {
   if (tone === 'self') {
     return {
-      label: 'text-cyan-100/75',
-      value: 'text-cyan-50/95',
-      nums: 'text-cyan-50',
-      sep: 'text-cyan-700/60',
-      splitLabel: 'text-cyan-200/80',
-      border: 'border-cyan-800/40',
+      label: 'text-foreground',
+      value: 'text-foreground',
+      nums: 'text-foreground',
+      sep: 'text-primary',
+      splitLabel: 'text-primary',
+      border: 'border-primary/30',
     };
   }
   if (tone === 'thread') {
     return {
-      label: 'text-slate-500',
-      value: 'text-slate-300/95',
-      nums: 'text-slate-200',
-      sep: 'text-slate-600',
-      splitLabel: 'text-slate-400',
-      border: 'border-white/[0.06]',
+      label: 'text-faint',
+      value: 'text-muted/95',
+      nums: 'text-foreground',
+      sep: 'text-faint',
+      splitLabel: 'text-muted',
+      border: 'border-divider',
     };
   }
   return {
-    label: 'text-slate-500',
-    value: 'text-slate-100',
-    nums: 'text-white',
-    sep: 'text-slate-600',
-    splitLabel: 'text-slate-400',
-    border: 'border-white/5',
+    label: 'text-faint',
+    value: 'text-foreground',
+    nums: 'text-foreground',
+    sep: 'text-faint',
+    splitLabel: 'text-muted',
+    border: 'border-divider',
   };
 }
 
@@ -71,7 +71,7 @@ export default function UchQuoteBreakdown({
       className={`grid grid-cols-2 gap-2 text-[10px] ${variant === 'detail' ? `pb-2 border-b ${tc.border}` : ''}`}
     >
       {quote.designPrice != null && (
-        <div className={`rounded-lg bg-slate-800/40 px-2 py-1.5 border ${tc.border}`}>
+        <div className={`rounded-lg bg-surface-2/40 px-2 py-1.5 border ${tc.border}`}>
           <p className={`text-[8px] uppercase font-bold tracking-widest ${tc.splitLabel}`}>Diseño</p>
           <p className={`font-bold tabular-nums ${tc.nums}`}>{formatUchQuoteClp(quote.designPrice)}</p>
           {quote.designDays != null && (
@@ -82,7 +82,7 @@ export default function UchQuoteBreakdown({
         </div>
       )}
       {quote.fabricationPrice != null && (
-        <div className={`rounded-lg bg-slate-800/40 px-2 py-1.5 border ${tc.border}`}>
+        <div className={`rounded-lg bg-surface-2/40 px-2 py-1.5 border ${tc.border}`}>
           <p className={`text-[8px] uppercase font-bold tracking-widest ${tc.splitLabel}`}>Fabricación</p>
           <p className={`font-bold tabular-nums ${tc.nums}`}>{formatUchQuoteClp(quote.fabricationPrice)}</p>
           {quote.fabricationDays != null && (

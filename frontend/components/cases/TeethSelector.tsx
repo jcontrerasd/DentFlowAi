@@ -35,8 +35,8 @@ const Quadrant: React.FC<QuadrantProps> = ({ start, end, step, reverse = false, 
           className={`
             w-8 h-8 md:w-10 md:h-10 flex items-center justify-center rounded-md cursor-pointer text-[10px] md:text-xs font-bold transition-all duration-200
             ${selectedTeeth.includes(id) 
-              ? 'bg-primary text-white shadow-lg shadow-teal-500/30 font-extrabold' 
-              : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800'}
+              ? 'bg-primary text-inverse shadow-lg shadow-sm font-extrabold' 
+              : 'bg-surface dark:bg-surface-2 hover:bg-surface-2 dark:hover:bg-surface-off text-faint dark:text-muted border border-slate-200 dark:border-divider'}
           `}
         >
           {id}
@@ -56,17 +56,17 @@ export const TeethSelector: React.FC<TeethSelectorProps> = ({ selectedTeeth, onC
   };
 
   return (
-    <div className="flex flex-col gap-2 p-2 border border-slate-200 dark:border-slate-800 rounded-3xl glass-effect overflow-x-auto">
+    <div className="flex flex-col gap-2 p-2 border border-slate-200 dark:border-divider rounded-3xl bg-surface shadow-sm border border-divider overflow-x-auto">
       <div className="min-w-fit">
-        <div className="text-[10px] font-bold text-slate-400 mb-3 text-center uppercase tracking-widest">Arcada Superior (Maxilar)</div>
+        <div className="text-[10px] font-bold text-muted mb-3 text-center uppercase tracking-widest">Arcada Superior (Maxilar)</div>
         <div className="flex justify-center gap-4 md:gap-8">
           <Quadrant start={18} end={11} step={-1} selectedTeeth={selectedTeeth} toggleTooth={toggleTooth} />
           <Quadrant start={21} end={28} step={1} selectedTeeth={selectedTeeth} toggleTooth={toggleTooth} />
         </div>
         
         <div className="my-2 relative">
-          <div className="h-px bg-slate-200 dark:bg-slate-800 w-full" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 bg-white dark:bg-slate-900 text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] rounded-full border border-slate-100 dark:border-slate-800">
+          <div className="h-px bg-surface-2 dark:bg-surface-2 w-full" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 bg-white dark:bg-surface text-[10px] font-black text-muted uppercase tracking-[0.2em] rounded-full border border-slate-100 dark:border-divider">
             Línea Media
           </div>
         </div>
@@ -75,7 +75,7 @@ export const TeethSelector: React.FC<TeethSelectorProps> = ({ selectedTeeth, onC
           <Quadrant start={48} end={41} step={-1} selectedTeeth={selectedTeeth} toggleTooth={toggleTooth} />
           <Quadrant start={31} end={38} step={1} selectedTeeth={selectedTeeth} toggleTooth={toggleTooth} />
         </div>
-        <div className="text-[10px] font-bold text-slate-400 mt-3 text-center uppercase tracking-widest">Arcada Inferior (Mandibular)</div>
+        <div className="text-[10px] font-bold text-muted mt-3 text-center uppercase tracking-widest">Arcada Inferior (Mandibular)</div>
       </div>
 
     </div>

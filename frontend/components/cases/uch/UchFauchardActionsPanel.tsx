@@ -131,7 +131,7 @@ export default function UchFauchardActionsPanel({
   return (
     <div
       data-testid="uch-case-actions-inline"
-      className="rounded-xl border border-white/[0.06] bg-[#111b21]/70 px-3 py-3 space-y-3"
+      className="rounded-xl border border-divider bg-[#111b21]/70 px-3 py-3 space-y-3"
     >
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-2">
@@ -151,10 +151,10 @@ export default function UchFauchardActionsPanel({
             </div>
           )}
           {actingAsDentista && clinicalCase?.pendingActionRequest && clinicalCase.pendingActionActor !== currentUserId && (
-            <div className="w-full flex flex-col gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl mb-2">
+            <div className="w-full flex flex-col gap-2 p-3 bg-warning-hl border border-warning/20 rounded-xl mb-2">
               <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-500" />
-                <span className="text-[10px] font-black text-white uppercase">Solicitud: {clinicalCase.pendingActionRequest}</span>
+                <AlertCircle className="w-4 h-4 text-warning" />
+                <span className="text-[10px] font-black text-foreground uppercase">Solicitud: {clinicalCase.pendingActionRequest}</span>
               </div>
               <div className="flex gap-2">
                 <button
@@ -162,7 +162,7 @@ export default function UchFauchardActionsPanel({
                   onClick={() => {
                     void onActionTriggered?.('resolve_flow', { approved: false });
                   }}
-                  className="flex-1 py-2 bg-slate-800 text-white text-[9px] font-bold rounded-lg uppercase"
+                  className="flex-1 py-2 bg-surface-2 text-foreground text-[9px] font-bold rounded-lg uppercase"
                 >
                   Rechazar
                 </button>
@@ -171,7 +171,7 @@ export default function UchFauchardActionsPanel({
                   onClick={() => {
                     void onActionTriggered?.('resolve_flow', { approved: true });
                   }}
-                  className="flex-1 py-2 bg-amber-600 text-white text-[9px] font-bold rounded-lg uppercase"
+                  className="flex-1 py-2 bg-warning text-inverse text-[9px] font-bold rounded-lg uppercase"
                 >
                   Aprobar
                 </button>
@@ -184,7 +184,7 @@ export default function UchFauchardActionsPanel({
               onClick={() => {
                 void onActionTriggered?.('confirm_reception');
               }}
-              className="flex-1 py-3 bg-emerald-500 text-white text-[10px] font-bold rounded-xl uppercase hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
+              className="flex-1 py-3 bg-jade-hl text-foreground text-[10px] font-bold rounded-xl uppercase hover:bg-jade-hl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="w-4 h-4" />
               Confirmar Recepción
@@ -193,16 +193,16 @@ export default function UchFauchardActionsPanel({
           {actingAsTecnico && myInvitation && (
             <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="w-full space-y-4">
               {myInvitation.expiresAt && myInvitation.status === 'pending' && caseStatus === 'enEvaluacion' && (
-                <motion.div className="bg-slate-800/60 border border-white/8 rounded-xl p-3 space-y-2">
-                  <p className="text-[9px] font-black text-amber-500/70 uppercase tracking-widest">
+                <motion.div className="bg-surface-2/60 border border-divider rounded-xl p-3 space-y-2">
+                  <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">
                     Plazo para enviar tu cotización
                   </p>
                   {quoteRemainingMs >= 0 && (
-                    <p className="text-lg font-mono font-black tabular-nums text-amber-200">
+                    <p className="text-lg font-mono font-black tabular-nums text-warning">
                       {formatCountdownHMS(quoteRemainingMs)}
                     </p>
                   )}
-                  <p className="text-[10px] text-amber-400/90 flex items-center gap-1">
+                  <p className="text-[10px] text-warning/90 flex items-center gap-1">
                     <Clock className="w-3 h-3 flex-shrink-0" />
                     Hasta el {format(new Date(myInvitation.expiresAt), "d 'de' MMMM 'a las' HH:mm", { locale: es })}
                   </p>
@@ -225,32 +225,32 @@ export default function UchFauchardActionsPanel({
                 const disabled = isSubmittingQuote || (isIntegral ? !splitReady : !flatReady);
 
                 return (
-                  <div className="space-y-3 bg-slate-900/40 border border-white/5 rounded-2xl p-4">
+                  <div className="space-y-3 bg-surface/40 border border-divider rounded-2xl p-4">
                     {isIntegral ? (
                       <>
-                        <p className="text-[10px] text-slate-400 leading-relaxed">
-                          Este caso es <strong className="text-teal-300">integral</strong>: ingresa precio y plazo por separado para diseño y fabricación. El total se calcula automáticamente.
+                        <p className="text-[10px] text-muted leading-relaxed">
+                          Este caso es <strong className="text-primary">integral</strong>: ingresa precio y plazo por separado para diseño y fabricación. El total se calcula automáticamente.
                         </p>
 
-                        <div className="space-y-3 rounded-xl border border-white/5 p-3">
-                          <p className="text-[9px] font-black text-teal-400 uppercase tracking-widest">Diseño</p>
+                        <div className="space-y-3 rounded-xl border border-divider p-3">
+                          <p className="text-[9px] font-black text-primary uppercase tracking-widest">Diseño</p>
                           <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Precio diseño (CLP)</label>
+                            <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Precio diseño (CLP)</label>
                             <input
                               type="text"
                               inputMode="numeric"
                               placeholder="Ej: 30000"
                               value={quoteDesignPrice ? new Intl.NumberFormat('es-CL').format(Number(quoteDesignPrice)) : ''}
                               onChange={(e) => setQuoteDesignPrice?.(e.target.value.replace(/\D/g, ''))}
-                              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-teal-500/50"
+                              className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-faint focus:outline-none focus:border-primary/30"
                             />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Plazo diseño</label>
+                            <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Plazo diseño</label>
                             <select
                               value={quoteDesignDays}
                               onChange={(e) => setQuoteDesignDays?.(Number(e.target.value))}
-                              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500/50"
+                              className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/30"
                             >
                               <option value={0} disabled>Selecciona el plazo</option>
                               {[1, 2, 3, 5, 7, 10].map((d) => (
@@ -260,25 +260,25 @@ export default function UchFauchardActionsPanel({
                           </div>
                         </div>
 
-                        <div className="space-y-3 rounded-xl border border-white/5 p-3">
-                          <p className="text-[9px] font-black text-teal-400 uppercase tracking-widest">Fabricación</p>
+                        <div className="space-y-3 rounded-xl border border-divider p-3">
+                          <p className="text-[9px] font-black text-primary uppercase tracking-widest">Fabricación</p>
                           <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Precio fabricación (CLP)</label>
+                            <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Precio fabricación (CLP)</label>
                             <input
                               type="text"
                               inputMode="numeric"
                               placeholder="Ej: 50000"
                               value={quoteFabricationPrice ? new Intl.NumberFormat('es-CL').format(Number(quoteFabricationPrice)) : ''}
                               onChange={(e) => setQuoteFabricationPrice?.(e.target.value.replace(/\D/g, ''))}
-                              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-teal-500/50"
+                              className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-faint focus:outline-none focus:border-primary/30"
                             />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Plazo fabricación</label>
+                            <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Plazo fabricación</label>
                             <select
                               value={quoteFabricationDays}
                               onChange={(e) => setQuoteFabricationDays?.(Number(e.target.value))}
-                              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500/50"
+                              className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/30"
                             >
                               <option value={0} disabled>Selecciona el plazo</option>
                               {[1, 2, 3, 5, 7, 10, 15].map((d) => (
@@ -288,9 +288,9 @@ export default function UchFauchardActionsPanel({
                           </div>
                         </div>
 
-                        <div className="rounded-xl bg-teal-500/10 border border-teal-500/30 px-3 py-2 flex justify-between items-center">
-                          <span className="text-[10px] font-black text-teal-300 uppercase tracking-widest">Total</span>
-                          <span className="text-sm font-black text-teal-200">
+                        <div className="rounded-xl bg-primary-hl border border-primary/30 px-3 py-2 flex justify-between items-center">
+                          <span className="text-[10px] font-black text-primary uppercase tracking-widest">Total</span>
+                          <span className="text-sm font-black text-primary">
                             {fmtCLP(totalSplitPrice)} · {totalSplitDays} {totalSplitDays === 1 ? 'día hábil' : 'días hábiles'}
                           </span>
                         </div>
@@ -298,22 +298,22 @@ export default function UchFauchardActionsPanel({
                     ) : (
                       <>
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Precio (CLP)</label>
+                          <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Precio (CLP)</label>
                           <input
                             type="text"
                             inputMode="numeric"
                             placeholder="Ej: 45000"
                             value={quotePrice ? new Intl.NumberFormat('es-CL').format(Number(quotePrice)) : ''}
                             onChange={(e) => setQuotePrice(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-teal-500/50"
+                            className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-faint focus:outline-none focus:border-primary/30"
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Plazo de entrega</label>
+                          <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Plazo de entrega</label>
                           <select
                             value={quoteDays}
                             onChange={(e) => setQuoteDays(Number(e.target.value))}
-                            className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500/50"
+                            className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/30"
                           >
                             <option value={0} disabled>
                               Selecciona el plazo
@@ -328,8 +328,8 @@ export default function UchFauchardActionsPanel({
                       </>
                     )}
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-                        Nota (opcional) <span className="font-normal text-slate-500">{quoteNotes.length}/200</span>
+                      <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">
+                        Nota (opcional) <span className="font-normal text-faint">{quoteNotes.length}/200</span>
                       </label>
                       <textarea
                         maxLength={200}
@@ -337,7 +337,7 @@ export default function UchFauchardActionsPanel({
                         placeholder="Comentario opcional para el dentista..."
                         value={quoteNotes}
                         onChange={(e) => setQuoteNotes(e.target.value)}
-                        className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-teal-500/50 resize-none"
+                        className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-faint focus:outline-none focus:border-primary/30 resize-none"
                       />
                     </div>
                     <button
@@ -347,10 +347,10 @@ export default function UchFauchardActionsPanel({
                         setShowQuoteConfirm(true);
                       }}
                       disabled={disabled}
-                      className="w-full py-2.5 bg-teal-500 text-white text-[10px] font-black rounded-xl uppercase shadow-lg shadow-teal-500/20 hover:bg-teal-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+                      className="w-full py-2.5 bg-primary text-inverse text-[10px] font-black rounded-xl uppercase shadow-lg shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                       {isSubmittingQuote ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" />
                       ) : (
                         <Send className="w-4 h-4" />
                       )}
@@ -360,8 +360,8 @@ export default function UchFauchardActionsPanel({
                 );
               })()}
               {canWithdrawQuote && myInvitation.quotedPrice != null && (
-                <div className="rounded-xl border border-white/[0.08] bg-slate-900/50 p-3 space-y-3">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tu oferta enviada</p>
+                <div className="rounded-xl border border-divider bg-surface p-3 space-y-3">
+                  <p className="text-[9px] font-black text-muted uppercase tracking-widest">Tu oferta enviada</p>
                   <UchQuoteBreakdown
                     quote={quoteDisplayFromInvitation(myInvitation)}
                     variant="compact"
@@ -374,7 +374,7 @@ export default function UchFauchardActionsPanel({
                       setWithdrawCheckConfirm(false);
                       setShowWithdrawConfirm(true);
                     }}
-                    className="w-full py-2 border border-rose-500/30 text-rose-300 hover:bg-rose-500/10 text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2"
+                    className="w-full py-2 border border-error/20 text-error hover:bg-error text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2"
                     data-testid="uch-withdraw-quote-open"
                   >
                     <Undo2 className="w-3.5 h-3.5" />
@@ -393,16 +393,16 @@ export default function UchFauchardActionsPanel({
                   clinicalCase?.assignedTechnicianId &&
                   clinicalCase.assignedTechnicianId !== currentUserId
                 ) && (
-                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 space-y-2">
+                <div className="bg-error border border-error/20 rounded-xl p-3 space-y-2">
                   <div className="flex items-center gap-2">
-                    <XCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                    <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">
+                    <XCircle className="w-4 h-4 text-error flex-shrink-0" />
+                    <span className="text-[10px] font-black text-error uppercase tracking-widest">
                       {myInvitation.dentistRejectionFeedback?.trim()
                         ? 'Oferta no contratada'
                         : 'Oferta no seleccionada'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                  <p className="text-[11px] text-muted leading-relaxed">
                     {myInvitation.dentistRejectionFeedback?.trim()
                       ? 'El dentista dejó un comentario sobre tu oferta. Puedes leerlo en el historial de esta conversación.'
                       : 'Tu oferta no continúa en este proceso. Gracias por participar.'}
@@ -416,12 +416,12 @@ export default function UchFauchardActionsPanel({
                   ? '¡Fabricación iniciada! El plazo de entrega ha sido registrado.'
                   : '¡Trabajo iniciado! El plazo de entrega ha sido registrado.';
                 return (
-                  <div className="bg-teal-500/10 border border-teal-500/30 rounded-xl p-4 space-y-3">
+                  <div className="bg-primary-hl border border-primary/30 rounded-xl p-4 space-y-3">
                     <div className="flex items-center gap-2">
-                      <Hammer className="w-4 h-4 text-teal-400 flex-shrink-0" />
-                      <span className="text-[10px] font-black text-teal-400 uppercase tracking-widest">El dentista aceptó la propuesta</span>
+                      <Hammer className="w-4 h-4 text-primary flex-shrink-0" />
+                      <span className="text-[10px] font-black text-primary uppercase tracking-widest">El dentista aceptó la propuesta</span>
                     </div>
-                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                    <p className="text-[10px] text-muted leading-relaxed">
                       El dentista ha aceptado la propuesta. Cuando estés listo, confirma el inicio
                       {isSoloFabrication ? ' de la fabricación' : ' del trabajo'}. Esto notificará al dentista y comenzará el conteo de tu plazo comprometido.
                     </p>
@@ -439,10 +439,10 @@ export default function UchFauchardActionsPanel({
                         }
                       }}
                       disabled={isStartingWork}
-                      className="w-full py-2.5 bg-teal-500 hover:bg-teal-400 text-white text-[10px] font-black uppercase rounded-xl shadow-lg shadow-teal-500/20 transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+                      className="w-full py-2.5 bg-primary hover:opacity-90 text-inverse text-[10px] font-black uppercase rounded-xl shadow-lg shadow-sm transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                     >
                       {isStartingWork ? (
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" />
                       ) : (
                         <Hammer className="w-4 h-4" />
                       )}
@@ -452,22 +452,22 @@ export default function UchFauchardActionsPanel({
                 );
               })()}
               {myInvitation.status === 'expired' && (
-                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-3 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                  <span className="text-[10px] font-bold text-rose-400">Esta invitación ha vencido.</span>
+                <div className="bg-error border border-error/20 rounded-xl p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-error flex-shrink-0" />
+                  <span className="text-[10px] font-bold text-error">Esta invitación ha vencido.</span>
                 </div>
               )}
             </motion.div>
           )}
           {actingAsTecnico && caseStatus === 'enRevision' && (
-            <div className="w-full py-3 bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-bold rounded-xl flex items-center justify-center gap-2">
+            <div className="w-full py-3 bg-warning-hl border border-warning/20 text-warning text-[10px] font-bold rounded-xl flex items-center justify-center gap-2">
               <Clock className="w-4 h-4" />
               Esperando revisión del dentista…
             </div>
           )}
           {actingAsTecnico && caseStatus === 'disenoAprobado' && (
             <div className="w-full space-y-2">
-              <div className="w-full py-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded-xl flex items-center justify-center gap-2">
+              <div className="w-full py-3 bg-jade-hl border border-jade/20 text-jade text-[10px] font-bold rounded-xl flex items-center justify-center gap-2">
                 <CheckCircle2 className="w-4 h-4" />
                 Diseño aprobado por el cliente
               </div>
@@ -483,10 +483,10 @@ export default function UchFauchardActionsPanel({
                     }
                   }}
                   disabled={isStartingManufacturing}
-                  className="w-full py-2.5 bg-teal-500 hover:bg-teal-400 text-white text-[10px] font-black uppercase rounded-xl shadow-lg shadow-teal-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+                  className="w-full py-2.5 bg-primary hover:opacity-90 text-inverse text-[10px] font-black uppercase rounded-xl shadow-lg shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                 >
                   {isStartingManufacturing ? (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" />
                   ) : (
                     <Hammer className="w-4 h-4" />
                   )}
@@ -504,7 +504,7 @@ export default function UchFauchardActionsPanel({
                 setDispatchTracking('');
                 setShowDispatchForm(true);
               }}
-              className="w-full py-3 bg-emerald-500 text-white text-[10px] font-bold rounded-xl uppercase hover:bg-emerald-400 shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
+              className="w-full py-3 bg-jade-hl text-foreground text-[10px] font-bold rounded-xl uppercase hover:bg-jade-hl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
             >
               <Package className="w-4 h-4" />
               Registrar despacho
@@ -514,7 +514,7 @@ export default function UchFauchardActionsPanel({
             <button
               type="button"
               onClick={onOpenDeliveryInline}
-              className="w-full py-2.5 text-[10px] font-semibold text-teal-300/90 hover:text-teal-200 border border-teal-500/20 rounded-xl"
+              className="w-full py-2.5 text-[10px] font-semibold text-primary/90 hover:text-primary border border-primary/20 rounded-xl"
             >
               Ir a entrega de diseño (formulario en el hilo)
             </button>
@@ -525,7 +525,7 @@ export default function UchFauchardActionsPanel({
       <AnimatePresence>
         {showDispatchForm && actingAsTecnico && caseStatus === 'enFabricacion' && (
           <motion.div
-            className="fixed inset-0 z-[310] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm"
+            className="fixed inset-0 z-[310] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -534,19 +534,19 @@ export default function UchFauchardActionsPanel({
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 40 }}
-              className="bg-slate-900 border border-emerald-500/30 border-b-0 sm:border-b rounded-t-2xl sm:rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 sm:mx-auto"
+              className="bg-surface border border-jade/20 border-b-0 sm:border-b rounded-t-2xl sm:rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 sm:mx-auto"
               role="dialog"
               aria-modal="true"
               aria-labelledby="uch-dispatch-form-title"
             >
               <div className="text-center space-y-2">
-                <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto mb-2">
-                  <Package className="w-6 h-6 text-emerald-400" />
+                <div className="w-14 h-14 bg-jade-hl rounded-2xl flex items-center justify-center mx-auto mb-2">
+                  <Package className="w-6 h-6 text-jade" />
                 </div>
-                <h3 id="uch-dispatch-form-title" className="text-xl font-bold text-white">
+                <h3 id="uch-dispatch-form-title" className="text-xl font-bold text-foreground">
                   Registrar despacho
                 </h3>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-muted">
                   El dentista verá esta referencia en el hilo del caso para hacer seguimiento del envío.
                 </p>
               </div>
@@ -555,7 +555,7 @@ export default function UchFauchardActionsPanel({
                 <div className="space-y-1.5">
                   <label
                     htmlFor="uch-dispatch-courier"
-                    className="text-[10px] font-black uppercase tracking-widest text-slate-500"
+                    className="text-[10px] font-bold uppercase tracking-wider text-faint"
                   >
                     Transportista / medio
                   </label>
@@ -565,13 +565,13 @@ export default function UchFauchardActionsPanel({
                     value={dispatchCourier}
                     onChange={(e) => setDispatchCourier(e.target.value)}
                     placeholder="Ej. Interno, Chilexpress, Starken…"
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500/50 outline-none"
+                    className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-faint focus:border-jade/20 outline-none"
                   />
                 </div>
                 <div className="space-y-1.5">
                   <label
                     htmlFor="uch-dispatch-tracking"
-                    className="text-[10px] font-black uppercase tracking-widest text-slate-500"
+                    className="text-[10px] font-bold uppercase tracking-wider text-faint"
                   >
                     Seguimiento del envío
                   </label>
@@ -582,7 +582,7 @@ export default function UchFauchardActionsPanel({
                     onChange={(e) => setDispatchTracking(e.target.value)}
                     rows={3}
                     placeholder="Nº de guía, URL de seguimiento o instrucciones para el dentista"
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500/50 outline-none resize-none"
+                    className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-faint focus:border-jade/20 outline-none resize-none"
                   />
                 </div>
               </div>
@@ -594,7 +594,7 @@ export default function UchFauchardActionsPanel({
                     if (!isRegisteringDispatch) setShowDispatchForm(false);
                   }}
                   disabled={isRegisteringDispatch}
-                  className="flex-1 py-3 bg-slate-800 text-slate-400 text-[10px] font-black uppercase rounded-2xl hover:bg-slate-700 transition-all disabled:opacity-50"
+                  className="flex-1 py-3 bg-surface-2 text-muted text-[10px] font-black uppercase rounded-2xl hover:bg-surface-off transition-all disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -625,7 +625,7 @@ export default function UchFauchardActionsPanel({
                       setIsRegisteringDispatch(false);
                     }
                   }}
-                  className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-black uppercase rounded-2xl transition-all disabled:opacity-40"
+                  className="flex-1 py-3 bg-jade-hl hover:bg-jade-hl text-foreground text-[10px] font-black uppercase rounded-2xl transition-all disabled:opacity-40"
                 >
                   {isRegisteringDispatch ? 'Registrando…' : 'Confirmar despacho'}
                 </button>
@@ -635,7 +635,7 @@ export default function UchFauchardActionsPanel({
         )}
         {showWithdrawConfirm && actingAsTecnico && myInvitation && (
           <motion.div
-            className="fixed inset-0 z-[310] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-sm"
+            className="fixed inset-0 z-[310] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -644,24 +644,24 @@ export default function UchFauchardActionsPanel({
               initial={{ opacity: 0, y: 40 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 40 }}
-              className="bg-slate-900 border border-rose-500/30 border-b-0 sm:border-b rounded-t-2xl sm:rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 sm:mx-auto"
+              className="bg-surface border border-error/20 border-b-0 sm:border-b rounded-t-2xl sm:rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 sm:mx-auto"
               role="dialog"
               aria-modal="true"
               aria-labelledby="uch-withdraw-quote-title"
             >
               <div className="text-center space-y-2">
-                <div className="w-14 h-14 bg-rose-500/10 rounded-2xl flex items-center justify-center mx-auto mb-2">
-                  <Undo2 className="w-6 h-6 text-rose-400" />
+                <div className="w-14 h-14 bg-error rounded-2xl flex items-center justify-center mx-auto mb-2">
+                  <Undo2 className="w-6 h-6 text-error" />
                 </div>
-                <h3 id="uch-withdraw-quote-title" className="text-xl font-bold text-white">
+                <h3 id="uch-withdraw-quote-title" className="text-xl font-bold text-foreground">
                   Retirar oferta
                 </h3>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-muted">
                   Esta oferta dejará de participar hasta que envíes una nueva (si el plazo lo permite).
                 </p>
               </div>
 
-              <div className="bg-slate-800/50 rounded-2xl p-4">
+              <div className="bg-surface-2 rounded-2xl p-4">
                 <UchQuoteBreakdown
                   quote={quoteDisplayFromInvitation(myInvitation)}
                   variant="compact"
@@ -675,10 +675,10 @@ export default function UchFauchardActionsPanel({
                     type="checkbox"
                     checked={withdrawCheckUnderstand}
                     onChange={(e) => setWithdrawCheckUnderstand(e.target.checked)}
-                    className="mt-1 rounded border-slate-600"
+                    className="mt-1 rounded border-divider"
                   />
-                  <span className="text-xs text-slate-400 leading-relaxed">
-                    Entiendo que <strong className="text-white">retiro mi oferta</strong> de este caso y el solicitante dejará de verla en el comparativo.
+                  <span className="text-xs text-muted leading-relaxed">
+                    Entiendo que <strong className="text-foreground">retiro mi oferta</strong> de este caso y el solicitante dejará de verla en el comparativo.
                   </span>
                 </label>
                 <label className="flex items-start gap-3 cursor-pointer select-none">
@@ -686,10 +686,10 @@ export default function UchFauchardActionsPanel({
                     type="checkbox"
                     checked={withdrawCheckConfirm}
                     onChange={(e) => setWithdrawCheckConfirm(e.target.checked)}
-                    className="mt-1 rounded border-slate-600"
+                    className="mt-1 rounded border-divider"
                   />
-                  <span className="text-xs text-slate-400 leading-relaxed">
-                    <strong className="text-white">Confirmo</strong> que deseo retirar esta oferta y podré cotizar de nuevo mientras no venza el plazo de invitación.
+                  <span className="text-xs text-muted leading-relaxed">
+                    <strong className="text-foreground">Confirmo</strong> que deseo retirar esta oferta y podré cotizar de nuevo mientras no venza el plazo de invitación.
                   </span>
                 </label>
               </div>
@@ -703,7 +703,7 @@ export default function UchFauchardActionsPanel({
                     setWithdrawCheckConfirm(false);
                   }}
                   disabled={isWithdrawingQuote}
-                  className="flex-1 py-3 bg-slate-800 text-slate-400 text-[10px] font-black uppercase rounded-2xl hover:bg-slate-700 transition-all disabled:opacity-50"
+                  className="flex-1 py-3 bg-surface-2 text-muted text-[10px] font-black uppercase rounded-2xl hover:bg-surface-off transition-all disabled:opacity-50"
                 >
                   Cancelar
                 </button>
@@ -726,7 +726,7 @@ export default function UchFauchardActionsPanel({
                       showError(res.error || 'No se pudo retirar la oferta');
                     }
                   }}
-                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-500 text-white text-[10px] font-black uppercase rounded-2xl transition-all disabled:opacity-40"
+                  className="flex-1 py-3 bg-error hover:bg-error text-inverse text-[10px] font-black uppercase rounded-2xl transition-all disabled:opacity-40"
                 >
                   {isWithdrawingQuote ? 'Retirando…' : 'Retirar oferta'}
                 </button>

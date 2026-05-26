@@ -169,43 +169,43 @@ export default function NewCasePage() {
         <div>
           <button 
             onClick={() => router.back()}
-            className="flex items-center gap-2 text-slate-400 hover:text-teal-400 transition-colors mb-4 group"
+            className="flex items-center gap-2 text-muted hover:text-primary transition-colors mb-4 group"
           >
             <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
             Volver al Panel
           </button>
-          <h1 className="text-4xl serif-font dark:text-white">Nuevo Caso</h1>
-          <p className="text-slate-500">Inicie el flujo de trabajo CAD/CAM completando el expediente</p>
+          <h1 className="text-4xl serif-font dark:text-foreground">Nuevo Caso</h1>
+          <p className="text-faint">Inicie el flujo de trabajo CAD/CAM completando el expediente</p>
         </div>
       </div>
 
       {uploadStatus && !error && !guardBlock && (
-        <div className="mb-6 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-teal-500 animate-pulse">
-          <div className="w-2 h-2 bg-teal-500 rounded-full" />
+        <div className="mb-6 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary animate-pulse">
+          <div className="w-2 h-2 bg-primary rounded-full" />
           {uploadStatus}
         </div>
       )}
 
       {error && (
 
-        <div className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-500 animate-fade-in shadow-sm">
+        <div className="mb-8 p-4 bg-error-hl border border-error/30 rounded-2xl flex items-center gap-3 text-error animate-fade-in shadow-sm">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           <p className="text-sm font-semibold">{error}</p>
         </div>
       )}
 
       {guardBlock && (
-        <div className="mb-8 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start gap-3 text-amber-300 animate-fade-in shadow-sm">
+        <div className="mb-8 p-4 bg-warning-hl border border-warning/20 rounded-2xl flex items-start gap-3 text-warning animate-fade-in shadow-sm">
           <ShieldAlert className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <p className="text-xs font-black uppercase tracking-widest text-amber-200">Validación de contacto</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-warning">Validación de contacto</p>
             <p className="text-sm leading-snug whitespace-pre-line">{guardBlock}</p>
-            <p className="text-[11px] text-amber-200/70">Edita los campos marcados y vuelve a intentarlo. Esta detección no es un error del sistema.</p>
+            <p className="text-[11px] text-warning">Edita los campos marcados y vuelve a intentarlo. Esta detección no es un error del sistema.</p>
           </div>
         </div>
       )}
 
-      <div className="glass-effect p-8 md:p-12 rounded-[2.5rem] border border-slate-200 dark:border-slate-800/30 shadow-2xl">
+      <div className="bg-surface shadow-sm border border-divider p-8 md:p-12 rounded-[2.5rem] border border-slate-200 dark:border-divider/30 shadow-2xl">
         <CaseCreationWizard onComplete={handleCreateCase} loading={loading} />
       </div>
     </div>

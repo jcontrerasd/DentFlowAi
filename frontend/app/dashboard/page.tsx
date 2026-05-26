@@ -192,7 +192,7 @@ export default function DashboardHome() {
       <motion.div
         className="flex items-center justify-center h-[60vh]"
       >
-        <div className="w-12 h-12 border-4 border-teal-500/20 border-t-teal-500 rounded-full animate-spin" />
+        <div className="w-12 h-12 border-4 border-primary/20 border-t-teal-500 rounded-full animate-spin" />
       </motion.div>
     );
   }
@@ -205,7 +205,7 @@ export default function DashboardHome() {
         className="flex flex-col md:flex-row md:items-center justify-between gap-6"
       >
         <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-          <h1 className="text-4xl serif-font text-white mb-2">Dashboard</h1>
+          <h1 className="text-4xl serif-font text-foreground mb-2">Dashboard</h1>
         </motion.div>
         {isDentist && <CreateCaseLinkButton />}
       </motion.div>
@@ -214,22 +214,22 @@ export default function DashboardHome() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-start gap-4 bg-amber-500/8 border border-amber-500/25 rounded-2xl px-5 py-4"
+          className="flex items-start gap-4 bg-warning-hl border border-warning/20 rounded-2xl px-5 py-4"
         >
-          <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <AlertCircle className="w-5 h-5 text-amber-400" />
+          <div className="w-9 h-9 rounded-xl bg-warning-hl border border-warning/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <AlertCircle className="w-5 h-5 text-warning" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-amber-300 mb-0.5">
+            <p className="text-sm font-bold text-warning mb-0.5">
               Tu perfil técnico está incompleto
             </p>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-faint">
               Declara tus habilidades para comenzar a recibir invitaciones de trabajo del sistema.
             </p>
           </div>
           <Link
             href="/dashboard/profile"
-            className="flex-shrink-0 px-4 py-2 bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-amber-500/25 transition-colors"
+            className="flex-shrink-0 px-4 py-2 bg-warning-hl border border-warning/20 text-warning text-[10px] font-bold uppercase tracking-wider rounded-xl hover:bg-warning-hl transition-colors"
           >
             Completar perfil
           </Link>
@@ -240,16 +240,16 @@ export default function DashboardHome() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-start gap-4 bg-red-500/10 border border-red-500/25 rounded-2xl px-5 py-6"
+          className="flex items-start gap-4 bg-error-hl border border-error/30/25 rounded-2xl px-5 py-6"
         >
-          <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center flex-shrink-0">
-            <AlertCircle className="w-6 h-6 text-red-400" />
+          <div className="w-10 h-10 rounded-xl bg-error/20 flex items-center justify-center flex-shrink-0">
+            <AlertCircle className="w-6 h-6 text-error" />
           </div>
           <div className="flex-1">
-            <p className="text-sm font-black text-red-400 uppercase tracking-tight mb-1">
+            <p className="text-sm font-black text-error uppercase tracking-tight mb-1">
               Cuenta Temporalmente Pausada
             </p>
-            <p className="text-xs text-slate-400 leading-relaxed max-w-2xl">
+            <p className="text-xs text-muted leading-relaxed max-w-2xl">
               Tu cuenta ha sido pausada hasta el{' '}
               <b>{new Date(suspendedUntil!).toLocaleDateString()}</b> porque no respondiste 3
               invitaciones consecutivas. Para volver a recibir casos, debes reactivar tu
@@ -268,7 +268,7 @@ export default function DashboardHome() {
                   setSubmitting(false);
                 }}
                 disabled={submitting}
-                className="px-6 py-2 bg-red-500 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-red-400 transition-colors shadow-lg shadow-red-900/20"
+                className="px-6 py-2 bg-error text-inverse text-[10px] font-bold uppercase tracking-wider rounded-xl hover:bg-red-400 transition-colors shadow-lg shadow-sm"
               >
                 {submitting ? 'Reactivando...' : 'Reactivar mi cuenta ahora'}
               </button>
@@ -300,55 +300,55 @@ export default function DashboardHome() {
         viewAllHref={viewAllHref}
       />
 
-      <section className="space-y-4 pt-3 border-t border-slate-800/40">
+      <section className="space-y-4 pt-3 border-t border-divider">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl serif-font text-white flex items-center gap-3">
-            <CreditCard className="w-6 h-6 text-teal-400" /> Información Financiera
+          <h2 className="text-2xl serif-font text-foreground flex items-center gap-3">
+            <CreditCard className="w-6 h-6 text-primary" /> Información Financiera
           </h2>
           <Link
             href="/dashboard/finance"
-            className="text-slate-500 text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:text-white transition-all"
+            className="text-faint text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 hover:text-foreground transition-all"
           >
             Ver Reportes <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-[1.5rem] flex items-center justify-between group hover:border-teal-500/30 transition-all">
+          <div className="bg-surface/40 border border-divider p-6 rounded-[1.5rem] flex items-center justify-between group hover:border-primary/30 transition-all">
             <div>
-              <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-1">
+              <p className="text-faint text-[10px] font-bold uppercase tracking-wider mb-1">
                 Saldo Disponible
               </p>
-              <h3 className="text-2xl text-white font-black">$0 CLP</h3>
+              <h3 className="text-2xl text-foreground font-black">$0 CLP</h3>
             </div>
             <motion.div
-              className="w-12 h-12 bg-emerald-500/10 rounded-xl flex items-center justify-center"
+              className="w-12 h-12 bg-jade-hl rounded-xl flex items-center justify-center"
             >
-              <DollarSign className="text-emerald-400 w-6 h-6" />
+              <DollarSign className="text-jade w-6 h-6" />
             </motion.div>
           </div>
           <motion.div
-            className="bg-slate-900/40 border border-slate-800 p-6 rounded-[1.5rem] flex items-center justify-between group hover:border-teal-500/30 transition-all"
+            className="bg-surface/40 border border-divider p-6 rounded-[1.5rem] flex items-center justify-between group hover:border-primary/30 transition-all"
           >
             <div>
-              <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-1">
+              <p className="text-faint text-[10px] font-bold uppercase tracking-wider mb-1">
                 Ingresos este Mes
               </p>
-              <h3 className="text-2xl text-white font-black">$0 CLP</h3>
+              <h3 className="text-2xl text-foreground font-black">$0 CLP</h3>
             </div>
-            <div className="w-12 h-12 bg-teal-500/10 rounded-xl flex items-center justify-center">
-              <Timer className="text-teal-400 w-6 h-6" />
+            <div className="w-12 h-12 bg-primary-hl rounded-xl flex items-center justify-center">
+              <Timer className="text-primary w-6 h-6" />
             </div>
           </motion.div>
-          <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-[1.5rem] flex items-center justify-between group hover:border-teal-500/30 transition-all">
+          <div className="bg-surface/40 border border-divider p-6 rounded-[1.5rem] flex items-center justify-between group hover:border-primary/30 transition-all">
             <div>
-              <p className="text-slate-500 text-[10px] font-black uppercase tracking-widest mb-1">
+              <p className="text-faint text-[10px] font-bold uppercase tracking-wider mb-1">
                 Pagos Pendientes
               </p>
-              <h3 className="text-2xl text-white font-black">0</h3>
+              <h3 className="text-2xl text-foreground font-black">0</h3>
             </div>
-            <div className="w-12 h-12 bg-amber-500/10 rounded-xl flex items-center justify-center">
-              <Clock className="text-amber-400 w-6 h-6" />
+            <div className="w-12 h-12 bg-warning-hl rounded-xl flex items-center justify-center">
+              <Clock className="text-warning w-6 h-6" />
             </div>
           </div>
         </div>

@@ -60,21 +60,21 @@ function Header({ days }: { days: number }) {
     <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
       <div className="space-y-1">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
+          <div className="w-10 h-10 rounded-2xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary">
             <Activity className="w-5 h-5" />
           </div>
-          <h1 className="text-2xl font-black text-white uppercase tracking-tighter">Observabilidad</h1>
+          <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter">Observabilidad</h1>
         </div>
-        <p className="text-slate-500 text-sm font-medium">Monitoreo de salud, equidad y desempeño de Fauchard.</p>
+        <p className="text-faint text-sm font-medium">Monitoreo de salud, equidad y desempeño de Fauchard.</p>
       </div>
 
-      <div className="flex items-center gap-2 p-1 bg-slate-900/60 border border-slate-800 rounded-2xl">
+      <div className="flex items-center gap-2 p-1 bg-surface/60 border border-divider rounded-2xl">
         {[30, 90, 365].map((d) => (
           <a
             key={d}
             href={`?days=${d}`}
-            className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
-              days === d ? 'bg-slate-800 text-white border border-slate-700/50' : 'text-slate-500 hover:text-slate-300'
+            className={`px-4 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all ${
+              days === d ? 'bg-surface-2 text-foreground border border-divider' : 'text-faint hover:text-muted'
             }`}
           >
             {d} Días
@@ -88,11 +88,11 @@ function Header({ days }: { days: number }) {
 function ErrorState({ message }: { message: string }) {
   return (
     <div className="p-12 flex flex-col items-center justify-center min-h-[60vh] gap-4">
-      <div className="w-16 h-16 rounded-[2rem] bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500">
+      <div className="w-16 h-16 rounded-[2rem] bg-error-hl border border-error/30 flex items-center justify-center text-error">
         <AlertTriangle className="w-8 h-8" />
       </div>
-      <h1 className="text-xl font-black text-white uppercase tracking-tighter">Error de Carga</h1>
-      <p className="text-slate-500 text-sm">{message}</p>
+      <h1 className="text-xl font-black text-foreground uppercase tracking-tighter">Error de Carga</h1>
+      <p className="text-faint text-sm">{message}</p>
     </div>
   );
 }

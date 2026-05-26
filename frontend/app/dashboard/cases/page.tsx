@@ -219,21 +219,21 @@ function CasesPageContent() {
   return (
     <motion.div className="font-sans flex flex-col h-[calc(100dvh-10rem)] max-h-[calc(100dvh-10rem)] min-h-0 overflow-hidden">
       <div
-        className="shrink-0 -mx-10 px-10 pb-4 space-y-4 bg-slate-950 border-b border-slate-800/60 shadow-[0_8px_24px_-12px_rgba(2,6,23,0.6)] z-20"
+        className="shrink-0 -mx-10 px-10 pb-4 space-y-4 bg-background border-b border-divider shadow-[0_8px_24px_-12px_rgba(2,6,23,0.6)] z-20"
         aria-label="Filtros de casos"
       >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
         <div>
-          <h1 className="text-4xl serif-font text-white mb-2">Casos</h1>
+          <h1 className="text-4xl serif-font text-foreground mb-2">Casos</h1>
           <div className="flex items-center gap-3 flex-wrap">
-            <p className="text-slate-500 text-sm">
+            <p className="text-faint text-sm">
               {isDentist
                 ? 'Gestiona y supervisa todos tus tratamientos activos.'
                 : 'Invitaciones, cotizaciones y casos en ejecución.'}
             </p>
             {lastUpdated && (
               <motion.div className="flex items-center gap-1.5">
-                <span className="text-slate-600 text-xs">
+                <span className="text-faint text-xs">
                   {formatDistanceToNow(lastUpdated, { locale: es, addSuffix: true })}
                 </span>
                 <button
@@ -243,7 +243,7 @@ function CasesPageContent() {
                   }
                   disabled={fetching}
                   aria-label="Actualizar lista de casos"
-                  className="p-1 rounded-lg text-slate-600 hover:text-teal-400 hover:bg-slate-800 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 disabled:opacity-40"
+                  className="p-1 rounded-lg text-faint hover:text-primary hover:bg-surface-2 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-40"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${fetching ? 'animate-spin' : ''}`} />
                 </button>
@@ -254,15 +254,15 @@ function CasesPageContent() {
         {isDentist && <CreateCaseLinkButton />}
       </div>
 
-        <div className="flex gap-1 bg-slate-900/60 border border-white/5 rounded-2xl p-1 w-fit">
+        <div className="flex gap-1 bg-surface/60 border border-divider rounded-2xl p-1 w-fit">
           <button
             type="button"
             onClick={() => {
               setShowArchived(false);
               setPage(1);
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 ${
-              !showArchived ? 'bg-teal-500/15 border border-teal-500/30 text-white' : 'border border-transparent text-slate-500 hover:bg-white/5 hover:border-white/20 hover:text-slate-300'
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+              !showArchived ? 'bg-primary-hl border border-primary/30 text-foreground' : 'border border-transparent text-faint hover:bg-surface-off hover:border-border hover:text-muted'
             }`}
           >
             <FolderOpen className="w-3.5 h-3.5" /> Activos
@@ -273,8 +273,8 @@ function CasesPageContent() {
               setShowArchived(true);
               setPage(1);
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 ${
-              showArchived ? 'bg-slate-700/60 border border-slate-600/50 text-white' : 'border border-transparent text-slate-500 hover:bg-white/5 hover:border-white/20 hover:text-slate-300'
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+              showArchived ? 'bg-surface-off border border-divider text-foreground' : 'border border-transparent text-faint hover:bg-surface-off hover:border-border hover:text-muted'
             }`}
           >
             <Archive className="w-3.5 h-3.5" /> Archivados
@@ -296,14 +296,14 @@ function CasesPageContent() {
       {showInitialSkeleton ? (
         <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-64 bg-slate-900/20 rounded-3xl animate-pulse border border-slate-800/50" />
+            <div key={i} className="h-64 bg-surface/20 rounded-3xl animate-pulse border border-divider/50" />
           ))}
         </motion.div>
       ) : cases.length === 0 && !fetching ? (
-        <div className="text-center py-20 bg-slate-900/20 border border-dashed border-slate-800 rounded-[2.5rem]">
-          <AlertCircle className="text-slate-600 w-12 h-12 mx-auto mb-4" />
-          <h3 className="text-xl text-white font-medium mb-2">No se encontraron casos</h3>
-          <p className="text-slate-500 mb-6">
+        <div className="text-center py-20 bg-surface/20 border border-dashed border-divider rounded-[2.5rem]">
+          <AlertCircle className="text-faint w-12 h-12 mx-auto mb-4" />
+          <h3 className="text-xl text-foreground font-medium mb-2">No se encontraron casos</h3>
+          <p className="text-faint mb-6">
             {emptyDueToFilters
               ? 'Prueba con otros términos o limpia los filtros activos.'
               : showArchived
@@ -314,7 +314,7 @@ function CasesPageContent() {
             <button
               type="button"
               onClick={handleClearFilters}
-              className="px-5 py-2.5 rounded-xl bg-teal-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-teal-500 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+              className="px-5 py-2.5 rounded-xl bg-primary text-inverse text-[10px] font-bold uppercase tracking-wider hover:bg-primary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               Limpiar filtros
             </button>
@@ -324,10 +324,10 @@ function CasesPageContent() {
         <div className="relative space-y-6">
           {showGridOverlay && (
             <div
-              className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-slate-950/50 backdrop-blur-[2px] min-h-[200px]"
+              className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-background/50 backdrop-blur-[2px] min-h-[200px]"
               aria-busy="true"
             >
-              <motion.div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900/90 border border-white/10 text-teal-400 text-[10px] font-black uppercase tracking-widest">
+              <motion.div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-surface/90 border border-divider text-primary text-[10px] font-bold uppercase tracking-wider">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Actualizando…
               </motion.div>
@@ -364,7 +364,7 @@ function CasesPageContent() {
                 type="button"
                 onClick={handleLoadMore}
                 disabled={loadingMore}
-                className="px-8 py-3 rounded-xl border border-slate-700 bg-slate-900 text-[10px] font-black uppercase tracking-widest text-white hover:border-teal-500/40 hover:bg-white/5 hover:text-teal-400 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 disabled:opacity-50"
+                className="px-8 py-3 rounded-xl border border-divider bg-surface text-[10px] font-bold uppercase tracking-wider text-foreground hover:border-primary/30 hover:bg-surface-off hover:text-primary transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-50"
               >
                 {loadingMore ? (
                   <span className="inline-flex items-center gap-2">
@@ -389,7 +389,7 @@ export default function CasesPage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center min-h-[40vh]">
-          <Loader2 className="w-10 h-10 text-teal-500 animate-spin" />
+          <Loader2 className="w-10 h-10 text-primary animate-spin" />
         </div>
       }
     >

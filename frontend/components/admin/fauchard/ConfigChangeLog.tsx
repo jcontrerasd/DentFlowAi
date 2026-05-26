@@ -85,8 +85,8 @@ export default function ConfigChangeLog() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <Loader2 className="w-8 h-8 text-teal-500 animate-spin" />
-        <p className="text-slate-500 text-sm font-medium">Cargando historial de cambios...</p>
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-faint text-sm font-medium">Cargando historial de cambios...</p>
       </div>
     );
   }
@@ -95,64 +95,64 @@ export default function ConfigChangeLog() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <History className="w-5 h-5 text-slate-400" />
-          <h3 className="text-sm font-black uppercase tracking-widest text-slate-200">Historial de Cambios</h3>
+          <History className="w-5 h-5 text-muted" />
+          <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Historial de Cambios</h3>
         </div>
         <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-faint" />
           <input
             type="text"
             placeholder="Filtrar por parámetro o admin..."
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-[11px] text-white focus:outline-none focus:border-slate-600 transition-colors"
+            className="w-full bg-surface border border-divider rounded-xl pl-9 pr-4 py-2 text-[11px] text-foreground focus:outline-none focus:border-divider transition-colors"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="rounded-[2rem] border border-slate-800 overflow-hidden bg-slate-900/20 shadow-xl">
+      <div className="rounded-[2rem] border border-divider overflow-hidden bg-surface/20 shadow-xl">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-slate-900/50 border-b border-slate-800">
-              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-500">Fecha y Hora</th>
-              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-500">Administrador</th>
-              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-500">Parámetro</th>
-              <th className="px-6 py-4 text-[9px] font-black uppercase tracking-widest text-slate-500 text-center">Cambio</th>
+            <tr className="bg-surface border-b border-divider">
+              <th className="px-6 py-4 text-[9px] font-bold uppercase tracking-wider text-faint">Fecha y Hora</th>
+              <th className="px-6 py-4 text-[9px] font-bold uppercase tracking-wider text-faint">Administrador</th>
+              <th className="px-6 py-4 text-[9px] font-bold uppercase tracking-wider text-faint">Parámetro</th>
+              <th className="px-6 py-4 text-[9px] font-bold uppercase tracking-wider text-faint text-center">Cambio</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/50">
             {filteredLogs.map((log) => (
-              <tr key={log.id} className="hover:bg-slate-800/30 transition-colors group">
+              <tr key={log.id} className="hover:bg-surface-2/30 transition-colors group">
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="text-[10px] font-medium text-slate-400">
+                  <span className="text-[10px] font-medium text-muted">
                     {format(new Date(log.changedAt), "dd MMM yyyy, HH:mm", { locale: es })}
                   </span>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700/50 group-hover:border-slate-600">
-                      <User className="w-3 h-3 text-slate-400" />
+                    <div className="w-6 h-6 rounded-lg bg-surface-2 flex items-center justify-center border border-divider group-hover:border-divider">
+                      <User className="w-3 h-3 text-muted" />
                     </div>
-                    <span className="text-[11px] font-bold text-slate-200">{log.changedByName || 'Sistema'}</span>
+                    <span className="text-[11px] font-bold text-foreground">{log.changedByName || 'Sistema'}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex flex-col gap-1">
-                    <span className="text-[11px] font-black text-slate-200 uppercase tracking-tight">
+                    <span className="text-[11px] font-black text-foreground uppercase tracking-tight">
                       {KEY_LABELS[log.parameterKey] || log.parameterKey}
                     </span>
-                    <code className="text-[9px] text-teal-400/60 font-mono">
+                    <code className="text-[9px] text-primary/60 font-mono">
                       {log.parameterKey}
                     </code>
                   </div>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center justify-center gap-3">
-                    <span className="text-[10px] font-mono text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded border border-slate-700/30">
+                    <span className="text-[10px] font-mono text-faint bg-surface-2 px-2 py-0.5 rounded border border-divider/30">
                       {formatValue(log.parameterKey, log.oldValue)}
                     </span>
-                    <ArrowRight className="w-3 h-3 text-slate-600" />
-                    <span className="text-[10px] font-mono text-white bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
+                    <ArrowRight className="w-3 h-3 text-faint" />
+                    <span className="text-[10px] font-mono text-foreground bg-primary-hl px-2 py-0.5 rounded border border-primary/20">
                       {formatValue(log.parameterKey, log.newValue)}
                     </span>
                   </div>
@@ -161,7 +161,7 @@ export default function ConfigChangeLog() {
             ))}
             {filteredLogs.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-6 py-20 text-center text-slate-500 text-sm italic font-medium">
+                <td colSpan={4} className="px-6 py-20 text-center text-faint text-sm italic font-medium">
                   No se encontraron registros de cambios.
                 </td>
               </tr>

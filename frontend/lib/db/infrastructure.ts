@@ -3,7 +3,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-export const INFRA_VERSION = 'v4.2';
+export const INFRA_VERSION = 'v4.3';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -790,6 +790,12 @@ export async function ensureInfrastructure(db: any) {
     // Invalida la caché in-memory de ContactGuard para que las reglas reseedadas
     // entren en efecto inmediato (sin esperar el TTL de 60s).
     invalidateContactGuardCache();
+
+    // v4.3 — Preferencia de tema por usuario (light | dark | system).
+    await db.execute(sql`
+      ALTER TABLE "user"
+        ADD COLUMN IF NOT EXISTS theme_preference text NOT NULL DEFAULT 'system';
+    `);
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
     console.log("[DB] Infraestructura verificada con éxito.");

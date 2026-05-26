@@ -110,7 +110,7 @@ const TimeCounter = ({ createdAt }: { createdAt: string | Date }) => {
     return () => clearInterval(interval);
   }, [createdAt]);
 
-  return <span className="text-[10px] text-teal-200/80 font-mono tracking-normal shrink-0">hace {elapsed}</span>;
+  return <span className="text-[10px] text-primary/80 font-mono tracking-normal shrink-0">hace {elapsed}</span>;
 };
 
 const formatDate = (dateValue: string | Date) => {
@@ -1651,12 +1651,12 @@ function CaseDetailPageContent() {
     const debug = clinicalCase?._debug;
 
     return (
-      <div className="text-center py-20 bg-slate-950 min-h-screen flex flex-col items-center justify-center p-6">
-        <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mb-6">
+      <div className="text-center py-20 bg-background min-h-screen flex flex-col items-center justify-center p-6">
+        <div className="w-16 h-16 bg-error-hl text-error rounded-full flex items-center justify-center mb-6">
           <XCircle className="w-8 h-8" />
         </div>
-        <h2 className="text-2xl text-white serif-font">Caso no encontrado</h2>
-        <p className="text-slate-500 mt-2 max-w-md mx-auto">
+        <h2 className="text-2xl text-foreground serif-font">Caso no encontrado</h2>
+        <p className="text-faint mt-2 max-w-md mx-auto">
           {clinicalCase?._error === 'NotFound'
             ? "El servidor no encontró el caso con los permisos actuales."
             : "No tenemos registro de este caso o no tienes los permisos necesarios."}
@@ -1664,30 +1664,30 @@ function CaseDetailPageContent() {
 
         {/* Panel de Diagnóstico Forense */}
         {debug && (
-          <div className="mt-8 p-6 bg-slate-900 border border-slate-800 rounded-2xl text-left max-w-2xl w-full">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-teal-500 mb-4 flex items-center gap-2">
+          <div className="mt-8 p-6 bg-surface border border-divider rounded-2xl text-left max-w-2xl w-full">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-primary mb-4 flex items-center gap-2">
               <Shield className="w-3 h-3" /> Reporte Forense del Servidor
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <p className="text-[9px] text-slate-500 uppercase font-bold">Case solicitado:</p>
-                <p className="text-[11px] text-white font-mono break-all bg-black/30 p-2 rounded border border-white/5">{debug.caseId}</p>
+                <p className="text-[9px] text-faint uppercase font-bold">Case solicitado:</p>
+                <p className="text-[11px] text-foreground font-mono break-all bg-black/30 p-2 rounded border border-divider">{debug.caseId}</p>
               </div>
               <div className="space-y-2">
-                <p className="text-[9px] text-slate-500 uppercase font-bold">Identidad Servidor:</p>
-                <div className="p-2 bg-black/30 rounded border border-white/5 space-y-1">
-                   <p className="text-[10px] text-white"><span className="text-slate-500">Email:</span> {debug.email}</p>
-                   <p className="text-[10px] text-white"><span className="text-slate-500">Role DB:</span> <span className="text-teal-400 font-bold uppercase">{debug.userRoleInDB}</span></p>
-                   <p className="text-[10px] text-white"><span className="text-slate-500">Master Key:</span> <span className={debug.isSystemAdmin ? "text-green-500" : "text-amber-500"}>{debug.isSystemAdmin ? "ACTIVA" : "INACTIVA"}</span></p>
+                <p className="text-[9px] text-faint uppercase font-bold">Identidad Servidor:</p>
+                <div className="p-2 bg-black/30 rounded border border-divider space-y-1">
+                   <p className="text-[10px] text-foreground"><span className="text-faint">Email:</span> {debug.email}</p>
+                   <p className="text-[10px] text-foreground"><span className="text-faint">Role DB:</span> <span className="text-primary font-bold uppercase">{debug.userRoleInDB}</span></p>
+                   <p className="text-[10px] text-foreground"><span className="text-faint">Master Key:</span> <span className={debug.isSystemAdmin ? "text-jade" : "text-warning"}>{debug.isSystemAdmin ? "ACTIVA" : "INACTIVA"}</span></p>
                    {debug.message && (
-                     <p className="text-[9px] text-red-400 mt-2 bg-red-500/5 p-2 rounded border border-red-500/10 font-mono italic">
+                     <p className="text-[9px] text-error mt-2 bg-error-hl p-2 rounded border border-error/30/10 font-mono italic">
                        Error: {debug.message}
                      </p>
                    )}
                 </div>
               </div>
             </div>
-            <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-center text-[9px] text-slate-600 font-black uppercase tracking-widest">
+            <div className="mt-4 pt-4 border-t border-divider flex justify-between items-center text-[9px] text-faint font-bold uppercase tracking-wider">
                <span>Criterio: {debug.criteria}</span>
                <span>DentFlow Forensic v1.0</span>
             </div>
@@ -1696,7 +1696,7 @@ function CaseDetailPageContent() {
         
         <button 
           onClick={() => router.push('/dashboard')} 
-          className="mt-8 text-slate-500 hover:text-white font-bold uppercase tracking-widest text-[9px] px-8 py-3 bg-slate-900 border border-slate-800 rounded-full transition-all"
+          className="mt-8 text-faint hover:text-foreground font-bold uppercase tracking-widest text-[9px] px-8 py-3 bg-surface border border-divider rounded-full transition-all"
         >
           Volver al Dashboard
         </button>
@@ -1707,12 +1707,12 @@ function CaseDetailPageContent() {
   // Guardia de Carga
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 space-y-4">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 space-y-4">
         <div className="relative w-20 h-20">
-          <div className="absolute inset-0 border-4 border-teal-500/10 rounded-full" />
-          <div className="absolute inset-0 border-4 border-teal-500 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(20,184,166,0.2)]" />
+          <div className="absolute inset-0 border-4 border-primary/30/10 rounded-full" />
+          <div className="absolute inset-0 border-4 border-primary/30 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(20,184,166,0.2)]" />
         </div>
-        <p className="text-teal-500 font-black uppercase tracking-[0.3em] text-[10px] animate-pulse">Sincronizando Expediente...</p>
+        <p className="text-primary font-black uppercase tracking-[0.3em] text-[10px] animate-pulse">Sincronizando Expediente...</p>
       </div>
     );
   }
@@ -1723,31 +1723,31 @@ function CaseDetailPageContent() {
       {/* HEADER SECTION — z-index por encima del panel UCH (col. derecha) para que abrir/cerrar responda siempre al clic */}
       <div className="relative z-[450] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} aria-label="Volver" className="w-10 h-10 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+          <button onClick={() => router.back()} aria-label="Volver" className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-surface-2 border border-divider text-muted hover:bg-surface-off hover:text-foreground hover:border-border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
             {canEditForm ? (
               <input
-                className="text-2xl serif-font bg-slate-900/50 border border-teal-500/30 rounded-xl px-4 py-1 text-white focus:outline-none w-full"
+                className="text-2xl serif-font bg-surface border border-primary/30 rounded-xl px-4 py-1 text-foreground focus:outline-none w-full"
                 value={editForm?.internalName}
                 onChange={e => setEditForm((prev: any) => ({ ...prev, internalName: e.target.value }))}
               />
             ) : (
-              <h1 className="text-2xl serif-font text-white uppercase">{clinicalCase?.internalName}</h1>
+              <h1 className="text-2xl serif-font text-foreground uppercase">{clinicalCase?.internalName}</h1>
             )}
             {fieldsEditable && !isEditing && (
-              <p className="text-[10px] text-slate-500/90 mt-1 font-medium normal-case tracking-normal">
+              <p className="text-[10px] text-faint/90 mt-1 font-medium normal-case tracking-normal">
                 Borrador — pulsa Editar para ajustar los datos clínicos
               </p>
             )}
             {clinicalCase?.copiedFromCaseId && (
-              <p className="text-[10px] text-slate-500 mt-1 normal-case tracking-normal">
+              <p className="text-[10px] text-faint mt-1 normal-case tracking-normal">
                 Copia del caso{' '}
                 {clinicalCase.copiedFromCaseNumber ? (
                   <Link
                     href={`/dashboard/cases/${clinicalCase.copiedFromCaseId}`}
-                    className="text-teal-500/90 hover:text-teal-400 font-semibold"
+                    className="text-primary/90 hover:text-primary font-semibold"
                   >
                     #{clinicalCase.copiedFromCaseNumber}
                   </Link>
@@ -1757,7 +1757,7 @@ function CaseDetailPageContent() {
               </p>
             )}
             {isActiveCaseStatus(caseStatus) && (
-              <p className="text-[10px] text-slate-500/90 mt-1 font-medium normal-case tracking-normal">
+              <p className="text-[10px] text-faint/90 mt-1 font-medium normal-case tracking-normal">
                 Caso en curso — datos clínicos en solo lectura
               </p>
             )}
@@ -1781,24 +1781,24 @@ function CaseDetailPageContent() {
                 <select 
                   value={editForm?.serviceType} 
                   onChange={e => setEditForm((prev: any) => ({ ...prev, serviceType: e.target.value }))}
-                  className="bg-slate-900 border border-teal-500/30 rounded px-2 py-1 text-teal-400 text-[10px] uppercase font-black tracking-widest outline-none"
+                  className="bg-surface border border-primary/30 rounded px-2 py-1 text-primary text-[10px] uppercase font-black tracking-widest outline-none"
                 >
                   {Object.values(SERVICE_TYPES).map(t => <option key={t} value={t}>{SERVICE_TYPE_LABELS[t] || t}</option>)}
                 </select>
               ) : (
                 <CaseServiceTypeBadge serviceType={clinicalCase?.serviceType} />
               )}
-              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-faint flex items-center gap-1">
                 {caseNumberLabel(clinicalCase?.caseNumber) ? (
                   <>
-                    <span className="text-teal-500/90">{caseNumberLabel(clinicalCase?.caseNumber)}</span>
+                    <span className="text-primary/90">{caseNumberLabel(clinicalCase?.caseNumber)}</span>
                     <span className="mx-1">·</span>
                   </>
                 ) : null}
                 <span>PAC:</span>
                 {canEditForm ? (
                   <input
-                    className="bg-slate-900 border border-teal-500/30 rounded px-2 py-0.5 text-white outline-none w-32"
+                    className="bg-surface border border-primary/30 rounded px-2 py-0.5 text-foreground outline-none w-32"
                     value={editForm?.patientIdAnon}
                     onChange={e => setEditForm((prev: any) => ({ ...prev, patientIdAnon: e.target.value }))}
                   />
@@ -1807,7 +1807,7 @@ function CaseDetailPageContent() {
                 )}
               </div>
               {clinicalCase?.internalStatus && authUserProfile?.role === 'admin' && (
-                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-800/80 text-slate-400 border border-slate-700 tracking-wider">
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-surface-2 text-muted border border-divider tracking-wider">
                   ⚙ {clinicalCase.internalStatus}
                 </span>
               )}
@@ -1844,17 +1844,17 @@ function CaseDetailPageContent() {
                             e.stopPropagation();
                             toggleCaseHubOpen();
                           }}
-                          className={`relative flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 ${
+                          className={`relative flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                             isHubOpen
-                              ? 'bg-teal-600 border-teal-500 text-white hover:bg-teal-500'
-                              : 'bg-teal-600/10 border-teal-500/30 text-teal-400 hover:bg-teal-600 hover:text-white'
+                              ? 'bg-primary border-primary/30 text-inverse hover:bg-primary'
+                              : 'bg-primary/10 border-primary/30 text-primary hover:bg-primary hover:text-foreground'
                           }`}
                           aria-label={isHubOpen ? 'Cerrar Centro de control' : 'Abrir Centro de control'}
                         >
                           <UchHubIcon className="h-4 w-4" />
                           <span>Centro de Control</span>
                           {totalUnread > 0 && (
-                            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-rose-600 text-white text-[9px] font-black rounded-full flex items-center justify-center animate-bounce shadow-lg shadow-rose-900/50">
+                            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-error text-inverse text-[9px] font-black rounded-full flex items-center justify-center animate-bounce shadow-lg shadow-sm">
                               {totalUnread}
                             </span>
                           )}
@@ -1864,7 +1864,7 @@ function CaseDetailPageContent() {
                   })()}
               </div>
 
-              <div className="w-px h-8 bg-white/10 mx-2 hidden sm:block" />
+              <div className="w-px h-8 bg-surface-off mx-2 hidden sm:block" />
 
               <CaseDetailManagementBar
                 actions={detailActions}
@@ -1949,23 +1949,23 @@ function CaseDetailPageContent() {
             let Icon = Activity;
 
             if (isLoser) {
-              buttonStyles = 'bg-slate-800 text-slate-400 border-slate-700/50 hover:bg-slate-700';
+              buttonStyles = 'bg-surface-2 text-muted border-divider hover:bg-surface-off';
               label = 'Centro de Control';
               Icon = FileText;
             } else if (isWinner) {
-              buttonStyles = 'bg-teal-600/20 text-teal-400 border-teal-500/30 hover:bg-teal-600/30';
+              buttonStyles = 'bg-primary/20 text-primary border-primary/30 hover:bg-primary/30';
               label = 'Centro de Control';
               Icon = Activity;
             } else if (invPending) {
-              buttonStyles = 'bg-teal-600 text-white shadow-lg shadow-teal-900/20 hover:bg-teal-500';
+              buttonStyles = 'bg-primary text-inverse shadow-lg shadow-sm hover:bg-primary';
               label = 'Enviar Oferta';
               Icon = Activity;
             } else if (invQuoted) {
-              buttonStyles = 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20';
+              buttonStyles = 'bg-warning-hl text-warning border-warning/20 hover:bg-warning-hl';
               label = 'Cotización Enviada';
               Icon = Clock;
             } else if (rejectedCanOpenHub) {
-              buttonStyles = 'bg-slate-800 text-slate-400 border-slate-700/50 hover:bg-slate-700';
+              buttonStyles = 'bg-surface-2 text-muted border-divider hover:bg-surface-off';
               label = 'Centro de Control';
               Icon = FileText;
             } else {
@@ -1980,7 +1980,7 @@ function CaseDetailPageContent() {
                   e.stopPropagation();
                   toggleCaseHubOpen();
                 }}
-                className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase transition-all border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 ${buttonStyles}`}
+                className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-[10px] uppercase transition-all border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${buttonStyles}`}
                 aria-label={
                   label === 'Centro de Control'
                     ? isHubOpen
@@ -1998,14 +1998,14 @@ function CaseDetailPageContent() {
                 )}
                 <span>{label}</span>
                 {invQuoted && myInvitation?.quotedPrice && (
-                  <span className="ml-1 text-[9px] font-mono text-white/70">
+                  <span className="ml-1 text-[9px] font-mono text-foreground/70">
                     {formatCurrency(myInvitation.quotedPrice)} · {myInvitation.quotedDays}d
                   </span>
                 )}
                 {isWinner &&
                   unreadTechMessages > 0 &&
                   !isHubInboxSuppressedForCompletedCase(clinicalCase?.status) && (
-                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-rose-600 text-white text-[8px] font-black rounded-full flex items-center justify-center animate-bounce">
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-error text-inverse text-[8px] font-black rounded-full flex items-center justify-center animate-bounce">
                     {unreadTechMessages}
                   </span>
                 )}
@@ -2057,10 +2057,10 @@ function CaseDetailPageContent() {
       {/* Estado "En Evaluación" para el dentista */}
       {showCaseToolbar && clinicalCase?.status === 'enEvaluacion' && (
         <div className="flex items-center gap-4 bg-sky-500/8 border border-sky-500/20 rounded-2xl px-5 py-4">
-          <div className="w-8 h-8 border-2 border-sky-500/30 border-t-sky-400 rounded-full animate-spin flex-shrink-0" />
+          <div className="w-8 h-8 border-2 border-primary/20 border-t-sky-400 rounded-full animate-spin flex-shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-bold text-sky-300">Tu caso está siendo evaluado</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">Faucard está seleccionando el laboratorio más adecuado. Recibirás una propuesta pronto.</p>
+            <p className="text-sm font-bold text-primary">Tu caso está siendo evaluado</p>
+            <p className="text-[11px] text-faint mt-0.5">Faucard está seleccionando el laboratorio más adecuado. Recibirás una propuesta pronto.</p>
           </div>
           {clinicalCase?.evaluationExpiresAt && !evalExpired && (
             <div className="flex flex-col items-end">
@@ -2069,7 +2069,7 @@ function CaseDetailPageContent() {
               </span>
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500/10 border border-sky-500/20 rounded-xl">
                 <Clock className="w-3.5 h-3.5 text-sky-400" />
-                <span className="text-sm font-black text-white tabular-nums">
+                <span className="text-sm font-black text-foreground tabular-nums">
                   {String(evalH).padStart(2, '0')}:{String(evalM).padStart(2, '0')}:{String(evalS).padStart(2, '0')}
                 </span>
               </div>
@@ -2079,7 +2079,7 @@ function CaseDetailPageContent() {
       )}
 
       {/* WORKFLOW STEPPER */}
-      <div className="bg-slate-900/60 border border-white/5 rounded-2xl px-6 py-4">
+      <div className="bg-surface/60 border border-divider rounded-2xl px-6 py-4">
         <CaseWorkflowStepper
           currentStatus={isEditingStatus ?? clinicalCase?.status ?? 'borrador'}
           serviceType={clinicalCase?.serviceType}
@@ -2090,13 +2090,13 @@ function CaseDetailPageContent() {
 
       {/* Banner de caso republicado (STAB-020) */}
       {clinicalCase?.changeSummary && clinicalCase.status === 'publicado' && (clinicalCase.commercialVersion ?? 1) > 1 && (
-        <div className="flex items-start gap-3 bg-amber-500/8 border border-amber-500/25 rounded-2xl px-5 py-3.5">
-          <RotateCcw className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 bg-warning-hl border border-warning/20 rounded-2xl px-5 py-3.5">
+          <RotateCcw className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
           <div className="min-w-0">
-            <p className="text-xs font-black text-amber-400 uppercase tracking-widest mb-0.5">
+            <p className="text-xs font-black text-warning uppercase tracking-widest mb-0.5">
               Caso republicado — versión {clinicalCase.commercialVersion}
             </p>
-            <p className="text-sm text-amber-200/70 leading-relaxed">{clinicalCase.changeSummary}</p>
+            <p className="text-sm text-warning leading-relaxed">{clinicalCase.changeSummary}</p>
           </div>
         </div>
       )}
@@ -2105,16 +2105,16 @@ function CaseDetailPageContent() {
         <div className="lg:col-span-8 flex flex-col gap-4">
           <div className="relative group">
             {modelConfig.length > 0 ? (
-              <div className="relative h-[320px] sm:h-[450px] lg:h-[600px] w-full overflow-hidden rounded-[1.5rem] bg-slate-900/40">
+              <div className="relative h-[320px] sm:h-[450px] lg:h-[600px] w-full overflow-hidden rounded-[1.5rem] bg-surface/40">
                 {/* WATERMARK ESTADO LICITACIÓN — solo si ya se aceptó (no en propuestaLista) */}
                 {assignedTechnicianIdStr != null && clinicalCase?.status !== 'propuestaLista' && (
                   <div className="absolute top-10 -left-14 z-50 pointer-events-none transform -rotate-45 w-64 text-center drop-shadow-xl">
                     {(actingAsDentista || (viewerIdStr != null && assignedTechnicianIdStr === viewerIdStr)) ? (
-                      <div className="bg-teal-600/90 text-white font-black uppercase text-[10px] tracking-[0.2em] py-1.5 shadow-lg shadow-teal-900/50 backdrop-blur-sm border-y border-teal-400/30">
+                      <div className="bg-primary/90 text-inverse font-black uppercase text-[10px] tracking-[0.2em] py-1.5 shadow-lg shadow-sm backdrop-blur-sm border-y border-primary/30">
                         OFERTA ACEPTADA
                       </div>
                     ) : (
-                      <div className="bg-rose-600/90 text-white font-black uppercase text-[10px] tracking-[0.2em] py-1.5 shadow-lg shadow-rose-900/50 backdrop-blur-sm border-y border-rose-400/30">
+                      <div className="bg-error text-inverse font-black uppercase text-[10px] tracking-[0.2em] py-1.5 shadow-lg shadow-sm backdrop-blur-sm border-y border-rose-400/30">
                         OFERTA RECHAZADA
                       </div>
                     )}
@@ -2136,24 +2136,24 @@ function CaseDetailPageContent() {
                     <motion.div
                       initial={{ opacity: 0, scale: 0.9, y: 20 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
-                      className="absolute bottom-6 left-6 right-6 lg:left-1/4 lg:right-1/4 bg-slate-900/95 backdrop-blur-xl border border-white/10 p-5 rounded-3xl shadow-2xl z-50 flex flex-col md:flex-row items-center gap-4"
+                      className="absolute bottom-6 left-6 right-6 lg:left-1/4 lg:right-1/4 bg-surface/95 backdrop-blur-xl border border-divider p-5 rounded-3xl shadow-2xl z-50 flex flex-col md:flex-row items-center gap-4"
                     >
                       <div className="flex-1 w-full">
-                        <p className="text-[10px] text-teal-400 font-bold uppercase tracking-widest mb-2">Nueva Anotación</p>
+                        <p className="text-[10px] text-primary font-bold uppercase tracking-widest mb-2">Nueva Anotación</p>
                         <input
                           autoFocus
                           value={newAnnotationText}
                           onChange={(e) => setNewAnnotationText(e.target.value)}
-                          className="w-full bg-slate-950/50 border border-white/5 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
+                          className="w-full bg-background/50 border border-divider rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none"
                           placeholder="Tu observación aquí..."
                         />
                       </div>
                       <div className="flex gap-2 w-full md:w-auto">
-                        <button onClick={() => setSelectedCoords(null)} className="p-3 bg-slate-800 text-slate-400 rounded-xl"><X className="w-5 h-5" /></button>
+                        <button onClick={() => setSelectedCoords(null)} className="p-3 bg-surface-2 text-muted rounded-xl"><X className="w-5 h-5" /></button>
                         <button
                           onClick={handleSaveAnnotation}
                           disabled={savingAnnotation || !newAnnotationText.trim()}
-                          className="flex-1 px-6 bg-teal-600 text-white rounded-xl font-bold"
+                          className="flex-1 px-6 bg-primary text-inverse rounded-xl font-bold"
                         >
                           {savingAnnotation ? "..." : "Guardar"}
                         </button>
@@ -2163,14 +2163,14 @@ function CaseDetailPageContent() {
                 </DentalViewer3D>
               </div>
             ) : (
-              <div className="w-full h-[280px] sm:h-[400px] lg:h-[500px] bg-slate-900/60 rounded-[1.5rem] border border-slate-800 flex items-center justify-center flex-col gap-4 text-center px-6">
+              <div className="w-full h-[280px] sm:h-[400px] lg:h-[500px] bg-surface/60 rounded-[1.5rem] border border-divider flex items-center justify-center flex-col gap-4 text-center px-6">
                 {canEditForm || (clinicalCase && (clinicalCase.files?.length ?? 0) === 0) ? (
                   <>
-                    <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-amber-400" />
+                    <div className="w-12 h-12 rounded-full bg-warning-hl border border-warning/20 flex items-center justify-center">
+                      <FileText className="w-6 h-6 text-warning" />
                     </div>
-                    <h3 className="text-white font-semibold">No hay archivos clínicos</h3>
-                    <p className="text-xs text-slate-400 max-w-xs">
+                    <h3 className="text-foreground font-semibold">No hay archivos clínicos</h3>
+                    <p className="text-xs text-muted max-w-xs">
                       {canEditForm
                         ? 'Carga un archivo (STL, PLY, OBJ, JPG, PNG) usando el botón "Agregar archivo" para visualizarlo aquí.'
                         : 'Este caso no tiene archivos clínicos cargados.'}
@@ -2178,16 +2178,16 @@ function CaseDetailPageContent() {
                   </>
                 ) : (
                   <>
-                    <div className="w-12 h-12 border-4 border-teal-500/20 border-t-teal-500 rounded-full animate-spin" />
-                    <h3 className="text-white font-semibold">Cargando modelos 3D...</h3>
+                    <div className="w-12 h-12 border-4 border-primary/20 border-t-teal-500 rounded-full animate-spin" />
+                    <h3 className="text-foreground font-semibold">Cargando modelos 3D...</h3>
                   </>
                 )}
               </div>
             )}
           </div>
 
-          <section className="glass-effect rounded-[1.5rem] border border-slate-800/50 bg-slate-900/40 p-6 flex flex-col items-center">
-            <h3 className="text-white text-sm uppercase tracking-wide mb-4">Odontograma</h3>
+          <section className="bg-surface shadow-sm border border-divider rounded-[1.5rem] border border-divider/50 bg-surface/40 p-6 flex flex-col items-center">
+            <h3 className="text-foreground text-sm uppercase tracking-wide mb-4">Odontograma</h3>
             <TeethSelector
               selectedTeeth={canEditForm ? (editForm?.teeth ?? []) : (clinicalCase?.teeth ?? [])}
               onChange={teeth => canEditForm && setEditForm((p: any) => ({ ...p, teeth }))}
@@ -2196,21 +2196,21 @@ function CaseDetailPageContent() {
 
           {/* Archivos del Caso */}
           {(displayedFiles.length > 0 || canEditForm) && (
-            <section className="glass-effect rounded-[1.5rem] border border-slate-800/50 bg-slate-900/40 p-6 flex flex-col">
+            <section className="bg-surface shadow-sm border border-divider rounded-[1.5rem] border border-divider/50 bg-surface/40 p-6 flex flex-col">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-white text-sm uppercase tracking-wide flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-teal-400" />
+                <h3 className="text-foreground text-sm uppercase tracking-wide flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
                   Archivos Clínicos
                 </h3>
                 {canEditForm && (
-                  <span className="text-[10px] text-slate-500 uppercase">
+                  <span className="text-[10px] text-faint uppercase">
                     {displayedFiles.length}/{MAX_CLINICAL_FILES}
                   </span>
                 )}
               </div>
               <div className="flex flex-col gap-2">
                 {canEditForm && displayedFiles.length < MAX_CLINICAL_FILES && (
-                  <label className="flex items-center justify-center gap-2 p-3 bg-slate-950/40 rounded-xl border border-dashed border-slate-700 hover:border-teal-500/40 hover:bg-teal-500/5 cursor-pointer transition-all text-xs text-slate-400 hover:text-teal-300">
+                  <label className="flex items-center justify-center gap-2 p-3 bg-background/40 rounded-xl border border-dashed border-divider hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all text-xs text-muted hover:text-primary">
                     <Upload className="w-4 h-4" />
                     Agregar archivo (STL, PLY, OBJ, JPG, PNG · máx 20 MB)
                     <input
@@ -2224,16 +2224,16 @@ function CaseDetailPageContent() {
                 {displayedFiles.map((f: any) => {
                   const url = f.staged ? f.previewUrl : downloadUrls[f.id];
                   return (
-                    <div key={f.key} className={`flex items-center justify-between p-3 bg-slate-950/60 rounded-xl border transition-all ${f.staged ? 'border-amber-500/30' : 'border-white/5 hover:border-teal-500/30'}`}>
+                    <div key={f.key} className={`flex items-center justify-between p-3 bg-background/60 rounded-xl border transition-all ${f.staged ? 'border-warning/20' : 'border-divider hover:border-primary/30'}`}>
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="p-2 bg-teal-500/10 rounded-lg shrink-0">
-                          <FileText className="w-4 h-4 text-teal-400" />
+                        <div className="p-2 bg-primary-hl rounded-lg shrink-0">
+                          <FileText className="w-4 h-4 text-primary" />
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <span className="text-xs text-white font-bold truncate">{f.filename}</span>
-                          <span className="text-[10px] text-slate-500 uppercase">
+                          <span className="text-xs text-foreground font-bold truncate">{f.filename}</span>
+                          <span className="text-[10px] text-faint uppercase">
                             {f.category} • {(f.size / 1024 / 1024).toFixed(2)} MB
-                            {f.staged && <span className="ml-2 text-amber-400 font-bold">· Pendiente</span>}
+                            {f.staged && <span className="ml-2 text-warning font-bold">· Pendiente</span>}
                           </span>
                         </div>
                       </div>
@@ -2255,7 +2255,7 @@ function CaseDetailPageContent() {
                               }
                             }}
                             aria-label="Descargar archivo"
-                            className="p-2 text-slate-400 hover:text-teal-400 hover:bg-teal-400/10 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-primary-hl border border-primary/20 text-primary hover:bg-primary hover:text-inverse transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                           >
                             <Download className="w-4 h-4" />
                           </a>
@@ -2266,7 +2266,7 @@ function CaseDetailPageContent() {
                             onClick={() => handleClinicalFileDelete(f.id)}
                             disabled={savingChanges}
                             aria-label="Eliminar archivo"
-                            className="p-2 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all disabled:opacity-50"
+                            className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-error-hl border border-error/20 text-error hover:bg-error hover:text-inverse transition-colors disabled:opacity-50"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -2285,15 +2285,15 @@ function CaseDetailPageContent() {
 
           {/* RESPUESTA A SOLICITUDES (DENTISTA) */}
           {actingAsDentista && clinicalCase?.pendingActionRequest && clinicalCase.pendingActionActor !== user?.id && (
-            <section className="bg-amber-600/10 border border-amber-500/30 rounded-[1.2rem] p-5 space-y-4">
+            <section className="bg-warning border border-warning/20 rounded-[1.2rem] p-5 space-y-4">
               <div className="flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-amber-500" />
-                <h3 className="text-white font-bold uppercase text-xs">Solicitud del Técnico</h3>
+                <AlertCircle className="w-5 h-5 text-warning" />
+                <h3 className="text-foreground font-bold uppercase text-xs">Solicitud del Técnico</h3>
               </div>
-              <p className="text-[11px] text-slate-400">El técnico ha solicitado **{clinicalCase.pendingActionRequest === 'pausa' ? 'PAUSAR' : 'CANCELAR'}** el trabajo.</p>
+              <p className="text-[11px] text-muted">El técnico ha solicitado **{clinicalCase.pendingActionRequest === 'pausa' ? 'PAUSAR' : 'CANCELAR'}** el trabajo.</p>
               <div className="flex gap-3">
-                <button onClick={() => handleResolveFlowRequest(false)} className="flex-1 py-3 bg-slate-800 text-white text-[10px] font-bold rounded-xl uppercase">Rechazar</button>
-                <button onClick={() => handleResolveFlowRequest(true)} className="flex-1 py-3 bg-amber-600 text-white text-[10px] font-bold rounded-xl uppercase">Aprobar Solicitud</button>
+                <button onClick={() => handleResolveFlowRequest(false)} className="flex-1 py-3 bg-surface-2 text-foreground text-[10px] font-bold rounded-xl uppercase">Rechazar</button>
+                <button onClick={() => handleResolveFlowRequest(true)} className="flex-1 py-3 bg-warning text-inverse text-[10px] font-bold rounded-xl uppercase">Aprobar Solicitud</button>
               </div>
             </section>
           )}
@@ -2343,19 +2343,19 @@ function CaseDetailPageContent() {
               </motion.div>
             )}
 
-            <section className="glass-effect p-0 rounded-[1.2rem] border border-slate-800/30 overflow-hidden flex flex-col h-[500px] lg:h-[600px]">
+            <section className="bg-surface shadow-sm border border-divider p-0 rounded-[1.2rem] border border-divider/30 overflow-hidden flex flex-col h-[500px] lg:h-[600px]">
               {/* ESPECIFICACIONES */}
               <div className="flex-1 flex-col h-full">
                 {true ? (
                   <div className="flex flex-col h-full">
-                    <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
+                    <div className="p-6 border-b border-divider flex items-center justify-between bg-surface-off">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-teal-500/20 flex items-center justify-center text-teal-400">
+                        <div className="w-10 h-10 rounded-2xl bg-primary-hl flex items-center justify-center text-primary">
                           <Stethoscope className="w-5 h-5" />
                         </div>
                         <div>
-                          <h3 className="text-sm font-black text-white uppercase tracking-widest">Especificaciones del Caso</h3>
-                          <p className="text-[9px] text-teal-400/80 font-bold uppercase tracking-widest">Detalles clínicos y materiales</p>
+                          <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Especificaciones del Caso</h3>
+                          <p className="text-[9px] text-primary/80 font-bold uppercase tracking-widest">Detalles clínicos y materiales</p>
                         </div>
                       </div>
                     </div>
@@ -2363,24 +2363,24 @@ function CaseDetailPageContent() {
                     <div className="flex-1 overflow-y-auto flex-1 p-6 custom-scrollbar space-y-6">
                       <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                         <div className="space-y-1">
-                          <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest block">Restauración</span>
+                          <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Restauración</span>
                           {canEditForm ? (
                             <select
-                              className="w-full bg-slate-900 border border-teal-500/30 rounded px-3 py-2 text-white text-xs outline-none"
+                              className="w-full bg-surface border border-primary/30 rounded px-3 py-2 text-foreground text-xs outline-none"
                               value={editForm?.restorationType ?? ''}
                               onChange={e => setEditForm((prev: any) => ({ ...prev, restorationType: e.target.value }))}
                             >
                               {restorationTypes.map(t => <option key={t.code} value={t.code}>{t.label}</option>)}
                             </select>
                           ) : (
-                            <span className="text-xs text-white font-medium">{clinicalCase?.restorationType}</span>
+                            <span className="text-xs text-foreground font-medium">{clinicalCase?.restorationType}</span>
                           )}
                         </div>
                         <div className="space-y-1">
-                          <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest block">Prioridad</span>
+                          <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Prioridad</span>
                           {canEditForm ? (
                             <select
-                              className="w-full bg-slate-900 border border-teal-500/30 rounded px-3 py-2 text-white text-xs outline-none"
+                              className="w-full bg-surface border border-primary/30 rounded px-3 py-2 text-foreground text-xs outline-none"
                               value={editForm?.urgency ?? ''}
                               onChange={e => setEditForm((prev: any) => ({ ...prev, urgency: e.target.value }))}
                             >
@@ -2389,14 +2389,14 @@ function CaseDetailPageContent() {
                               ))}
                             </select>
                           ) : (
-                            <span className="text-xs text-white font-medium uppercase tracking-widest">{clinicalCase?.urgency}</span>
+                            <span className="text-xs text-foreground font-medium uppercase tracking-widest">{clinicalCase?.urgency}</span>
                           )}
                         </div>
                         <div className="space-y-1">
-                          <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest block">Material</span>
+                          <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Material</span>
                           {canEditForm ? (
                             <select
-                              className="w-full bg-slate-900 border border-teal-500/30 rounded px-3 py-2 text-white text-xs outline-none"
+                              className="w-full bg-surface border border-primary/30 rounded px-3 py-2 text-foreground text-xs outline-none"
                               value={editForm?.material ?? ''}
                               onChange={e => setEditForm((prev: any) => ({ ...prev, material: e.target.value }))}
                             >
@@ -2404,32 +2404,32 @@ function CaseDetailPageContent() {
                               {dentalMaterials.map(m => <option key={m.code} value={m.code}>{m.label}</option>)}
                             </select>
                           ) : (
-                            <span className="text-xs text-white font-medium">{clinicalCase?.material || 's/n'}</span>
+                            <span className="text-xs text-foreground font-medium">{clinicalCase?.material || 's/n'}</span>
                           )}
                         </div>
                         <div className="space-y-1">
-                          <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest block">Color Vita</span>
+                          <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Color Vita</span>
                           {canEditForm ? (
                             <select
-                              className="w-full bg-slate-900 border border-teal-500/30 rounded px-3 py-2 text-white text-xs outline-none"
+                              className="w-full bg-surface border border-primary/30 rounded px-3 py-2 text-foreground text-xs outline-none"
                               value={editForm?.shade ?? ''}
                               onChange={e => setEditForm((prev: any) => ({ ...prev, shade: e.target.value }))}
                             >
                               {vitaShades.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
                             </select>
                           ) : (
-                            <span className="text-xs text-teal-400 font-black uppercase">{clinicalCase?.shade}</span>
+                            <span className="text-xs text-primary font-black uppercase">{clinicalCase?.shade}</span>
                           )}
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-white/5 space-y-4">
+                      <div className="pt-4 border-t border-divider space-y-4">
                         <div className="space-y-2">
-                          <span className="text-[10px] text-slate-500 uppercase font-black tracking-widest block">Instrucciones Especiales</span>
-                          <div className="bg-slate-900/50 p-4 rounded-xl border border-white/5 space-y-4">
+                          <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Instrucciones Especiales</span>
+                          <div className="bg-surface p-4 rounded-xl border border-divider space-y-4">
                             {canEditForm ? (
                               <textarea
-                                className="w-full bg-slate-950/50 border border-teal-500/30 rounded-xl px-4 py-3 text-[11px] text-slate-300 outline-none resize-none"
+                                className="w-full bg-background/50 border border-primary/30 rounded-xl px-4 py-3 text-[11px] text-muted outline-none resize-none"
                                 rows={3}
                                 placeholder="Instrucciones adicionales para el técnico..."
                                 value={editForm?.doctorNotes ?? ''}
@@ -2437,39 +2437,39 @@ function CaseDetailPageContent() {
                               />
                             ) : (
                               <div>
-                                <p className="text-[11px] text-slate-300 leading-relaxed italic">
+                                <p className="text-[11px] text-muted leading-relaxed italic">
                                   {creationInstructionsText(clinicalCase ?? {}) || 'No hay instrucciones adicionales.'}
                                 </p>
                               </div>
                             )}
                             
-                            <div className="pt-3 border-t border-white/5">
-                              <span className="text-[9px] text-teal-400 uppercase font-black tracking-widest block mb-1">Notas Estéticas</span>
+                            <div className="pt-3 border-t border-divider">
+                              <span className="text-[9px] text-primary uppercase font-black tracking-widest block mb-1">Notas Estéticas</span>
                               {canEditForm ? (
                                 <input
-                                  className="w-full bg-slate-950/50 border border-teal-500/30 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none"
+                                  className="w-full bg-background/50 border border-primary/30 rounded-lg px-3 py-2 text-[11px] text-muted outline-none"
                                   placeholder="Translucidez, mamelones, etc."
                                   value={editForm?.notesEsthetic ?? ''}
                                   onChange={e => setEditForm((prev: any) => ({ ...prev, notesEsthetic: e.target.value }))}
                                 />
                               ) : (
-                                <p className="text-[11px] text-slate-300 leading-relaxed italic">
+                                <p className="text-[11px] text-muted leading-relaxed italic">
                                   {clinicalCase?.notesEsthetic?.trim() || 'Sin notas estéticas.'}
                                 </p>
                               )}
                             </div>
 
-                            <div className="pt-3 border-t border-white/5">
-                              <span className="text-[9px] text-teal-400 uppercase font-black tracking-widest block mb-1">Notas Oclusales</span>
+                            <div className="pt-3 border-t border-divider">
+                              <span className="text-[9px] text-primary uppercase font-black tracking-widest block mb-1">Notas Oclusales</span>
                               {canEditForm ? (
                                 <input
-                                  className="w-full bg-slate-950/50 border border-teal-500/30 rounded-lg px-3 py-2 text-[11px] text-slate-300 outline-none"
+                                  className="w-full bg-background/50 border border-primary/30 rounded-lg px-3 py-2 text-[11px] text-muted outline-none"
                                   placeholder="Puntos de contacto, guía, etc."
                                   value={editForm?.notesOclusal ?? ''}
                                   onChange={e => setEditForm((prev: any) => ({ ...prev, notesOclusal: e.target.value }))}
                                 />
                               ) : (
-                                <p className="text-[11px] text-slate-300 leading-relaxed italic">
+                                <p className="text-[11px] text-muted leading-relaxed italic">
                                   {clinicalCase?.notesOclusal?.trim() || 'Sin notas oclusales.'}
                                 </p>
                               )}
@@ -2487,29 +2487,29 @@ function CaseDetailPageContent() {
 
 
 
-            <section className="glass-effect rounded-[1.5rem] border border-slate-800/30 flex flex-col min-h-[250px]">
-              <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
+            <section className="bg-surface shadow-sm border border-divider rounded-[1.5rem] border border-divider/30 flex flex-col min-h-[250px]">
+              <div className="p-6 border-b border-divider flex items-center justify-between bg-surface-off">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
                     <Activity className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-black text-white uppercase tracking-widest">Anotaciones 3D</h3>
+                    <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Anotaciones 3D</h3>
                     <p className="text-[9px] text-indigo-400/80 font-bold uppercase tracking-widest">{displayedAnnotations.length} notas clínicas registradas</p>
                   </div>
                 </div>
               </div>
               <div className="p-4 space-y-3 overflow-y-auto max-h-[300px]">
                 {[...displayedAnnotations].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((a: any) => (
-                  <div key={a.id} className={`p-3 bg-slate-900/40 border rounded-xl ${a.staged ? 'border-amber-500/30' : 'border-slate-800/50'}`}>
+                  <div key={a.id} className={`p-3 bg-surface/40 border rounded-xl ${a.staged ? 'border-warning/20' : 'border-divider/50'}`}>
                     <div className="flex justify-between mb-1">
-                      <span className="text-[10px] text-teal-400 font-bold uppercase">
+                      <span className="text-[10px] text-primary font-bold uppercase">
                         {a.user?.fullName}
-                        {a.staged && <span className="ml-2 text-amber-400">· Pendiente</span>}
+                        {a.staged && <span className="ml-2 text-warning">· Pendiente</span>}
                       </span>
-                      <span className="text-[9px] text-slate-500">{new Date(a.createdAt).toLocaleDateString()}</span>
+                      <span className="text-[9px] text-faint">{new Date(a.createdAt).toLocaleDateString()}</span>
                     </div>
-                    <p className="text-xs text-white">{a.text}</p>
+                    <p className="text-xs text-foreground">{a.text}</p>
                   </div>
                 ))}
               </div>
@@ -2520,20 +2520,20 @@ function CaseDetailPageContent() {
 
       {isCloning && (
         <div
-          className="fixed inset-0 z-[115] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm"
+          className="fixed inset-0 z-[115] flex items-center justify-center bg-background/70 backdrop-blur-sm"
           role="status"
           aria-live="polite"
           aria-busy="true"
         >
-          <div className="flex flex-col items-center gap-4 px-8 py-10 rounded-[2rem] bg-slate-900/95 border border-teal-500/30 shadow-2xl">
+          <div className="flex flex-col items-center gap-4 px-8 py-10 rounded-[2rem] bg-surface/95 border border-primary/30 shadow-2xl">
             <div className="relative w-14 h-14">
-              <div className="absolute inset-0 border-4 border-teal-500/15 rounded-full" />
-              <div className="absolute inset-0 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
+              <div className="absolute inset-0 border-4 border-primary/30/15 rounded-full" />
+              <div className="absolute inset-0 border-4 border-primary/30 border-t-transparent rounded-full animate-spin" />
             </div>
-            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-teal-400">
+            <p className="text-[11px] font-black uppercase tracking-[0.25em] text-primary">
               Creando copia del caso…
             </p>
-            <p className="text-[10px] text-slate-500 text-center max-w-xs">
+            <p className="text-[10px] text-faint text-center max-w-xs">
               Copiando archivos y generando el nuevo borrador
             </p>
           </div>
@@ -2547,21 +2547,21 @@ function CaseDetailPageContent() {
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="bg-slate-900/95 backdrop-blur-xl border border-red-500/30 p-8 rounded-[2.5rem] max-w-sm w-full text-center space-y-6 shadow-[0_50px_100px_rgba(220,38,38,0.3)] pointer-events-auto"
+            className="bg-surface/95 backdrop-blur-xl border border-error/20 p-8 rounded-[2.5rem] max-w-sm w-full text-center space-y-6 shadow-[0_50px_100px_rgba(220,38,38,0.3)] pointer-events-auto"
           >
-            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto text-red-500">
+            <div className="w-20 h-20 bg-error-hl rounded-full flex items-center justify-center mx-auto text-error">
               <Trash2 className="w-10 h-10" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-2xl text-white font-bold tracking-tight">¿Eliminar este caso?</h3>
-              <p className="text-[11px] text-slate-500 uppercase font-black tracking-widest leading-loose">Esta acción es permanente e irreversible.</p>
+              <h3 className="text-2xl text-foreground font-bold tracking-tight">¿Eliminar este caso?</h3>
+              <p className="text-[11px] text-faint uppercase font-black tracking-widest leading-loose">Esta acción es permanente e irreversible.</p>
               {clinicalCase && (
-                <p className="text-[10px] font-black uppercase tracking-widest text-teal-500/90 pt-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-primary/90 pt-1">
                   {formatCaseIdAndPac(clinicalCase.caseNumber, clinicalCase.patientIdAnon)}
                 </p>
               )}
               {clinicalCase?.copiedFromCaseId && (
-                <p className="text-[10px] text-slate-500 normal-case tracking-normal font-medium">
+                <p className="text-[10px] text-faint normal-case tracking-normal font-medium">
                   Copia del caso{' '}
                   {clinicalCase.copiedFromCaseNumber
                     ? `#${clinicalCase.copiedFromCaseNumber}`
@@ -2571,10 +2571,10 @@ function CaseDetailPageContent() {
             </div>
 
             <div className="space-y-3">
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Escribe <span className="text-red-500 underline">ELIMINAR</span> para confirmar</p>
+              <p className="text-[10px] text-muted font-bold uppercase tracking-widest">Escribe <span className="text-error underline">ELIMINAR</span> para confirmar</p>
               <input
                 placeholder="Escribe aquí..."
-                className="w-full bg-slate-950 border border-white/10 p-4 rounded-2xl text-center text-white focus:border-red-500/50 outline-none transition-all font-bold tracking-[0.2em]"
+                className="w-full bg-background border border-divider p-4 rounded-2xl text-center text-foreground focus:border-error/30 outline-none transition-all font-bold tracking-[0.2em]"
                 onChange={e => setDeleteInput(e.target.value.toUpperCase())}
               />
             </div>
@@ -2607,41 +2607,41 @@ function CaseDetailPageContent() {
 
       {/* MODAL DE CONFIRMACIÓN DE PUBLICACIÓN DE CASO (DENTISTA) */}
       {isPublishing && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center p-4 pt-[12vh] bg-slate-950/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[120] flex items-start justify-center p-4 pt-[12vh] bg-background/60 backdrop-blur-sm">
           <FocusTrap onEscape={() => setIsPublishing(false)}>
           <motion.div
             initial={{ opacity: 0, scale: 0.92, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
-            className="bg-slate-900/98 backdrop-blur-xl border border-teal-500/30 p-8 rounded-[2.5rem] max-w-lg w-full shadow-[0_50px_100px_rgba(20,184,166,0.15)] space-y-6"
+            className="bg-surface/98 backdrop-blur-xl border border-primary/30 p-8 rounded-[2.5rem] max-w-lg w-full shadow-[0_50px_100px_rgba(20,184,166,0.15)] space-y-6"
           >
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 bg-teal-500/10 rounded-2xl flex items-center justify-center text-teal-400 flex-shrink-0">
+              <div className="w-14 h-14 bg-primary-hl rounded-2xl flex items-center justify-center text-primary flex-shrink-0">
                 <Globe className="w-7 h-7" />
               </div>
               <div>
-                <h3 className="text-xl text-white font-bold tracking-tight">Publicar Caso</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Los técnicos podrán ver y ofertar este caso</p>
+                <h3 className="text-xl text-foreground font-bold tracking-tight">Publicar Caso</h3>
+                <p className="text-xs text-faint mt-0.5">Los técnicos podrán ver y ofertar este caso</p>
               </div>
             </div>
 
             {isFormDirty && (
-              <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-                <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-100/90 leading-relaxed">
+              <div className="flex items-start gap-3 rounded-2xl border border-warning/20 bg-warning-hl px-4 py-3">
+                <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-warning leading-relaxed">
                   Tienes cambios sin guardar. Debes guardarlos antes de publicar el caso.
                 </p>
               </div>
             )}
 
             {/* Resumen del caso (UX-019) */}
-            <div className="rounded-2xl border border-white/5 bg-slate-800/50 p-4">
-              <p className="mb-3 text-[9px] font-black uppercase tracking-widest text-slate-500">Resumen del caso</p>
+            <div className="rounded-2xl border border-divider bg-surface-2 p-4">
+              <p className="mb-3 text-[9px] font-bold uppercase tracking-wider text-faint">Resumen del caso</p>
               <div className="max-h-[min(52vh,28rem)] space-y-2.5 overflow-y-auto pr-1">
                 {buildPublishCaseSummaryRows(clinicalCase).map(r => (
                   <div key={r.label} className="flex items-start justify-between gap-3 text-xs">
-                    <span className="shrink-0 text-slate-500">{r.label}</span>
-                    <span className="max-w-[min(20rem,62%)] text-right font-medium break-words text-white">{r.value}</span>
+                    <span className="shrink-0 text-faint">{r.label}</span>
+                    <span className="max-w-[min(20rem,62%)] text-right font-medium break-words text-foreground">{r.value}</span>
                   </div>
                 ))}
               </div>
@@ -2687,12 +2687,12 @@ function CaseDetailPageContent() {
 
 function CaseDetailPageLoadingFallback() {
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-6 space-y-4">
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 space-y-4">
       <div className="relative w-20 h-20">
-        <div className="absolute inset-0 border-4 border-teal-500/10 rounded-full" />
-        <div className="absolute inset-0 border-4 border-teal-500 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(20,184,166,0.2)]" />
+        <div className="absolute inset-0 border-4 border-primary/30/10 rounded-full" />
+        <div className="absolute inset-0 border-4 border-primary/30 border-t-transparent rounded-full animate-spin shadow-[0_0_20px_rgba(20,184,166,0.2)]" />
       </div>
-      <p className="text-teal-500 font-black uppercase tracking-[0.3em] text-[10px] animate-pulse">Sincronizando Expediente...</p>
+      <p className="text-primary font-black uppercase tracking-[0.3em] text-[10px] animate-pulse">Sincronizando Expediente...</p>
     </div>
   );
 }

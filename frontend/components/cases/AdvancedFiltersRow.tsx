@@ -85,7 +85,7 @@ export default function AdvancedFiltersRow({
             placeholder={role === 'dentista' ? 'Buscar…' : 'Buscar…'}
             value={filters.q ?? ''}
             onChange={(e) => persist({ ...filters, q: e.target.value })}
-            className="w-[120px] sm:w-[160px] bg-slate-900 border border-slate-800/60 rounded-lg px-3 py-1.5 text-[11px] text-white outline-none focus:border-teal-500/50 placeholder:text-slate-600"
+            className="w-[120px] sm:w-[160px] bg-surface border border-divider rounded-lg px-3 py-1.5 text-[11px] text-foreground outline-none focus:border-primary/30 placeholder:text-faint"
             aria-label="Buscar en casos recientes"
           />
           <button
@@ -93,14 +93,14 @@ export default function AdvancedFiltersRow({
             onClick={() => setModalOpen(true)}
             className={`relative w-8 h-8 rounded-full border flex items-center justify-center transition-all ${
               activeCount > 0
-                ? 'bg-teal-500/10 border-teal-500/50 text-teal-400'
-                : 'bg-slate-900 border-slate-800 text-slate-500 hover:text-white'
+                ? 'bg-primary-hl border-primary/30 text-primary'
+                : 'bg-surface border-divider text-faint hover:text-foreground'
             }`}
             aria-label="Filtros del carrusel"
           >
             <Filter className="w-3.5 h-3.5" />
             {activeCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-teal-500 rounded-full text-[7px] font-black text-white flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full text-[7px] font-black text-inverse flex items-center justify-center">
                 {activeCount}
               </span>
             )}

@@ -162,7 +162,7 @@ export default function CaseListToolbar({
     <div className={`space-y-3 ${compact ? '' : 'w-full'}`}>
       <div className={`flex flex-col md:flex-row gap-3 ${compact ? '' : 'w-full'}`}>
         <div className={`relative ${compact ? 'flex-1 min-w-[140px]' : 'flex-1'}`}>
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
           <input
             type="search"
             placeholder={
@@ -174,25 +174,25 @@ export default function CaseListToolbar({
               if (onSearchChange) onSearchChange(q);
               else onFiltersChange({ ...filters, q });
             }}
-            className="w-full bg-slate-900 border border-slate-800/60 rounded-xl pl-11 pr-4 py-3 text-sm text-white outline-none focus:border-teal-500/50 transition-all placeholder:text-slate-600"
+            className="w-full bg-surface border border-divider rounded-xl pl-11 pr-4 py-3 text-sm text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
             aria-label="Buscar casos"
           />
         </div>
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl border transition-colors duration-150 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 ${
+          className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl border transition-colors duration-150 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
             activeCount > 0
-              ? 'bg-teal-500/10 border-teal-500/50 text-teal-400 hover:bg-teal-500/15'
-              : 'bg-slate-900 border-slate-800/60 text-slate-400 hover:bg-white/5 hover:text-white hover:border-white/20'
+              ? 'bg-primary-hl border-primary/30 text-primary hover:bg-primary-hl'
+              : 'bg-surface border-divider text-muted hover:bg-surface-off hover:text-foreground hover:border-border'
           }`}
         >
           <Filter className="w-3.5 h-3.5" />
           {!compact && (
-            <span className="text-[10px] font-black uppercase tracking-widest">Filtros avanzados</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider">Filtros avanzados</span>
           )}
           {activeCount > 0 && (
-            <span className="min-w-[18px] h-[18px] rounded-full bg-teal-500 text-white text-[9px] font-black flex items-center justify-center px-1">
+            <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-inverse text-[9px] font-black flex items-center justify-center px-1">
               {activeCount}
             </span>
           )}
@@ -202,7 +202,7 @@ export default function CaseListToolbar({
       {(activeChips.length > 0 || (total != null && !compact)) && (
         <div className="flex flex-wrap items-center gap-2">
           {total != null && (
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-2" aria-live="polite">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-faint mr-2" aria-live="polite">
               {loading ? 'Buscando…' : `${total} ${total === 1 ? 'caso' : 'casos'}`}
             </p>
           )}
@@ -211,7 +211,7 @@ export default function CaseListToolbar({
               key={chip.key}
               type="button"
               onClick={chip.clear}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-[9px] font-bold uppercase tracking-wide text-slate-300 hover:border-rose-500/40 hover:text-rose-300 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-2 border border-divider text-[9px] font-bold uppercase tracking-wide text-muted hover:border-error/20 hover:text-error transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               {chip.label}
               <X className="w-3 h-3" />

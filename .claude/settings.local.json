@@ -91,7 +91,8 @@
       "Bash(sed -i '' \"s|c\\\\.urgency === 'alta' || c\\\\.urgency === 'urgente'|c.urgency === 'Alta' || c.urgency === 'Urgente'|g\" /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/components/cases/MarketplaceCaseCard.tsx)",
       "Bash(sed -i '' \"s|c\\\\.urgency === 'prioritario'|c.urgency === 'Prioritario'|g\" /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/components/cases/KanbanBoard.tsx)",
       "Bash(PGPASSWORD='dentflow_secure_pass_2026' psql -h 34.176.243.133 -U dentflow_admin -d dentflowai-cbcf2-database -c \"SELECT code, label, is_active FROM dental_material ORDER BY sort_order;\")",
-      "Bash(awk '/^export async function approveWorkAction/,/^}$/' /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/lib/db/actions/cases.ts)"
+      "Bash(awk '/^export async function approveWorkAction/,/^}$/' /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/lib/db/actions/cases.ts)",
+      "Bash(git check-ignore *)"
     ],
     "additionalDirectories": [
       "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/invitations",

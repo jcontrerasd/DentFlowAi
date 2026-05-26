@@ -30,9 +30,9 @@ function EventOfferQuoteDetail({
   const quote = quoteDisplayFromPayload(raw);
   const tn = raw.techNotes;
   const techNotes = typeof tn === 'string' ? tn.trim() : '';
-  const detailBorder = tone === 'self' ? 'border-cyan-800/40' : 'border-white/[0.06]';
-  const labelMuted = tone === 'self' ? 'text-cyan-100/75' : 'text-slate-500';
-  const valueText = tone === 'self' ? 'text-cyan-50/95' : 'text-slate-300/95';
+  const detailBorder = tone === 'self' ? 'border-primary/30' : 'border-divider';
+  const labelMuted = tone === 'self' ? 'text-foreground' : 'text-faint';
+  const valueText = tone === 'self' ? 'text-foreground' : 'text-muted/95';
 
   return (
     <div className={`space-y-2 pt-1 border-t ${detailBorder}`}>
@@ -47,7 +47,7 @@ function EventOfferQuoteDetail({
         {techNotes ? (
           <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${valueText}`}>{techNotes}</p>
         ) : (
-          <p className={`text-[11px] italic ${tone === 'self' ? 'text-cyan-200/70' : 'text-slate-500/80'}`}>
+          <p className={`text-[11px] italic ${tone === 'self' ? 'text-foreground' : 'text-faint/80'}`}>
             {emptyComment}
           </p>
         )}
@@ -123,15 +123,15 @@ export default function UchEventBubble({
   const showAvatarHeader = !isNeutralSystemPill;
 
   const bubbleFauchardBase =
-    'bg-[#2a3942] border border-amber-500/20 text-[#e9edef] px-3 py-2 rounded-2xl rounded-tl-sm';
-  /** Carril propio del viewer (incl. voz Fauchard enmascarada): distinto del verde legacy. */
+    'bg-surface border border-divider text-foreground px-3 py-2 rounded-2xl rounded-tl-sm shadow-sm';
+  /** Carril propio del viewer (incl. voz Fauchard enmascarada). */
   const bubbleSelfBase =
-    'bg-[#0d3d42] border border-cyan-500/30 text-[#e9edef] px-3 py-2 rounded-2xl rounded-tr-sm shadow-sm';
+    'bg-primary-hl border border-primary/20 text-foreground px-3 py-2 rounded-2xl rounded-tr-sm shadow-sm';
 
   let bubbleShell: string;
   if (isNeutralSystemPill) {
     bubbleShell =
-      'bg-[#2a3942]/90 border border-amber-500/15 text-slate-300/95 text-[10px] py-1.5 px-3 rounded-full self-start max-w-[min(100%,24rem)]';
+      'bg-surface-off border border-divider text-muted text-[10px] py-1.5 px-3 rounded-full self-start max-w-[min(100%,24rem)]';
   } else if (isOutcomeNotice) {
     bubbleShell = isSelfLane
       ? `${bubbleSelfBase} max-w-[min(100%,24rem)] shadow-sm`
@@ -153,7 +153,7 @@ export default function UchEventBubble({
       className={`flex flex-col w-full ${isRightLane ? 'items-end' : 'items-start'}${isInvitationReceivedQuote ? ' pl-4' : ''}`}
     >
       {showFauchardSystemTimestamp && (
-        <span className="text-[10px] text-slate-500 mb-1 tabular-nums self-start">
+        <span className="text-[10px] text-faint mb-1 tabular-nums self-start">
           {formatActivityTimestamp(event.createdAt)}
         </span>
       )}
@@ -163,19 +163,19 @@ export default function UchEventBubble({
             isRightLane ? 'flex-row-reverse justify-end' : ''
           }`}
         >
-          <div className="w-5 h-5 rounded-full bg-slate-800 border border-white/10 overflow-hidden flex items-center justify-center flex-shrink-0">
+          <div className="w-5 h-5 rounded-full bg-surface-2 border border-divider overflow-hidden flex items-center justify-center flex-shrink-0">
             {showAsFauchard ? (
-              <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+              <Sparkles className="w-2.5 h-2.5 text-warning" />
             ) : event.user?.image && (event.user.image.startsWith('http') || event.user.image.startsWith('/')) ? (
               <Image src={event.user.image} alt="" width={20} height={20} className="w-full h-full object-cover" unoptimized={event.user.image.startsWith('http')} />
             ) : (
-              <User className="w-2.5 h-2.5 text-slate-500" />
+              <User className="w-2.5 h-2.5 text-faint" />
             )}
           </div>
-          <span className="text-[10px] font-semibold text-slate-500">
+          <span className="text-[10px] font-semibold text-faint">
             {showHeaderAsYou ? 'Yo' : showAsFauchard ? 'Fauchard' : (event.user?.fullName || 'Usuario')}
           </span>
-          <span className="text-[10px] text-slate-600 tabular-nums">
+          <span className="text-[10px] text-faint tabular-nums">
             {formatActivityTimestamp(event.createdAt)}
           </span>
         </div>
@@ -195,11 +195,11 @@ export default function UchEventBubble({
             <div className="space-y-1.5">
               <div
                 className={`flex items-center gap-2 ${
-                  isSelfLane ? 'text-cyan-100/90' : 'text-slate-400'
+                  isSelfLane ? 'text-foreground' : 'text-muted'
                 }`}
               >
                 <XCircle
-                  className={`w-3.5 h-3.5 flex-shrink-0 ${isSelfLane ? 'text-cyan-200/80' : 'text-rose-400/55'}`}
+                  className={`w-3.5 h-3.5 flex-shrink-0 ${isSelfLane ? 'text-foreground' : 'text-error/55'}`}
                 />
                 <span className="text-[11px] font-semibold tracking-tight">
                   {event.action === CASE_EVENTS.OFERTA_RECHAZADA && actingAsDentista
@@ -211,7 +211,7 @@ export default function UchEventBubble({
               </div>
               <p
                 className={`text-[11px] leading-relaxed whitespace-pre-wrap pl-5 ${
-                  isSelfLane ? 'text-cyan-50/95' : 'text-slate-400/95'
+                  isSelfLane ? 'text-foreground' : 'text-muted/95'
                 }`}
               >
                 {event.content}
@@ -242,9 +242,9 @@ export default function UchEventBubble({
                 const raw = (event.payload as { feedbackDentista?: unknown } | null)?.feedbackDentista;
                 const fb = typeof raw === 'string' ? raw.trim() : '';
                 if (!fb) return null;
-                const detailBorder = isSelfLane ? 'border-cyan-800/40' : 'border-white/[0.06]';
-                const labelMuted = isSelfLane ? 'text-cyan-100/75' : 'text-slate-500';
-                const valueText = isSelfLane ? 'text-cyan-50/95' : 'text-slate-300/95';
+                const detailBorder = isSelfLane ? 'border-primary/30' : 'border-divider';
+                const labelMuted = isSelfLane ? 'text-foreground' : 'text-faint';
+                const valueText = isSelfLane ? 'text-foreground' : 'text-muted/95';
                 return (
                   <div className={`pl-5 pt-1.5 mt-1 space-y-0.5 border-t ${detailBorder}`}>
                     <p className={`text-[10px] font-medium ${labelMuted}`}>Comentario del solicitante</p>
@@ -278,7 +278,7 @@ export default function UchEventBubble({
           )}
 
           {event.action === CASE_EVENTS.OFERTA_ENVIADA && (
-            <div className={`space-y-1.5 ${isSelfLane ? 'text-cyan-100' : 'text-teal-100/95'}`}>
+            <div className={`space-y-1.5 ${isSelfLane ? 'text-foreground' : 'text-foreground'}`}>
               <div className="flex items-center gap-2">
                 <Send className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="text-[11px] font-bold">Cotización enviada</span>
@@ -286,7 +286,7 @@ export default function UchEventBubble({
               {event.content?.trim() ? (
                 <p
                   className={`text-[11px] leading-relaxed whitespace-pre-wrap ${
-                    isSelfLane ? 'text-cyan-50/95' : 'text-slate-200/95'
+                    isSelfLane ? 'text-foreground' : 'text-foreground/95'
                   }`}
                 >
                   {event.content}
@@ -311,7 +311,7 @@ export default function UchEventBubble({
           )}
 
           {event.action === CASE_EVENTS.OFERTA_RETIRADA && (
-            <div className={`space-y-1.5 ${isSelfLane ? 'text-cyan-100' : 'text-rose-100/95'}`}>
+            <div className={`space-y-1.5 ${isSelfLane ? 'text-foreground' : 'text-error'}`}>
               <div className="flex items-center gap-2">
                 <Undo2 className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="text-[11px] font-bold">Oferta retirada</span>
@@ -319,7 +319,7 @@ export default function UchEventBubble({
               {event.content?.trim() ? (
                 <p
                   className={`text-[11px] leading-relaxed whitespace-pre-wrap ${
-                    isSelfLane ? 'text-cyan-50/95' : 'text-slate-200/95'
+                    isSelfLane ? 'text-foreground' : 'text-foreground/95'
                   }`}
                 >
                   {event.content}
@@ -344,7 +344,7 @@ export default function UchEventBubble({
             return (
               <p
                 className={`text-[10px] flex items-center gap-1.5 mt-1 ${
-                  isSelfLane ? 'text-cyan-100/75' : 'text-slate-400'
+                  isSelfLane ? 'text-foreground' : 'text-muted'
                 }`}
               >
                 <Download className="w-3 h-3 opacity-80" />
@@ -355,19 +355,19 @@ export default function UchEventBubble({
 
           {event.action === 'COMENTARIO_TECNICO' && (
             <div className="space-y-1">
-              <p className={`text-[10px] font-medium ${isSelfLane ? 'text-cyan-100/75' : 'text-slate-400'}`}>
+              <p className={`text-[10px] font-medium ${isSelfLane ? 'text-foreground' : 'text-muted'}`}>
                 Comentario del técnico
               </p>
               {event.content?.trim() ? (
                 <p className="text-xs leading-relaxed whitespace-pre-wrap">{event.content}</p>
               ) : (
-                <p className="text-[10px] text-slate-500 italic">Sin texto.</p>
+                <p className="text-[10px] text-faint italic">Sin texto.</p>
               )}
             </div>
           )}
 
           {event.action === 'TRABAJO_INICIADO' && (
-            <div className={`space-y-1.5 ${isSelfLane ? 'text-cyan-100' : 'text-amber-100/95'}`}>
+            <div className={`space-y-1.5 ${isSelfLane ? 'text-foreground' : 'text-warning'}`}>
               <div className="flex items-center gap-2">
                 <Hammer className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="text-[11px] font-bold">{actingAsDentista ? 'Laboratorio en ejecución' : 'Diseño iniciado'}</span>
@@ -375,7 +375,7 @@ export default function UchEventBubble({
               {event.content && (
                 <p
                   className={`text-[11px] leading-relaxed whitespace-pre-wrap pl-5 ${
-                    isSelfLane ? 'text-[#e9edef]/95' : 'text-slate-200/95'
+                    isSelfLane ? 'text-foreground' : 'text-foreground/95'
                   }`}
                 >
                   {event.content}
@@ -392,33 +392,33 @@ export default function UchEventBubble({
             const canDownload = !!onDownloadRevisionZip && files.length > 0;
             return (
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-teal-300">
+                <div className="flex items-center gap-2 text-primary">
                   <FileText className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="text-[11px] font-bold">Entrega v{deliveryVersion} enviada a revisión</span>
                 </div>
                 {event.content?.trim() ? (
                   <div className="space-y-0.5">
-                    <p className="text-[10px] font-medium text-slate-500">Comentario con la entrega</p>
-                    <p className="text-[11px] text-[#e9edef]/95 leading-relaxed whitespace-pre-wrap">{event.content}</p>
+                    <p className="text-[10px] font-medium text-faint">Comentario con la entrega</p>
+                    <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">{event.content}</p>
                   </div>
                 ) : null}
                 {canDownload ? (
                   <div
                     className={`flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t ${
-                      isSelfLane ? 'border-cyan-800/45' : 'border-white/[0.08]'
+                      isSelfLane ? 'border-primary/30' : 'border-divider'
                     }`}
                   >
-                    <span className={`text-[10px] ${isSelfLane ? 'text-cyan-100/85' : 'text-slate-400'}`}>
+                    <span className={`text-[10px] ${isSelfLane ? 'text-foreground' : 'text-muted'}`}>
                       v{deliveryVersion} · {files.length} archivo{files.length !== 1 ? 's' : ''}
                     </span>
                     <button
                       type="button"
                       onClick={() => void onDownloadRevisionZip(zipKey, `v${deliveryVersion}`, files)}
                       disabled={downloadingRevisionZipId === zipKey}
-                      className={`text-[11px] font-medium whitespace-nowrap disabled:opacity-40 inline-flex items-center gap-1 shrink-0 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/40 rounded-sm ${
+                      className={`text-[11px] font-medium whitespace-nowrap disabled:opacity-40 inline-flex items-center gap-1 shrink-0 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 rounded-sm ${
                         isSelfLane
-                          ? 'text-cyan-200/95 hover:text-cyan-100'
-                          : 'text-teal-400/90 hover:text-teal-300'
+                          ? 'text-foreground hover:text-foreground'
+                          : 'text-primary/90 hover:text-primary'
                       }`}
                     >
                       {downloadingRevisionZipId === zipKey ? (
@@ -440,15 +440,15 @@ export default function UchEventBubble({
               .find((t) => t.length > 0) ?? '';
             return (
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-amber-300">
+                <div className="flex items-center gap-2 text-warning">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="text-[11px] font-bold">Ajustes solicitados</span>
                 </div>
-                <p className="text-[10px] font-medium text-slate-500">Detalle del ajuste</p>
+                <p className="text-[10px] font-medium text-faint">Detalle del ajuste</p>
                 {adjustmentText ? (
-                  <p className="text-xs text-[#e9edef]/95 leading-relaxed whitespace-pre-wrap">{adjustmentText}</p>
+                  <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{adjustmentText}</p>
                 ) : (
-                  <p className="text-[10px] text-slate-500 italic">Sin descripción de ajuste.</p>
+                  <p className="text-[10px] text-faint italic">Sin descripción de ajuste.</p>
                 )}
               </div>
             );
@@ -469,19 +469,19 @@ export default function UchEventBubble({
             const commentBody = fromMarker || payloadComment;
             return (
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-emerald-300">
+                <div className="flex items-center gap-2 text-jade">
                   <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="text-[11px] font-bold">Diseño aprobado</span>
                 </div>
                 {intro ? (
-                  <p className="text-[11px] leading-relaxed whitespace-pre-wrap pl-5 text-slate-200/95">{intro}</p>
+                  <p className="text-[11px] leading-relaxed whitespace-pre-wrap pl-5 text-foreground/95">{intro}</p>
                 ) : null}
                 {commentBody ? (
                   <div className="pl-5 space-y-0.5">
-                    <p className="text-[10px] font-medium text-slate-500">
+                    <p className="text-[10px] font-medium text-faint">
                       {actingAsDentista && isSelfLane ? 'Tu comentario' : 'Comentario del solicitante'}
                     </p>
-                    <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-slate-200/95">{commentBody}</p>
+                    <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/95">{commentBody}</p>
                   </div>
                 ) : null}
               </div>

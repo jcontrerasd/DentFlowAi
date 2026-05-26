@@ -1,20 +1,20 @@
 export default function CaseCardSkeleton() {
   return (
-    <div className="bg-slate-900/60 border border-white/5 rounded-[1.5rem] overflow-hidden animate-pulse">
+    <div className="bg-surface/60 border border-divider rounded-[1.5rem] overflow-hidden animate-pulse">
       {/* Thumbnail placeholder */}
-      <div className="h-36 bg-slate-800/60" />
+      <div className="h-36 bg-surface-2/60" />
       <div className="p-4 space-y-3">
         {/* Title */}
-        <div className="h-4 bg-slate-800 rounded-full w-3/4" />
+        <div className="h-4 bg-surface-2 rounded-full w-3/4" />
         {/* Sub line */}
-        <div className="h-3 bg-slate-800/70 rounded-full w-1/2" />
+        <div className="h-3 bg-surface-2/70 rounded-full w-1/2" />
         {/* Badge row */}
         <div className="flex gap-2 pt-1">
-          <div className="h-5 bg-slate-800 rounded-full w-20" />
-          <div className="h-5 bg-slate-800 rounded-full w-16" />
+          <div className="h-5 bg-surface-2 rounded-full w-20" />
+          <div className="h-5 bg-surface-2 rounded-full w-16" />
         </div>
         {/* Action area */}
-        <div className="h-9 bg-slate-800/60 rounded-2xl w-full mt-2" />
+        <div className="h-9 bg-surface-2/60 rounded-2xl w-full mt-2" />
       </div>
     </div>
   );

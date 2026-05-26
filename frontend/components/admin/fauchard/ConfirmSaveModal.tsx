@@ -32,7 +32,7 @@ export default function ConfirmSaveModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            className="absolute inset-0 bg-background/80 backdrop-blur-sm"
           />
 
           {/* Modal Content */}
@@ -40,27 +40,27 @@ export default function ConfirmSaveModal({
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-[2.5rem] shadow-2xl overflow-hidden"
+            className="relative w-full max-w-md bg-surface border border-divider rounded-[2.5rem] shadow-2xl overflow-hidden"
           >
             <FocusTrap onEscape={onClose}>
               <div className="p-8">
                 <div className="flex items-start justify-between mb-6">
-                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <div className="w-12 h-12 rounded-2xl bg-warning-hl border border-warning/20 flex items-center justify-center text-warning">
                     <AlertTriangle className="w-6 h-6" />
                   </div>
                   <button
                     onClick={onClose}
-                    className="p-2 text-slate-500 hover:text-white transition-colors"
+                    className="p-2 text-faint hover:text-foreground transition-colors"
                   >
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
                 <div className="space-y-3 mb-8">
-                  <h3 className="text-xl font-black text-white uppercase tracking-tighter">
+                  <h3 className="text-xl font-black text-foreground uppercase tracking-tighter">
                     {title}
                   </h3>
-                  <p className="text-sm text-slate-400 leading-relaxed font-medium">
+                  <p className="text-sm text-muted leading-relaxed font-medium">
                     {description}
                   </p>
                 </div>
@@ -70,7 +70,7 @@ export default function ConfirmSaveModal({
                     onClick={onConfirm}
                     loading={isLoading}
                     variant="primary"
-                    className="w-full bg-teal-500 hover:bg-teal-400 text-slate-950 font-black uppercase tracking-widest text-[10px] h-12 rounded-2xl"
+                    className="w-full bg-primary hover:opacity-90 text-inverse font-bold uppercase tracking-wider text-[10px] h-12 rounded-2xl"
                     icon={<Save className="w-4 h-4" />}
                   >
                     Confirmar y Aplicar
@@ -79,7 +79,7 @@ export default function ConfirmSaveModal({
                     onClick={onClose}
                     disabled={isLoading}
                     variant="secondary"
-                    className="w-full bg-slate-800 hover:bg-slate-700 text-white font-black uppercase tracking-widest text-[10px] h-12 rounded-2xl border-none"
+                    className="w-full bg-surface-2 hover:bg-surface-off text-foreground font-bold uppercase tracking-wider text-[10px] h-12 rounded-2xl border-none"
                   >
                     Cancelar
                   </Button>

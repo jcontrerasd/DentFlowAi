@@ -10,12 +10,12 @@ export default async function Home() {
     redirect("/dashboard");
   }
   return (
-    <div className="flex flex-col min-h-screen selection:bg-teal-500/30">
+    <div className="flex flex-col min-h-screen selection:bg-primary/25">
       {/* Navbar con Glassmorphism */}
-      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 glass-effect m-4 rounded-2xl">
+      <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 bg-surface shadow-sm border border-divider m-4 rounded-2xl">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg gradient-teal flex items-center justify-center">
-            <Activity className="text-white w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center">
+            <Activity className="text-foreground w-5 h-5" />
           </div>
           <span className="text-xl font-bold tracking-tight text-foreground">DentFlowAi</span>
         </div>
@@ -24,7 +24,7 @@ export default async function Home() {
           <Link href="/auth/login" className="text-sm font-medium hover:text-primary transition-colors">
             Iniciar Sesión
           </Link>
-          <Link href="/auth/register" className="px-4 py-2 text-sm font-medium text-white gradient-teal rounded-xl shadow-lg shadow-teal-500/20 hover:scale-105 transition-transform">
+          <Link href="/auth/register" className="px-4 py-2 text-sm font-medium text-foreground bg-surface rounded-xl shadow-lg shadow-sm hover:scale-105 transition-transform">
             Registro Gratis
           </Link>
         </div>
@@ -34,7 +34,7 @@ export default async function Home() {
         {/* Section Hero */}
         <section className="px-6 py-12 lg:py-24 max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12 overflow-hidden">
           <div className="flex-1 text-center lg:text-left space-y-6 animate-fade-in">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-primary text-xs font-semibold tracking-wider uppercase">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-hl border border-primary/20 text-primary text-xs font-semibold tracking-wider uppercase">
               <Zap className="w-3 h-3" />
               Revolucionando el flujo dental
             </div>
@@ -48,8 +48,8 @@ export default async function Home() {
           </div>
 
           <div className="flex-1 relative w-full aspect-square max-w-xl animate-fade-in [animation-delay:200ms]">
-            <div className="absolute inset-0 bg-teal-500/20 blur-[100px] rounded-full" />
-            <div className="relative z-10 w-full h-full rounded-3xl overflow-hidden glass-effect p-2 rotate-2 hover:rotate-0 transition-transform duration-700">
+            <div className="absolute inset-0 bg-primary-hl blur-[100px] rounded-full" />
+            <div className="relative z-10 w-full h-full rounded-3xl overflow-hidden bg-surface shadow-sm border border-divider p-2 rotate-2 hover:rotate-0 transition-transform duration-700">
                <Image 
                 src="/images/hero_dental.png" 
                 alt="Prosthetic Design AI" 
@@ -60,10 +60,10 @@ export default async function Home() {
                />
             </div>
             {/* Badges de soporte (flotantes) */}
-            <div className="absolute -bottom-6 -left-6 z-20 glass-effect p-4 rounded-2xl border border-teal-500/30 shadow-2xl animate-bounce [animation-duration:3s]">
+            <div className="absolute -bottom-6 -left-6 z-20 bg-surface shadow-sm border border-divider p-4 rounded-2xl border border-primary/30 shadow-2xl animate-bounce [animation-duration:3s]">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full gradient-teal flex items-center justify-center">
-                  <ShieldCheck className="text-white w-6 h-6" />
+                <div className="w-10 h-10 rounded-full bg-surface flex items-center justify-center">
+                  <ShieldCheck className="text-foreground w-6 h-6" />
                 </div>
                 <div>
                   <div className="text-xs font-bold text-secondary uppercase tracking-widest">Escrow Activo</div>
@@ -83,8 +83,8 @@ export default async function Home() {
 
           <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
             {/* Card Dentista */}
-            <div className="p-10 rounded-3xl glass-effect border-t-4 border-t-primary space-y-6 hover:shadow-2xl transition-all group">
-              <div className="w-14 h-14 rounded-2xl bg-teal-500/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+            <div className="p-10 rounded-3xl bg-surface shadow-sm border border-divider border-t-4 border-t-primary space-y-6 hover:shadow-2xl transition-all group">
+              <div className="w-14 h-14 rounded-2xl bg-primary-hl flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-foreground transition-colors">
                 <Users className="w-8 h-8" />
               </div>
               <h3 className="text-2xl font-bold">Soy Dentista / Clínica</h3>
@@ -108,8 +108,8 @@ export default async function Home() {
             </div>
 
             {/* Card Técnico */}
-            <div className="p-10 rounded-3xl glass-effect border-t-4 border-t-zinc-400 space-y-6 hover:shadow-2xl transition-all group">
-              <div className="w-14 h-14 rounded-2xl bg-zinc-500/10 flex items-center justify-center text-zinc-500 group-hover:bg-zinc-800 group-hover:text-white transition-colors">
+            <div className="p-10 rounded-3xl bg-surface shadow-sm border border-divider border-t-4 border-t-zinc-400 space-y-6 hover:shadow-2xl transition-all group">
+              <div className="w-14 h-14 rounded-2xl bg-zinc-500/10 flex items-center justify-center text-zinc-500 group-hover:bg-zinc-800 group-hover:text-foreground transition-colors">
                 <Activity className="w-8 h-8" />
               </div>
               <h3 className="text-2xl font-bold">Soy Laboratorio / Técnico</h3>

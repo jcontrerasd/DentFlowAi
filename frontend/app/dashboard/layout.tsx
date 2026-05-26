@@ -145,24 +145,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ];
 
   if (loading || !userProfile) return (
-    <div className="h-screen bg-slate-950 flex items-center justify-center">
-      <div className="w-10 h-10 border-4 border-teal-500/30 border-t-teal-500 rounded-full animate-spin" />
+    <div className="h-screen bg-background flex items-center justify-center">
+      <div className="w-10 h-10 border-4 border-primary/30 border-t-teal-500 rounded-full animate-spin" />
     </div>
   );
 
   const displayName = userProfile?.fullName ?? user?.name ?? 'Usuario DentFlow';
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-200">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full bg-slate-900/50 backdrop-blur-xl border-r border-slate-800 transition-all duration-300 z-50 ${isSidebarOpen ? 'w-64' : 'w-20'}`}
+        className={`fixed top-0 left-0 h-full bg-surface backdrop-blur-xl border-r border-divider transition-all duration-300 z-50 ${isSidebarOpen ? 'w-64' : 'w-20'}`}
       >
         <div className="p-6 mb-8 flex items-center gap-3">
-          <div className="w-10 h-10 gradient-teal rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-teal-500/20">
-            <Activity className="text-white w-6 h-6" />
+          <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-sm">
+            <Activity className="text-foreground w-6 h-6" />
           </div>
-          {isSidebarOpen && <span className="text-xl serif-font font-bold text-white">DentFlowAi</span>}
+          {isSidebarOpen && <span className="text-xl serif-font font-bold text-foreground">DentFlowAi</span>}
         </div>
 
         <nav className="px-4 space-y-2">
@@ -174,16 +174,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             );
             return (
               <Link key={item.name} href={item.href}>
-                <div className={`relative flex items-center gap-4 px-4 py-3 rounded-xl transition-all ${isActive ? 'bg-teal-500/10 text-teal-400' : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'}`}>
+                <div className={`relative flex items-center gap-4 px-4 py-3 rounded-xl transition-all ${isActive ? 'bg-primary-hl text-primary' : 'text-faint hover:text-muted hover:bg-surface-2'}`}>
                   <item.icon className="w-5 h-5 flex-shrink-0" />
                   {isSidebarOpen && <span className="font-medium">{item.name}</span>}
                   {/* Badge de invitaciones pendientes */}
                   {item.badge > 0 && (
-                    <span className={`${isSidebarOpen ? 'ml-auto' : 'absolute -top-1 -right-1'} min-w-[18px] h-[18px] bg-amber-500 text-slate-950 text-[9px] font-black rounded-full flex items-center justify-center px-1 animate-bounce`}>
+                    <span className={`${isSidebarOpen ? 'ml-auto' : 'absolute -top-1 -right-1'} min-w-[18px] h-[18px] bg-warning-hl text-inverse text-[9px] font-black rounded-full flex items-center justify-center px-1 animate-bounce`}>
                       {item.badge}
                     </span>
                   )}
-                  {isActive && isSidebarOpen && !item.badge && <motion.div layoutId="activeNav" className="ml-auto w-1 h-1 bg-teal-400 rounded-full" />}
+                  {isActive && isSidebarOpen && !item.badge && <motion.div layoutId="activeNav" className="ml-auto w-1 h-1 bg-primary rounded-full" />}
                 </div>
               </Link>
             );
@@ -193,7 +193,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="absolute bottom-8 left-0 w-full px-4">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-4 px-4 py-3 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-all"
+            className="w-full flex items-center gap-4 px-4 py-3 text-faint hover:text-error hover:bg-error-hl rounded-xl transition-all"
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
             {isSidebarOpen && <span className="font-medium">Cerrar Sesión</span>}
@@ -203,21 +203,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Main Content */}
       <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'pl-64' : 'pl-20'}`}>
-        <header className="h-20 border-b border-slate-800/50 flex items-center justify-between px-10 glass-effect sticky top-0 z-40">
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-slate-400 hover:text-white transition-colors">
+        <header className="h-20 border-b border-divider/50 flex items-center justify-between px-10 bg-surface shadow-sm border border-divider sticky top-0 z-40">
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-muted hover:text-foreground transition-colors">
             <Menu className="w-6 h-6" />
           </button>
 
           <div className="flex items-center gap-6">
             {(userProfile?.role === 'dentista' || userProfile?.role === 'tecnico') && (
               <div
-                className="relative flex items-center justify-center p-2 rounded-xl text-slate-500 hover:text-teal-400 hover:bg-slate-800/50 transition-colors"
+                className="relative flex items-center justify-center p-2 rounded-xl text-faint hover:text-primary hover:bg-surface-2 transition-colors"
                 title="Actividad sin leer en el Centro de control"
                 aria-label={`Actividad del hub sin leer: ${hubBellTotal}`}
               >
                 <Bell className="w-5 h-5" />
                 {hubBellTotal > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-rose-600 text-white text-[9px] font-black rounded-full flex items-center justify-center px-0.5 shadow-lg shadow-rose-900/40">
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-error text-inverse text-[9px] font-black rounded-full flex items-center justify-center px-0.5 shadow-lg shadow-sm">
                     {hubBellTotal > 99 ? '99+' : hubBellTotal}
                   </span>
                 )}
@@ -226,12 +226,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <ImpersonationSelector />
 
             <Link href="/dashboard/profile">
-              <div className="flex items-center gap-6 hover:bg-slate-800/40 p-2 rounded-2xl transition-all group cursor-pointer">
+              <div className="flex items-center gap-6 hover:bg-surface-2/40 p-2 rounded-2xl transition-all group cursor-pointer">
                 <div className="text-right hidden sm:block">
-                  <p className="text-sm font-semibold text-white group-hover:text-teal-400 transition-colors">{displayName}</p>
-                  <p className="text-[10px] uppercase tracking-wider text-teal-500 font-bold">{userProfile.role}</p>
+                  <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">{displayName}</p>
+                  <p className="text-[10px] uppercase tracking-wider text-primary font-bold">{userProfile.role}</p>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-teal-400 font-bold overflow-hidden group-hover:border-teal-500/50 transition-all">
+                <div className="w-10 h-10 rounded-full bg-surface-2 border border-divider flex items-center justify-center text-primary font-bold overflow-hidden group-hover:border-primary/30 transition-all">
                   {avatarUrl ? (
                     <Image 
                       src={avatarUrl} 

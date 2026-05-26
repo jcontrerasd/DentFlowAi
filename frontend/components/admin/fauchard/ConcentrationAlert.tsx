@@ -23,19 +23,19 @@ export default function ConcentrationAlert({ alerts, topQuartileShare }: Concent
           className={`
             p-6 rounded-[2rem] border flex gap-5 items-start relative overflow-hidden
             ${alert.severity === 'critical' 
-              ? 'bg-red-500/10 border-red-500/20 text-red-400' 
-              : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}
+              ? 'bg-error-hl border-error/30 text-error' 
+              : 'bg-warning-hl border-warning/20 text-warning'}
           `}
         >
           <div className={`
             w-12 h-12 rounded-2xl flex items-center justify-center shrink-0
-            ${alert.severity === 'critical' ? 'bg-red-500/20' : 'bg-amber-500/20'}
+            ${alert.severity === 'critical' ? 'bg-error/20' : 'bg-warning-hl'}
           `}>
             {alert.severity === 'critical' ? <AlertCircle className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
           </div>
           
           <div className="space-y-2 flex-1">
-            <h4 className="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+            <h4 className="text-sm font-bold uppercase tracking-wider flex items-center gap-2">
               {alert.type === 'concentration' ? 'Alerta de Concentración' : 
                alert.type === 'empty_pool' ? 'Fallo Crítico de Selección' : 'Alerta de Equidad'}
             </h4>
@@ -47,7 +47,7 @@ export default function ConcentrationAlert({ alerts, topQuartileShare }: Concent
               <div className="pt-2 flex flex-wrap gap-4">
                 <Link 
                   href="/dashboard/admin/algorithm"
-                  className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest bg-amber-500 text-slate-950 px-4 py-1.5 rounded-xl hover:bg-amber-400 transition-colors"
+                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider bg-warning-hl text-inverse px-4 py-1.5 rounded-xl hover:bg-warning transition-colors"
                 >
                   <Settings className="w-3 h-3" />
                   Ajustar Pesos (C / B)

@@ -39,7 +39,7 @@ function TimelineStep({
     <motion.div className="flex items-start shrink-0">
       {showLeadingConnector ? (
         <span
-          className="mt-[15px] mx-0.5 h-px w-2 sm:w-2.5 shrink-0 bg-slate-600/70"
+          className="mt-[15px] mx-0.5 h-px w-2 sm:w-2.5 shrink-0 bg-surface-off/70"
           aria-hidden
         />
       ) : null}
@@ -53,15 +53,15 @@ function TimelineStep({
         <span
           className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
             selected
-              ? 'border-teal-400/90 bg-teal-500/15 text-teal-300 shadow-[0_0_14px_rgba(45,212,191,0.35)]'
-              : 'border-slate-700/90 bg-slate-950 text-slate-500 group-hover:border-slate-600'
+              ? 'border-teal-400/90 bg-primary-hl text-primary shadow-[0_0_14px_rgba(45,212,191,0.35)]'
+              : 'border-divider/90 bg-background text-faint group-hover:border-divider'
           }`}
         >
           <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
         </span>
         <span
           className={`w-full text-center text-[6px] font-black uppercase leading-[1.15] tracking-wide sm:text-[7px] ${
-            selected ? 'text-teal-400/95' : 'text-slate-500'
+            selected ? 'text-primary/95' : 'text-faint'
           }`}
         >
           {item.label}
@@ -89,12 +89,12 @@ export function ExceptionPill({
       aria-pressed={selected}
       className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 transition-all ${
         selected
-          ? 'border-teal-400/80 bg-teal-500/15 text-teal-300 shadow-[0_0_10px_rgba(45,212,191,0.25)]'
-          : 'border-slate-700/90 bg-slate-950 text-slate-500 hover:border-slate-600'
+          ? 'border-teal-400/80 bg-primary-hl text-primary shadow-[0_0_10px_rgba(45,212,191,0.25)]'
+          : 'border-divider/90 bg-background text-faint hover:border-divider'
       }`}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-      <span className="whitespace-nowrap text-[7px] font-black uppercase tracking-widest">
+      <span className="whitespace-nowrap text-[7px] font-bold uppercase tracking-wider">
         {item.label}
       </span>
     </button>
@@ -102,7 +102,7 @@ export function ExceptionPill({
 }
 
 const CHIP_BASE =
-  'px-3 py-1.5 rounded-xl border text-[8px] font-black uppercase tracking-widest transition-all whitespace-nowrap shrink-0';
+  'px-3 py-1.5 rounded-xl border text-[8px] font-bold uppercase tracking-wider transition-all whitespace-nowrap shrink-0';
 
 export function CaseListTimelineFilterWrap({
   items,
@@ -124,8 +124,8 @@ export function CaseListTimelineFilterWrap({
             onClick={() => onToggle(item.id)}
             className={
               isOn
-                ? `${CHIP_BASE} bg-teal-600/20 border-teal-500/50 text-teal-400`
-                : `${CHIP_BASE} bg-slate-950 border-slate-800 text-slate-500`
+                ? `${CHIP_BASE} bg-primary/20 border-primary/30 text-primary`
+                : `${CHIP_BASE} bg-background border-divider text-faint`
             }
           >
             {item.label}
@@ -166,7 +166,7 @@ export default function CaseListTimelineFilter({
 
       {exceptionItems.length > 0 ? (
         <motion.div>
-          <p className="mb-2 text-[8px] font-black uppercase tracking-widest text-slate-600">
+          <p className="mb-2 text-[8px] font-bold uppercase tracking-wider text-faint">
             {exceptionGroupLabel}
           </p>
           <motion.div className="flex flex-wrap gap-2">

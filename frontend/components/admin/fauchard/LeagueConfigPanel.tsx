@@ -47,8 +47,8 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         {/* Requisitos de Ascenso */}
         <div className="space-y-8">
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-teal-400" />
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-200">Requisitos de Ascenso</h3>
+            <TrendingUp className="w-5 h-5 text-primary" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Requisitos de Ascenso</h3>
           </div>
           
           <div className="space-y-8 pl-1">
@@ -90,8 +90,8 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         {/* Transición y Descenso */}
         <div className="space-y-8">
           <div className="flex items-center gap-2">
-            <TrendingDown className="w-5 h-5 text-amber-400" />
-            <h3 className="text-sm font-black uppercase tracking-widest text-slate-200">Transición y Descenso</h3>
+            <TrendingDown className="w-5 h-5 text-warning" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Transición y Descenso</h3>
           </div>
 
           <div className="space-y-8 pl-1">
@@ -135,8 +135,8 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
       <div className="p-6 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 flex gap-4">
         <Trophy className="w-8 h-8 text-indigo-400 shrink-0" />
         <div className="space-y-1">
-          <h4 className="text-sm font-bold text-indigo-300">Sobre el sistema de categorías</h4>
-          <p className="text-xs text-indigo-300/70 leading-relaxed">
+          <h4 className="text-sm font-bold text-primary">Sobre el sistema de categorías</h4>
+          <p className="text-xs text-primary/70 leading-relaxed">
             Las categorías (Bronce, Plata, Oro, Élite) determinan el acceso a casos de mayor complejidad. 
             El algoritmo utiliza estos parámetros para automatizar los ascensos y descensos basados en el desempeño real.
           </p>
@@ -171,7 +171,7 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
             exit={{ opacity: 0, y: 10 }}
             className={`
               p-4 rounded-2xl border text-sm
-              ${message.type === 'success' ? 'bg-teal-500/10 border-teal-500/20 text-teal-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}
+              ${message.type === 'success' ? 'bg-primary-hl border-primary/20 text-primary' : 'bg-error-hl border-error/30 text-error'}
             `}
           >
             {message.text}

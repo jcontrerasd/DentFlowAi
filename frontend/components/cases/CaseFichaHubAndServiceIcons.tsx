@@ -28,7 +28,7 @@ export function CaseHubUnreadBadge({ count }: { count: number }) {
   const display = count > 99 ? '99+' : String(count);
   return (
     <span
-      className="pointer-events-none flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-rose-500/85 px-1 text-[8px] font-semibold tabular-nums leading-none text-white/95 ring-1 ring-slate-950/60"
+      className="pointer-events-none flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-error px-1 text-[8px] font-semibold tabular-nums leading-none text-inverse/95 ring-1 ring-slate-950/60"
       title={`${count} mensaje${count === 1 ? '' : 's'} sin leer en el Centro de control`}
     >
       {display}
@@ -43,20 +43,20 @@ const SERVICE_META: Record<
   solo_diseno: {
     Icon: PenTool,
     label: 'CAD',
-    chipClass: 'border-sky-500/35 bg-sky-500/10 text-sky-300',
+    chipClass: 'border-sky-500/35 bg-sky-500/10 text-primary',
     iconClass: 'text-sky-400',
   },
   solo_fabricacion: {
     Icon: Factory,
     label: 'CAM',
-    chipClass: 'border-amber-500/35 bg-amber-500/10 text-amber-200',
-    iconClass: 'text-amber-400',
+    chipClass: 'border-warning/20 bg-warning-hl text-warning',
+    iconClass: 'text-warning',
   },
   integral: {
     Icon: Layers,
     label: 'CAD+CAM',
-    chipClass: 'border-teal-500/40 bg-teal-500/12 text-teal-200',
-    iconClass: 'text-teal-400',
+    chipClass: 'border-primary/30 bg-primary/12 text-primary',
+    iconClass: 'text-primary',
   },
 };
 
@@ -73,7 +73,7 @@ export function CaseServiceTypeBadge({ serviceType }: { serviceType?: string | n
       className={`inline-flex items-center gap-1.5 rounded-xl border px-2 py-1 ${chipClass}`}
     >
       <Icon className={`h-3.5 w-3.5 shrink-0 ${iconClass}`} aria-hidden />
-      <span className="font-black uppercase tracking-widest text-[9px]">{label}</span>
+      <span className="font-bold uppercase tracking-wider text-[9px]">{label}</span>
     </span>
   );
 }

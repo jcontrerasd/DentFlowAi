@@ -73,7 +73,7 @@ export default function FauchardWeightsPanel({ initialConfig }: FauchardWeightsP
             valueSuffix=" (w)"
             tooltip="Mide la importancia de las valoraciones y el feedback de casos anteriores. Un valor alto hace que los técnicos con mejores calificaciones tengan mayor prioridad para nuevos casos."
           />
-          <p className="text-[10px] text-slate-500 italic px-1">
+          <p className="text-[10px] text-faint italic px-1">
             Importancia de los ratings promedio de casos anteriores.
           </p>
         </div>
@@ -90,7 +90,7 @@ export default function FauchardWeightsPanel({ initialConfig }: FauchardWeightsP
             valueSuffix=" (w)"
             tooltip="Evalúa la frecuencia con la que el técnico entrega los trabajos a tiempo. Aumentar este peso prioriza a los técnicos que no se atrasan en sus fechas de entrega prometidas."
           />
-          <p className="text-[10px] text-slate-500 italic px-1">
+          <p className="text-[10px] text-faint italic px-1">
             Historial de entregas en el plazo prometido.
           </p>
         </div>
@@ -107,7 +107,7 @@ export default function FauchardWeightsPanel({ initialConfig }: FauchardWeightsP
             valueSuffix=" (w)"
             tooltip="Considera el nivel de habilidad declarado o verificado del técnico para el tipo de trabajo específico. Darle más peso favorece a los especialistas."
           />
-          <p className="text-[10px] text-slate-500 italic px-1">
+          <p className="text-[10px] text-faint italic px-1">
             Nivel de habilidad declarado para el tipo de trabajo específico.
           </p>
         </div>
@@ -124,7 +124,7 @@ export default function FauchardWeightsPanel({ initialConfig }: FauchardWeightsP
             valueSuffix=" (w)"
             tooltip="Reduce el score de los técnicos que ya tienen muchos casos asignados o invitaciones pendientes. Ayuda a distribuir el trabajo de forma más equitativa y evita cuellos de botella."
           />
-          <p className="text-[10px] text-slate-500 italic px-1">
+          <p className="text-[10px] text-faint italic px-1">
             Reduce prioridad a técnicos con muchas invitaciones recientes.
           </p>
         </div>
@@ -141,29 +141,29 @@ export default function FauchardWeightsPanel({ initialConfig }: FauchardWeightsP
             valueSuffix=" (w)"
             tooltip="Otorga un aumento de score temporal a técnicos que llevan mucho tiempo sin recibir casos nuevos. Fomenta la participación de todo el pool de técnicos activos."
           />
-          <p className="text-[10px] text-slate-500 italic px-1">
+          <p className="text-[10px] text-faint italic px-1">
             Prioriza a técnicos que llevan tiempo sin ser invitados.
           </p>
         </div>
       </div>
 
       {/* Sum Validation Indicator */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-6 p-6 rounded-[2rem] bg-slate-900/40 border border-slate-800/60 shadow-2xl">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-6 p-6 rounded-[2rem] bg-surface/40 border border-divider shadow-2xl">
         <div className="flex items-center gap-4">
           <div className={`
             w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300
-            ${isSumValid ? 'bg-teal-500/10 text-teal-400 border border-teal-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}
+            ${isSumValid ? 'bg-primary-hl text-primary border border-primary/20' : 'bg-warning-hl text-warning border border-warning/20'}
           `}>
             {isSumValid ? <Save className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className={`text-lg font-black ${isSumValid ? 'text-teal-400' : 'text-amber-400'}`}>
+              <span className={`text-lg font-black ${isSumValid ? 'text-primary' : 'text-warning'}`}>
                 Suma: {sum.toFixed(3)}
               </span>
-              <span className="text-slate-500 text-sm font-medium">/ 1.000</span>
+              <span className="text-faint text-sm font-medium">/ 1.000</span>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-faint">
               {isSumValid 
                 ? 'La configuración es válida y puede ser guardada.' 
                 : 'La suma de todos los pesos (α) debe ser exactamente 1.000.'}
@@ -202,8 +202,8 @@ export default function FauchardWeightsPanel({ initialConfig }: FauchardWeightsP
             className={`
               p-4 rounded-2xl border text-sm flex items-center gap-3
               ${message.type === 'success' 
-                ? 'bg-teal-500/10 border-teal-500/20 text-teal-400' 
-                : 'bg-red-500/10 border-red-500/20 text-red-400'}
+                ? 'bg-primary-hl border-primary/20 text-primary' 
+                : 'bg-error-hl border-error/30 text-error'}
             `}
           >
             {message.type === 'success' ? <Info className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
