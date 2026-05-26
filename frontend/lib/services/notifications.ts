@@ -3,7 +3,14 @@ import { user } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendInstance: Resend | null = null;
+function getResend() {
+  if (!resendInstance) {
+    resendInstance = new Resend(process.env.RESEND_API_KEY || 're_dummy_key_for_build_purposes');
+  }
+  return resendInstance;
+}
+
 const FROM_EMAIL = process.env.NOTIFICATION_FROM_EMAIL || 'DentFlowAi <notifications@dentflow.ai>';
 
 export type NotificationType =
@@ -118,7 +125,7 @@ export async function notifyUser(userId: string, type: NotificationType, data: a
       return { success: true, stub: true };
     }
 
-    const { error } = await resend.emails.send({
+    const { error } = await getResend().emails.send({
       from: FROM_EMAIL,
       to: [userData.email],
       subject: `Fauchard · DentFlowAi: ${template.subject}`,

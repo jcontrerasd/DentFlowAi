@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+
+export const dynamic = 'force-dynamic';
 import { caseInvitation } from '@/lib/db/schema';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { checkAndExpireInvitationsAction } from '@/lib/db/actions/fauchard';
