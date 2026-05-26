@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["http://localhost:3000", "https://dentflowai.com"],
+    "method": ["GET", "PUT", "POST", "DELETE", "OPTIONS"],
+    "responseHeader": ["Content-Type", "Content-Encoding", "x-goog-resumable"],
+    "maxAgeSeconds": 3600
+  }
+]

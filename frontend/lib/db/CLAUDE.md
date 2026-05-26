@@ -1,0 +1,156 @@
+# lib/db/ — Capa de datos (Drizzle ORM)
+
+## Archivos clave
+- `schema.ts` — Definición de todas las tablas. Fuente de verdad del modelo.
+- `infrastructure.ts` — Conexión DB + runtime migrations (NO usar drizzle-kit push en producción)
+- `index.ts` — Exporta instancia `db`
+
+## Tablas principales
+
+### `clinicalCase`
+Estado del caso: `borrador → enEvaluacion → propuestaLista → aceptadaPendienteInicio → enEjecucion → enRevision [→ cambiosEnProceso] → disenoAprobado [→ enFabricacion → enviado] → completado`
+
+Para `solo_fabricacion` el flujo salta `enEjecucion`/`enRevision`/`disenoAprobado` y va directo de `aceptadaPendienteInicio` → `enFabricacion`.
+
+Campos clave:
+- `serviceType`: `solo_diseno` | `solo_fabricacion` | `integral` — fuente de verdad del tipo de servicio
+- `needsFabrication`: boolean (`true` para `integral` y `solo_fabricacion`; mantenido por retrocompatibilidad con casos legacy)
+- `proposedPrice`, `proposedDeliveryDays`: oferta aceptada (totales canónicos del único técnico ganador)
+- `proposalExpiresAt`: deadline del comparativo (fijado por `buildProposalAction`). **No resetear si `status !== enEvaluacion`** (idempotencia).
+- `assignedTechnicianId`: técnico ganador (uno solo por caso; no hay aprobación parcial)
+- `workDeadline`: fecha de entrega comprometida (se muestra en el stepper)
+- `fauchardConfigId`: config Fauchard anclada al publicar (copy-on-write admin)
+- `internalStatus`: estados internos granulares para el motor (no visible al usuario)
+
+### `caseInvitation`
+Una fila por técnico invitado por caso. Status: `pending | quoted | accepted | confirmed | rejected | expired | withdrawn`
+
+Campos de cotización:
+- `quotedPrice`, `quotedDays`: **totales canónicos** (ordenamiento, comparativo, reporting). Para integral son suma de diseño + fabricación; para solo_diseno / solo_fabricacion son el único valor cotizado.
+- `quotedDesignPrice`, `quotedDesignDays`, `quotedFabricationPrice`, `quotedFabricationDays`: desglose **nullable**. Se persisten solo cuando `serviceType === 'integral'` (kind 'split'). Cotizaciones antiguas o de tipos flat quedan con estos campos null y la UI hace fallback al total.
+- `techNotes`, `dentistRejectionFeedback`
+
+### `technicianSkill`
+Habilidades del técnico por `workType`: `designLevel` y `fabricationLevel` (0–7 cada uno).
+El motor Fauchard usa estos niveles para filtrar y puntuar invitados.
+
+### `fauchardConfig`
+Parámetros del algoritmo. **Como máximo una fila `is_active`** (índice único parcial). El admin actualiza con copy-on-write: nueva fila + desactivar la anterior. Cada `clinicalCase` puede anclar `fauchardConfigId` al publicar.
+
+### `caseUserArchive`
+Archivo por usuario y caso (`case_user_archive`). Usado por `archiveCaseForUserAction` / `unarchiveCaseForUserAction` en terminal.
+
+### `clinicalCaseEvent`
+Log de todos los eventos UCH. Campos: `userId`, `type`, `action`, `content`, `payload` (jsonb), `stateChange` (jsonb), `createdAt`.
+
+Convención de `payload`:
+- `visibleTo`: `'dentista'` | `'tecnico'` | `'ambos'` | `'sistema'` — filtra visibilidad
+- `presentationAuthor: 'fauchard'` — el receptor ve a Fauchard como emisor
+- `invitationId` — acota el evento al hilo de esa invitación (aislamiento técnico)
+
+### `clinicalCaseDelivery`
+Entregas de diseño/revisión. Campos: `technicianId`, `version`, `files` (jsonb), `status`, `reviewComment`.
+
+### `clinicalCaseHubRead`
+Cursores de lectura del UCH por usuario + caso: `lastReadTechHubAt`, `lastReadNegHubAt`. Usado por `uchUnread.ts` para los contadores de mensajes no leídos.
+
+### Catálogos UI — `vitaShade`, `restorationType`, `dentalMaterial`, `urgencyLevel`
+Tablas administrables (v3.9, diseño con 3 identificadores por rol):
+- `id` (uuid PK) — referenciado por FK desde `clinical_case`.
+- `code` (text UNIQUE NOT NULL) — **opaco** system-generated (`mat_001`, `vita_001`, `rest_001`, `urg_001`). Estable; no relacionado al label.
+- `businessKey` (text UNIQUE, nullable) — **semántica** para branches de código (Fauchard, comparaciones de urgencia). Solo set en filas referenciadas; null para puro UI.
+- `label` (text) — editable por admin sin consecuencias.
+- `sortOrder`, `isActive`.
+
+`clinical_case` tiene FKs `material_id`, `restoration_type_id`, `shade_id`, `urgency_id` (`ON DELETE RESTRICT`). Columnas text legacy eliminadas en v3.8.
+
+**Reglas de acceso**:
+- Form/wizard → envía `code` opaco para material/restoration/shade; `business_key` para urgency.
+- Resolver (`catalogResolver.ts`) → convierte a id antes de persistir (urgency vía business_key, los otros vía code).
+- App code referencia `business_key` (`urgency === 'alta'`, `RESTORATION_TO_WORK_TYPE[businessKey]`). Nunca el code opaco.
+- Reads (JOIN) aplanan: `material/restorationType/shade` = label, `urgency` = business_key, `urgencyLabel` = label.
+
+**Admin CRUD**: admin solo edita `label`. `code` se genera automáticamente como `${prefix}_${NNN}` (siguiente disponible). `businessKey` es read-only (no se setea desde la UI).
+
+Migraciones:
+- `scripts/migrate-catalogs-fk.ts` — v3.7→v3.8 (text → FK).
+- `scripts/migrate-catalogs-opaque-codes.ts` — v3.8→v3.9 (code slug→opaco; copia slug a business_key para restoration_type y urgency_level).
+
+## Patrón Server Actions
+<important>Todas las funciones retornan `{ success: boolean; data?: T; error?: string }`</important>
+<important>Usar `getServerIdentity()` para userId/role — nunca leer JWT directamente</important>
+<important>Validar role antes de cualquier mutación</important>
+
+## actions/ clave
+
+| Archivo | Responsabilidad |
+|---------|----------------|
+| `fauchard.ts` | Motor Fauchard: classifyCase, runFauchard, sendInvitations, submitQuote, evaluateQuotes, buildProposal |
+| `cases.ts` | CRUD casos, publicar, archivar, clonar, fabricación/despacho/recepción, `logCaseEvent()`, `getCaseEventsAction` |
+| `proposal.ts` | acceptProposal, rejectInvitationOffer, startWork, withdrawQuote, expireDentistComparativeWindow |
+| `invitations.ts` | Listado de invitaciones; archivos visibles solo si `invitation.status === confirmed` |
+| `skills.ts` | Matriz habilidades; lee rol desde DB (no JWT) |
+| `files.ts` | Upload/download vía GCS signed URLs |
+| `archiveCaseFiles.ts` | `archiveCaseFilesBestEffort(caseId)` — marca `customTime` en archivos GCS al cerrar el caso (alimenta la lifecycle policy del bucket) |
+| `impersonation.ts` | `getServerIdentity()` — resolver canónico de identidad |
+| `hubRead.ts` | Cursores de lectura del UCH + contadores no leídos |
+| `dashboard.ts` | Métricas y agregados del dashboard |
+| `admin.ts` | Operaciones admin (usuarios, orgs) |
+| `user.ts` / `organization.ts` | Perfil, onboarding, organizaciones |
+| `annotations.ts` | Anotaciones 3D en visor |
+| `catalogs.ts` | Listas administrables del wizard (vita_shade, restoration_type, dental_material, urgency_level): list públicas + CRUD admin |
+
+## getCaseEventsAction — pipeline de entrega al cliente
+1. Filtra eventos por visibilidad de rol (via `filterCaseEventsForUchViewer`).
+2. Enriquece payload de cotizaciones rechazadas con snapshot de `caseInvitation`.
+3. Firma URLs de avatares (GCS).
+4. Para cada evento: `shouldPresentUchEventAsFauchard` → si true, sustituye `user` por `UCH_FAUCHARD_PUBLIC_USER` y limpia `presentationAuthor` del payload con `sanitizeUchPayloadForViewer`.
+5. Admin recibe identidades reales sin enmascarado.
+
+## Idempotencia crítica en Fauchard
+- `evaluateQuotesAction` / `buildProposalAction`: guard `status === EN_EVALUACION`; `buildProposal` usa `UPDATE … WHERE status = enEvaluacion` (sin re-fijar `proposalExpiresAt`).
+- `expirePendingInvitationsForCase` vs `tryEvaluateQuotesIfReady`: las **lecturas** solo expiran invitaciones; evaluación en `submitQuote`, cron y `checkAndExpireInvitationsAction`.
+- Countdown 1: `expires_at` se fija en `sendInvitationsAction` (`tQuoteMinutes`); dedupe por técnico activo.
+- Countdown 2: `proposalExpiresAt` se fija una vez en `buildProposalAction` (`tProposalHours`).
+- Ver `frontend/lib/db/caseDeadlines.ts`.
+
+## Fauchard selección por tipo de servicio
+- `classifyCaseAction`: si el caso tiene `serviceType` poblado (wizard v3) lo respeta como fuente de verdad; si no, lo deriva de `needsFabrication`.
+- `runFauchardAction` filtra `technicianSkill` según el tipo:
+  - `solo_diseno`, `integral` → `designLevel >= minSkillLevel`
+  - `solo_fabricacion` → `fabricationLevel >= minSkillLevel` (design ignorado)
+  - `integral` además exige `fabricationLevel >= minSkillLevel`
+- `calculateTechnicianScore` (componente E, experiencia):
+  - `integral` → `min(designLevel, fabLevel)`
+  - `solo_fabricacion` → `fabricationLevel`
+  - `solo_diseno` → `designLevel`
+
+## submitQuoteAction
+- Firma nueva: `submitQuoteAction(invitationId, input: QuoteInput)` con `kind: 'flat' | 'split'`.
+- Firma legacy `(invitationId, price, deliveryDays, notes?)` se mantiene como flat por retrocompatibilidad (tests, integraciones internas); no aplica validación estricta de coherencia con `serviceType`.
+- Cuando el caller usa el objeto `QuoteInput`:
+  - `integral` → solo acepta `kind: 'split'` (todos los campos > 0 y ≤ 365 días)
+  - `solo_diseno` / `solo_fabricacion` → solo acepta `kind: 'flat'`
+- Persiste totales en `quotedPrice/Days` y el desglose en `quotedDesignPrice/Days` + `quotedFabricationPrice/Days`. El evento UCH `OFERTA_ENVIADA` lleva el desglose en `payload`, no en `content`.
+
+## Fabricación, despacho y cierre
+- `transitionToManufacturingAction(caseId)` — pasa a `enFabricacion`, emite `FABRICACION_INICIADA`.
+- `registerDispatchAction(caseId, { courier, trackingId, photos? })` — pasa a `enviado`, emite `CASO_DESPACHADO`.
+- `confirmReceptionAction(caseId)` — dentista confirma recepción → `completado`, emite `RECEPCION_CONFIRMADA`.
+- Estas tres viven en `cases.ts`. `startWorkAction` en `proposal.ts` bifurca según `serviceType` (ver abajo).
+
+## approveWorkAction — cierre por tipo
+- `solo_diseno` → `completado` (con `completedAt`, `currentResponsibility=null`).
+- `integral` con CAM → `enFabricacion` (con `currentResponsibility='tecnico'`).
+- `integral` sin CAM (legacy) → `disenoAprobado` (con `completedAt`).
+- Mensaje UCH ajustado por rama.
+- Si el caso queda en terminal (`completado` o `disenoAprobado`), llama `archiveCaseFilesBestEffort(caseId)` tras commit para marcar archivos con `customTime` (lifecycle GCS).
+
+## startWorkAction — bifurcación por tipo
+- `solo_fabricacion` → transición directa a `enFabricacion` y evento UCH `FABRICACION_INICIADA`.
+- `solo_diseno` / `integral` → mantiene transición a `enEjecucion` con evento `TRABAJO_INICIADO`.
+
+## Nomenclatura
+- Funciones: `verbAction` (createCaseAction, updateSkillsAction, etc.)
+- Constantes de estado: `CASE_STATUSES` en `lib/constants/dental.ts`
+- Constantes de evento: `CASE_EVENTS` en `lib/constants/caseEvents.ts`

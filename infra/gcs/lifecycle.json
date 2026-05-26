@@ -1,0 +1,31 @@
+{
+  "lifecycle": {
+    "rule": [
+      {
+        "action": { "type": "SetStorageClass", "storageClass": "NEARLINE" },
+        "condition": {
+          "daysSinceCustomTime": 30,
+          "matchesStorageClass": ["STANDARD"]
+        }
+      },
+      {
+        "action": { "type": "SetStorageClass", "storageClass": "COLDLINE" },
+        "condition": {
+          "daysSinceCustomTime": 120,
+          "matchesStorageClass": ["NEARLINE"]
+        }
+      },
+      {
+        "action": { "type": "SetStorageClass", "storageClass": "ARCHIVE" },
+        "condition": {
+          "daysSinceCustomTime": 365,
+          "matchesStorageClass": ["COLDLINE"]
+        }
+      },
+      {
+        "action": { "type": "AbortIncompleteMultipartUpload" },
+        "condition": { "age": 7 }
+      }
+    ]
+  }
+}

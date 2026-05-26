@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./BackupDentFlowAi.sh \"Registro: eliminada funcionalidad de identificación automática de organización/RUT en el paso 'Laboratorio' del flujo de registro. Se quitaron: autocomplete de nombre de organización, detección de RUT duplicado con popup de vinculación, estados asociados \\(duplicateOrg, linkedOrgByRut, orgSuggestions, etc.\\), función handleJoinOrganization, y los imports getOrganizationByRutAction y searchOrganizationByNameAction. El formulario del paso 3 ahora es simple y directo.\")",
+      "Bash(grep -E \"^/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/page.tsx$|landing|inicio|home\")",
+      "Bash(./BackupDentFlowAi.sh \"Igualado estilo del botón Iniciar Sesión en login page: agregado uppercase, tracking-widest y transition-all para coincidir con el botón REGISTRARME del registro\")",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(grep -n \"publishCaseAction\\\\|sendToBlackBox\\\\|publishCaseAction\" /Users/jaimecontreras/Documents/Projects/Projects/DentFlowAi/frontend/lib/db/actions/*.ts 2>/dev/null | head -20)",
+      "Read(//Users/jaimecontreras/Documents/Projects/Projects/DentFlowAi/frontend/lib/db/**)",
+      "Bash(grep -E \"\\\\.tsx$\")",
+      "Bash(tsc --noEmit)",
+      "Bash(sed -i '' 's/isStagedPublished/isStagedWithdrawable/g' /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/cases/\\\\[id\\\\]/page.tsx)",
+      "Bash(psql postgresql://dentflow_admin:dentflow_secure_pass_2026@34.176.243.133:5432/dentflowai-cbcf2-database -c ' *)",
+      "Bash(awk '/OFERTA ACEPTADA/{found=NR} found && NR<=found+20 && NR>=found-5 {print NR\": \"$0}' /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/cases/\\\\[id\\\\]/page.tsx)",
+      "Bash(awk 'NR>=1255 && NR<=1270' /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/cases/[id]/page.tsx)",
+      "Bash(grep -n \"^  \\);$\\\\|^}$\\\\|FocusTrap\" /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/components/cases/UnifiedCaseHub.tsx)",
+      "Bash(gsutil version *)"
+    ],
+    "additionalDirectories": [
+      "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/cases/[id]"
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Env / Secrets
+.env
+.env.*
+!.env.example
+firebase-key.json
+*-service-account.json
+*-key.json
+*-adminsdk-*.json
+
+# Debug / temp scripts
+find_brace_error.py
+check_*.py
+trace_*.py
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+scripts/.venv/
+
+# Node / build artifacts
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+dist/
+build/
+
+# Backups / archives
+Backup/
+*.zip
+
+# Logs
+*.log
+frontend/*.log
+

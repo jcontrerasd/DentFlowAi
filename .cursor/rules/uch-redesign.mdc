@@ -1,0 +1,27 @@
+---
+description: Reglas UCH DentFlowAi — apunta a la documentación canónica del repo
+globs:
+  - frontend/components/cases/**
+  - frontend/components/cases/uch/**
+  - frontend/lib/uch*.ts
+  - frontend/lib/caseEventsUchFilter.ts
+alwaysApply: false
+---
+
+# UCH — Reglas de Diseño DentFlowAi
+
+**No usar este archivo como fuente única.** La documentación canónica está en:
+
+1. [CLAUDE.md](../../CLAUDE.md) — sección **UCH — Reglas de Diseño DentFlowAi**
+2. Skill Cursor `@uch-reglas-diseno-dentflowai` (mismo contenido, paths absolutos en repo)
+3. [frontend/components/CLAUDE.md](../../frontend/components/CLAUDE.md) — detalle de componentes UCH
+
+## Recordatorio mínimo
+
+- El UCH **no** es chat libre: flujo guiado (stepper + eventos + acciones embebidas en el hilo).
+- **Una acción primaria** expandida; resto colapsable en la misma lista.
+- Fauchard aparece como **voz del sistema** en el carril izquierdo cuando corresponde (`uchThreadLane`, `uchPresentation`).
+- Countdown de propuesta **solo** en header del UCH (no en página ni `ComparativeOffersPanel`).
+- No desmontar el UCH al cerrar panel — `uchPanelMounted`.
+- Carril: `resolveUchThreadLane()`; split `CASO_PUBLICADO`: `splitCasoPublicadoForDentista()`.
+- Stack: Next.js 15 + Drizzle + PostgreSQL + GCS (no Supabase).

@@ -1,0 +1,7 @@
+{
+  "ignore": [
+    "lib/dataconnect/**",
+    "next-env.d.ts"
+  ],
+  "ignoreExportsUsedInFile": true
+}
