@@ -146,9 +146,6 @@ export const DENTIST_FILTERABLE_CASE_STATUSES: string[] = [
  */
 export const CASE_LIST_FILTER_USE_TIMELINE_UI = true;
 
-/** @deprecated Usar `CASE_LIST_FILTER_USE_TIMELINE_UI`. */
-export const DENTIST_STATUS_FILTER_USE_TIMELINE_UI = CASE_LIST_FILTER_USE_TIMELINE_UI;
-
 /** KPI técnico — flujo principal (pre-oferta → trabajo → cierre). */
 export const TECH_KPI_FILTER_MAIN_TIMELINE: TechKpiId[] = [
   'invitacionPendiente',

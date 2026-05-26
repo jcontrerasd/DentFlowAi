@@ -1,7 +1,17 @@
 {
   "ignore": [
     "lib/dataconnect/**",
-    "next-env.d.ts"
+    "next-env.d.ts",
+    "scratch*.ts",
+    "scratch-*.ts",
+    "scripts/*.ts",
+    "test-*.ts",
+    "components/cases/AcceptedProposalSummary.tsx",
+    "components/cases/CaseCardSkeleton.tsx"
+  ],
+  "ignoreDependencies": [
+    "@types/jszip",
+    "eslint-config-next"
   ],
   "ignoreExportsUsedInFile": true
 }

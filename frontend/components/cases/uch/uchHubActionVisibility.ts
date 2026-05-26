@@ -74,6 +74,3 @@ export function computeIncludeCaseActionTimeline(p: ComputeIncludeCaseActionTime
 
   return false;
 }
-
-/** Alias retrocompatible (nombre anterior). */
-export const computeIncludeFauchardTimeline = computeIncludeCaseActionTimeline;
