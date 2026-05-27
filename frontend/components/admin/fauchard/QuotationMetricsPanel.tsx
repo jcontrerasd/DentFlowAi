@@ -104,7 +104,7 @@ export default function QuotationMetricsPanel({ metrics }: QuotationMetricsPanel
 function MetricCard({ label, value, sub, icon, color }: any) {
   const colors: any = {
     teal: "text-primary bg-primary-hl border-primary/20",
-    indigo: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20",
+    indigo: "text-primary bg-primary-hl border-primary/20",
     red: "text-error bg-error-hl border-error/30",
     slate: "text-muted bg-surface-2 border-divider"
   };

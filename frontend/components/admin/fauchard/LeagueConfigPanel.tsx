@@ -132,8 +132,8 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
       </div>
 
       {/* Info Card */}
-      <div className="p-6 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 flex gap-4">
-        <Trophy className="w-8 h-8 text-indigo-400 shrink-0" />
+      <div className="p-6 rounded-[2rem] bg-primary-hl border border-primary/10 flex gap-4">
+        <Trophy className="w-8 h-8 text-primary shrink-0" />
         <div className="space-y-1">
           <h4 className="text-sm font-bold text-primary">Sobre el sistema de categorías</h4>
           <p className="text-xs text-primary/70 leading-relaxed">

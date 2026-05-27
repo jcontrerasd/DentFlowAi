@@ -752,12 +752,12 @@ export default function UnifiedCaseHub({
             id="uch-panel-actividad"
             role="region"
             aria-label="Actividad del caso"
-            className="flex flex-1 flex-col min-h-0 overflow-hidden bg-[#0b141a]"
+            className="flex flex-1 flex-col min-h-0 overflow-hidden bg-background"
           >
-            <div className="px-4 pt-2.5 pb-2 border-b border-divider flex-shrink-0 bg-[#111b21]">
+            <div className="px-4 pt-2.5 pb-2 border-b border-divider flex-shrink-0 bg-surface">
               <>
                 <p className="text-[10px] text-faint mb-1.5">Fase</p>
-                <div className="flex gap-0.5 bg-[#1f2c34] rounded-lg p-0.5">
+                <div className="flex gap-0.5 bg-surface-2 rounded-lg p-0.5">
                   {(['todos', 'propuesta', 'diseno', 'produccion'] as PhaseTab[]).map((tab) => {
                     const labels: Record<PhaseTab, string> = {
                       todos: 'Todos',
@@ -771,7 +771,7 @@ export default function UnifiedCaseHub({
                         type="button"
                         onClick={() => setPhaseTab(tab)}
                         className={`flex-1 py-1.5 rounded-md text-[10px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                          phaseTab === tab ? 'bg-[#2a3942] text-[#e9edef]' : 'text-faint hover:text-muted hover:bg-surface-off/60'
+                          phaseTab === tab ? 'bg-surface-off text-foreground' : 'text-faint hover:text-muted hover:bg-surface-off/60'
                         }`}
                       >
                         {labels[tab]}
@@ -789,7 +789,7 @@ export default function UnifiedCaseHub({
               showUchInlineDeadlineBanner) && (
               <div
                 data-testid="uch-inline-alerts"
-                className="px-3 pt-2 pb-2 space-y-2 flex-shrink-0 border-b border-divider bg-[#0b141a]"
+                className="px-3 pt-2 pb-2 space-y-2 flex-shrink-0 border-b border-divider bg-background"
               >
                 {showTechRevisionFromDeliveryBanner && techLatestRevisionComment && (
                   <div className="rounded-lg border-l-2 border-warning/20 bg-surface-off/40 pl-3 pr-2 py-2">
@@ -804,7 +804,7 @@ export default function UnifiedCaseHub({
                   </div>
                 )}
                 {showDentistEvalBanner && (
-                  <div className="rounded-xl px-3 py-2.5 border border-indigo-500/25 bg-indigo-500/10 flex items-center gap-2">
+                  <div className="rounded-xl px-3 py-2.5 border border-primary/20 bg-primary-hl flex items-center gap-2">
                     <Activity className="w-3.5 h-3.5 text-primary flex-shrink-0 animate-pulse" />
                     <div>
                       <p className="text-[9px] font-bold text-indigo-200 uppercase tracking-widest">Estamos analizando tu caso</p>
@@ -863,7 +863,7 @@ export default function UnifiedCaseHub({
             <div
               ref={scrollRef}
               data-testid="uch-timeline-scroll"
-              className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar bg-[#0b141a]"
+              className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar bg-background"
             >
               {timelineRows.map((row) => {
                 if (row.kind === 'action' && row.id === 'dentist_review') {
@@ -1034,7 +1034,7 @@ export default function UnifiedCaseHub({
           </div>
 
           {isLoser && !timelineHasTechOfferClosureEvent && (
-            <div className="px-5 py-4 bg-[#111b21] border-t border-divider">
+            <div className="px-5 py-4 bg-surface border-t border-divider">
               <div className="flex items-center gap-3 bg-error border border-error/20 rounded-2xl px-4 py-3">
                 <div className="w-8 h-8 rounded-xl bg-error-hl border border-error/20 flex items-center justify-center flex-shrink-0">
                   <XCircle className="w-4 h-4 text-error" />

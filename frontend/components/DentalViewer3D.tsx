@@ -5,21 +5,24 @@ import { Canvas, useLoader, type ThreeEvent } from '@react-three/fiber';
 import { STLLoader, PLYLoader, OBJLoader } from '@/lib/three-loaders';
 import {
   OrbitControls,
-  Stage,
   Center,
-  Html
+  Html,
 } from '@react-three/drei';
 import type { Group } from 'three';
 import * as THREE from 'three';
 import { ErrorBoundary, type FallbackProps } from 'react-error-boundary';
-import { 
+import {
   AlertTriangle,
-  Eye, 
-  EyeOff, 
-  Maximize2, 
+  Eye,
+  EyeOff,
+  Maximize2,
   MessageSquarePlus,
   Navigation,
-  RefreshCcw
+  RefreshCcw,
+  Settings2,
+  X,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 
 function getModelExtension(url: string): 'stl' | 'ply' | 'obj' {
@@ -104,10 +107,12 @@ function Model({
         geometry={result}
         onPointerDown={onPointerDown}
       >
-        <meshStandardMaterial
+        {/* Phong: highlights especulares suaves para percibir relieve dental,
+            sin el costo de PBR/HDRI. Specular tono neutro frío. */}
+        <meshPhongMaterial
           color={color}
-          roughness={0.4}
-          metalness={0.1}
+          shininess={28}
+          specular="#3a4a5c"
           transparent={opacity < 1}
           opacity={opacity}
           depthWrite={opacity === 1}
@@ -120,11 +125,12 @@ function Model({
   // Aplicamos material a los hijos
   result.traverse((child: THREE.Object3D) => {
     if (child instanceof THREE.Mesh) {
-       if (!child.material || (child.material as THREE.MeshStandardMaterial).color?.getHex() !== new THREE.Color(color).getHex()) {
-          child.material = new THREE.MeshStandardMaterial({
+       const mat = child.material as THREE.MeshPhongMaterial | undefined;
+       if (!mat || mat.color?.getHex() !== new THREE.Color(color).getHex()) {
+          child.material = new THREE.MeshPhongMaterial({
             color: color,
-            roughness: 0.4,
-            metalness: 0.1,
+            shininess: 28,
+            specular: new THREE.Color('#3a4a5c'),
             transparent: opacity < 1,
             opacity: opacity,
             depthWrite: opacity === 1
@@ -209,9 +215,33 @@ export default function DentalViewer3D({
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneGroupRef = useRef<Group>(null);
+  // Ref a OrbitControls para zoom imperativo desde los botones.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const controlsRef = useRef<any>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAnnotateMode, setIsAnnotateMode] = useState(false);
   const [mountKey, setMountKey] = useState(0);
+  const [panelOpen, setPanelOpen] = useState(true);
+
+  /**
+   * Acerca/aleja la cámara moviéndola sobre la línea cámara→target.
+   * factor < 1 = zoom in (más cerca); factor > 1 = zoom out (más lejos).
+   * Respeta minDistance/maxDistance de OrbitControls.
+   */
+  const adjustZoom = (factor: number) => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const cam = c.object as THREE.PerspectiveCamera;
+    const target = c.target as THREE.Vector3;
+    const offset = new THREE.Vector3().subVectors(cam.position, target);
+    const newDist = offset.length() * factor;
+    const min = c.minDistance ?? 0.1;
+    const max = c.maxDistance ?? Infinity;
+    const clamped = Math.min(Math.max(newDist, min), max);
+    offset.setLength(clamped);
+    cam.position.copy(target).add(offset);
+    c.update();
+  };
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
@@ -254,108 +284,166 @@ export default function DentalViewer3D({
         key={mountKey}
       >
         <Canvas
-          camera={{ position: [0, 0, 200], fov: 45 }}
-          // Fix: "demand" en lugar de "always" — renderiza solo cuando hay interacción,
-          // reduciendo el uso de GPU de 60fps constantes a 0fps cuando el modelo está quieto.
-          frameloop="demand"
+          camera={{ position: [0, 0, 120], fov: 45 }}
+          // `always` es necesario para que el damping de OrbitControls glidee suavemente
+          // (con `demand` el damping queda sin frames intermedios y produce stutter).
+          frameloop="always"
+          // Cap a 2x evita render 4-9x en pantallas retina/M-series y elimina lag por GPU saturada.
+          dpr={[1, 2]}
           style={{ background: '#020617' }}
           gl={{
             antialias: true,
-            powerPreference: 'high-performance'
+            powerPreference: 'high-performance',
           }}
         >
           <color attach="background" args={['#020617']} />
           
-          <Suspense fallback={null}>
-            <Stage
-              environment="city"
-              intensity={0.4}
-              shadows={false}
-              adjustCamera={1.2}
-            >
-              {/* `key` derivado de las URLs de los modelos: el centrado se recalcula
-                  solo cuando cambian los modelos, NO al agregar/editar pins. Así
-                  el modelo y los pins comparten el mismo frame estable. */}
-              <Center top key={validModels.map(m => m.url).join('|')}>
-                <group ref={sceneGroupRef}>
-                  {validModels.map((m, idx) => (
-                    <Model
-                      key={`${m.subType}-${idx}`}
-                      url={m.url}
-                      color={getColor(m.subType)}
-                      visible={m.visible}
-                      opacity={m.opacity ?? 1}
-                      onPointerDown={(e) => {
-                        if (isAnnotateMode && sceneGroupRef.current) {
-                          e.stopPropagation();
-                          const local = sceneGroupRef.current.worldToLocal(e.point.clone());
-                          onAnnotate?.({ x: local.x, y: local.y, z: local.z });
-                          setIsAnnotateMode(false);
-                        }
-                      }}
-                    />
-                  ))}
+          {/* Iluminación manual ligera: reemplaza <Stage> de drei que cargaba HDRI environment
+              (costo enorme con meshStandard + mallas dentales de 200k-1M tris). */}
+          <ambientLight intensity={0.75} />
+          <directionalLight position={[10, 10, 5]} intensity={0.95} />
+          <directionalLight position={[-10, -10, -5]} intensity={0.35} />
 
-                  {annotations.map(anno => (
-                    <Pin
-                      key={anno.id}
-                      position={[anno.coordinates.x, anno.coordinates.y, anno.coordinates.z]}
-                      text={anno.text}
-                      user={anno.user?.fullName || 'Usuario'}
-                    />
-                  ))}
-                </group>
-              </Center>
-            </Stage>
+          <Suspense fallback={null}>
+            {/* `key` derivado de las URLs de los modelos: el centrado se recalcula
+                solo cuando cambian los modelos, NO al agregar/editar pins. */}
+            <Center key={validModels.map(m => m.url).join('|')}>
+              <group ref={sceneGroupRef}>
+                {validModels.map((m, idx) => (
+                  <Model
+                    key={`${m.subType}-${idx}`}
+                    url={m.url}
+                    color={getColor(m.subType)}
+                    visible={m.visible}
+                    opacity={m.opacity ?? 1}
+                    onPointerDown={(e) => {
+                      if (isAnnotateMode && sceneGroupRef.current) {
+                        e.stopPropagation();
+                        const local = sceneGroupRef.current.worldToLocal(e.point.clone());
+                        onAnnotate?.({ x: local.x, y: local.y, z: local.z });
+                        setIsAnnotateMode(false);
+                      }
+                    }}
+                  />
+                ))}
+
+                {annotations.map(anno => (
+                  <Pin
+                    key={anno.id}
+                    position={[anno.coordinates.x, anno.coordinates.y, anno.coordinates.z]}
+                    text={anno.text}
+                    user={anno.user?.fullName || 'Usuario'}
+                  />
+                ))}
+              </group>
+            </Center>
           </Suspense>
 
-          <OrbitControls 
-            makeDefault 
+          <OrbitControls
+            ref={controlsRef}
+            makeDefault
             enableDamping={true}
           />
         </Canvas>
       </ErrorBoundary>
 
-      {/* Interface Overlays */}
-      <div className="absolute top-6 right-6 flex flex-col gap-3 z-20">
-         <div className="flex flex-col gap-1 p-2 bg-surface backdrop-blur-md rounded-2xl border border-divider shadow-xl">
-           {models.map(m => (
-             <div key={m.subType} className="flex flex-col gap-1 p-1">
-               <button
-                 onClick={() => onToggleLayer?.(m.subType)}
-                 className={`flex items-center justify-between gap-4 px-3 py-2 rounded-xl transition-all ${
-                   m.visible ? 'bg-primary-hl text-foreground' : 'hover:bg-surface-off text-faint'
-                 }`}
-               >
-                 <span className="text-[10px] uppercase font-bold tracking-tight">{m.subType}</span>
-                 {m.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5 opacity-50" />}
-               </button>
-               {m.visible && (
-                 <input 
-                   type="range" min="0.1" max="1" step="0.05"
-                   value={m.opacity ?? 1}
-                   onChange={(e) => onOpacityChange?.(m.subType, parseFloat(e.target.value))}
-                   className="w-full h-1 bg-surface-2 rounded-full appearance-none cursor-pointer"
-                 />
-               )}
-             </div>
-           ))}
-         </div>
-
-         {canAnnotate && (
-           <button 
-              onClick={() => setIsAnnotateMode(!isAnnotateMode)}
-              className={`p-3 bg-surface backdrop-blur-md rounded-2xl border border-divider shadow-xl transition-all ${
-                isAnnotateMode ? 'text-error bg-error-hl' : 'text-muted hover:text-foreground'
-              }`}
-            >
-               {isAnnotateMode ? <MessageSquarePlus className="w-4 h-4 animate-pulse" /> : <Navigation className="w-4 h-4" />}
-            </button>
-         )}
-
-          <button onClick={toggleFullscreen} className="p-3 bg-surface backdrop-blur-md rounded-2xl border border-divider shadow-xl text-muted hover:text-foreground">
-             <Maximize2 className="w-4 h-4" />
+      {/* Interface Overlay — panel flotante compacto + toggle */}
+      <div className="absolute top-4 right-4 z-20">
+        {!panelOpen ? (
+          <button
+            onClick={() => setPanelOpen(true)}
+            aria-label="Mostrar controles del visor"
+            title="Mostrar controles"
+            className="p-2.5 bg-surface backdrop-blur-md rounded-xl border border-divider shadow-lg text-muted hover:text-foreground hover:bg-surface-off transition-colors"
+          >
+            <Settings2 className="w-4 h-4" />
           </button>
+        ) : (
+          <div className="w-56 bg-surface backdrop-blur-md rounded-xl border border-divider shadow-xl overflow-hidden">
+            {/* Header con close */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-divider">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-faint">Controles</span>
+              <button
+                onClick={() => setPanelOpen(false)}
+                aria-label="Ocultar controles"
+                title="Ocultar"
+                className="p-1 rounded-md text-faint hover:text-foreground hover:bg-surface-off transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Capas */}
+            {models.length > 0 && (
+              <div className="p-2 space-y-1 border-b border-divider">
+                {models.map((m) => (
+                  <div key={m.subType} className="flex items-center gap-2">
+                    <button
+                      onClick={() => onToggleLayer?.(m.subType)}
+                      className={`flex-1 flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+                        m.visible ? 'bg-primary-hl text-foreground' : 'hover:bg-surface-off text-faint'
+                      }`}
+                    >
+                      <span className="text-[10px] uppercase font-bold tracking-tight truncate">{m.subType}</span>
+                      {m.visible ? <Eye className="w-3 h-3 shrink-0" /> : <EyeOff className="w-3 h-3 shrink-0 opacity-50" />}
+                    </button>
+                    {m.visible && (
+                      <input
+                        type="range" min="0.1" max="1" step="0.05"
+                        value={m.opacity ?? 1}
+                        onChange={(e) => onOpacityChange?.(m.subType, parseFloat(e.target.value))}
+                        aria-label={`Opacidad ${m.subType}`}
+                        className="w-14 h-1 bg-surface-2 rounded-full appearance-none cursor-pointer accent-primary"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Zoom + acciones en una sola fila */}
+            <div className="flex items-center gap-1 p-2">
+              <button
+                onClick={() => adjustZoom(0.82)}
+                aria-label="Acercar"
+                title="Acercar"
+                className="flex-1 inline-flex items-center justify-center py-2 rounded-lg text-muted hover:text-foreground hover:bg-surface-off transition-colors"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => adjustZoom(1.22)}
+                aria-label="Alejar"
+                title="Alejar"
+                className="flex-1 inline-flex items-center justify-center py-2 rounded-lg text-muted hover:text-foreground hover:bg-surface-off transition-colors"
+              >
+                <ZoomOut className="w-4 h-4" />
+              </button>
+
+              {canAnnotate && (
+                <button
+                  onClick={() => setIsAnnotateMode(!isAnnotateMode)}
+                  aria-label={isAnnotateMode ? 'Salir de modo anotación' : 'Anotar punto'}
+                  title={isAnnotateMode ? 'Salir' : 'Anotar'}
+                  className={`flex-1 inline-flex items-center justify-center py-2 rounded-lg transition-colors ${
+                    isAnnotateMode ? 'bg-error-hl text-error' : 'text-muted hover:text-foreground hover:bg-surface-off'
+                  }`}
+                >
+                  {isAnnotateMode ? <MessageSquarePlus className="w-4 h-4 animate-pulse" /> : <Navigation className="w-4 h-4" />}
+                </button>
+              )}
+
+              <button
+                onClick={toggleFullscreen}
+                aria-label="Pantalla completa"
+                title="Pantalla completa"
+                className="flex-1 inline-flex items-center justify-center py-2 rounded-lg text-muted hover:text-foreground hover:bg-surface-off transition-colors"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
 

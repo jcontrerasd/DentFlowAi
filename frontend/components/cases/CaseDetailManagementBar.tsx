@@ -193,6 +193,7 @@ export default function CaseDetailManagementBar({
               tooltip="Archivar Caso"
               enabled={actions.archive.enabled}
               onClick={onArchive}
+              accent="teal"
             />
           )}
 
@@ -202,6 +203,7 @@ export default function CaseDetailManagementBar({
               tooltip="Sacar del Archivo"
               enabled={actions.unarchive.enabled}
               onClick={onUnarchive}
+              accent="teal"
             />
           )}
 

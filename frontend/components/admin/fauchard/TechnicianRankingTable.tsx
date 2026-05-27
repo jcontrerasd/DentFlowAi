@@ -96,7 +96,7 @@ export default function TechnicianRankingTable({ data }: TechnicianRankingTableP
                     <div className="flex flex-col">
                       <span className="text-[11px] font-black text-foreground uppercase tracking-tight">{t.fullName}</span>
                       <span className={`text-[9px] font-bold uppercase tracking-wider ${
-                        t.leagueLevel.toLowerCase() === 'elite' ? 'text-indigo-400' :
+                        t.leagueLevel.toLowerCase() === 'elite' ? 'text-primary' :
                         t.leagueLevel.toLowerCase() === 'oro' ? 'text-warning' :
                         t.leagueLevel.toLowerCase() === 'plata' ? 'text-muted' : 'text-orange-600'
                       }`}>

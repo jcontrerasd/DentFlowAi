@@ -131,7 +131,7 @@ export default function UchFauchardActionsPanel({
   return (
     <div
       data-testid="uch-case-actions-inline"
-      className="rounded-xl border border-divider bg-[#111b21]/70 px-3 py-3 space-y-3"
+      className="rounded-xl border border-divider bg-surface px-3 py-3 space-y-3"
     >
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-2">

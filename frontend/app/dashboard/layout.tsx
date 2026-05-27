@@ -23,6 +23,7 @@ import { getSignedUrlAction } from '@/lib/db/actions/cases';
 import { getMyInvitationsAction } from '@/lib/db/actions/invitations';
 import { getMyHubUnreadTotalAction } from '@/lib/db/actions/hubRead';
 import ImpersonationSelector from '@/components/admin/ImpersonationSelector';
+import ThemeToggleButton from '@/components/theme/ThemeToggleButton';
 import Image from 'next/image';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -204,11 +205,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Main Content */}
       <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'pl-64' : 'pl-20'}`}>
         <header className="h-20 border-b border-divider/50 flex items-center justify-between px-10 bg-surface shadow-sm border border-divider sticky top-0 z-40">
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-muted hover:text-foreground transition-colors">
-            <Menu className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-4">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-muted hover:text-foreground transition-colors">
+              <Menu className="w-6 h-6" />
+            </button>
+            {/* Impersonación admin: a la izquierda para no comprimir el lado derecho */}
+            <ImpersonationSelector />
+          </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
             {(userProfile?.role === 'dentista' || userProfile?.role === 'tecnico') && (
               <div
                 className="relative flex items-center justify-center p-2 rounded-xl text-faint hover:text-primary hover:bg-surface-2 transition-colors"
@@ -223,7 +228,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 )}
               </div>
             )}
-            <ImpersonationSelector />
+
+            {/* Toggle rápido de tema (claro / oscuro / sistema) */}
+            <ThemeToggleButton />
 
             <Link href="/dashboard/profile">
               <div className="flex items-center gap-6 hover:bg-surface-2/40 p-2 rounded-2xl transition-all group cursor-pointer">

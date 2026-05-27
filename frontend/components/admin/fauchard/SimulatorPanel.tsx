@@ -74,7 +74,7 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
       <div className="lg:col-span-4 space-y-8">
         <div className="p-8 rounded-[2.5rem] bg-surface/40 border border-divider shadow-xl space-y-8">
           <div className="flex items-center gap-3">
-            <FlaskConical className="w-5 h-5 text-indigo-400" />
+            <FlaskConical className="w-5 h-5 text-primary" />
             <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Configurar Escenario</h3>
           </div>
 
@@ -124,7 +124,7 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
               <label className="text-[10px] font-bold uppercase tracking-wider text-muted">Modo Sandbox</label>
               <button 
                 onClick={() => setUseOverride(!useOverride)}
-                className={`relative w-10 h-5 rounded-full transition-colors ${useOverride ? 'bg-indigo-500' : 'bg-surface-2'}`}
+                className={`relative w-10 h-5 rounded-full transition-colors ${useOverride ? 'bg-primary' : 'bg-surface-2'}`}
               >
                 <motion.div animate={{ x: useOverride ? 22 : 2 }} className="w-4 h-4 bg-white rounded-full shadow-sm mt-0.5" />
               </button>
@@ -179,10 +179,10 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
                   <span className="text-xl font-black text-foreground">{result.eligiblePool} Técnicos</span>
                 </div>
               </div>
-              <div className="p-6 rounded-3xl bg-indigo-500/5 border border-indigo-500/10 flex items-center gap-4">
-                <Settings2 className="w-6 h-6 text-indigo-400" />
+              <div className="p-6 rounded-3xl bg-primary-hl border border-primary/10 flex items-center gap-4">
+                <Settings2 className="w-6 h-6 text-primary" />
                 <div>
-                  <span className="text-[9px] font-black uppercase text-indigo-500/60 block">N Invitados</span>
+                  <span className="text-[9px] font-black uppercase text-primary/60 block">N Invitados</span>
                   <span className="text-xl font-black text-foreground">{result.invitedCount}</span>
                 </div>
               </div>

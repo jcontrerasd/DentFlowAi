@@ -48,7 +48,7 @@ export default function UchDentistReviewPanel({
 
   if (!expanded) {
     return (
-      <div data-testid="uch-dentist-review-collapsed" className="rounded-xl border border-indigo-500/25 bg-[#111b21] px-3 py-2.5 transition-colors duration-150 hover:bg-surface-off/60 focus-within:bg-surface-off">
+      <div data-testid="uch-dentist-review-collapsed" className="rounded-xl border border-primary/20 bg-surface px-3 py-2.5 transition-colors duration-150 hover:bg-surface-off/60 focus-within:bg-surface-off">
         <button
           type="button"
           onClick={onToggleExpanded}
@@ -65,7 +65,7 @@ export default function UchDentistReviewPanel({
       data-testid="uch-dentist-review-panel"
       role="region"
       aria-label="Revisar entrega"
-      className="rounded-xl border border-indigo-500/25 bg-surface/95 p-4 shadow-xl space-y-4"
+      className="rounded-xl border border-primary/20 bg-surface/95 p-4 shadow-xl space-y-4"
     >
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-foreground">Revisar entrega</h2>

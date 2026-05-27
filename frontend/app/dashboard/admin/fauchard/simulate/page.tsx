@@ -27,7 +27,7 @@ export default async function AdminFauchardSimulatePage() {
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+            <div className="w-10 h-10 rounded-2xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary">
               <FlaskConical className="w-5 h-5" />
             </div>
             <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter">Simulador Sandbox</h1>

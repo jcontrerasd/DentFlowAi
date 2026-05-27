@@ -62,7 +62,7 @@ export default function UchDeliveryPanel({
 }: UchDeliveryPanelProps) {
   if (!expanded) {
     return (
-      <div data-testid="uch-delivery-collapsed" className="rounded-xl border border-primary/20 bg-[#111b21] px-3 py-2.5 transition-colors duration-150 hover:bg-surface-off/60 focus-within:bg-surface-off">
+      <div data-testid="uch-delivery-collapsed" className="rounded-xl border border-primary/20 bg-surface px-3 py-2.5 transition-colors duration-150 hover:bg-surface-off/60 focus-within:bg-surface-off">
         <button
           type="button"
           onClick={onToggleExpanded}

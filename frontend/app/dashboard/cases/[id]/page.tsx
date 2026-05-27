@@ -2490,12 +2490,12 @@ function CaseDetailPageContent() {
             <section className="bg-surface shadow-sm border border-divider rounded-[1.5rem] border border-divider/30 flex flex-col min-h-[250px]">
               <div className="p-6 border-b border-divider flex items-center justify-between bg-surface-off">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                  <div className="w-10 h-10 rounded-2xl bg-primary-hl flex items-center justify-center text-primary">
                     <Activity className="w-5 h-5" />
                   </div>
                   <div>
                     <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Anotaciones 3D</h3>
-                    <p className="text-[9px] text-indigo-400/80 font-bold uppercase tracking-widest">{displayedAnnotations.length} notas clínicas registradas</p>
+                    <p className="text-[9px] text-primary/80 font-bold uppercase tracking-widest">{displayedAnnotations.length} notas clínicas registradas</p>
                   </div>
                 </div>
               </div>
