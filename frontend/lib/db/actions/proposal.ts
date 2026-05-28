@@ -136,6 +136,7 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
           invitationId: inv.id,
         },
         stateChange: { from: CASE_STATUSES.PROPUESTA_LISTA, to: CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO },
+        skipActivityUpdate: true,
       }, tx);
 
       await logCaseEvent({
@@ -146,6 +147,7 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
         content:
           '¡Tu oferta fue seleccionada! El solicitante aceptó tu propuesta. Confirma el inicio cuando estés listo.',
         payload: { visibleTo: 'tecnico', invitationId: inv.id, ...UCH_PAYLOAD_PRESENTATION_FAUCHARD },
+        skipActivityUpdate: true,
       }, tx);
 
       for (const loser of losers) {
@@ -172,6 +174,7 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
             techNotes: techNotesPayload,
             ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
           },
+          skipActivityUpdate: true,
         }, tx);
 
         if (loser.status !== 'rejected') {
@@ -189,11 +192,15 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
               quotedHours: quotedHoursPayload,
               techNotes: techNotesPayload,
             },
+            skipActivityUpdate: true,
           }, tx);
         }
 
         await notifyUser(loser.technicianId, 'CASO_ASIGNADO_OTRO', { caseId, caseNumber: cCase.caseNumber });
       }
+
+      // Un solo UPDATE de lastActivityAt tras todos los eventos del loop de aceptación
+      await tx.update(clinicalCase).set({ lastActivityAt: new Date() }).where(eq(clinicalCase.id, caseId));
 
       await notifyUser(inv.technicianId, 'TRABAJO_CONFIRMADO', { caseId, caseNumber: cCase.caseNumber });
 

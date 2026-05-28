@@ -57,7 +57,8 @@ export async function logCaseEvent({
   action,
   content,
   payload = {},
-  stateChange = {}
+  stateChange = {},
+  skipActivityUpdate = false,
 }: {
   caseId: string,
   userId: string,
@@ -65,7 +66,8 @@ export async function logCaseEvent({
   action: string,
   content?: string,
   payload?: any,
-  stateChange?: { from?: string, to?: string }
+  stateChange?: { from?: string, to?: string },
+  skipActivityUpdate?: boolean,
 }, tx?: any) {
   const dbClient = tx || db;
   try {
@@ -79,12 +81,13 @@ export async function logCaseEvent({
       stateChange,
       createdAt: new Date()
     });
-    
-    // También actualizamos last_activity_at en el caso para que el dashboard sepa que hay algo nuevo
-    await dbClient.update(clinicalCase).set({
-      lastActivityAt: new Date()
-    }).where(eq(clinicalCase.id, caseId));
-    
+
+    if (!skipActivityUpdate) {
+      await dbClient.update(clinicalCase).set({
+        lastActivityAt: new Date()
+      }).where(eq(clinicalCase.id, caseId));
+    }
+
   } catch (error) {
     console.error("[logCaseEvent] Error:", error);
     // No lanzamos el error para no bloquear la acción principal si falla el logging
