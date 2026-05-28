@@ -131,6 +131,22 @@ export async function getConfigForCase(caseId: string): Promise<FauchardConfigRo
   return getActiveConfig();
 }
 
+// ─── Batch expiration — called from case list to avoid N+1 ───────────────────
+
+export async function batchExpireInvitationsForCases(caseIds: string[]): Promise<void> {
+  if (!caseIds.length) return;
+  await db
+    .update(caseInvitation)
+    .set({ status: 'expired' })
+    .where(
+      and(
+        inArray(caseInvitation.clinicalCaseId, caseIds),
+        eq(caseInvitation.status, 'pending'),
+        lt(caseInvitation.expiresAt, new Date())
+      )
+    );
+}
+
 // ─── S2-02: Calcular score de un técnico para un caso ────────────────────────
 
 async function calculateTechnicianScore(

@@ -582,8 +582,8 @@ export async function listCasesByOrganization(
     });
 
     if (evalCaseIds.length > 0) {
-      const { checkAndExpireInvitationsAction } = await import('./fauchard');
-      await Promise.all(evalCaseIds.map((id) => checkAndExpireInvitationsAction(id)));
+      const { batchExpireInvitationsForCases } = await import('./fauchard');
+      await batchExpireInvitationsForCases(evalCaseIds);
     }
 
     return {
