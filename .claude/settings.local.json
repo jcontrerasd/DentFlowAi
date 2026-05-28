@@ -105,7 +105,10 @@
       "Bash(npx --prefix frontend vitest run --root frontend test/role-guards.test.tsx)",
       "Bash(git stash *)",
       "Bash(npx --prefix frontend vitest run --root frontend test/businessTime.test.ts test/uch-quote-breakdown.test.tsx test/uch-quote-display.test.ts test/accept-proposal-dentist-uch.test.ts)",
-      "Bash(npm --prefix frontend run lint)"
+      "Bash(npm --prefix frontend run lint)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/invitations",

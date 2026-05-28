@@ -55,7 +55,7 @@ function formatDeliveryDate(workDeadline: string | Date) {
   const d = new Date(workDeadline);
   const day = d.toLocaleDateString('es-CL', { weekday: 'long' });
   const date = d.toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' });
-  const time = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+  const time = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false });
   return { day, date, time, full: `${day} · ${date} · ${time}` };
 }
 
@@ -133,16 +133,45 @@ export default function UchDealSummary({
       data-testid="uch-deal-summary"
     >
       {showPactada && clinicalCase.proposedPrice != null && (() => {
-        const shipping = clinicalCase.proposedShippingPrice ?? 0;
-        const shippingDays = clinicalCase.proposedShippingDays ?? null;
-        const shippingHours = clinicalCase.proposedShippingHours ?? null;
+        // El técnico ganador ve su propia oferta (sin fee); el dentista/admin ve la pactada (con fee aplicado a diseño/fabricación).
+        const useTechValues = actingAsTecnico && assigned && invitation != null;
+        const totalPrice = useTechValues
+          ? (invitation?.quotedPrice ?? clinicalCase.proposedPrice)
+          : clinicalCase.proposedPrice;
+        const totalDays = useTechValues
+          ? (invitation?.quotedDays ?? clinicalCase.proposedDeliveryDays ?? null)
+          : (clinicalCase.proposedDeliveryDays ?? null);
+        const totalHours = useTechValues
+          ? (invitation?.quotedHours ?? clinicalCase.proposedDeliveryHours ?? null)
+          : (clinicalCase.proposedDeliveryHours ?? null);
+        const shipping = useTechValues
+          ? (invitation?.quotedShippingPrice ?? 0)
+          : (clinicalCase.proposedShippingPrice ?? 0);
+        const shippingDays = useTechValues
+          ? (invitation?.quotedShippingDays ?? null)
+          : (clinicalCase.proposedShippingDays ?? null);
+        const shippingHours = useTechValues
+          ? (invitation?.quotedShippingHours ?? null)
+          : (clinicalCase.proposedShippingHours ?? null);
         const hasShipping = shipping > 0;
-        const designPrice = clinicalCase.proposedDesignPrice ?? null;
-        const designDays = clinicalCase.proposedDesignDays ?? null;
-        const designHours = clinicalCase.proposedDesignHours ?? null;
-        const fabPrice = clinicalCase.proposedFabricationPrice ?? null;
-        const fabDays = clinicalCase.proposedFabricationDays ?? null;
-        const fabHours = clinicalCase.proposedFabricationHours ?? null;
+        const designPrice = useTechValues
+          ? (invitation?.quotedDesignPrice ?? null)
+          : (clinicalCase.proposedDesignPrice ?? null);
+        const designDays = useTechValues
+          ? (invitation?.quotedDesignDays ?? null)
+          : (clinicalCase.proposedDesignDays ?? null);
+        const designHours = useTechValues
+          ? (invitation?.quotedDesignHours ?? null)
+          : (clinicalCase.proposedDesignHours ?? null);
+        const fabPrice = useTechValues
+          ? (invitation?.quotedFabricationPrice ?? null)
+          : (clinicalCase.proposedFabricationPrice ?? null);
+        const fabDays = useTechValues
+          ? (invitation?.quotedFabricationDays ?? null)
+          : (clinicalCase.proposedFabricationDays ?? null);
+        const fabHours = useTechValues
+          ? (invitation?.quotedFabricationHours ?? null)
+          : (clinicalCase.proposedFabricationHours ?? null);
         const hasSplit = designPrice != null || fabPrice != null;
 
         type Cell = { label: string; price: number; days: number | null; hours: number | null };
@@ -151,14 +180,14 @@ export default function UchDealSummary({
           if (designPrice != null) cells.push({ label: 'Diseño', price: designPrice, days: designDays, hours: designHours });
           if (fabPrice != null) cells.push({ label: 'Fabricación', price: fabPrice, days: fabDays, hours: fabHours });
         } else {
-          const workPrice = hasShipping ? clinicalCase.proposedPrice - shipping : clinicalCase.proposedPrice;
-          cells.push({ label: 'Trabajo', price: workPrice, days: clinicalCase.proposedDeliveryDays ?? null, hours: clinicalCase.proposedDeliveryHours ?? null });
+          const workPrice = hasShipping ? totalPrice - shipping : totalPrice;
+          cells.push({ label: 'Trabajo', price: workPrice, days: totalDays, hours: totalHours });
         }
         if (hasShipping) cells.push({ label: 'Flete', price: shipping, days: shippingDays, hours: shippingHours });
 
         const totalTurnaround = formatTurnaround({
-          days: clinicalCase.proposedDeliveryDays,
-          hours: clinicalCase.proposedDeliveryHours,
+          days: totalDays,
+          hours: totalHours,
         });
 
         return (
@@ -186,7 +215,7 @@ export default function UchDealSummary({
             <div className="flex items-stretch border-t border-divider pt-1.5">
               <div className="flex-1 min-w-0 px-2">
                 <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">Total</p>
-                <p className="text-[13px] font-bold tabular-nums text-primary truncate">{formatUchQuoteClp(clinicalCase.proposedPrice)}</p>
+                <p className="text-[13px] font-bold tabular-nums text-primary truncate">{formatUchQuoteClp(totalPrice)}</p>
                 {totalTurnaround !== '—' && (
                   <p className="text-[9px] text-muted truncate">Plazo · {totalTurnaround}</p>
                 )}

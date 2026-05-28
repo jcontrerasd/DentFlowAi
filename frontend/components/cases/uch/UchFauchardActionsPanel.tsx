@@ -394,9 +394,9 @@ export default function UchFauchardActionsPanel({
                               />
                             </div>
                             <div className="space-y-2">
-                              <div className="flex items-center justify-between gap-2">
+                              <div className="flex flex-wrap items-center justify-between gap-1.5">
                                 <label className="text-[9px] font-black text-muted uppercase tracking-widest">Plazo traslado</label>
-                                <div className="inline-flex rounded-lg border border-divider overflow-hidden">
+                                <div className="inline-flex rounded-lg border border-divider overflow-hidden flex-shrink-0">
                                   <button
                                     type="button"
                                     onClick={() => { setQuoteShippingUnit?.('dias'); setQuoteShippingDays?.(0); }}
@@ -404,7 +404,7 @@ export default function UchFauchardActionsPanel({
                                   >Días</button>
                                   <button
                                     type="button"
-                                    onClick={() => { setQuoteShippingUnit?.('horas'); setQuoteShippingDays?.(0); }}
+                                    onClick={() => { setQuoteShippingUnit?.('horas'); setQuoteShippingDays?.(1); }}
                                     className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteShippingUnit === 'horas' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
                                   >Horas</button>
                                 </div>

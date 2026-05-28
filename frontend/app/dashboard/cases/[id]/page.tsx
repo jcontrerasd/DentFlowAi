@@ -657,41 +657,7 @@ function CaseDetailPageContent() {
           serviceType: c.serviceType
         });
 
-        // 2. Obtener URLs Firmadas para el Visor 3D y Descargas Generales
-        if (c?.files?.length) {
-          const viewerUrls: Record<string, string> = {};
-          const allUrls: Record<string, string> = {};
-          const initialVisible = new Set<string>();
-
-          await Promise.all(c.files.map(async (file: any) => {
-            try {
-              const signedUrl = await getSignedUrlAction(file.gcsPath);
-              if (signedUrl) {
-                // Guardar la URL firmada para la lista de descargas
-                allUrls[file.id] = signedUrl;
-                
-                // Si es un archivo compatible con el visor 3D, lo agregamos al diccionario del visor
-                // Visor: escaneos, diseños del técnico y archivo de diseño del dentista en solo_fabricacion (design_upload).
-                if (file.category === 'scan' || file.category === 'design' || file.category === 'design_upload') {
-                  const subType = file.subType || 'default';
-                  viewerUrls[subType] = signedUrl;
-                  if (subType === 'superior' || subType === 'inferior') {
-                    initialVisible.add(subType);
-                  }
-                }
-              }
-            } catch (err) {
-              logError('Error getting signed URL', err, { caseId: caseIdStr, filename: file.filename });
-            }
-          }));
-
-          setFileUrls(viewerUrls);
-          setDownloadUrls(allUrls);
-          if (initialVisible.size === 0 && Object.keys(viewerUrls).length > 0) {
-            initialVisible.add(Object.keys(viewerUrls)[0]);
-          }
-          setVisibleSubtypes(initialVisible);
-        }
+        // 2. Las URLs firmadas se resuelven en un useEffect aparte (no bloquean el spinner).
 
         // 3. Eventos del hub + estado de lectura + invitación (todas independientes → paralelo)
         setIsLoadingEvents(true);
@@ -739,6 +705,52 @@ function CaseDetailPageContent() {
     };
     void fetchData();
   }, [id, sessionUserId, profileUserId, router, ingestCasePayloadFromServer]);
+
+  // Firma de URLs GCS en background: corre en cuanto cambia el listado de archivos del caso,
+  // sin bloquear el cierre del spinner "Sincronizando expediente". El visor 3D y la lista de
+  // descargas muestran su propio estado vacío hasta que llegan las URLs.
+  useEffect(() => {
+    const files = clinicalCase?.files as any[] | undefined;
+    const caseIdStr = String(id ?? '');
+    if (!files?.length) return;
+    let cancelled = false;
+
+    (async () => {
+      const viewerUrls: Record<string, string> = {};
+      const allUrls: Record<string, string> = {};
+      const initialVisible = new Set<string>();
+
+      await Promise.all(files.map(async (file: any) => {
+        try {
+          const signedUrl = await getSignedUrlAction(file.gcsPath);
+          if (!signedUrl) return;
+          allUrls[file.id] = signedUrl;
+          if (file.category === 'scan' || file.category === 'design' || file.category === 'design_upload') {
+            const subType = file.subType || 'default';
+            viewerUrls[subType] = signedUrl;
+            if (subType === 'superior' || subType === 'inferior') {
+              initialVisible.add(subType);
+            }
+          }
+        } catch (err) {
+          logError('Error getting signed URL', err, { caseId: caseIdStr, filename: file.filename });
+        }
+      }));
+
+      if (cancelled) return;
+
+      setFileUrls(viewerUrls);
+      setDownloadUrls(allUrls);
+      setVisibleSubtypes(prev => {
+        if (prev.size > 0) return prev;
+        if (initialVisible.size > 0) return initialVisible;
+        const firstKey = Object.keys(viewerUrls)[0];
+        return firstKey ? new Set([firstKey]) : prev;
+      });
+    })();
+
+    return () => { cancelled = true; };
+  }, [id, clinicalCase?.id, clinicalCase?.files]);
 
   const handleSaveAnnotation = async () => {
     if (!selectedCoords || !newAnnotationText.trim() || !user || !clinicalCase) return;

@@ -121,12 +121,12 @@ export function addBusinessTime(
   turnaround: { days?: number; hours?: number },
   cfg: BusinessCalendar
 ): Date {
-  let cursor = new Date(start);
   const days = turnaround.days ?? 0;
   const hours = turnaround.hours ?? 0;
-  if (days > 0) cursor = addBusinessDays(cursor, days, cfg);
-  if (hours > 0) cursor = addBusinessHours(cursor, hours, cfg);
-  return cursor;
+  const dayHours = Math.max(0, cfg.endHour - cfg.startHour);
+  const totalHours = days * dayHours + hours;
+  if (totalHours <= 0) return new Date(start);
+  return addBusinessHours(start, totalHours, cfg);
 }
 
 /** Default L-V, 08:00–20:00, sin feriados. Útil como fallback. */

@@ -302,31 +302,31 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="space-y-6"
+            className="space-y-4"
           >
-            <div className="flex items-center gap-3 mb-6">
-              <div className="p-3 bg-primary-hl rounded-xl text-primary">
-                <Stethoscope size={24} />
+            <div className="flex items-center gap-3 mb-3">
+              <div className="p-2 bg-primary-hl rounded-lg text-primary">
+                <Stethoscope size={20} />
               </div>
               <div>
-                <h2 className="text-xl font-bold dark:text-foreground">Odontograma</h2>
-                <p className="text-sm text-faint">Seleccione las piezas y el tipo de trabajo</p>
+                <h2 className="text-lg font-bold dark:text-foreground leading-tight">Odontograma</h2>
+                <p className="text-xs text-faint">Seleccione las piezas y el tipo de trabajo</p>
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-2">
               <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Selección de Piezas (FDI)</label>
-              <TeethSelector 
-                selectedTeeth={formData.teeth} 
-                onChange={teeth => setFormData({...formData, teeth})} 
+              <TeethSelector
+                selectedTeeth={formData.teeth}
+                onChange={teeth => setFormData({...formData, teeth})}
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Restauración</label>
                 <select
-                  className="w-full bg-surface dark:bg-surface border border-slate-200 dark:border-divider rounded-xl px-4 py-3 appearance-none"
+                  className="w-full bg-surface dark:bg-surface border border-slate-200 dark:border-divider rounded-xl px-4 py-2.5 appearance-none"
                   value={formData.restorationType}
                   onChange={e => setFormData({ ...formData, restorationType: e.target.value })}
                 >
@@ -335,7 +335,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               </div>
               <div className="space-y-2 md:col-span-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Tipo de Servicio</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   {[
                     { id: SERVICE_TYPES.SOLO_DISENO, title: 'Solo diseño', desc: 'Recibo un archivo digital' },
                     { id: SERVICE_TYPES.SOLO_FABRICACION, title: 'Solo fabricación', desc: 'Yo aporto el diseño' },
@@ -347,14 +347,14 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                         type="button"
                         key={opt.id}
                         onClick={() => setFormData({ ...formData, serviceType: opt.id })}
-                        className={`text-left rounded-xl border px-4 py-3 transition-all ${
+                        className={`text-left rounded-lg border px-3 py-2 transition-all ${
                           selected
                             ? 'bg-primary/10 border-primary'
                             : 'bg-surface dark:bg-surface border-slate-200 dark:border-divider hover:border-primary/50'
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                          <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
                             selected ? 'bg-primary border-primary' : 'bg-white dark:bg-surface-2 border-slate-300'
                           }`}>
                             {selected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
@@ -363,7 +363,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                             {opt.title}
                           </span>
                         </div>
-                        <p className="text-[11px] text-faint mt-1.5 leading-snug">{opt.desc}</p>
+                        <p className="text-[11px] text-faint mt-1 leading-snug">{opt.desc}</p>
                       </button>
                     );
                   })}
@@ -371,14 +371,14 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               </div>
             </div>
 
-            <div className="pt-6 flex justify-between">
+            <div className="pt-3 flex justify-between">
               <button onClick={prevStep} className="flex items-center gap-2 text-faint font-bold hover:text-primary transition-colors">
                 <ChevronLeft size={20} /> Atrás
               </button>
               <button
                 onClick={nextStep}
                 disabled={!isStepValid()}
-                className="bg-primary/20 border border-primary/30 px-8 py-3 rounded-xl text-primary font-bold uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-primary/30 transition-all disabled:opacity-50"
+                className="bg-primary/20 border border-primary/30 px-6 py-2.5 rounded-xl text-primary font-bold uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-primary/30 transition-all disabled:opacity-50"
               >
                 Configurar Estética <ArrowRight size={16} className="font-black" />
               </button>
@@ -641,7 +641,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                 ) : (
                   <Save size={16} className="font-black" />
                 )}
-                {loading ? (initialData ? 'Guardando...' : 'Publicando...') : (initialData ? 'Guardar Cambios' : 'Guardar Caso')}
+                {loading ? 'Guardando...' : (initialData ? 'Guardar Cambios' : 'Guardar Caso')}
               </button>
             </div>
           </motion.div>

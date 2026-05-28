@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useRef, useState, useEffect } from 'react';
+import { Suspense, useRef, useState, useEffect, useCallback } from 'react';
 import { Canvas, useLoader, type ThreeEvent } from '@react-three/fiber';
 import { STLLoader, PLYLoader, OBJLoader } from '@/lib/three-loaders';
 import {
@@ -24,6 +24,20 @@ import {
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
+
+type ViewerBg = 'neutro' | 'brand' | 'claro';
+
+const VIEWER_BG_STORAGE_KEY = 'dentflow_viewer_bg';
+const VIEWER_BG_COLORS: Record<ViewerBg, string> = {
+  neutro: '#020617',
+  brand: '#1A2347',
+  claro: '#E2E8F0',
+};
+const VIEWER_BG_LABELS: Record<ViewerBg, string> = {
+  neutro: 'Neutro',
+  brand: 'Brand',
+  claro: 'Claro',
+};
 
 function getModelExtension(url: string): 'stl' | 'ply' | 'obj' {
   const lower = url.toLowerCase();
@@ -74,17 +88,19 @@ function ErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   );
 }
 
-function Model({ 
-  url, 
-  color, 
-  visible, 
+function Model({
+  url,
+  color,
+  visible,
   opacity = 1,
+  specularColor = '#3a4a5c',
   onPointerDown
-}: { 
-  url: string, 
-  color: string, 
-  visible: boolean, 
+}: {
+  url: string,
+  color: string,
+  visible: boolean,
   opacity?: number,
+  specularColor?: string,
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -112,7 +128,7 @@ function Model({
         <meshPhongMaterial
           color={color}
           shininess={28}
-          specular="#3a4a5c"
+          specular={specularColor}
           transparent={opacity < 1}
           opacity={opacity}
           depthWrite={opacity === 1}
@@ -123,14 +139,18 @@ function Model({
 
   // Si es un objeto/grupo (OBJ)
   // Aplicamos material a los hijos
+  const targetColorHex = new THREE.Color(color).getHex();
+  const targetSpecularHex = new THREE.Color(specularColor).getHex();
   result.traverse((child: THREE.Object3D) => {
     if (child instanceof THREE.Mesh) {
        const mat = child.material as THREE.MeshPhongMaterial | undefined;
-       if (!mat || mat.color?.getHex() !== new THREE.Color(color).getHex()) {
+       const colorMismatch = !mat || mat.color?.getHex() !== targetColorHex;
+       const specMismatch = !mat || (mat.specular?.getHex?.() ?? -1) !== targetSpecularHex;
+       if (colorMismatch || specMismatch) {
           child.material = new THREE.MeshPhongMaterial({
             color: color,
             shininess: 28,
-            specular: new THREE.Color('#3a4a5c'),
+            specular: new THREE.Color(specularColor),
             transparent: opacity < 1,
             opacity: opacity,
             depthWrite: opacity === 1
@@ -222,6 +242,23 @@ export default function DentalViewer3D({
   const [isAnnotateMode, setIsAnnotateMode] = useState(false);
   const [mountKey, setMountKey] = useState(0);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [bgMode, setBgMode] = useState<ViewerBg>('brand');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const saved = window.localStorage.getItem(VIEWER_BG_STORAGE_KEY) as ViewerBg | null;
+    if (saved && saved in VIEWER_BG_COLORS) setBgMode(saved);
+  }, []);
+
+  const setBgModePersist = useCallback((mode: ViewerBg) => {
+    setBgMode(mode);
+    try { window.localStorage.setItem(VIEWER_BG_STORAGE_KEY, mode); } catch { /* ignore */ }
+  }, []);
+
+  const bgColor = VIEWER_BG_COLORS[bgMode];
+  const isLightBg = bgMode === 'claro';
+  const specularColor = isLightBg ? '#1e293b' : '#3a4a5c';
+  const ambientIntensity = isLightBg ? 0.45 : 0.75;
 
   /**
    * Acerca/aleja la cámara moviéndola sobre la línea cámara→target.
@@ -272,7 +309,7 @@ export default function DentalViewer3D({
   return (
     <div 
       ref={containerRef}
-      style={{ backgroundColor: '#020617' }}
+      style={{ backgroundColor: bgColor }}
       className={`w-full rounded-[2.5rem] border border-divider overflow-hidden relative group shadow-2xl transition-all ${
         isFullscreen ? 'h-screen fixed inset-0 z-[9999] rounded-none' : 'h-[600px]'
       } ${isAnnotateMode ? 'cursor-crosshair' : 'cursor-default'}`}
@@ -290,17 +327,18 @@ export default function DentalViewer3D({
           frameloop="always"
           // Cap a 2x evita render 4-9x en pantallas retina/M-series y elimina lag por GPU saturada.
           dpr={[1, 2]}
-          style={{ background: '#020617' }}
+          style={{ background: bgColor }}
           gl={{
             antialias: true,
             powerPreference: 'high-performance',
           }}
         >
-          <color attach="background" args={['#020617']} />
-          
+          <color attach="background" args={[bgColor]} />
+
           {/* Iluminación manual ligera: reemplaza <Stage> de drei que cargaba HDRI environment
-              (costo enorme con meshStandard + mallas dentales de 200k-1M tris). */}
-          <ambientLight intensity={0.75} />
+              (costo enorme con meshStandard + mallas dentales de 200k-1M tris).
+              `ambientIntensity` baja en modo Claro para evitar sobre-exposición de modelos cream. */}
+          <ambientLight intensity={ambientIntensity} />
           <directionalLight position={[10, 10, 5]} intensity={0.95} />
           <directionalLight position={[-10, -10, -5]} intensity={0.35} />
 
@@ -316,6 +354,7 @@ export default function DentalViewer3D({
                     color={getColor(m.subType)}
                     visible={m.visible}
                     opacity={m.opacity ?? 1}
+                    specularColor={specularColor}
                     onPointerDown={(e) => {
                       if (isAnnotateMode && sceneGroupRef.current) {
                         e.stopPropagation();
@@ -400,6 +439,36 @@ export default function DentalViewer3D({
                 ))}
               </div>
             )}
+
+            {/* Fondo del visor */}
+            <div className="p-2 space-y-1.5 border-b border-divider">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-faint">Fondo</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(['neutro', 'brand', 'claro'] as ViewerBg[]).map((mode) => {
+                  const active = bgMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setBgModePersist(mode)}
+                      aria-pressed={active}
+                      className={`relative py-1.5 rounded-lg text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        active
+                          ? 'bg-primary-hl text-primary border border-primary/30'
+                          : 'text-muted hover:bg-surface-off border border-divider'
+                      }`}
+                    >
+                      <span
+                        aria-hidden
+                        className="inline-block w-3 h-3 rounded-full mr-1.5 align-middle ring-1 ring-divider/60"
+                        style={{ backgroundColor: VIEWER_BG_COLORS[mode] }}
+                      />
+                      {VIEWER_BG_LABELS[mode]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Zoom + acciones en una sola fila */}
             <div className="flex items-center gap-1 p-2">

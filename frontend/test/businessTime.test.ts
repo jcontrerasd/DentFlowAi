@@ -131,10 +131,10 @@ describe('addBusinessTime (combinado días + horas)', () => {
     expect(r.getHours()).toBe(12);
   });
 
-  it('mixto: 1 día + 2 horas → día siguiente endHour rolea a próximo día +2h', () => {
-    // Lun 10:00 + 1 día = Mar 20:00 (endHour). Snap fuera ventana → Mié 08:00. +2h → Mié 10:00.
+  it('mixto: 1 día (=12h jornada) + 2 horas se acumulan como horas laborales', () => {
+    // Lun 10:00 + (12+2)=14h. Lun 10→20 = 10h; restan 4h → Mar 08:00 + 4h = Mar 12:00.
     const r = addBusinessTime(MON, { days: 1, hours: 2 }, LV_8_20);
-    expect(r.getDate()).toBe(27);
-    expect(r.getHours()).toBe(10);
+    expect(r.getDate()).toBe(26);
+    expect(r.getHours()).toBe(12);
   });
 });
