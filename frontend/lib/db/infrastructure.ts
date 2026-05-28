@@ -3,7 +3,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-export const INFRA_VERSION = 'v4.6';
+export const INFRA_VERSION = 'v4.7';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -845,6 +845,24 @@ export async function ensureInfrastructure(db: any) {
         created_at timestamptz NOT NULL DEFAULT now()
       );
       CREATE UNIQUE INDEX IF NOT EXISTS fauchard_holiday_date_uidx ON "fauchard_holiday"(holiday_date);
+    `);
+
+    // v4.7 — Índices de rendimiento: status, doctor_id, last_activity_at, delivery, ci composite
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS clinical_case_status_idx
+        ON clinical_case(status);
+      CREATE INDEX IF NOT EXISTS clinical_case_org_status_idx
+        ON clinical_case(organization_id, status);
+      CREATE INDEX IF NOT EXISTS clinical_case_doctor_id_idx
+        ON clinical_case(doctor_id);
+      CREATE INDEX IF NOT EXISTS clinical_case_last_activity_idx
+        ON clinical_case(last_activity_at DESC NULLS LAST);
+      CREATE INDEX IF NOT EXISTS clinical_case_delivery_case_idx_v2
+        ON clinical_case_delivery(clinical_case_id);
+      CREATE INDEX IF NOT EXISTS ci_tech_invited_at_idx
+        ON case_invitation(technician_id, invited_at);
+      CREATE INDEX IF NOT EXISTS ci_case_pending_idx
+        ON case_invitation(clinical_case_id) WHERE (status = 'pending');
     `);
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
