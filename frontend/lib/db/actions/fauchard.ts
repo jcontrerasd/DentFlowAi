@@ -153,7 +153,7 @@ async function calculateTechnicianScore(
 
   // Q — Calidad histórica: promedio de ratings en la ventana de calidad
   const qualityRows = await db
-    .select()
+    .select({ rating: review.rating })
     .from(review)
     .where(
       and(
@@ -223,7 +223,7 @@ async function calculateTechnicianScore(
 
   // C — Índice de carga reciente
   const recentInvs = await db
-    .select()
+    .select({ id: caseInvitation.id })
     .from(caseInvitation)
     .where(and(eq(caseInvitation.technicianId, technicianId), gt(caseInvitation.invitedAt, loadWindow)));
   const invitationCount = recentInvs.length;
@@ -232,7 +232,7 @@ async function calculateTechnicianScore(
 
   // B — Bono de infrautilización
   const [techRow] = await db
-    .select()
+    .select({ lastInvitedAt: user.lastInvitedAt })
     .from(user)
     .where(eq(user.id, technicianId))
     .limit(1);
@@ -497,7 +497,7 @@ export async function runFauchardAction(caseId: string): Promise<{
 
       if (cCase) {
         if (cCase.doctorId) await notifyUser(cCase.doctorId, 'FALLO_SELECCION_DENTISTA', { caseId });
-        const [admin] = await db.select().from(user).where(eq(user.role, 'admin')).limit(1);
+        const [admin] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'admin')).limit(1);
         if (admin) await notifyUser(admin.id, 'SIN_COTIZACIONES_FALLO', { caseId });
       }
 
@@ -1123,7 +1123,7 @@ export async function evaluateQuotesAction(caseId: string) {
       const [cCase] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
       if (cCase) {
         if (cCase.doctorId) await notifyUser(cCase.doctorId, 'FALLO_SELECCION_DENTISTA', { caseId });
-        const [admin] = await db.select().from(user).where(eq(user.role, 'admin')).limit(1);
+        const [admin] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'admin')).limit(1);
         if (admin) await notifyUser(admin.id, 'SIN_COTIZACIONES_FALLO', { caseId });
       }
 

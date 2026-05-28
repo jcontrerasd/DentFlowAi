@@ -18,7 +18,7 @@ import {
   sendInvitationsAction,
 } from '@/lib/db/actions/fauchard';
 import { acceptProposalAction, startWorkAction } from '@/lib/db/actions/proposal';
-import { forceIdentity } from '@/lib/db/actions/test-identity';
+import { forceIdentity } from './helpers/test-identity';
 
 vi.mock('next/headers', () => ({
   headers: () => new Map(),

@@ -15,9 +15,11 @@ import { getForcedIdentity } from './test-identity';
  * permitiendo que un Admin actúe en nombre de otro.
  */
 export async function getServerIdentity() {
-  // Bypass para pruebas de integración
-  const forced = getForcedIdentity();
-  if (forced) return forced;
+  // Bypass para pruebas de integración (solo fuera de producción)
+  if (process.env.NODE_ENV !== 'production') {
+    const forced = getForcedIdentity();
+    if (forced) return forced;
+  }
 
   if (infraPromise) await infraPromise;
 

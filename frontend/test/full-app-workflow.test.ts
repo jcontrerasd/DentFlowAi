@@ -16,7 +16,7 @@ import {
   withdrawQuoteAction,
 } from '@/lib/db/actions/proposal';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
-import { forceIdentity, clearForcedIdentity } from '@/lib/db/actions/test-identity';
+import { forceIdentity, clearForcedIdentity } from './helpers/test-identity';
 
 // ─── Mocks globales ──────────────────────────────────────────────────────────
 vi.mock('next/headers', () => ({

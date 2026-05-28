@@ -43,6 +43,7 @@ import {
   buildTechFacetCondition,
 } from '@/lib/db/caseListQueryBuilder';
 import { pickInvitationStatusForKpi } from '@/lib/cases/technicianInvitationForKpi';
+import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt } from '@/lib/db/caseDeadlines';
 
 
 /**
@@ -548,7 +549,6 @@ export async function listCasesByOrganization(
     const total = Number(countResult[0]?.count ?? 0);
 
     const evalCaseIds = results.filter((c) => c.status === 'enEvaluacion').map((c) => c.id);
-    const { getCaseQuoteDeadlineAtBatch } = await import('@/lib/db/caseDeadlines');
     const quoteDeadlines = await getCaseQuoteDeadlineAtBatch(evalCaseIds);
 
     const processedResults = results.map((c: any) => {
@@ -575,7 +575,6 @@ export async function listCasesByOrganization(
         shade: shadeRel?.label ?? null,
         shadeCode: shadeRel?.code ?? null,
         urgency: urgRel?.label ?? null,
-        urgencyLabel: urgRel?.label ?? null,
         viewerInvitation: viewerInv ?? null,
         invitationExpiresAt:
           c.status === 'enEvaluacion' ? quoteDeadlines.get(c.id) ?? null : null,
@@ -713,7 +712,6 @@ export async function getCaseDetails(caseId: string) {
       (cCase as any).shade = shadeRel?.label ?? null;
       (cCase as any).shadeCode = shadeRel?.code ?? null;
       (cCase as any).urgency = urgRel?.label ?? null;
-      (cCase as any).urgencyLabel = urgRel?.label ?? null;
     }
 
     // 4. Visibilidad alineada con listCases (misma org no basta para dentista ajeno)
@@ -763,7 +761,7 @@ export async function getCaseDetails(caseId: string) {
 
     let evaluationExpiresAt: Date | null = null;
     if (cCase.status === 'enEvaluacion') {
-      const { getCaseQuoteDeadlineAt } = await import('@/lib/db/caseDeadlines');
+      // getCaseQuoteDeadlineAt imported statically at top of file
       evaluationExpiresAt = await getCaseQuoteDeadlineAt(caseId);
     }
 
