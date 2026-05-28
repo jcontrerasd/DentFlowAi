@@ -737,8 +737,8 @@ export default function UnifiedCaseHub({
   return (
     <div className="flex flex-col h-full min-h-0 bg-surface backdrop-blur-xl border border-divider/30 rounded-3xl shadow-2xl overflow-hidden">
       {/* HEADER */}
-      <div className="px-6 py-4 bg-surface-off border-b border-divider">
-        <div className="flex items-center justify-between mb-3">
+      <div className="px-6 pt-4 pb-2 bg-surface-off border-b border-divider">
+        <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-2xl bg-primary-hl flex items-center justify-center text-primary border border-primary/30">
               <Activity className="w-5 h-5" />
@@ -811,10 +811,10 @@ export default function UnifiedCaseHub({
             aria-label="Actividad del caso"
             className="flex flex-1 flex-col min-h-0 overflow-hidden bg-background"
           >
-            <div className="px-4 pt-2.5 pb-2 border-b border-divider flex-shrink-0 bg-surface">
-              <>
-                <p className="text-[10px] text-faint mb-1.5">Fase</p>
-                <div className="flex gap-0.5 bg-surface-2 rounded-lg p-0.5">
+            <div className="px-4 py-1.5 border-b border-divider flex-shrink-0 bg-surface">
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] uppercase tracking-wide text-faint flex-shrink-0">Fase</span>
+                <div className="flex flex-1 gap-0.5 bg-surface-2 rounded-md p-0.5">
                   {(['todos', 'propuesta', 'diseno', 'produccion'] as PhaseTab[]).map((tab) => {
                     const labels: Record<PhaseTab, string> = {
                       todos: 'Todos',
@@ -827,7 +827,7 @@ export default function UnifiedCaseHub({
                         key={tab}
                         type="button"
                         onClick={() => setPhaseTab(tab)}
-                        className={`flex-1 py-1.5 rounded-md text-[10px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                        className={`flex-1 py-1 rounded text-[10px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                           phaseTab === tab ? 'bg-surface-off text-foreground' : 'text-faint hover:text-muted hover:bg-surface-off/60'
                         }`}
                       >
@@ -836,7 +836,7 @@ export default function UnifiedCaseHub({
                     );
                   })}
                 </div>
-              </>
+              </div>
             </div>
 
             {(showTechCreationInstructionsBanner ||

@@ -2,7 +2,6 @@
 
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { FileText } from 'lucide-react';
 import type { InvitationStatus } from '@/lib/db/actions/invitations';
 import UchQuoteBreakdown from '@/components/cases/uch/UchQuoteBreakdown';
 import { formatTurnaround, formatUchQuoteClp, quoteDisplayFromInvitation } from '@/lib/uchQuoteDisplay';
@@ -122,135 +121,122 @@ export default function UchDealSummary({
     ? formatDeliveryDate(clinicalCase.workDeadline)
     : null;
 
+  const deliveryFallback = showPactada && ['aceptadaPendienteInicio'].includes(caseStatus)
+    ? 'Se definirá al iniciar el trabajo.'
+    : actingAsDentista && caseStatus === 'propuestaLista'
+      ? 'Se definirá al aceptar una oferta.'
+      : 'Sin fecha aún.';
+
   return (
     <div
-      className="mt-2 grid gap-2 sm:grid-cols-[2fr_1fr] rounded-lg border border-divider bg-surface px-3 py-2.5"
+      className="mt-1 rounded-lg border border-divider bg-surface px-3 pt-1.5 pb-1.5"
       data-testid="uch-deal-summary"
     >
-      <div className="min-w-0 flex items-start gap-2 sm:col-span-1">
-        <FileText className="w-3.5 h-3.5 text-primary/90 flex-shrink-0 mt-0.5" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <p className="text-[9px] font-semibold uppercase tracking-wide text-faint">La oferta</p>
+      {showPactada && clinicalCase.proposedPrice != null && (() => {
+        const shipping = clinicalCase.proposedShippingPrice ?? 0;
+        const shippingDays = clinicalCase.proposedShippingDays ?? null;
+        const shippingHours = clinicalCase.proposedShippingHours ?? null;
+        const hasShipping = shipping > 0;
+        const designPrice = clinicalCase.proposedDesignPrice ?? null;
+        const designDays = clinicalCase.proposedDesignDays ?? null;
+        const designHours = clinicalCase.proposedDesignHours ?? null;
+        const fabPrice = clinicalCase.proposedFabricationPrice ?? null;
+        const fabDays = clinicalCase.proposedFabricationDays ?? null;
+        const fabHours = clinicalCase.proposedFabricationHours ?? null;
+        const hasSplit = designPrice != null || fabPrice != null;
 
-          {showPactada && clinicalCase.proposedPrice != null && (() => {
-            const shipping = clinicalCase.proposedShippingPrice ?? 0;
-            const shippingDays = clinicalCase.proposedShippingDays ?? null;
-            const shippingHours = clinicalCase.proposedShippingHours ?? null;
-            const hasShipping = shipping > 0;
-            const designPrice = clinicalCase.proposedDesignPrice ?? null;
-            const designDays = clinicalCase.proposedDesignDays ?? null;
-            const designHours = clinicalCase.proposedDesignHours ?? null;
-            const fabPrice = clinicalCase.proposedFabricationPrice ?? null;
-            const fabDays = clinicalCase.proposedFabricationDays ?? null;
-            const fabHours = clinicalCase.proposedFabricationHours ?? null;
-            const hasSplit = designPrice != null || fabPrice != null;
+        type Cell = { label: string; price: number; days: number | null; hours: number | null };
+        const cells: Cell[] = [];
+        if (hasSplit) {
+          if (designPrice != null) cells.push({ label: 'Diseño', price: designPrice, days: designDays, hours: designHours });
+          if (fabPrice != null) cells.push({ label: 'Fabricación', price: fabPrice, days: fabDays, hours: fabHours });
+        } else {
+          const workPrice = hasShipping ? clinicalCase.proposedPrice - shipping : clinicalCase.proposedPrice;
+          cells.push({ label: 'Trabajo', price: workPrice, days: clinicalCase.proposedDeliveryDays ?? null, hours: clinicalCase.proposedDeliveryHours ?? null });
+        }
+        if (hasShipping) cells.push({ label: 'Flete', price: shipping, days: shippingDays, hours: shippingHours });
 
-            // Card config según serviceType + split disponible. Fallback a "Trabajo" si no hay split.
-            type Card = { label: string; price: number; days: number | null; hours: number | null };
-            const cards: Card[] = [];
-            if (hasSplit) {
-              if (designPrice != null) cards.push({ label: 'Diseño', price: designPrice, days: designDays, hours: designHours });
-              if (fabPrice != null) cards.push({ label: 'Fabricación', price: fabPrice, days: fabDays, hours: fabHours });
-            } else {
-              const workPrice = hasShipping ? clinicalCase.proposedPrice - shipping : clinicalCase.proposedPrice;
-              cards.push({ label: 'Trabajo', price: workPrice, days: clinicalCase.proposedDeliveryDays ?? null, hours: clinicalCase.proposedDeliveryHours ?? null });
-            }
-            if (hasShipping) cards.push({ label: 'Flete', price: shipping, days: shippingDays, hours: shippingHours });
+        const totalTurnaround = formatTurnaround({
+          days: clinicalCase.proposedDeliveryDays,
+          hours: clinicalCase.proposedDeliveryHours,
+        });
 
-            const gridCols = cards.length >= 3 ? 'grid-cols-3' : cards.length === 2 ? 'grid-cols-2' : 'grid-cols-1';
+        return (
+          <div className="space-y-1.5">
+            {/* Fila 1 — desglose */}
+            <div className="flex items-stretch">
+              {cells.map((c, idx) => {
+                const turnaround = formatTurnaround({ days: c.days, hours: c.hours });
+                return (
+                  <div
+                    key={c.label}
+                    className={`flex-1 min-w-0 px-2 ${idx > 0 ? 'border-l border-divider' : ''}`}
+                  >
+                    <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">{c.label}</p>
+                    <p className="text-[12px] font-bold tabular-nums text-foreground truncate">{formatUchQuoteClp(c.price)}</p>
+                    {turnaround !== '—' && (
+                      <p className="text-[9px] text-muted truncate">{turnaround}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
 
-            return (
-              <div className="mt-1 space-y-1.5">
-                <div className={`grid ${gridCols} gap-2 text-[10px]`}>
-                  {cards.map((c) => {
-                    const turnaround = formatTurnaround({ days: c.days, hours: c.hours });
-                    return (
-                      <div key={c.label} className="rounded-lg bg-surface-2/40 px-2 py-1.5 border border-divider">
-                        <p className="text-[8px] uppercase font-bold tracking-widest text-muted">{c.label}</p>
-                        <p className="font-bold tabular-nums text-foreground">{formatUchQuoteClp(c.price)}</p>
-                        {turnaround !== '—' && (
-                          <p className="text-[9px] text-muted">{turnaround}</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] text-foreground">
-                  <span>
-                    <span className="text-[10px] font-medium uppercase tracking-wide text-faint">Total</span>
-                    <span className="mx-1 text-faint">·</span>
-                    <span className="font-bold tabular-nums">{formatUchQuoteClp(clinicalCase.proposedPrice)}</span>
-                  </span>
-                  {(clinicalCase.proposedDeliveryDays != null || clinicalCase.proposedDeliveryHours != null) && (
-                    <span>
-                      <span className="text-[10px] font-medium uppercase tracking-wide text-faint">Plazo</span>
-                      <span className="mx-1 text-faint">·</span>
-                      <span className="font-bold">
-                        {formatTurnaround({
-                          days: clinicalCase.proposedDeliveryDays,
-                          hours: clinicalCase.proposedDeliveryHours,
-                        })}
-                      </span>
-                    </span>
-                  )}
-                </div>
-                {hasShipping && (
-                  <p className="text-[9px] text-faint">Flete sin comisión de plataforma.</p>
+            {/* Fila 2 — total + entrega, agrupados visualmente */}
+            <div className="flex items-stretch border-t border-divider pt-1.5">
+              <div className="flex-1 min-w-0 px-2">
+                <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">Total</p>
+                <p className="text-[13px] font-bold tabular-nums text-primary truncate">{formatUchQuoteClp(clinicalCase.proposedPrice)}</p>
+                {totalTurnaround !== '—' && (
+                  <p className="text-[9px] text-muted truncate">Plazo · {totalTurnaround}</p>
                 )}
               </div>
-            );
-          })()}
 
-          {showTechQuote && !showPactada && invitation && quotedPrice != null && (
-            <div className="mt-1 space-y-1.5">
-              {sentLabel ? (
-                <p className="text-[10px] text-muted tabular-nums">{sentLabel}</p>
-              ) : null}
-              <UchQuoteBreakdown
-                quote={quoteDisplayFromInvitation(invitation)}
-                variant="compact"
-                tone="neutral"
-              />
+              <div className="flex-1 min-w-0 px-2 border-l border-divider">
+                <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">Entrega</p>
+                {deadlineFmt ? (
+                  <div title={deadlineFmt.full}>
+                    <p className="text-[11px] font-medium text-foreground capitalize truncate">
+                      <span className="text-muted">{deadlineFmt.day}</span>
+                      <span className="mx-1 text-faint">·</span>
+                      <span className="tabular-nums">{deadlineFmt.date}</span>
+                    </p>
+                    <p className="text-[9px] text-faint tabular-nums truncate">{deadlineFmt.time}</p>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-faint leading-snug">{deliveryFallback}</p>
+                )}
+              </div>
             </div>
-          )}
 
-          {showTechQuoteRejectedOnly && invitation && (
-            <div className="mt-1">
-              <UchQuoteBreakdown quote={quoteDisplayFromInvitation(invitation)} variant="compact" tone="neutral" />
-            </div>
-          )}
+          </div>
+        );
+      })()}
 
-          {techRejectedSummary && !showTechQuoteRejectedOnly && (
-            <p className="text-[11px] text-muted leading-snug mt-1">Solo lectura — no hay cotización registrada en tu invitación.</p>
-          )}
-
-          {!showPactada && !showTechQuote && !showTechQuoteRejectedOnly && !techRejectedSummary && (
-            <p className="text-[10px] text-faint mt-1">Se fijará al aceptar la propuesta.</p>
-          )}
+      {showTechQuote && !showPactada && invitation && quotedPrice != null && (
+        <div className="space-y-1.5">
+          {sentLabel ? (
+            <p className="text-[10px] text-muted tabular-nums">{sentLabel}</p>
+          ) : null}
+          <UchQuoteBreakdown
+            quote={quoteDisplayFromInvitation(invitation)}
+            variant="compact"
+            tone="neutral"
+          />
         </div>
-      </div>
+      )}
 
-      <div className="min-w-0 sm:border-l sm:border-divider sm:pl-3">
-        <p className="text-[9px] font-semibold uppercase tracking-wide text-faint">Entrega del trabajo</p>
-        {techRejectedSummary ? (
-          <p className="text-[10px] text-muted leading-snug">No Aplica</p>
-        ) : deadlineFmt ? (
-          <p className="text-[11px] text-foreground capitalize leading-snug" title={deadlineFmt.full}>
-            <span className="text-muted">{deadlineFmt.day}</span>
-            <br />
-            <span className="font-medium tabular-nums">{deadlineFmt.date}</span>
-            <span className="text-faint"> · {deadlineFmt.time}</span>
-          </p>
-        ) : (
-          <p className="text-[10px] text-faint leading-snug">
-            {showPactada && ['aceptadaPendienteInicio'].includes(caseStatus)
-              ? 'Se definirá al iniciar el trabajo en laboratorio.'
-              : actingAsDentista && caseStatus === 'propuestaLista'
-                ? 'Se definirá al aceptar una oferta del comparativo en el hilo.'
-                : 'Aún sin fecha de entrega operativa.'}
-          </p>
-        )}
-      </div>
+      {showTechQuoteRejectedOnly && invitation && (
+        <UchQuoteBreakdown quote={quoteDisplayFromInvitation(invitation)} variant="compact" tone="neutral" />
+      )}
+
+      {techRejectedSummary && !showTechQuoteRejectedOnly && (
+        <p className="text-[11px] text-muted leading-snug">Solo lectura — no hay cotización registrada en tu invitación.</p>
+      )}
+
+      {!showPactada && !showTechQuote && !showTechQuoteRejectedOnly && !techRejectedSummary && (
+        <p className="text-[10px] text-faint">Se fijará al aceptar la propuesta.</p>
+      )}
     </div>
   );
 }

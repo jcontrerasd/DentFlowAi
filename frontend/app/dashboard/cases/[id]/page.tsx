@@ -73,7 +73,6 @@ import {
 } from '@/lib/db/actions/catalogs';
 import DentalViewer3D from '@/components/DentalViewer3D';
 import { TeethSelector } from '@/components/cases/TeethSelector';
-import STLThumbnail from '@/components/cases/STLThumbnail';
 import UnifiedCaseHub from '@/components/cases/UnifiedCaseHub';
 import Button from '@/components/ui/Button';
 import StatusBadge from '@/components/ui/StatusBadge';
