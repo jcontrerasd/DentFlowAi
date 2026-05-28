@@ -3,9 +3,10 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Activity, AlertCircle, Mail, Lock } from 'lucide-react';
+import { AlertCircle, Mail, Lock } from 'lucide-react';
 import { signIn, useSession } from 'next-auth/react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { checkUserStatusAction } from '@/lib/db/actions/user';
 import AuthNavbar from '@/components/auth/AuthNavbar';
 
@@ -94,7 +95,7 @@ function LoginContent() {
         className="w-full max-w-md bg-surface shadow-sm border border-divider p-8 sm:p-12 rounded-[2.5rem] relative z-10 border border-divider"
       >
         <div className="text-center mb-10">
-          <Activity className="w-12 h-12 text-primary mx-auto mb-4" />
+          <Image src="/dentflowai.jpg" alt="DentFlowAi" width={64} height={64} className="w-16 h-16 mx-auto mb-4 rounded-xl object-cover" />
           {/* Fix: eliminado 'italic' duplicado */}
           <h1 className="text-5xl serif-font italic text-foreground mb-2">DentFlowAI.</h1>
           <p className="text-faint text-xs tracking-widest uppercase font-black">Panel de Acceso</p>

@@ -88,23 +88,25 @@ export default function AdvancedFiltersRow({
             className="w-[120px] sm:w-[160px] bg-surface border border-divider rounded-lg px-3 py-1.5 text-[11px] text-foreground outline-none focus:border-primary/30 placeholder:text-faint"
             aria-label="Buscar en casos recientes"
           />
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className={`relative w-8 h-8 rounded-full border flex items-center justify-center transition-all ${
-              activeCount > 0
-                ? 'bg-primary-hl border-primary/30 text-primary'
-                : 'bg-surface border-divider text-faint hover:text-foreground'
-            }`}
-            aria-label="Filtros del carrusel"
-          >
-            <Filter className="w-3.5 h-3.5" />
-            {activeCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full text-[7px] font-black text-inverse flex items-center justify-center">
-                {activeCount}
-              </span>
-            )}
-          </button>
+          {context !== 'DASHBOARD' && (
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className={`relative w-8 h-8 rounded-full border flex items-center justify-center transition-all ${
+                activeCount > 0
+                  ? 'bg-primary-hl border-primary/30 text-primary'
+                  : 'bg-surface border-divider text-faint hover:text-foreground'
+              }`}
+              aria-label="Filtros del carrusel"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              {activeCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full text-[7px] font-black text-inverse flex items-center justify-center">
+                  {activeCount}
+                </span>
+              )}
+            </button>
+          )}
         </div>
         <AnimatePresence>
           {modalOpen && (

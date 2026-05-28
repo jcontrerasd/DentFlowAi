@@ -606,7 +606,7 @@ describe('SUITE G — Oferta integral desglosada (Fase 4.2)', () => {
       designPrice: 80000,
       designDays: 2,
       fabricationPrice: 120000,
-      fabricationDays: 4,
+      fabricationDays: 4, shippingPrice: 0, shippingDays: 0,
       notes: 'Cotización integral con desglose',
     });
     expect(res.success, (res as any).error ?? '').toBe(true);
@@ -695,7 +695,7 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
       designPrice: 70_000,
       designDays: 2,
       fabricationPrice: 110_000,
-      fabricationDays: 5,
+      fabricationDays: 5, shippingPrice: 0, shippingDays: 0,
       notes: 'Primera cotización',
     });
     expect(quoteRes.success, (quoteRes as { error?: string }).error ?? '').toBe(true);
@@ -748,7 +748,7 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
       designPrice: 90_000,
       designDays: 3,
       fabricationPrice: 100_000,
-      fabricationDays: 4,
+      fabricationDays: 4, shippingPrice: 0, shippingDays: 0,
       notes: 'Segunda cotización',
     });
     expect(res.success, (res as { error?: string }).error ?? '').toBe(true);

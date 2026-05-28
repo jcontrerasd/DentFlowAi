@@ -11,7 +11,7 @@ import { es } from 'date-fns/locale';
 import { useEffect, useState } from 'react';
 
 const PILL_BASE =
-  'inline-flex items-center gap-x-1 flex-wrap px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border';
+  'inline-flex items-center gap-x-1 flex-wrap px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider border transition-all duration-150 cursor-pointer hover:bg-foreground hover:text-inverse hover:border-foreground';
 
 function SolicitudVigencia({ invitedAt }: { invitedAt: string | Date | null | undefined }) {
   const getLabel = () => {

@@ -30,6 +30,9 @@ export type InvitationItem = {
   quotedDesignDays?: number | null;
   quotedFabricationPrice?: number | null;
   quotedFabricationDays?: number | null;
+  /** Flete (v4.4): aplica a casos con fabricación. Sin fee de plataforma. */
+  quotedShippingPrice?: number | null;
+  quotedShippingDays?: number | null;
   techNotes?: string | null;
   respondedAt?: Date | null;
   dentistRejectionFeedback?: string | null;
@@ -62,6 +65,8 @@ export async function getMyInvitationsAction(): Promise<InvitationItem[]> {
         quotedDesignDays: caseInvitation.quotedDesignDays,
         quotedFabricationPrice: caseInvitation.quotedFabricationPrice,
         quotedFabricationDays: caseInvitation.quotedFabricationDays,
+        quotedShippingPrice: caseInvitation.quotedShippingPrice,
+        quotedShippingDays: caseInvitation.quotedShippingDays,
         respondedAt: caseInvitation.respondedAt,
         caseId: clinicalCase.id,
         caseNumber: clinicalCase.caseNumber,
@@ -115,6 +120,8 @@ export async function getMyInvitationsAction(): Promise<InvitationItem[]> {
       quotedDesignDays: r.quotedDesignDays,
       quotedFabricationPrice: r.quotedFabricationPrice,
       quotedFabricationDays: r.quotedFabricationDays,
+      quotedShippingPrice: r.quotedShippingPrice,
+      quotedShippingDays: r.quotedShippingDays,
       respondedAt: r.respondedAt,
       isWinner: r.assignedTechnicianId === identity.id,
       caseStatus: r.caseStatus,
@@ -151,6 +158,8 @@ export async function getMyInvitationForCaseAction(caseId: string): Promise<{ su
         quotedDesignDays: caseInvitation.quotedDesignDays,
         quotedFabricationPrice: caseInvitation.quotedFabricationPrice,
         quotedFabricationDays: caseInvitation.quotedFabricationDays,
+        quotedShippingPrice: caseInvitation.quotedShippingPrice,
+        quotedShippingDays: caseInvitation.quotedShippingDays,
         techNotes: caseInvitation.techNotes,
         respondedAt: caseInvitation.respondedAt,
         dentistRejectionFeedback: caseInvitation.dentistRejectionFeedback,
@@ -203,6 +212,8 @@ export async function getMyInvitationForCaseAction(caseId: string): Promise<{ su
         quotedDesignDays: row.quotedDesignDays,
         quotedFabricationPrice: row.quotedFabricationPrice,
         quotedFabricationDays: row.quotedFabricationDays,
+        quotedShippingPrice: row.quotedShippingPrice,
+        quotedShippingDays: row.quotedShippingDays,
         techNotes: row.techNotes,
         respondedAt: row.respondedAt,
         dentistRejectionFeedback: row.dentistRejectionFeedback,

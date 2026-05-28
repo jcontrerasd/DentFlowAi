@@ -12,6 +12,7 @@ import type { ActionResult } from '@/lib/types/actions';
 import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
 import { archiveCaseFilesBestEffort } from '@/lib/db/archiveCaseFiles';
 import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
+import { addBusinessTime } from '@/lib/businessTime';
 
 // S3-01 — Dentista acepta una oferta concreta (comparativo anónimo)
 export async function acceptProposalAction(caseId: string, invitationId: string): Promise<ActionResult> {
@@ -49,7 +50,13 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
     const { getConfigForCase } = await import('./fauchard');
     const cfg = await getConfigForCase(caseId);
     const fee = parseFloat(String(cfg.platformFee));
-    const proposedPrice = (inv.quotedPrice ?? 0) * (1 + fee);
+
+    // v4.4 — Flete: el fee de plataforma NO aplica al flete. Se traslada 1:1.
+    // Fórmula: proposedPrice = (quotedPrice − shipping) × (1 + fee) + shipping
+    const quotedTotal = inv.quotedPrice ?? 0;
+    const shipping = inv.quotedShippingPrice ?? 0;
+    const shippingDays = inv.quotedShippingDays ?? 0;
+    const proposedPrice = (quotedTotal - shipping) * (1 + fee) + shipping;
 
     return await db.transaction(async (tx) => {
       // Incluye invitaciones ya rejected para técnico (evento + notificación CASO_ASIGNADO_OTRO).
@@ -60,6 +67,7 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
           technicianId: caseInvitation.technicianId,
           quotedPrice: caseInvitation.quotedPrice,
           quotedDays: caseInvitation.quotedDays,
+          quotedHours: caseInvitation.quotedHours,
           techNotes: caseInvitation.techNotes,
           status: caseInvitation.status,
         })
@@ -84,11 +92,27 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
         .set({ status: 'confirmed', updatedAt: new Date() })
         .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.id, invitationId)));
 
+      // v4.5 — Desglose diseño/fabricación con fee aplicado (flete sin fee).
+      const proposedDesignPrice =
+        inv.quotedDesignPrice != null ? inv.quotedDesignPrice * (1 + fee) : null;
+      const proposedFabricationPrice =
+        inv.quotedFabricationPrice != null ? inv.quotedFabricationPrice * (1 + fee) : null;
+
       await tx.update(clinicalCase).set({
         assignedTechnicianId: inv.technicianId,
         assignedAt: new Date(),
         proposedPrice,
-        proposedDeliveryDays: inv.quotedDays ?? 5,
+        proposedDeliveryDays: inv.quotedDays ?? null,
+        proposedDeliveryHours: inv.quotedHours ?? null,
+        proposedShippingPrice: shipping,
+        proposedShippingDays: inv.quotedShippingDays ?? null,
+        proposedShippingHours: inv.quotedShippingHours ?? null,
+        proposedDesignPrice,
+        proposedDesignDays: inv.quotedDesignDays ?? null,
+        proposedDesignHours: inv.quotedDesignHours ?? null,
+        proposedFabricationPrice,
+        proposedFabricationDays: inv.quotedFabricationDays ?? null,
+        proposedFabricationHours: inv.quotedFabricationHours ?? null,
         platformFee: String(fee),
         status: CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO,
         internalStatus: INTERNAL_CASE_STATUSES.ACEPTADA_CONFIGURANDO,
@@ -127,9 +151,11 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
       for (const loser of losers) {
         const qp = loser.quotedPrice != null ? Number(loser.quotedPrice) : NaN;
         const qd = loser.quotedDays != null ? Math.trunc(Number(loser.quotedDays)) : NaN;
+        const qh = loser.quotedHours != null ? Math.trunc(Number(loser.quotedHours)) : NaN;
         const techNotesPayload = loser.techNotes?.trim() ? loser.techNotes.trim().slice(0, 200) : null;
         const quotedPricePayload = Number.isFinite(qp) && qp >= 0 ? qp : null;
         const quotedDaysPayload = Number.isFinite(qd) && qd > 0 ? qd : null;
+        const quotedHoursPayload = Number.isFinite(qh) && qh > 0 ? qh : null;
 
         await logCaseEvent({
           caseId,
@@ -142,6 +168,7 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
             invitationId: loser.id,
             quotedPrice: quotedPricePayload,
             quotedDays: quotedDaysPayload,
+            quotedHours: quotedHoursPayload,
             techNotes: techNotesPayload,
             ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
           },
@@ -159,6 +186,7 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
               invitationId: loser.id,
               quotedPrice: quotedPricePayload,
               quotedDays: quotedDaysPayload,
+              quotedHours: quotedHoursPayload,
               techNotes: techNotesPayload,
             },
           }, tx);
@@ -495,7 +523,27 @@ export async function startWorkAction(caseId: string): Promise<ActionResult> {
     }
 
     const now = new Date();
-    const workDeadline = addBusinessDays(now, cCase.proposedDeliveryDays ?? 5);
+    // v4.6 — Computar workDeadline con calendario laboral + feriados configurables.
+    const { getConfigForCase } = await import('./fauchard');
+    const { listHolidayDatesGlobal } = await import('./fauchardHolidays');
+    const cfg = await getConfigForCase(caseId);
+    const holidays = await listHolidayDatesGlobal();
+    const calendar = {
+      startHour: cfg.businessHoursStart ?? 8,
+      endHour: cfg.businessHoursEnd ?? 20,
+      daysMask: cfg.businessDaysMask ?? 31,
+      holidays,
+    };
+    // `proposedDeliveryDays` / `proposedDeliveryHours` ya son los totales canónicos
+    // (suma de todos los slots — flat o split — calculados al aceptar la oferta).
+    const totalDays = cCase.proposedDeliveryDays ?? 0;
+    const totalHours = cCase.proposedDeliveryHours ?? 0;
+    const effectiveDays = totalDays > 0 ? totalDays : (totalHours > 0 ? 0 : 5);
+    const workDeadline = addBusinessTime(
+      now,
+      { days: effectiveDays, hours: totalHours },
+      calendar,
+    );
 
     const [winnerInv] = await db
       .select({ id: caseInvitation.id })
@@ -577,18 +625,6 @@ export async function startWorkAction(caseId: string): Promise<ActionResult> {
     console.error('[startWorkAction] Error:', error);
     return { success: false, error: String(error) };
   }
-}
-
-function addBusinessDays(start: Date, days: number): Date {
-  const result = new Date(start);
-  result.setHours(18, 0, 0, 0);
-  let added = 0;
-  while (added < days) {
-    result.setDate(result.getDate() + 1);
-    const dow = result.getDay();
-    if (dow !== 0 && dow !== 6) added++;
-  }
-  return result;
 }
 
 export async function checkProposalExpiryAction(caseId: string): Promise<{ expired: boolean }> {

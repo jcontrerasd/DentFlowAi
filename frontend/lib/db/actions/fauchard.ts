@@ -62,6 +62,10 @@ export interface FauchardConfigRow {
   lPenaltyTransition: string;
   lDescentRating: string;
   lDescentDays: number;
+  /** v4.6 — Calendario laboral (usado para computar workDeadline). */
+  businessHoursStart: number;
+  businessHoursEnd: number;
+  businessDaysMask: number;
 }
 
 // Nivel mínimo de designLevel requerido según la categoría del caso
@@ -168,6 +172,7 @@ async function calculateTechnicianScore(
       completedAt: clinicalCase.completedAt,
       assignedAt: clinicalCase.assignedAt,
       quotedDays: caseInvitation.quotedDays,
+      quotedHours: caseInvitation.quotedHours,
     })
     .from(caseInvitation)
     .innerJoin(clinicalCase, eq(caseInvitation.clinicalCaseId, clinicalCase.id))
@@ -181,8 +186,12 @@ async function calculateTechnicianScore(
   const totalCompleted = completedInvs.length;
   let onTimeCases = 0;
   for (const inv of completedInvs) {
-    if (inv.completedAt && inv.assignedAt && inv.quotedDays) {
-      const deadline = new Date(new Date(inv.assignedAt).getTime() + inv.quotedDays * 86400000);
+    if (inv.completedAt && inv.assignedAt && (inv.quotedDays || inv.quotedHours)) {
+      // Aproximación de scoring: no respeta horario laboral ni feriados.
+      // Si hay horas, se suman como ventana 24/7; si hay días, se cuentan calendario.
+      const ms =
+        (inv.quotedDays ?? 0) * 86_400_000 + (inv.quotedHours ?? 0) * 3_600_000;
+      const deadline = new Date(new Date(inv.assignedAt).getTime() + ms);
       if (new Date(inv.completedAt) <= deadline) onTimeCases++;
     }
   }
@@ -666,16 +675,70 @@ export async function sendInvitationsAction(
  * - `split`: desglose obligatorio diseño + fabricación (solo casos `integral`).
  * El total (`quotedPrice`, `quotedDays`) se calcula como suma cuando es split.
  */
+/**
+ * Cada slot acepta `deliveryDays` (1–365) o `deliveryHours` (1–24), mutuamente
+ * excluyentes. v4.6 — soporte de plazos en horas para trabajos express.
+ */
 export type QuoteInput =
-  | { kind: 'flat'; price: number; deliveryDays: number; notes?: string }
+  | {
+      kind: 'flat';
+      price: number;
+      deliveryDays?: number;
+      deliveryHours?: number;
+      /** Flete (v4.4): obligatorio para solo_fabricacion (≥ 0). Ignorado para solo_diseno. */
+      shippingPrice?: number;
+      shippingDays?: number;
+      shippingHours?: number;
+      notes?: string;
+    }
   | {
       kind: 'split';
       designPrice: number;
-      designDays: number;
+      designDays?: number;
+      designHours?: number;
       fabricationPrice: number;
-      fabricationDays: number;
+      fabricationDays?: number;
+      fabricationHours?: number;
+      /** Flete (v4.4): obligatorio para integral (≥ 0). */
+      shippingPrice: number;
+      shippingDays?: number;
+      shippingHours?: number;
       notes?: string;
     };
+
+/**
+ * Valida y normaliza un slot de plazo. Retorna `{ days, hours }` con exactamente
+ * uno > 0 (el otro 0 o null según corresponda). Para slots opcionales (shipping)
+ * permitir 0 días = sin flete. Para slots obligatorios el valor debe ser ≥ 1.
+ */
+function normalizeTurnaroundSlot(
+  days: number | undefined,
+  hours: number | undefined,
+  opts: { slotName: string; allowZeroDays?: boolean; required?: boolean }
+): { ok: true; days: number | null; hours: number | null } | { ok: false; error: string } {
+  const hasDays = days != null && Number.isFinite(days);
+  const hasHours = hours != null && Number.isFinite(hours);
+  if (hasDays && hasHours && days !== 0 && hours !== 0) {
+    return { ok: false, error: `${opts.slotName}: indica días o horas, no ambos` };
+  }
+  if (hasHours && hours !== 0) {
+    if (hours! < 1 || hours! > 24) {
+      return { ok: false, error: `${opts.slotName}: horas debe estar entre 1 y 24` };
+    }
+    return { ok: true, days: null, hours: Math.trunc(hours!) };
+  }
+  if (hasDays) {
+    const min = opts.allowZeroDays ? 0 : 1;
+    if (days! < min || days! > 365) {
+      return { ok: false, error: `${opts.slotName}: días debe estar entre ${min} y 365` };
+    }
+    return { ok: true, days: Math.trunc(days!), hours: null };
+  }
+  if (opts.required) {
+    return { ok: false, error: `${opts.slotName}: debes indicar el plazo (días u horas)` };
+  }
+  return { ok: true, days: null, hours: null };
+}
 
 /**
  * Wrapper retrocompatible: si llaman a submitQuoteAction(invId, price, days, notes)
@@ -697,7 +760,7 @@ export async function submitQuoteAction(
   const isLegacyFlat = typeof priceOrInput !== 'object';
   const input: QuoteInput = typeof priceOrInput === 'object'
     ? priceOrInput
-    : { kind: 'flat', price: priceOrInput, deliveryDays: deliveryDays ?? 0, notes };
+    : { kind: 'flat', price: priceOrInput as number, deliveryDays: deliveryDays ?? 0, notes };
 
   try {
     const [invitation] = await db
@@ -731,6 +794,8 @@ export async function submitQuoteAction(
     const effectiveServiceType: string = (cCase?.serviceType as string | null)
       ?? (cCase?.needsFabrication ? SERVICE_TYPES.INTEGRAL : SERVICE_TYPES.SOLO_DISENO);
     const isIntegral = effectiveServiceType === SERVICE_TYPES.INTEGRAL;
+    const hasFabrication =
+      isIntegral || effectiveServiceType === SERVICE_TYPES.SOLO_FABRICACION;
 
     // Validación serviceType ⇄ input.kind.
     // - Si el caller usa la firma nueva (objeto QuoteInput), exigimos coherencia estricta.
@@ -748,49 +813,93 @@ export async function submitQuoteAction(
 
     // Calcular totales y campos a persistir.
     let totalPrice: number;
-    let totalDays: number;
     let designPrice: number | null = null;
     let designDays: number | null = null;
+    let designHours: number | null = null;
     let fabricationPrice: number | null = null;
     let fabricationDays: number | null = null;
+    let fabricationHours: number | null = null;
+    let shippingPrice: number | null = null;
+    let shippingDays: number | null = null;
+    let shippingHours: number | null = null;
+    let flatDays: number | null = null;
+    let flatHours: number | null = null;
     let notesText: string | undefined;
+
+    // Flete (v4.4 + v4.6 horas): solo aplica si el caso tiene fabricación.
+    if (hasFabrication) {
+      const sp = input.shippingPrice;
+      if (sp == null) {
+        return { success: false, error: 'Debes indicar el costo del flete' };
+      }
+      if (!Number.isFinite(sp) || sp < 0) {
+        return { success: false, error: 'El costo del flete no puede ser negativo' };
+      }
+      shippingPrice = sp;
+      const ship = normalizeTurnaroundSlot(input.shippingDays, input.shippingHours, {
+        slotName: 'Flete', allowZeroDays: true, required: true,
+      });
+      if (!ship.ok) return { success: false, error: ship.error };
+      shippingDays = ship.days;
+      shippingHours = ship.hours;
+    }
 
     if (input.kind === 'flat') {
       if (input.price <= 0) return { success: false, error: 'El precio debe ser mayor a 0' };
-      if (input.deliveryDays < 1 || input.deliveryDays > 365) {
-        return { success: false, error: 'El plazo debe estar entre 1 y 365 días' };
-      }
-      totalPrice = input.price;
-      totalDays = input.deliveryDays;
+      const slot = normalizeTurnaroundSlot(input.deliveryDays, input.deliveryHours, {
+        slotName: 'Plazo', required: true,
+      });
+      if (!slot.ok) return { success: false, error: slot.error };
+      flatDays = slot.days;
+      flatHours = slot.hours;
+      totalPrice = input.price + (shippingPrice ?? 0);
       notesText = input.notes;
     } else {
       if (input.designPrice <= 0 || input.fabricationPrice <= 0) {
         return { success: false, error: 'Los precios de diseño y fabricación deben ser mayores a 0' };
       }
-      if (
-        input.designDays < 1 || input.designDays > 365
-        || input.fabricationDays < 1 || input.fabricationDays > 365
-      ) {
-        return { success: false, error: 'Los plazos deben estar entre 1 y 365 días' };
-      }
+      const dSlot = normalizeTurnaroundSlot(input.designDays, input.designHours, {
+        slotName: 'Diseño', required: true,
+      });
+      if (!dSlot.ok) return { success: false, error: dSlot.error };
+      const fSlot = normalizeTurnaroundSlot(input.fabricationDays, input.fabricationHours, {
+        slotName: 'Fabricación', required: true,
+      });
+      if (!fSlot.ok) return { success: false, error: fSlot.error };
       designPrice = input.designPrice;
-      designDays = input.designDays;
+      designDays = dSlot.days;
+      designHours = dSlot.hours;
       fabricationPrice = input.fabricationPrice;
-      fabricationDays = input.fabricationDays;
-      totalPrice = designPrice + fabricationPrice;
-      totalDays = designDays + fabricationDays;
+      fabricationDays = fSlot.days;
+      fabricationHours = fSlot.hours;
+      totalPrice = designPrice + fabricationPrice + (shippingPrice ?? 0);
       notesText = input.notes;
     }
+
+    // Totales canónicos: suma de días y horas por separado (compatibilidad legacy +
+    // soporte de mezcla). Al menos uno de los dos será > 0.
+    const sumDays =
+      (flatDays ?? 0) + (designDays ?? 0) + (fabricationDays ?? 0) + (shippingDays ?? 0);
+    const sumHours =
+      (flatHours ?? 0) + (designHours ?? 0) + (fabricationHours ?? 0) + (shippingHours ?? 0);
+    const totalDaysCanonical = sumDays > 0 ? sumDays : null;
+    const totalHoursCanonical = sumHours > 0 ? sumHours : null;
 
     await db.update(caseInvitation)
       .set({
         status: 'quoted',
         quotedPrice: totalPrice,
-        quotedDays: totalDays,
+        quotedDays: totalDaysCanonical,
+        quotedHours: totalHoursCanonical,
         quotedDesignPrice: designPrice,
         quotedDesignDays: designDays,
+        quotedDesignHours: designHours,
         quotedFabricationPrice: fabricationPrice,
         quotedFabricationDays: fabricationDays,
+        quotedFabricationHours: fabricationHours,
+        quotedShippingPrice: shippingPrice,
+        quotedShippingDays: shippingDays,
+        quotedShippingHours: shippingHours,
         techNotes: notesText?.slice(0, 200), // máx 200 chars
         respondedAt: new Date(),
         updatedAt: new Date(),
@@ -814,13 +923,23 @@ export async function submitQuoteAction(
         invitationId,
         visibleTo: 'tecnico',
         quotedPrice: totalPrice,
-        quotedDays: totalDays,
+        quotedDays: totalDaysCanonical,
+        quotedHours: totalHoursCanonical,
         ...(designPrice !== null
           ? {
               quotedDesignPrice: designPrice,
               quotedDesignDays: designDays,
+              quotedDesignHours: designHours,
               quotedFabricationPrice: fabricationPrice,
               quotedFabricationDays: fabricationDays,
+              quotedFabricationHours: fabricationHours,
+            }
+          : {}),
+        ...(shippingPrice !== null
+          ? {
+              quotedShippingPrice: shippingPrice,
+              quotedShippingDays: shippingDays,
+              quotedShippingHours: shippingHours,
             }
           : {}),
         techNotes: notesTrim,
@@ -1264,6 +1383,9 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
         lPenaltyTransition: fauchardConfig.lPenaltyTransition,
         lDescentRating: fauchardConfig.lDescentRating,
         lDescentDays: fauchardConfig.lDescentDays,
+        businessHoursStart: fauchardConfig.businessHoursStart,
+        businessHoursEnd: fauchardConfig.businessHoursEnd,
+        businessDaysMask: fauchardConfig.businessDaysMask,
         updatedAt: fauchardConfig.updatedAt,
         updatedBy: fauchardConfig.updatedBy,
         updatedByName: user.fullName,
@@ -1329,6 +1451,26 @@ export async function updateFauchardParamsAction(params: Record<string, any>): P
         const fee = parseFloat(params.platformFee);
         if (isNaN(fee) || fee < 0.05 || fee > 0.50) {
           throw new Error('El margen de plataforma (platformFee) debe estar entre 5% y 50%');
+        }
+      }
+      // v4.6 — Calendario laboral
+      const startCandidate = params.businessHoursStart !== undefined
+        ? parseInt(params.businessHoursStart) : (current as any).businessHoursStart ?? 8;
+      const endCandidate = params.businessHoursEnd !== undefined
+        ? parseInt(params.businessHoursEnd) : (current as any).businessHoursEnd ?? 20;
+      if (params.businessHoursStart !== undefined && (isNaN(startCandidate) || startCandidate < 0 || startCandidate > 22)) {
+        throw new Error('Hora de inicio (businessHoursStart) debe estar entre 0 y 22');
+      }
+      if (params.businessHoursEnd !== undefined && (isNaN(endCandidate) || endCandidate < 1 || endCandidate > 23)) {
+        throw new Error('Hora de fin (businessHoursEnd) debe estar entre 1 y 23');
+      }
+      if (startCandidate >= endCandidate) {
+        throw new Error('Hora de inicio debe ser menor que hora de fin');
+      }
+      if (params.businessDaysMask !== undefined) {
+        const mask = parseInt(params.businessDaysMask);
+        if (isNaN(mask) || mask < 1 || mask > 127) {
+          throw new Error('Máscara de días laborables debe estar entre 1 y 127 (al menos un día encendido)');
         }
       }
 

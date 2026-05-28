@@ -36,6 +36,28 @@ function isAllowedCourierDomain(domain: string, allowed: string[]): boolean {
   return allowed.some((d) => domain === d || domain.endsWith('.' + d));
 }
 
+/**
+ * Detecta spans `[start, end)` ocupados por URLs http(s) en el texto normalizado.
+ * Usado para que reglas no-URL (teléfono 8+ dígitos, dominios, etc.) ignoren los
+ * dígitos/caracteres que viven DENTRO de una URL cuando el campo lo permite.
+ */
+function findUrlSpans(normalized: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  const re = /https?:\/\/[^\s<>"']+/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(normalized)) !== null) {
+    spans.push([m.index, m.index + m[0].length]);
+  }
+  return spans;
+}
+
+function isInsideUrlSpan(start: number, end: number, spans: Array<[number, number]>): boolean {
+  for (const [s, e] of spans) {
+    if (start >= s && end <= e) return true;
+  }
+  return false;
+}
+
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -62,6 +84,9 @@ export async function checkContactExposure(
     );
   }
   const violations: GuardViolation[] = [];
+  // Cuando el campo permite URLs de courier, los dígitos/dominios que viven DENTRO
+  // de una URL no deben dispararse como teléfono/email/handle (la URL ya fue validada).
+  const urlSpans = context.allowCourierUrls ? findUrlSpans(normalized) : [];
 
   for (const rule of bucket.rules) {
     if (rule.invalid) continue;
@@ -79,6 +104,14 @@ export async function checkContactExposure(
             continue;
           }
         }
+        if (
+          urlSpans.length > 0 &&
+          !isUrlRule(rule.name) &&
+          isInsideUrlSpan(match.index, match.index + matched.length, urlSpans)
+        ) {
+          if (match.index === rule.compiled.lastIndex) rule.compiled.lastIndex++;
+          continue;
+        }
         violations.push({
           ruleId: rule.id,
           ruleType: 'regex',
@@ -93,6 +126,9 @@ export async function checkContactExposure(
       const re = new RegExp(`(^|[^a-z0-9])(${escapeRegex(kw)})(?![a-z0-9])`, 'gi');
       let match: RegExpExecArray | null;
       while ((match = re.exec(normalized)) !== null) {
+        const matchStart = match.index + match[1].length;
+        const matchEnd = matchStart + match[2].length;
+        if (urlSpans.length > 0 && isInsideUrlSpan(matchStart, matchEnd, urlSpans)) continue;
         violations.push({
           ruleId: rule.id,
           ruleType: 'keyword',

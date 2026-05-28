@@ -431,10 +431,22 @@ function CaseDetailPageContent() {
     setUchHasMoreOlder(hasMoreOlder);
   };
 
+  /**
+   * Recarga eventos al abrir el hub solo si todavía no se cargaron en el fetch inicial.
+   * Antes esto refetcheaba siempre que isHubOpen pasaba a true, duplicando el trabajo del
+   * fetch principal (que ya trae los eventos en paralelo con getCaseDetails).
+   */
+  const eventsLoadedForCaseRef = useRef<string | null>(null);
   useEffect(() => {
-    if (isHubOpen) {
-      loadCaseEvents();
+    if (caseEvents.length > 0 && clinicalCase?.id) {
+      eventsLoadedForCaseRef.current = String(clinicalCase.id);
     }
+  }, [caseEvents.length, clinicalCase?.id]);
+  useEffect(() => {
+    if (!isHubOpen) return;
+    const caseIdStr = String(id ?? '');
+    if (eventsLoadedForCaseRef.current === caseIdStr) return;
+    loadCaseEvents();
   }, [isHubOpen, id]);
 
   const handleHubAction = async (action: string, data?: any): Promise<boolean> => {
@@ -682,14 +694,18 @@ function CaseDetailPageContent() {
           setVisibleSubtypes(initialVisible);
         }
 
-        // 3. Obtener Eventos del Hub (página amplia + flag para cargar anteriores)
+        // 3. Eventos del hub + estado de lectura + invitación (todas independientes → paralelo)
         setIsLoadingEvents(true);
-        const evPage = await getCaseEventsAction(caseIdStr);
+        const fetchAsTecnico = prof.role === 'tecnico';
+        const [evPage, rs, invRes] = await Promise.all([
+          getCaseEventsAction(caseIdStr),
+          getCaseHubReadStateAction(caseIdStr),
+          fetchAsTecnico ? getMyInvitationForCaseAction(caseIdStr) : Promise.resolve(null),
+        ]);
         setCaseEvents(evPage.events || []);
         setUchHasMoreOlder(evPage.hasMoreOlder);
         setIsLoadingEvents(false);
 
-        const rs = await getCaseHubReadStateAction(caseIdStr);
         if (rs) {
           setHubServerReads({
             lastReadTech: rs.lastReadTechHubAt ? new Date(rs.lastReadTechHubAt) : null,
@@ -700,9 +716,7 @@ function CaseDetailPageContent() {
         }
 
         // 4. Invitación del técnico (si aplica)
-        const fetchAsTecnico = prof.role === 'tecnico';
-        if (fetchAsTecnico) {
-          const invRes = await getMyInvitationForCaseAction(caseIdStr);
+        if (fetchAsTecnico && invRes) {
           const inv = invRes.data;
           setMyInvitation(inv);
           // Solo auto-abrir una vez por carga/viewer: refetch no debe anular un cierre manual del hub.

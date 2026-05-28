@@ -239,6 +239,7 @@ export async function getCaseEventsAction(
     const caseDoctorId = targetCase?.doctorId ?? null;
 
     const signedEvents = filteredEvents.map((event) => {
+      try {
       let mapped: (typeof filteredEvents)[number] = event;
 
       if (
@@ -316,11 +317,16 @@ export async function getCaseEventsAction(
       }
 
       return mapped;
+      } catch (err) {
+        console.error('[getCaseEventsAction] event-map failure:', event.id, event.action, err);
+        return event;
+      }
     });
 
     return { events: signedEvents, hasMoreOlder };
   } catch (error) {
     console.error("[getCaseEventsAction] Error:", error);
+    console.error("[getCaseEventsAction] Stack:", (error as Error)?.stack);
     return { events: [], hasMoreOlder: false };
   }
 }
@@ -680,13 +686,8 @@ export async function getCaseDetails(caseId: string) {
         technician: {
           with: { organization: true }
         },
-        events: {
-          with: {
-            user: {
-              columns: { id: true, fullName: true, role: true, image: true }
-            }
-          }
-        }
+        // events: se obtienen via getCaseEventsAction (con paginación y enmascarado Fauchard).
+        // Cargarlos aquí duplicaba trabajo y crecía con el historial del caso.
       }
     });
 
@@ -758,20 +759,7 @@ export async function getCaseDetails(caseId: string) {
       }
     }
 
-    // 6. Firmar avatares de usuarios en eventos (deduplicado por ruta)
-    if (cCase.events && cCase.events.length > 0) {
-      const uniquePaths = [...new Set(
-        cCase.events.map((e: any) => e.user?.image).filter((p: any) => p && !p.startsWith('http'))
-      )] as string[];
-      const signedMap = new Map<string, string | null>();
-      await Promise.all(uniquePaths.map(async (p) => {
-        try { signedMap.set(p, await getSignedUrl(p)); } catch { signedMap.set(p, null); }
-      }));
-      cCase.events.forEach((event: any) => {
-        const orig = event.user?.image;
-        if (orig && signedMap.has(orig)) event.user.image = signedMap.get(orig);
-      });
-    }
+    // 6. Avatares de eventos: ya se firman dentro de getCaseEventsAction.
 
     let evaluationExpiresAt: Date | null = null;
     if (cCase.status === 'enEvaluacion') {
@@ -783,14 +771,21 @@ export async function getCaseDetails(caseId: string) {
       invitationId: string;
       rank: number;
       totalPriceCLP: number;
-      quotedDays: number;
+      quotedDays: number | null;
+      quotedHours: number | null;
       techNotes: string | null;
       respondedAt: Date | null;
       // Desglose integral (Fase 4.4): nullable.
       designPriceCLP?: number | null;
       designDays?: number | null;
+      designHours?: number | null;
       fabricationPriceCLP?: number | null;
       fabricationDays?: number | null;
+      fabricationHours?: number | null;
+      // Flete (v4.4): expuesto SIN fee. nullable para casos legacy y solo_diseno.
+      shippingPriceCLP?: number | null;
+      shippingDays?: number | null;
+      shippingHours?: number | null;
     }> | undefined;
 
     const isOwningDentist =
@@ -808,23 +803,36 @@ export async function getCaseDetails(caseId: string) {
       const sorted = [...rows].sort((a, b) => {
         const pd = (a.quotedPrice ?? Infinity) - (b.quotedPrice ?? Infinity);
         if (pd !== 0) return pd;
-        const dd = (a.quotedDays ?? Infinity) - (b.quotedDays ?? Infinity);
-        if (dd !== 0) return dd;
+        // Ordenamiento secundario: tiempo total aproximado (días*24 + horas).
+        const aTime = (a.quotedDays ?? 0) * 24 + (a.quotedHours ?? 0);
+        const bTime = (b.quotedDays ?? 0) * 24 + (b.quotedHours ?? 0);
+        if (aTime !== bTime) return aTime - bTime;
         return new Date(a.respondedAt ?? a.createdAt ?? 0).getTime() - new Date(b.respondedAt ?? b.createdAt ?? 0).getTime();
       });
 
-      comparativeOffers = sorted.map((row, i) => ({
-        invitationId: row.id,
-        rank: i + 1,
-        totalPriceCLP: (row.quotedPrice ?? 0) * (1 + fee),
-        quotedDays: row.quotedDays ?? 0,
-        techNotes: row.techNotes ?? null,
-        respondedAt: row.respondedAt ?? null,
-        designPriceCLP: row.quotedDesignPrice != null ? row.quotedDesignPrice * (1 + fee) : null,
-        designDays: row.quotedDesignDays ?? null,
-        fabricationPriceCLP: row.quotedFabricationPrice != null ? row.quotedFabricationPrice * (1 + fee) : null,
-        fabricationDays: row.quotedFabricationDays ?? null,
-      }));
+      comparativeOffers = sorted.map((row, i) => {
+        // v4.4 — Flete: fee NO aplica al flete. Lo separamos del total con-fee.
+        const shipping = row.quotedShippingPrice ?? 0;
+        const subtotalWithoutShipping = (row.quotedPrice ?? 0) - shipping;
+        return {
+          invitationId: row.id,
+          rank: i + 1,
+          totalPriceCLP: subtotalWithoutShipping * (1 + fee) + shipping,
+          quotedDays: row.quotedDays ?? null,
+          quotedHours: row.quotedHours ?? null,
+          techNotes: row.techNotes ?? null,
+          respondedAt: row.respondedAt ?? null,
+          designPriceCLP: row.quotedDesignPrice != null ? row.quotedDesignPrice * (1 + fee) : null,
+          designDays: row.quotedDesignDays ?? null,
+          designHours: row.quotedDesignHours ?? null,
+          fabricationPriceCLP: row.quotedFabricationPrice != null ? row.quotedFabricationPrice * (1 + fee) : null,
+          fabricationDays: row.quotedFabricationDays ?? null,
+          fabricationHours: row.quotedFabricationHours ?? null,
+          shippingPriceCLP: row.quotedShippingPrice ?? null,
+          shippingDays: row.quotedShippingDays ?? null,
+          shippingHours: row.quotedShippingHours ?? null,
+        };
+      });
     }
 
     if (userRole === 'tecnico' && cCase.status === CASE_STATUSES.PROPUESTA_LISTA) {

@@ -28,7 +28,7 @@ import Image from 'next/image';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const { user, userProfile, loading } = useAuth();
+  const { user, userProfile, loading, isSimulating } = useAuth();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [pendingInvitations, setPendingInvitations] = useState(0);
   const [hubBellTotal, setHubBellTotal] = useState(0);
@@ -160,11 +160,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         className={`fixed top-0 left-0 h-full bg-surface backdrop-blur-xl border-r border-divider transition-all duration-300 z-50 ${isSidebarOpen ? 'w-64' : 'w-20'}`}
       >
         <div className="p-6 mb-8 flex items-center gap-3">
-          <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-sm">
-            <Activity className="text-foreground w-6 h-6" />
+          <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-sm overflow-hidden">
+            <Image src="/dentflowai.jpg" alt="DentFlowAi" width={40} height={40} className="w-full h-full object-cover" />
           </div>
           {isSidebarOpen && <span className="text-xl serif-font font-bold text-foreground">DentFlowAi</span>}
         </div>
+
+        {(userProfile?.role === 'admin' || isSimulating || user?.email === 'jaime.contreras.d@gmail.com') && isSidebarOpen && (
+          <div className="px-4 mb-3">
+            <ImpersonationSelector />
+          </div>
+        )}
 
         <nav className="px-4 space-y-2">
           {menuItems.map((item: any) => {
@@ -209,8 +215,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-muted hover:text-foreground transition-colors">
               <Menu className="w-6 h-6" />
             </button>
-            {/* Impersonación admin: a la izquierda para no comprimir el lado derecho */}
-            <ImpersonationSelector />
           </div>
 
           <div className="flex items-center gap-4">

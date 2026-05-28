@@ -68,7 +68,7 @@ export default function ImpersonationSelector() {
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              className="absolute right-0 mt-3 w-80 bg-surface border border-divider rounded-[2rem] shadow-2xl z-50 overflow-hidden backdrop-blur-xl"
+              className="absolute left-0 mt-3 w-80 bg-surface border border-divider rounded-[2rem] shadow-2xl z-50 overflow-hidden backdrop-blur-xl"
             >
               {/* Encabezado */}
               <div className="p-5 bg-gradient-to-b from-slate-800/50 to-transparent border-b border-divider">

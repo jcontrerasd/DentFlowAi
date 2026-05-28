@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  AlertCircle, CheckCircle2, Clock, Hammer, Package, Send, Undo2, XCircle,
+  AlertCircle, AlertTriangle, CheckCircle2, Clock, Hammer, Package, Send, Undo2, XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -21,7 +21,8 @@ type ComparativeOffer = {
   invitationId: string;
   rank: number;
   totalPriceCLP: number;
-  quotedDays: number;
+  quotedDays: number | null;
+  quotedHours?: number | null;
   techNotes: string | null;
   respondedAt: string | Date | null;
 };
@@ -39,6 +40,9 @@ export type UchFauchardActionsPanelProps = {
   setQuotePrice: (v: string) => void;
   quoteDays: number;
   setQuoteDays: (v: number) => void;
+  /** v4.6 — unidad del slot flat: 'dias' (legacy) o 'horas'. */
+  quoteFlatUnit?: 'dias' | 'horas';
+  setQuoteFlatUnit?: (v: 'dias' | 'horas') => void;
   quoteNotes: string;
   setQuoteNotes: (v: string) => void;
   // Desglose obligatorio en casos integrales (Fase 4.3).
@@ -46,10 +50,21 @@ export type UchFauchardActionsPanelProps = {
   setQuoteDesignPrice?: (v: string) => void;
   quoteDesignDays?: number;
   setQuoteDesignDays?: (v: number) => void;
+  quoteDesignUnit?: 'dias' | 'horas';
+  setQuoteDesignUnit?: (v: 'dias' | 'horas') => void;
   quoteFabricationPrice?: string;
   setQuoteFabricationPrice?: (v: string) => void;
   quoteFabricationDays?: number;
   setQuoteFabricationDays?: (v: number) => void;
+  quoteFabricationUnit?: 'dias' | 'horas';
+  setQuoteFabricationUnit?: (v: 'dias' | 'horas') => void;
+  // Flete (v4.4): aplica en integral y solo_fabricacion (acepta 0).
+  quoteShippingPrice?: string;
+  setQuoteShippingPrice?: (v: string) => void;
+  quoteShippingDays?: number;
+  setQuoteShippingDays?: (v: number) => void;
+  quoteShippingUnit?: 'dias' | 'horas';
+  setQuoteShippingUnit?: (v: 'dias' | 'horas') => void;
   isSubmittingQuote: boolean;
   isStartingWork: boolean;
   setIsStartingWork: (v: boolean) => void;
@@ -79,16 +94,28 @@ export default function UchFauchardActionsPanel({
   setQuotePrice,
   quoteDays,
   setQuoteDays,
+  quoteFlatUnit = 'dias',
+  setQuoteFlatUnit,
   quoteNotes,
   setQuoteNotes,
   quoteDesignPrice = '',
   setQuoteDesignPrice,
   quoteDesignDays = 0,
   setQuoteDesignDays,
+  quoteDesignUnit = 'dias',
+  setQuoteDesignUnit,
   quoteFabricationPrice = '',
   setQuoteFabricationPrice,
   quoteFabricationDays = 0,
   setQuoteFabricationDays,
+  quoteFabricationUnit = 'dias',
+  setQuoteFabricationUnit,
+  quoteShippingPrice = '',
+  setQuoteShippingPrice,
+  quoteShippingDays = 0,
+  setQuoteShippingDays,
+  quoteShippingUnit = 'dias',
+  setQuoteShippingUnit,
   isSubmittingQuote,
   isStartingWork,
   setIsStartingWork,
@@ -109,6 +136,7 @@ export default function UchFauchardActionsPanel({
   const [withdrawCheckConfirm, setWithdrawCheckConfirm] = useState(false);
   const [isWithdrawingQuote, setIsWithdrawingQuote] = useState(false);
   const [showDispatchForm, setShowDispatchForm] = useState(false);
+  const [dispatchMode, setDispatchMode] = useState<'interno' | 'externo'>('interno');
   const [dispatchCourier, setDispatchCourier] = useState('Interno');
   const [dispatchTracking, setDispatchTracking] = useState('');
   const [isRegisteringDispatch, setIsRegisteringDispatch] = useState(false);
@@ -210,22 +238,56 @@ export default function UchFauchardActionsPanel({
               )}
               {myInvitation.status === 'pending' && caseStatus === 'enEvaluacion' && (() => {
                 const isIntegral = clinicalCase?.serviceType === 'integral';
+                const isSoloFab = clinicalCase?.serviceType === 'solo_fabricacion';
+                const hasFabrication = isIntegral || isSoloFab;
                 const dp = Number((quoteDesignPrice || '').replace(/\D/g, '')) || 0;
                 const fp = Number((quoteFabricationPrice || '').replace(/\D/g, '')) || 0;
-                const totalSplitPrice = dp + fp;
-                const totalSplitDays = quoteDesignDays + quoteFabricationDays;
+                // Flete (v4.4): obligatorio para casos con fabricación, acepta 0.
+                const sp = Number((quoteShippingPrice || '').replace(/\D/g, '')) || 0;
+                const sd = quoteShippingDays ?? 0;
+                const totalSplitPrice = dp + fp + (hasFabrication ? sp : 0);
+                const totalFlatPrice = (Number(quotePrice) || 0) + (hasFabrication ? sp : 0);
+                // v4.6 — Helpers de formato por unidad
+                const DAY_OPTS = [1, 2, 3, 5, 7, 10, 15];
+                const DAY_OPTS_DESIGN = [1, 2, 3, 5, 7, 10];
+                const SHIP_DAY_OPTS = [0, 1, 2, 3, 5, 7];
+                const HOUR_OPTS = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24];
+                const SHIP_HOUR_OPTS = [1, 2, 3, 4, 6, 8, 12, 24];
+                const labelDay = (d: number) => `${d} ${d === 1 ? 'día hábil' : 'días hábiles'}`;
+                const labelHour = (h: number) => `${h} ${h === 1 ? 'hora' : 'horas'}`;
+                const labelShipDay = (d: number) => `${d} ${d === 1 ? 'día' : 'días'}`;
+                const slotSummary = (value: number, unit: 'dias' | 'horas') => {
+                  if (!value || value <= 0) return '—';
+                  return unit === 'horas' ? labelHour(value) : labelDay(value);
+                };
+                const totalSplitSummary = `${slotSummary(quoteDesignDays, quoteDesignUnit)} · ${slotSummary(quoteFabricationDays, quoteFabricationUnit)}${
+                  hasFabrication ? ` · ${quoteShippingUnit === 'horas' ? labelHour(sd) : labelShipDay(sd)}` : ''
+                }`;
+                const totalFlatSummary = `${slotSummary(quoteDays, quoteFlatUnit)}${
+                  hasFabrication ? ` · ${quoteShippingUnit === 'horas' ? labelHour(sd) : labelShipDay(sd)}` : ''
+                }`;
                 const fmtCLP = (n: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n);
+                const shippingReady = !hasFabrication || (quoteShippingPrice !== '' && quoteShippingDays != null);
                 const splitReady =
                   isIntegral &&
                   dp > 0 &&
                   fp > 0 &&
                   quoteDesignDays > 0 &&
-                  quoteFabricationDays > 0;
-                const flatReady = !isIntegral && !!quotePrice && quoteDays > 0;
+                  quoteFabricationDays > 0 &&
+                  shippingReady;
+                const flatReady = !isIntegral && !!quotePrice && quoteDays > 0 && shippingReady;
                 const disabled = isSubmittingQuote || (isIntegral ? !splitReady : !flatReady);
 
                 return (
                   <div className="space-y-3 bg-surface/40 border border-divider rounded-2xl p-4">
+                    {hasFabrication && (
+                      <div className="flex items-start gap-2 rounded-xl bg-warning-hl border border-warning/30 px-3 py-2.5">
+                        <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                        <p className="text-[11px] text-warning leading-snug">
+                          Este caso incluye <strong>entrega física</strong>. Tu oferta debe contemplar el <strong>costo y tiempo del traslado</strong> hasta las manos del dentista. El flete se cobra aparte y <strong>no está sujeto a comisión de plataforma</strong>.
+                        </p>
+                      </div>
+                    )}
                     {isIntegral ? (
                       <>
                         <p className="text-[10px] text-muted leading-relaxed">
@@ -246,15 +308,29 @@ export default function UchFauchardActionsPanel({
                             />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Plazo diseño</label>
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-[9px] font-black text-muted uppercase tracking-widest">Plazo diseño</label>
+                              <div className="inline-flex rounded-lg border border-divider overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => { setQuoteDesignUnit?.('dias'); setQuoteDesignDays?.(0); }}
+                                  className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteDesignUnit === 'dias' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
+                                >Días</button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setQuoteDesignUnit?.('horas'); setQuoteDesignDays?.(0); }}
+                                  className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteDesignUnit === 'horas' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
+                                >Horas</button>
+                              </div>
+                            </div>
                             <select
                               value={quoteDesignDays}
                               onChange={(e) => setQuoteDesignDays?.(Number(e.target.value))}
                               className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/30"
                             >
                               <option value={0} disabled>Selecciona el plazo</option>
-                              {[1, 2, 3, 5, 7, 10].map((d) => (
-                                <option key={d} value={d}>{d} {d === 1 ? 'día hábil' : 'días hábiles'}</option>
+                              {(quoteDesignUnit === 'horas' ? HOUR_OPTS : DAY_OPTS_DESIGN).map((d) => (
+                                <option key={d} value={d}>{quoteDesignUnit === 'horas' ? labelHour(d) : labelDay(d)}</option>
                               ))}
                             </select>
                           </div>
@@ -274,24 +350,82 @@ export default function UchFauchardActionsPanel({
                             />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Plazo fabricación</label>
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-[9px] font-black text-muted uppercase tracking-widest">Plazo fabricación</label>
+                              <div className="inline-flex rounded-lg border border-divider overflow-hidden">
+                                <button
+                                  type="button"
+                                  onClick={() => { setQuoteFabricationUnit?.('dias'); setQuoteFabricationDays?.(0); }}
+                                  className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteFabricationUnit === 'dias' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
+                                >Días</button>
+                                <button
+                                  type="button"
+                                  onClick={() => { setQuoteFabricationUnit?.('horas'); setQuoteFabricationDays?.(0); }}
+                                  className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteFabricationUnit === 'horas' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
+                                >Horas</button>
+                              </div>
+                            </div>
                             <select
                               value={quoteFabricationDays}
                               onChange={(e) => setQuoteFabricationDays?.(Number(e.target.value))}
                               className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/30"
                             >
                               <option value={0} disabled>Selecciona el plazo</option>
-                              {[1, 2, 3, 5, 7, 10, 15].map((d) => (
-                                <option key={d} value={d}>{d} {d === 1 ? 'día hábil' : 'días hábiles'}</option>
+                              {(quoteFabricationUnit === 'horas' ? HOUR_OPTS : DAY_OPTS).map((d) => (
+                                <option key={d} value={d}>{quoteFabricationUnit === 'horas' ? labelHour(d) : labelDay(d)}</option>
                               ))}
                             </select>
+                          </div>
+                        </div>
+
+                        {/* Bloque Flete (v4.4) — solo cuando hay fabricación. */}
+                        <div className="space-y-3 rounded-xl border border-divider p-3">
+                          <p className="text-[9px] font-black text-primary uppercase tracking-widest">Flete · entrega física</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-2">
+                              <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Costo flete (CLP)</label>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="Ej: 8000 · acepta 0"
+                                value={quoteShippingPrice ? new Intl.NumberFormat('es-CL').format(Number(quoteShippingPrice)) : ''}
+                                onChange={(e) => setQuoteShippingPrice?.(e.target.value.replace(/\D/g, ''))}
+                                className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-faint focus:outline-none focus:border-primary/30"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <label className="text-[9px] font-black text-muted uppercase tracking-widest">Plazo traslado</label>
+                                <div className="inline-flex rounded-lg border border-divider overflow-hidden">
+                                  <button
+                                    type="button"
+                                    onClick={() => { setQuoteShippingUnit?.('dias'); setQuoteShippingDays?.(0); }}
+                                    className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteShippingUnit === 'dias' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
+                                  >Días</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setQuoteShippingUnit?.('horas'); setQuoteShippingDays?.(0); }}
+                                    className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteShippingUnit === 'horas' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
+                                  >Horas</button>
+                                </div>
+                              </div>
+                              <select
+                                value={quoteShippingDays}
+                                onChange={(e) => setQuoteShippingDays?.(Number(e.target.value))}
+                                className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/30"
+                              >
+                                {(quoteShippingUnit === 'horas' ? SHIP_HOUR_OPTS : SHIP_DAY_OPTS).map((d) => (
+                                  <option key={d} value={d}>{quoteShippingUnit === 'horas' ? labelHour(d) : labelShipDay(d)}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                         </div>
 
                         <div className="rounded-xl bg-primary-hl border border-primary/30 px-3 py-2 flex justify-between items-center">
                           <span className="text-[10px] font-black text-primary uppercase tracking-widest">Total</span>
                           <span className="text-sm font-black text-primary">
-                            {fmtCLP(totalSplitPrice)} · {totalSplitDays} {totalSplitDays === 1 ? 'día hábil' : 'días hábiles'}
+                            {fmtCLP(totalSplitPrice)} · {totalSplitSummary}
                           </span>
                         </div>
                       </>
@@ -309,7 +443,21 @@ export default function UchFauchardActionsPanel({
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Plazo de entrega</label>
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="text-[9px] font-black text-muted uppercase tracking-widest">Plazo de entrega</label>
+                            <div className="inline-flex rounded-lg border border-divider overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => { setQuoteFlatUnit?.('dias'); setQuoteDays(0); }}
+                                className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteFlatUnit === 'dias' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
+                              >Días</button>
+                              <button
+                                type="button"
+                                onClick={() => { setQuoteFlatUnit?.('horas'); setQuoteDays(0); }}
+                                className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteFlatUnit === 'horas' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
+                              >Horas</button>
+                            </div>
+                          </div>
                           <select
                             value={quoteDays}
                             onChange={(e) => setQuoteDays(Number(e.target.value))}
@@ -318,13 +466,54 @@ export default function UchFauchardActionsPanel({
                             <option value={0} disabled>
                               Selecciona el plazo
                             </option>
-                            {[1, 2, 3, 5, 7, 10, 15].map((d) => (
+                            {(quoteFlatUnit === 'horas' ? HOUR_OPTS : DAY_OPTS).map((d) => (
                               <option key={d} value={d}>
-                                {d} {d === 1 ? 'día hábil' : 'días hábiles'}
+                                {quoteFlatUnit === 'horas' ? labelHour(d) : labelDay(d)}
                               </option>
                             ))}
                           </select>
                         </div>
+
+                        {/* Bloque Flete (v4.4) — solo_fabricacion */}
+                        {hasFabrication && (
+                          <>
+                            <div className="space-y-3 rounded-xl border border-divider p-3">
+                              <p className="text-[9px] font-black text-primary uppercase tracking-widest">Flete · entrega física</p>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-2">
+                                  <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Costo flete (CLP)</label>
+                                  <input
+                                    type="text"
+                                    inputMode="numeric"
+                                    placeholder="Ej: 8000 · acepta 0"
+                                    value={quoteShippingPrice ? new Intl.NumberFormat('es-CL').format(Number(quoteShippingPrice)) : ''}
+                                    onChange={(e) => setQuoteShippingPrice?.(e.target.value.replace(/\D/g, ''))}
+                                    className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-faint focus:outline-none focus:border-primary/30"
+                                  />
+                                </div>
+                                <div className="space-y-2">
+                                  <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Días traslado</label>
+                                  <select
+                                    value={quoteShippingDays}
+                                    onChange={(e) => setQuoteShippingDays?.(Number(e.target.value))}
+                                    className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/30"
+                                  >
+                                    {[0, 1, 2, 3, 5, 7].map((d) => (
+                                      <option key={d} value={d}>{d} {d === 1 ? 'día' : 'días'}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-xl bg-primary-hl border border-primary/30 px-3 py-2 flex justify-between items-center">
+                              <span className="text-[10px] font-black text-primary uppercase tracking-widest">Total</span>
+                              <span className="text-sm font-black text-primary">
+                                {fmtCLP(totalFlatPrice)} · {totalFlatSummary}
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
                     <div className="space-y-2">
@@ -552,6 +741,37 @@ export default function UchFauchardActionsPanel({
               </div>
 
               <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2 p-1 bg-background rounded-xl border border-divider">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDispatchMode('interno');
+                      if (!dispatchCourier.trim()) setDispatchCourier('Interno');
+                    }}
+                    className={`py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                      dispatchMode === 'interno'
+                        ? 'bg-jade-hl text-jade'
+                        : 'text-faint hover:text-muted'
+                    }`}
+                  >
+                    Envío interno
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDispatchMode('externo');
+                      if (dispatchCourier.trim().toLowerCase() === 'interno') setDispatchCourier('');
+                    }}
+                    className={`py-2 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                      dispatchMode === 'externo'
+                        ? 'bg-jade-hl text-jade'
+                        : 'text-faint hover:text-muted'
+                    }`}
+                  >
+                    Envío externo
+                  </button>
+                </div>
+
                 <div className="space-y-1.5">
                   <label
                     htmlFor="uch-dispatch-courier"
@@ -564,7 +784,7 @@ export default function UchFauchardActionsPanel({
                     type="text"
                     value={dispatchCourier}
                     onChange={(e) => setDispatchCourier(e.target.value)}
-                    placeholder="Ej. Interno, Chilexpress, Starken…"
+                    placeholder={dispatchMode === 'interno' ? 'Ej. Interno, motorizado propio…' : 'Ej. Chilexpress, Starken, Blue Express…'}
                     className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-faint focus:border-jade/20 outline-none"
                   />
                 </div>
@@ -573,7 +793,7 @@ export default function UchFauchardActionsPanel({
                     htmlFor="uch-dispatch-tracking"
                     className="text-[10px] font-bold uppercase tracking-wider text-faint"
                   >
-                    Seguimiento del envío
+                    {dispatchMode === 'externo' ? 'URL de seguimiento (obligatoria)' : 'Referencia / instrucciones (opcional)'}
                   </label>
                   <textarea
                     id="uch-dispatch-tracking"
@@ -581,9 +801,16 @@ export default function UchFauchardActionsPanel({
                     value={dispatchTracking}
                     onChange={(e) => setDispatchTracking(e.target.value)}
                     rows={3}
-                    placeholder="Nº de guía, URL de seguimiento o instrucciones para el dentista"
+                    placeholder={
+                      dispatchMode === 'externo'
+                        ? 'https://… (URL de seguimiento del courier)'
+                        : 'Datos del retiro o entrega directa (opcional)'
+                    }
                     className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-faint focus:border-jade/20 outline-none resize-none"
                   />
+                  {dispatchMode === 'externo' && (
+                    <p className="text-[10px] text-faint">El dentista hará clic para abrir el seguimiento del courier.</p>
+                  )}
                 </div>
               </div>
 
@@ -601,18 +828,31 @@ export default function UchFauchardActionsPanel({
                 <button
                   type="button"
                   data-testid="uch-dispatch-confirm"
-                  disabled={isRegisteringDispatch || !dispatchTracking.trim()}
+                  disabled={
+                    isRegisteringDispatch ||
+                    (dispatchMode === 'externo' && !dispatchTracking.trim())
+                  }
                   onClick={async () => {
                     const trackingId = dispatchTracking.trim();
-                    if (!trackingId || trackingId.toUpperCase() === 'N/A') {
-                      showError('Indica un número de seguimiento, enlace o referencia de despacho.');
-                      return;
+                    if (dispatchMode === 'externo') {
+                      if (!trackingId) {
+                        showError('Indica la URL de seguimiento del courier.');
+                        return;
+                      }
+                      try {
+                        const u = new URL(trackingId);
+                        if (!/^https?:$/.test(u.protocol)) throw new Error('proto');
+                      } catch {
+                        showError('La URL debe ser válida (http:// o https://).');
+                        return;
+                      }
                     }
                     setIsRegisteringDispatch(true);
                     try {
                       const ok = await onActionTriggered?.('register_dispatch', {
                         courier: dispatchCourier.trim() || 'Interno',
-                        trackingId,
+                        trackingId: trackingId || (dispatchMode === 'interno' ? 'Entrega interna' : ''),
+                        dispatchMode,
                       });
                       // Solo cerrar y limpiar si el server aceptó (no ContactGuard u otro fallo).
                       if (ok) {

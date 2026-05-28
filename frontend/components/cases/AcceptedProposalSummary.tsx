@@ -1,11 +1,18 @@
 'use client';
 
 import { CheckCircle2, Building2 } from 'lucide-react';
+import { formatTurnaround } from '@/lib/uchQuoteDisplay';
 
 interface AcceptedProposalSummaryProps {
   proposedPrice: number;
-  proposedDeliveryDays: number;
+  proposedDeliveryDays: number | null;
+  /** v4.6 — total en horas (alternativa a proposedDeliveryDays). */
+  proposedDeliveryHours?: number | null;
   platformFee?: string | null;
+  /** Flete pactado (v4.4): se excluye del cálculo base/fee y se muestra aparte. */
+  proposedShippingPrice?: number | null;
+  proposedShippingDays?: number | null;
+  proposedShippingHours?: number | null;
   technicianName?: string;
   technicianOrganization?: string;
   technicianImage?: string | null;
@@ -24,15 +31,22 @@ function formatCLP(amount: number) {
 export default function AcceptedProposalSummary({
   proposedPrice,
   proposedDeliveryDays,
+  proposedDeliveryHours,
   platformFee,
+  proposedShippingPrice,
+  proposedShippingDays,
+  proposedShippingHours,
   technicianName,
   technicianOrganization,
   technicianImage,
   forDentist = false,
 }: AcceptedProposalSummaryProps) {
   const fee = parseFloat(platformFee ?? '0.15');
-  const basePrice = proposedPrice / (1 + fee);
-  const feeAmount = proposedPrice - basePrice;
+  // v4.4 — Flete NO está sujeto a fee. Lo descontamos antes de calcular base/fee.
+  const shipping = proposedShippingPrice ?? 0;
+  const priceExcludingShipping = proposedPrice - shipping;
+  const basePrice = priceExcludingShipping / (1 + fee);
+  const feeAmount = priceExcludingShipping - basePrice;
 
   return (
     <div className="bg-surface-2/40 border border-primary/20 rounded-xl p-3 space-y-2">
@@ -76,21 +90,31 @@ export default function AcceptedProposalSummary({
             </p>
             <p className="text-[9px] text-faint leading-snug">
               Incluye remuneración del proveedor técnico (importe no desglosado por confidencialidad) y comisión de plataforma DentFlowAi.
+              {shipping > 0 && (
+                <> {' '}Incluye además flete por entrega física: <span className="text-foreground font-semibold">{formatCLP(shipping)}</span> (sin comisión).</>
+              )}
             </p>
           </>
         ) : (
-          <p className="text-[11px] text-foreground">
-            Precio: <span className="font-bold">{formatCLP(proposedPrice)}</span>
-            <span className="text-[9px] text-faint">
-              {' '}
-              (lab {formatCLP(basePrice)} + plataforma {formatCLP(feeAmount)})
-            </span>
-          </p>
+          <>
+            <p className="text-[11px] text-foreground">
+              Precio: <span className="font-bold">{formatCLP(proposedPrice)}</span>
+              <span className="text-[9px] text-faint">
+                {' '}
+                (lab {formatCLP(basePrice)} + plataforma {formatCLP(feeAmount)}
+                {shipping > 0 && <> + flete {formatCLP(shipping)}</>})
+              </span>
+            </p>
+          </>
         )}
         <p className="text-[11px] text-foreground">
           Plazo: <span className="font-bold">
-            {proposedDeliveryDays} {proposedDeliveryDays === 1 ? 'día hábil' : 'días hábiles'}
+            {formatTurnaround({ days: proposedDeliveryDays, hours: proposedDeliveryHours })}
           </span>
+          {((proposedShippingDays != null && proposedShippingDays > 0) ||
+            (proposedShippingHours != null && proposedShippingHours > 0)) && (
+            <span className="text-[9px] text-faint"> (incluye {formatTurnaround({ days: proposedShippingDays, hours: proposedShippingHours })} de traslado)</span>
+          )}
         </p>
       </div>
     </div>

@@ -14,8 +14,8 @@ export default async function Home() {
       {/* Navbar con Glassmorphism */}
       <nav className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-6 py-4 bg-surface shadow-sm border border-divider m-4 rounded-2xl">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center">
-            <Activity className="text-foreground w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center overflow-hidden">
+            <Image src="/dentflowai.jpg" alt="DentFlowAi" width={32} height={32} className="w-full h-full object-cover" />
           </div>
           <span className="text-xl font-bold tracking-tight text-foreground">DentFlowAi</span>
         </div>
@@ -137,7 +137,7 @@ export default async function Home() {
 
       <footer className="px-6 py-12 border-t border-zinc-200 dark:border-zinc-800 max-w-7xl mx-auto w-full flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-2 opacity-50">
-          <Activity className="w-5 h-5" />
+          <Image src="/dentflowai.jpg" alt="DentFlowAi" width={20} height={20} className="w-5 h-5 rounded object-cover" />
           <span className="font-bold tracking-tight">DentFlowAi</span>
         </div>
         <p className="text-sm text-zinc-500">© 2026 DentFlowAi. Todos los derechos reservados.</p>

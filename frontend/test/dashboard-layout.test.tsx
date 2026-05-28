@@ -31,6 +31,10 @@ vi.mock('@/components/admin/ImpersonationSelector', () => ({
   default: () => null,
 }));
 
+vi.mock('@/components/theme/ThemeToggleButton', () => ({
+  default: () => null,
+}));
+
 import DashboardLayout from '@/app/dashboard/layout';
 
 describe('DashboardLayout', () => {

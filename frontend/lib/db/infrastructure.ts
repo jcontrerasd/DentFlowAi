@@ -3,7 +3,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-export const INFRA_VERSION = 'v4.3';
+export const INFRA_VERSION = 'v4.6';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -795,6 +795,56 @@ export async function ensureInfrastructure(db: any) {
     await db.execute(sql`
       ALTER TABLE "user"
         ADD COLUMN IF NOT EXISTS theme_preference text NOT NULL DEFAULT 'system';
+    `);
+
+    // v4.4 — Flete (shipping) en cotizaciones: costo + días traslado
+    // Aplica a casos con fabricación. El fee de plataforma NO aplica al flete.
+    await db.execute(sql`
+      ALTER TABLE "case_invitation"
+        ADD COLUMN IF NOT EXISTS quoted_shipping_price double precision,
+        ADD COLUMN IF NOT EXISTS quoted_shipping_days  integer;
+      ALTER TABLE "clinical_case"
+        ADD COLUMN IF NOT EXISTS proposed_shipping_price double precision,
+        ADD COLUMN IF NOT EXISTS proposed_shipping_days  integer;
+    `);
+
+    // v4.5 — Desglose diseño/fabricación pactado en clinical_case.
+    // Permite mostrar Diseño + Fabricación + Flete en la cabecera UCH tras la aceptación
+    // (antes solo vivía en case_invitation del ganador).
+    await db.execute(sql`
+      ALTER TABLE "clinical_case"
+        ADD COLUMN IF NOT EXISTS proposed_design_price double precision,
+        ADD COLUMN IF NOT EXISTS proposed_design_days integer,
+        ADD COLUMN IF NOT EXISTS proposed_fabrication_price double precision,
+        ADD COLUMN IF NOT EXISTS proposed_fabrication_days integer;
+    `);
+
+    // v4.6 — Plazos en horas (1–24 h) por slot + calendario laboral configurable.
+    // Columnas *_hours paralelas a *_days en case_invitation y clinical_case
+    // (mutuamente excluyentes por slot).
+    await db.execute(sql`
+      ALTER TABLE "case_invitation"
+        ADD COLUMN IF NOT EXISTS quoted_hours integer,
+        ADD COLUMN IF NOT EXISTS quoted_design_hours integer,
+        ADD COLUMN IF NOT EXISTS quoted_fabrication_hours integer,
+        ADD COLUMN IF NOT EXISTS quoted_shipping_hours integer;
+      ALTER TABLE "clinical_case"
+        ADD COLUMN IF NOT EXISTS proposed_delivery_hours integer,
+        ADD COLUMN IF NOT EXISTS proposed_design_hours integer,
+        ADD COLUMN IF NOT EXISTS proposed_fabrication_hours integer,
+        ADD COLUMN IF NOT EXISTS proposed_shipping_hours integer;
+      ALTER TABLE "fauchard_config"
+        ADD COLUMN IF NOT EXISTS business_hours_start integer NOT NULL DEFAULT 8,
+        ADD COLUMN IF NOT EXISTS business_hours_end   integer NOT NULL DEFAULT 20,
+        ADD COLUMN IF NOT EXISTS business_days_mask   integer NOT NULL DEFAULT 31;
+      CREATE TABLE IF NOT EXISTS "fauchard_holiday" (
+        id uuid NOT NULL DEFAULT uuid_generate_v4() PRIMARY KEY,
+        holiday_date date NOT NULL,
+        label text NOT NULL,
+        created_by text REFERENCES "user"(id) ON DELETE SET NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS fauchard_holiday_date_uidx ON "fauchard_holiday"(holiday_date);
     `);
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;

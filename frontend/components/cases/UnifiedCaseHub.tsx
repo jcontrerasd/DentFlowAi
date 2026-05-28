@@ -199,13 +199,20 @@ export default function UnifiedCaseHub({
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
   const [quotePrice, setQuotePrice] = useState('');
   const [quoteDays, setQuoteDays] = useState(0);
+  const [quoteFlatUnit, setQuoteFlatUnit] = useState<'dias' | 'horas'>('dias');
   const [quoteNotes, setQuoteNotes] = useState('');
   // Desglose integral (Fase 4): solo se usan cuando serviceType === 'integral'.
   // Para todos los demás tipos se ignoran y se envía la firma flat tradicional.
   const [quoteDesignPrice, setQuoteDesignPrice] = useState('');
   const [quoteDesignDays, setQuoteDesignDays] = useState(0);
+  const [quoteDesignUnit, setQuoteDesignUnit] = useState<'dias' | 'horas'>('dias');
   const [quoteFabricationPrice, setQuoteFabricationPrice] = useState('');
   const [quoteFabricationDays, setQuoteFabricationDays] = useState(0);
+  const [quoteFabricationUnit, setQuoteFabricationUnit] = useState<'dias' | 'horas'>('dias');
+  // Flete (v4.4): aplica a casos con fabricación. Acepta 0.
+  const [quoteShippingPrice, setQuoteShippingPrice] = useState('');
+  const [quoteShippingDays, setQuoteShippingDays] = useState(0);
+  const [quoteShippingUnit, setQuoteShippingUnit] = useState<'dias' | 'horas'>('dias');
   const [isSubmittingQuote, setIsSubmittingQuote] = useState(false);
   const [showQuoteConfirm, setShowQuoteConfirm] = useState(false);
   const [quoteConfirmChecked, setQuoteConfirmChecked] = useState(false);
@@ -494,6 +501,15 @@ export default function UnifiedCaseHub({
     if (!myInvitation) return;
     setIsSubmittingQuote(true);
 
+    // Flete (v4.4): aplica si el caso tiene fabricación. Acepta 0.
+    const serviceType = (clinicalCase as any)?.serviceType as string | undefined;
+    const hasFabrication = serviceType === 'integral' || serviceType === 'solo_fabricacion';
+    const shippingPrice = hasFabrication ? Number((quoteShippingPrice || '').replace(/\D/g, '')) || 0 : 0;
+    // v4.6 — La unidad determina si el numérico se envía como days u hours.
+    const shippingValue = hasFabrication ? (quoteShippingDays ?? 0) : 0;
+    const shippingDaysPayload = quoteShippingUnit === 'dias' ? shippingValue : 0;
+    const shippingHoursPayload = quoteShippingUnit === 'horas' ? shippingValue : 0;
+
     if (isIntegralCase) {
       // Caso integral: desglose obligatorio diseño + fabricación.
       const designPrice = Number(quoteDesignPrice.replace(/\D/g, ''));
@@ -511,9 +527,16 @@ export default function UnifiedCaseHub({
       const res = await submitQuoteAction(myInvitation.id, {
         kind: 'split',
         designPrice,
-        designDays: quoteDesignDays,
+        ...(quoteDesignUnit === 'horas'
+          ? { designHours: quoteDesignDays }
+          : { designDays: quoteDesignDays }),
         fabricationPrice,
-        fabricationDays: quoteFabricationDays,
+        ...(quoteFabricationUnit === 'horas'
+          ? { fabricationHours: quoteFabricationDays }
+          : { fabricationDays: quoteFabricationDays }),
+        shippingPrice,
+        shippingDays: shippingDaysPayload,
+        shippingHours: shippingHoursPayload,
         notes: quoteNotes || undefined,
       });
       setIsSubmittingQuote(false);
@@ -537,7 +560,12 @@ export default function UnifiedCaseHub({
     const res = await submitQuoteAction(myInvitation.id, {
       kind: 'flat',
       price: numericPrice,
-      deliveryDays: quoteDays,
+      ...(quoteFlatUnit === 'horas'
+        ? { deliveryHours: quoteDays }
+        : { deliveryDays: quoteDays }),
+      ...(hasFabrication
+        ? { shippingPrice, shippingDays: shippingDaysPayload, shippingHours: shippingHoursPayload }
+        : {}),
       notes: quoteNotes || undefined,
     });
     setIsSubmittingQuote(false);
@@ -555,13 +583,19 @@ export default function UnifiedCaseHub({
         invitationId: string;
         rank: number;
         totalPriceCLP: number;
-        quotedDays: number;
+        quotedDays: number | null;
+        quotedHours?: number | null;
         techNotes: string | null;
         respondedAt: string | Date | null;
         designPriceCLP?: number | null;
         designDays?: number | null;
+        designHours?: number | null;
         fabricationPriceCLP?: number | null;
         fabricationDays?: number | null;
+        fabricationHours?: number | null;
+        shippingPriceCLP?: number | null;
+        shippingDays?: number | null;
+        shippingHours?: number | null;
       }[]
     | undefined;
 
@@ -610,14 +644,33 @@ export default function UnifiedCaseHub({
     [includeDentistReview, includeDelivery, includeCaseActions],
   );
 
+  /**
+   * Fase de las filas de acción. Cuando el usuario filtra por una pestaña distinta de
+   * "todos", las acciones que pertenecen a otra fase no deben aparecer.
+   *   - dentist_review / delivery → siempre fase diseño
+   *   - case_actions → fase derivada del estado actual del caso
+   */
+  const caseActionsPhase: PhaseTab =
+    caseStatus === 'borrador' ||
+    caseStatus === 'enEvaluacion' ||
+    caseStatus === 'propuestaLista' ||
+    caseStatus === 'publicado'
+      ? 'propuesta'
+      : caseStatus === 'enFabricacion' || caseStatus === 'enviado' || caseStatus === 'completado'
+        ? 'produccion'
+        : 'diseno';
+
+  const phaseAllowsAction = (actionPhase: PhaseTab) =>
+    phaseTab === 'todos' || phaseTab === actionPhase;
+
   const timelineRows = useMemo(
     () =>
       buildUchTimelineRows({
         events: filteredEvents as unknown as UchCaseEventLite[],
         includeContext: false,
-        includeDentistReview,
-        includeCaseActions,
-        includeDelivery,
+        includeDentistReview: includeDentistReview && phaseAllowsAction('diseno'),
+        includeCaseActions: includeCaseActions && phaseAllowsAction(caseActionsPhase),
+        includeDelivery: includeDelivery && phaseAllowsAction('diseno'),
         proposalExpiresAt: clinicalCase?.proposalExpiresAt,
         clinicalUpdatedAt: clinicalCase?.updatedAt,
         workDeadline: clinicalCase?.workDeadline,
@@ -626,6 +679,8 @@ export default function UnifiedCaseHub({
     [
       filteredEvents,
       caseStatus,
+      phaseTab,
+      caseActionsPhase,
       actingAsDentista,
       actingAsTecnico,
       currentUser?.id,
@@ -737,6 +792,8 @@ export default function UnifiedCaseHub({
                   quotedDesignDays: myInvitation.quotedDesignDays,
                   quotedFabricationPrice: myInvitation.quotedFabricationPrice,
                   quotedFabricationDays: myInvitation.quotedFabricationDays,
+                  quotedShippingPrice: myInvitation.quotedShippingPrice,
+                  quotedShippingDays: myInvitation.quotedShippingDays,
                   respondedAt: myInvitation.respondedAt ?? null,
                   techNotes: myInvitation.techNotes ?? null,
                   status: myInvitation.status,
@@ -958,16 +1015,28 @@ export default function UnifiedCaseHub({
                         setQuotePrice={setQuotePrice}
                         quoteDays={quoteDays}
                         setQuoteDays={setQuoteDays}
+                        quoteFlatUnit={quoteFlatUnit}
+                        setQuoteFlatUnit={setQuoteFlatUnit}
                         quoteNotes={quoteNotes}
                         setQuoteNotes={setQuoteNotes}
                         quoteDesignPrice={quoteDesignPrice}
                         setQuoteDesignPrice={setQuoteDesignPrice}
                         quoteDesignDays={quoteDesignDays}
                         setQuoteDesignDays={setQuoteDesignDays}
+                        quoteDesignUnit={quoteDesignUnit}
+                        setQuoteDesignUnit={setQuoteDesignUnit}
                         quoteFabricationPrice={quoteFabricationPrice}
                         setQuoteFabricationPrice={setQuoteFabricationPrice}
                         quoteFabricationDays={quoteFabricationDays}
                         setQuoteFabricationDays={setQuoteFabricationDays}
+                        quoteFabricationUnit={quoteFabricationUnit}
+                        setQuoteFabricationUnit={setQuoteFabricationUnit}
+                        quoteShippingPrice={quoteShippingPrice}
+                        setQuoteShippingPrice={setQuoteShippingPrice}
+                        quoteShippingDays={quoteShippingDays}
+                        setQuoteShippingDays={setQuoteShippingDays}
+                        quoteShippingUnit={quoteShippingUnit}
+                        setQuoteShippingUnit={setQuoteShippingUnit}
                         isSubmittingQuote={isSubmittingQuote}
                         isStartingWork={isStartingWork}
                         setIsStartingWork={setIsStartingWork}
@@ -1070,42 +1139,75 @@ export default function UnifiedCaseHub({
               </div>
 
               <div className="bg-surface-2 rounded-2xl p-4 space-y-2">
-                {isIntegralCase ? (() => {
-                  const dp = Number(quoteDesignPrice.replace(/\D/g, '')) || 0;
-                  const fp = Number(quoteFabricationPrice.replace(/\D/g, '')) || 0;
-                  const total = dp + fp;
-                  const totalDays = quoteDesignDays + quoteFabricationDays;
+                {(() => {
+                  // v4.4 — Flete (aplica a integral y solo_fabricacion). v4.6 — soporte horas por slot.
+                  const serviceType = (clinicalCase as any)?.serviceType as string | undefined;
+                  const hasFabrication = serviceType === 'integral' || serviceType === 'solo_fabricacion';
+                  const sp = hasFabrication ? Number((quoteShippingPrice || '').replace(/\D/g, '')) || 0 : 0;
+                  const sd = hasFabrication ? (quoteShippingDays ?? 0) : 0;
                   const fmt = (n: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n);
+                  const slot = (value: number, unit: 'dias' | 'horas') => {
+                    if (!value || value <= 0) return '—';
+                    if (unit === 'horas') return `${value} ${value === 1 ? 'hora' : 'horas'}`;
+                    return `${value} ${value === 1 ? 'día hábil' : 'días hábiles'}`;
+                  };
+
+                  if (isIntegralCase) {
+                    const dp = Number(quoteDesignPrice.replace(/\D/g, '')) || 0;
+                    const fp = Number(quoteFabricationPrice.replace(/\D/g, '')) || 0;
+                    const total = dp + fp + sp;
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-faint">Diseño</span>
+                          <span className="text-foreground font-bold">{fmt(dp)} · {slot(quoteDesignDays, quoteDesignUnit)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-faint">Fabricación</span>
+                          <span className="text-foreground font-bold">{fmt(fp)} · {slot(quoteFabricationDays, quoteFabricationUnit)}</span>
+                        </div>
+                        {hasFabrication && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-faint">Flete <span className="text-[10px]">(sin comisión)</span></span>
+                            <span className="text-foreground font-bold">{fmt(sp)} · {slot(sd, quoteShippingUnit)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-sm pt-2 border-t border-divider mt-2">
+                          <span className="text-primary font-bold">Total</span>
+                          <span className="text-primary font-bold">{fmt(total)}</span>
+                        </div>
+                      </>
+                    );
+                  }
+
+                  // flat (solo_diseno / solo_fabricacion)
+                  const flat = Number((quotePrice || '').replace(/\D/g, '')) || 0;
+                  const total = flat + sp;
                   return (
                     <>
                       <div className="flex justify-between text-sm">
-                        <span className="text-faint">Diseño</span>
-                        <span className="text-foreground font-bold">{fmt(dp)} · {quoteDesignDays} {quoteDesignDays === 1 ? 'día hábil' : 'días hábiles'}</span>
+                        <span className="text-faint">Precio</span>
+                        <span className="text-foreground font-bold">{fmt(flat)}</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-faint">Fabricación</span>
-                        <span className="text-foreground font-bold">{fmt(fp)} · {quoteFabricationDays} {quoteFabricationDays === 1 ? 'día hábil' : 'días hábiles'}</span>
+                        <span className="text-faint">Plazo</span>
+                        <span className="text-foreground font-bold">{slot(quoteDays, quoteFlatUnit)}</span>
                       </div>
-                      <div className="flex justify-between text-sm pt-2 border-t border-divider mt-2">
-                        <span className="text-primary font-bold">Total</span>
-                        <span className="text-primary font-bold">{fmt(total)} · {totalDays} {totalDays === 1 ? 'día hábil' : 'días hábiles'}</span>
-                      </div>
+                      {hasFabrication && (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-faint">Flete <span className="text-[10px]">(sin comisión)</span></span>
+                            <span className="text-foreground font-bold">{fmt(sp)} · {slot(sd, quoteShippingUnit)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm pt-2 border-t border-divider mt-2">
+                            <span className="text-primary font-bold">Total</span>
+                            <span className="text-primary font-bold">{fmt(total)}</span>
+                          </div>
+                        </>
+                      )}
                     </>
                   );
-                })() : (
-                  <>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-faint">Precio</span>
-                      <span className="text-foreground font-bold">
-                        {quotePrice ? new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(Number(quotePrice)) : '—'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-faint">Plazo</span>
-                      <span className="text-foreground font-bold">{quoteDays} {quoteDays === 1 ? 'día hábil' : 'días hábiles'}</span>
-                    </div>
-                  </>
-                )}
+                })()}
                 {quoteNotes && (
                   <div className="text-xs pt-1 border-t border-divider mt-2">
                     <p className="text-faint mb-1">Nota</p>

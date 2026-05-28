@@ -29,7 +29,7 @@ describe('CaseWorkflowStepper', () => {
     expect([...connectors].some((el) => el.className.includes('error'))).toBe(true);
     const rechazado = screen.getByText(/^rechazado$/i);
     const terminalCircle = rechazado.parentElement?.querySelector('.rounded-full');
-    expect(terminalCircle?.className).toContain('bg-error text-foreground');
+    expect(terminalCircle?.className).toContain('bg-error text-inverse');
   });
 
   it('variante techRejected: tramo propuesta–diseño usa círculos rose suaves (no sólidos como el terminal)', () => {
@@ -127,7 +127,7 @@ describe('CaseWorkflowStepper', () => {
       );
       const rechazado = screen.getAllByText(/^rechazado$/i).at(-1);
       const circle = rechazado?.parentElement?.querySelector('.rounded-full');
-      expect(circle?.className).toContain('bg-error text-foreground');
+      expect(circle?.className).toContain('bg-error text-inverse');
       // Verifica presencia de algún conector rosa entre la banda terminal
       const connectors = container.querySelectorAll('.h-px.flex-1');
       expect([...connectors].some((el) => el.className.includes('error'))).toBe(true);

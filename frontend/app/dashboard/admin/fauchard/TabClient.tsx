@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Sliders, Trophy, History, ShieldCheck } from 'lucide-react';
+import { Sliders, Trophy, History, ShieldCheck, CalendarDays } from 'lucide-react';
 import FauchardWeightsPanel from '@/components/admin/fauchard/FauchardWeightsPanel';
 import FauchardFiltersPanel from '@/components/admin/fauchard/FauchardFiltersPanel';
 import LeagueConfigPanel from '@/components/admin/fauchard/LeagueConfigPanel';
 import ConfigChangeLog from '@/components/admin/fauchard/ConfigChangeLog';
+import FauchardCalendarPanel from '@/components/admin/fauchard/FauchardCalendarPanel';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type Tab = 'weights' | 'filters' | 'leagues' | 'history';
+type Tab = 'weights' | 'filters' | 'calendar' | 'leagues' | 'history';
 
 export function TabClient({ config }: { config: any }) {
   const [activeTab, setActiveTab] = useState<Tab>('weights');
@@ -16,6 +17,7 @@ export function TabClient({ config }: { config: any }) {
   const tabs = [
     { id: 'weights', label: 'Pesos del Score', icon: Sliders },
     { id: 'filters', label: 'Filtros y Tiempos', icon: ShieldCheck },
+    { id: 'calendar', label: 'Calendario laboral', icon: CalendarDays },
     { id: 'leagues', label: 'Sistema de Categorías', icon: Trophy },
     { id: 'history', label: 'Historial', icon: History },
   ];
@@ -64,6 +66,7 @@ export function TabClient({ config }: { config: any }) {
           >
             {activeTab === 'weights' && <FauchardWeightsPanel initialConfig={config} />}
             {activeTab === 'filters' && <FauchardFiltersPanel initialConfig={config} />}
+            {activeTab === 'calendar' && <FauchardCalendarPanel initialConfig={config} />}
             {activeTab === 'leagues' && <LeagueConfigPanel initialConfig={config} />}
             {activeTab === 'history' && <ConfigChangeLog />}
           </motion.div>

@@ -92,11 +92,25 @@
       "Bash(sed -i '' \"s|c\\\\.urgency === 'prioritario'|c.urgency === 'Prioritario'|g\" /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/components/cases/KanbanBoard.tsx)",
       "Bash(PGPASSWORD='dentflow_secure_pass_2026' psql -h 34.176.243.133 -U dentflow_admin -d dentflowai-cbcf2-database -c \"SELECT code, label, is_active FROM dental_material ORDER BY sort_order;\")",
       "Bash(awk '/^export async function approveWorkAction/,/^}$/' /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/lib/db/actions/cases.ts)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(perl -i -pe \"s/bg-error text-foreground/bg-error text-inverse/g\" test/case-workflow-stepper.test.tsx)",
+      "Bash(perl -i -pe ' *)",
+      "Bash(grep -rn \"53.990\\\\|\\\\\\\\\\\\$.*·.*[0-9]D\\\\| · [0-9]*D\" /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/components --include=\"*.tsx\")",
+      "Bash(grep -rn \"}D\\\\|'D'\\\\b\\\\|\\\\\\\\\\\\${.*}D\\\\b\" /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/components --include=\"*.tsx\")",
+      "Bash(grep -rn \"\\\\\\\\\\\\$.*·.*[0-9]\" /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/components/cases --include=\"*.tsx\")",
+      "Bash(grep -rn \"}\\\\\\\\\\\\\\\\?D\\\\b\\\\|'D'\\\\|\\\\\\\\\\\\${[a-zA-Z]*[Dd]ays}D\" /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend --include=\"*.tsx\")",
+      "Bash(mv frontend/app/dentflowai.jpg frontend/public/dentflowai.jpg && ls frontend/public/dentflowai.jpg)",
+      "Bash(npm --prefix frontend run type-check)",
+      "Bash(npm --prefix frontend run test:run)",
+      "Bash(npx --prefix frontend vitest run --root frontend test/role-guards.test.tsx)",
+      "Bash(git stash *)",
+      "Bash(npx --prefix frontend vitest run --root frontend test/businessTime.test.ts test/uch-quote-breakdown.test.tsx test/uch-quote-display.test.ts test/accept-proposal-dentist-uch.test.ts)",
+      "Bash(npm --prefix frontend run lint)"
     ],
     "additionalDirectories": [
       "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/invitations",
-      "/private/tmp"
+      "/private/tmp",
+      "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app"
     ]
   }
 }
