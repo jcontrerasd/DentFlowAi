@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { fauchardConfig, user } from '@/lib/db/schema';
 import { eq, count, desc } from 'drizzle-orm';
 import { updateFauchardParamsAction } from '@/lib/db/actions/fauchard';
-import { forceIdentity, clearForcedIdentity } from '@/lib/db/actions/test-identity';
+import { forceIdentity, clearForcedIdentity } from './helpers/test-identity';
 
 vi.mock('next/headers', () => ({
   headers: () => new Map(),

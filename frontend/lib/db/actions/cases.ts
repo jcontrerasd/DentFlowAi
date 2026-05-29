@@ -43,6 +43,7 @@ import {
   buildTechFacetCondition,
 } from '@/lib/db/caseListQueryBuilder';
 import { pickInvitationStatusForKpi } from '@/lib/cases/technicianInvitationForKpi';
+import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt } from '@/lib/db/caseDeadlines';
 
 
 /**
@@ -56,7 +57,8 @@ export async function logCaseEvent({
   action,
   content,
   payload = {},
-  stateChange = {}
+  stateChange = {},
+  skipActivityUpdate = false,
 }: {
   caseId: string,
   userId: string,
@@ -64,7 +66,8 @@ export async function logCaseEvent({
   action: string,
   content?: string,
   payload?: any,
-  stateChange?: { from?: string, to?: string }
+  stateChange?: { from?: string, to?: string },
+  skipActivityUpdate?: boolean,
 }, tx?: any) {
   const dbClient = tx || db;
   try {
@@ -78,12 +81,13 @@ export async function logCaseEvent({
       stateChange,
       createdAt: new Date()
     });
-    
-    // También actualizamos last_activity_at en el caso para que el dashboard sepa que hay algo nuevo
-    await dbClient.update(clinicalCase).set({
-      lastActivityAt: new Date()
-    }).where(eq(clinicalCase.id, caseId));
-    
+
+    if (!skipActivityUpdate) {
+      await dbClient.update(clinicalCase).set({
+        lastActivityAt: new Date()
+      }).where(eq(clinicalCase.id, caseId));
+    }
+
   } catch (error) {
     console.error("[logCaseEvent] Error:", error);
     // No lanzamos el error para no bloquear la acción principal si falla el logging
@@ -548,7 +552,6 @@ export async function listCasesByOrganization(
     const total = Number(countResult[0]?.count ?? 0);
 
     const evalCaseIds = results.filter((c) => c.status === 'enEvaluacion').map((c) => c.id);
-    const { getCaseQuoteDeadlineAtBatch } = await import('@/lib/db/caseDeadlines');
     const quoteDeadlines = await getCaseQuoteDeadlineAtBatch(evalCaseIds);
 
     const processedResults = results.map((c: any) => {
@@ -575,7 +578,6 @@ export async function listCasesByOrganization(
         shade: shadeRel?.label ?? null,
         shadeCode: shadeRel?.code ?? null,
         urgency: urgRel?.label ?? null,
-        urgencyLabel: urgRel?.label ?? null,
         viewerInvitation: viewerInv ?? null,
         invitationExpiresAt:
           c.status === 'enEvaluacion' ? quoteDeadlines.get(c.id) ?? null : null,
@@ -583,8 +585,8 @@ export async function listCasesByOrganization(
     });
 
     if (evalCaseIds.length > 0) {
-      const { checkAndExpireInvitationsAction } = await import('./fauchard');
-      await Promise.all(evalCaseIds.map((id) => checkAndExpireInvitationsAction(id)));
+      const { batchExpireInvitationsForCases } = await import('./fauchard');
+      await batchExpireInvitationsForCases(evalCaseIds);
     }
 
     return {
@@ -713,7 +715,6 @@ export async function getCaseDetails(caseId: string) {
       (cCase as any).shade = shadeRel?.label ?? null;
       (cCase as any).shadeCode = shadeRel?.code ?? null;
       (cCase as any).urgency = urgRel?.label ?? null;
-      (cCase as any).urgencyLabel = urgRel?.label ?? null;
     }
 
     // 4. Visibilidad alineada con listCases (misma org no basta para dentista ajeno)
@@ -763,7 +764,7 @@ export async function getCaseDetails(caseId: string) {
 
     let evaluationExpiresAt: Date | null = null;
     if (cCase.status === 'enEvaluacion') {
-      const { getCaseQuoteDeadlineAt } = await import('@/lib/db/caseDeadlines');
+      // getCaseQuoteDeadlineAt imported statically at top of file
       evaluationExpiresAt = await getCaseQuoteDeadlineAt(caseId);
     }
 
@@ -891,7 +892,10 @@ export async function getCaseDetails(caseId: string) {
       canDelete,
     };
   } catch (error: any) {
-    console.error("[getCaseDetails] CRITICAL DATABASE ERROR:", error);
+    console.error("==== [getCaseDetails] CRITICAL ERROR ====");
+    console.error("MESSAGE:", error?.message);
+    console.error("CAUSE:", error?.cause?.message ?? error?.cause);
+    console.error("=========================================");
     return {
       _error: "SystemError",
       _debug: { 

@@ -131,6 +131,149 @@ export async function getConfigForCase(caseId: string): Promise<FauchardConfigRo
   return getActiveConfig();
 }
 
+// ─── Batch expiration — called from case list to avoid N+1 ───────────────────
+
+export async function batchExpireInvitationsForCases(caseIds: string[]): Promise<void> {
+  if (!caseIds.length) return;
+  await db
+    .update(caseInvitation)
+    .set({ status: 'expired' })
+    .where(
+      and(
+        inArray(caseInvitation.clinicalCaseId, caseIds),
+        eq(caseInvitation.status, 'pending'),
+        lt(caseInvitation.expiresAt, new Date())
+      )
+    );
+}
+
+// ─── Bulk data loader for pool scoring (avoids N×5 DB queries in runFauchard) ─
+
+type BulkScoringData = {
+  reviews: { revieweeId: string; rating: number }[];
+  completedInvs: { technicianId: string; completedAt: Date | null; assignedAt: Date | null; quotedDays: number | null; quotedHours: number | null }[];
+  skills: { userId: string; workType: string; designLevel: number; fabricationLevel: number }[];
+  recentInvs: { technicianId: string }[];
+  techUsers: { id: string; lastInvitedAt: Date | null }[];
+};
+
+async function bulkLoadTechnicianData(
+  techIds: string[],
+  config: FauchardConfigRow,
+  workType: string
+): Promise<BulkScoringData> {
+  if (!techIds.length) return { reviews: [], completedInvs: [], skills: [], recentInvs: [], techUsers: [] };
+
+  const now = new Date();
+  const qualityWindow = new Date(now.getTime() - config.wQualityDays * 86400000);
+  const loadWindow = new Date(now.getTime() - config.wLoadDays * 86400000);
+
+  const [reviews, completedInvs, skills, recentInvs, techUsers] = await Promise.all([
+    db.select({ revieweeId: review.revieweeId, rating: review.rating })
+      .from(review)
+      .where(and(inArray(review.revieweeId, techIds), gt(review.createdAt, qualityWindow))),
+
+    db.select({
+      technicianId: caseInvitation.technicianId,
+      completedAt: clinicalCase.completedAt,
+      assignedAt: clinicalCase.assignedAt,
+      quotedDays: caseInvitation.quotedDays,
+      quotedHours: caseInvitation.quotedHours,
+    })
+    .from(caseInvitation)
+    .innerJoin(clinicalCase, eq(caseInvitation.clinicalCaseId, clinicalCase.id))
+    .where(and(
+      inArray(caseInvitation.technicianId, techIds),
+      eq(caseInvitation.status, 'confirmed'),
+      isNotNull(clinicalCase.completedAt),
+      isNotNull(clinicalCase.assignedAt),
+    )),
+
+    db.select({
+      userId: technicianSkill.userId,
+      workType: technicianSkill.workType,
+      designLevel: technicianSkill.designLevel,
+      fabricationLevel: technicianSkill.fabricationLevel,
+    })
+    .from(technicianSkill)
+    .where(and(inArray(technicianSkill.userId, techIds), eq(technicianSkill.workType, workType))),
+
+    db.select({ technicianId: caseInvitation.technicianId })
+      .from(caseInvitation)
+      .where(and(inArray(caseInvitation.technicianId, techIds), gt(caseInvitation.invitedAt, loadWindow))),
+
+    db.select({ id: user.id, lastInvitedAt: user.lastInvitedAt })
+      .from(user)
+      .where(inArray(user.id, techIds)),
+  ]);
+
+  return { reviews, completedInvs, skills, recentInvs, techUsers };
+}
+
+function calculateScoreFromBulkData(
+  technicianId: string,
+  data: BulkScoringData,
+  config: FauchardConfigRow,
+  avgPoolLoad: number,
+  serviceType: string
+): { score: number; components: { Q: number; P: number; E: number; C: number; B: number } } {
+  const α1 = parseFloat(config.alphaQuality);
+  const α2 = parseFloat(config.alphaPunctuality);
+  const α3 = parseFloat(config.alphaExperience);
+  const α4 = parseFloat(config.alphaLoad);
+  const α5 = parseFloat(config.alphaBonus);
+  const cMax = parseFloat(config.cMax);
+  const now = new Date();
+
+  // Q
+  const techRatings = data.reviews.filter(r => r.revieweeId === technicianId).map(r => r.rating);
+  const avgRating = techRatings.length > 0 ? techRatings.reduce((a, b) => a + b, 0) / techRatings.length : null;
+  const Q = avgRating !== null ? avgRating / 5 : 0.5;
+
+  // P
+  const techInvs = data.completedInvs.filter(i => i.technicianId === technicianId);
+  let onTimeCases = 0;
+  for (const inv of techInvs) {
+    if (inv.completedAt && inv.assignedAt && (inv.quotedDays || inv.quotedHours)) {
+      const ms = (inv.quotedDays ?? 0) * 86_400_000 + (inv.quotedHours ?? 0) * 3_600_000;
+      const deadline = new Date(new Date(inv.assignedAt).getTime() + ms);
+      if (new Date(inv.completedAt) <= deadline) onTimeCases++;
+    }
+  }
+  const P = techInvs.length > 0 ? onTimeCases / techInvs.length : 0.80;
+
+  // E
+  const skillRow = data.skills.find(s => s.userId === technicianId);
+  let skillLevel = 0;
+  if (skillRow) {
+    const designLevel = skillRow.designLevel ?? 0;
+    const fabLevel = skillRow.fabricationLevel ?? 0;
+    if (serviceType === SERVICE_TYPES.INTEGRAL) {
+      skillLevel = Math.min(designLevel, fabLevel);
+    } else if (serviceType === SERVICE_TYPES.SOLO_FABRICACION) {
+      skillLevel = fabLevel;
+    } else {
+      skillLevel = designLevel;
+    }
+  }
+  const E = skillLevel / 7;
+
+  // C
+  const invitationCount = data.recentInvs.filter(i => i.technicianId === technicianId).length;
+  const C = Math.min(invitationCount / (avgPoolLoad > 0 ? avgPoolLoad : 1), cMax);
+
+  // B
+  const techUser = data.techUsers.find(u => u.id === technicianId);
+  const lastInvited = techUser?.lastInvitedAt;
+  const daysSince = lastInvited
+    ? (now.getTime() - new Date(lastInvited).getTime()) / 86400000
+    : config.dBonusMaxDays;
+  const B = Math.min(daysSince / config.dBonusMaxDays, 1.0);
+
+  const score = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B;
+  return { score: Math.max(0, score), components: { Q, P, E, C, B } };
+}
+
 // ─── S2-02: Calcular score de un técnico para un caso ────────────────────────
 
 async function calculateTechnicianScore(
@@ -153,7 +296,7 @@ async function calculateTechnicianScore(
 
   // Q — Calidad histórica: promedio de ratings en la ventana de calidad
   const qualityRows = await db
-    .select()
+    .select({ rating: review.rating })
     .from(review)
     .where(
       and(
@@ -223,7 +366,7 @@ async function calculateTechnicianScore(
 
   // C — Índice de carga reciente
   const recentInvs = await db
-    .select()
+    .select({ id: caseInvitation.id })
     .from(caseInvitation)
     .where(and(eq(caseInvitation.technicianId, technicianId), gt(caseInvitation.invitedAt, loadWindow)));
   const invitationCount = recentInvs.length;
@@ -232,7 +375,7 @@ async function calculateTechnicianScore(
 
   // B — Bono de infrautilización
   const [techRow] = await db
-    .select()
+    .select({ lastInvitedAt: user.lastInvitedAt })
     .from(user)
     .where(eq(user.id, technicianId))
     .limit(1);
@@ -497,7 +640,7 @@ export async function runFauchardAction(caseId: string): Promise<{
 
       if (cCase) {
         if (cCase.doctorId) await notifyUser(cCase.doctorId, 'FALLO_SELECCION_DENTISTA', { caseId });
-        const [admin] = await db.select().from(user).where(eq(user.role, 'admin')).limit(1);
+        const [admin] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'admin')).limit(1);
         if (admin) await notifyUser(admin.id, 'SIN_COTIZACIONES_FALLO', { caseId });
       }
 
@@ -515,11 +658,11 @@ export async function runFauchardAction(caseId: string): Promise<{
       avgPoolLoad = Math.max(Number(loadResult?.total ?? 0) / filtered.length, 1);
     }
 
-    // Calcular scores para el pool elegible
+    // Calcular scores para el pool elegible — bulk load (5 queries paralelas en vez de N×5)
+    const bulkData = await bulkLoadTechnicianData(filtered.map(t => t.id), config, workType);
     const scored: { id: string; score: number }[] = [];
     for (const tech of filtered) {
-      console.log(`[DEBUG] calculateTechnicianScore for ${tech.id}`);
-      const { score } = await calculateTechnicianScore(tech.id, workType, serviceType, config, avgPoolLoad);
+      const { score } = calculateScoreFromBulkData(tech.id, bulkData, config, avgPoolLoad, serviceType);
       scored.push({ id: tech.id, score });
     }
 
@@ -1123,7 +1266,7 @@ export async function evaluateQuotesAction(caseId: string) {
       const [cCase] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
       if (cCase) {
         if (cCase.doctorId) await notifyUser(cCase.doctorId, 'FALLO_SELECCION_DENTISTA', { caseId });
-        const [admin] = await db.select().from(user).where(eq(user.role, 'admin')).limit(1);
+        const [admin] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'admin')).limit(1);
         if (admin) await notifyUser(admin.id, 'SIN_COTIZACIONES_FALLO', { caseId });
       }
 
