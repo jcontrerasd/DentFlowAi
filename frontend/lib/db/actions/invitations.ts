@@ -28,11 +28,15 @@ export type InvitationItem = {
   /** Desglose obligatorio en casos integrales; null en solo_diseno / solo_fabricacion. */
   quotedDesignPrice?: number | null;
   quotedDesignDays?: number | null;
+  quotedDesignHours?: number | null;
   quotedFabricationPrice?: number | null;
   quotedFabricationDays?: number | null;
+  quotedFabricationHours?: number | null;
+  quotedHours?: number | null;
   /** Flete (v4.4): aplica a casos con fabricación. Sin fee de plataforma. */
   quotedShippingPrice?: number | null;
   quotedShippingDays?: number | null;
+  quotedShippingHours?: number | null;
   techNotes?: string | null;
   respondedAt?: Date | null;
   dentistRejectionFeedback?: string | null;
