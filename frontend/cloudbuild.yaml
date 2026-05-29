@@ -1,15 +1,7 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: [
-      'build',
-      '--tag', 'gcr.io/$PROJECT_ID/frontend',
-      '--build-arg', 'NEXT_PUBLIC_FIREBASE_API_KEY=${_API_KEY}',
-      '--build-arg', 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${_AUTH_DOMAIN}',
-      '--build-arg', 'NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_PROJECT_ID_FB}',
-      '--build-arg', 'NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${_STORAGE_BUCKET}',
-      '--build-arg', 'NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${_SENDER_ID}',
-      '--build-arg', 'NEXT_PUBLIC_FIREBASE_APP_ID=${_APP_ID}',
-      '.'
-    ]
+    args: ['build', '--tag', 'gcr.io/$PROJECT_ID/frontend:${_TAG}', '.']
+substitutions:
+  _TAG: latest
 images:
-  - 'gcr.io/$PROJECT_ID/frontend'
+  - 'gcr.io/$PROJECT_ID/frontend:${_TAG}'

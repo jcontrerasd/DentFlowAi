@@ -81,6 +81,10 @@ npm run test:smoke   # smoke tests páginas clave
 npm run lint         # eslint
 npm run validate:full # lint + type-check + build
 npx tsx scripts/seed-uat.ts  # seed UAT (.env.local)
+bash deploy.sh develop       # staging en Cloud Run (servicio dentflowai-frontend-dev)
+bash deploy.sh production    # producción en Cloud Run (pide confirmación 'SI')
 ```
 
 Requisitos: Node ≥ 20.19, npm ≥ 10.
+
+Detalle del flujo de desarrollo y deploy: [Doc/Ciclo_Desarrollo.md](../Doc/Ciclo_Desarrollo.md).

@@ -199,15 +199,15 @@ export default function AdminPage() {
         <Link href="/dashboard/admin/fauchard/simulate">
           <motion.div
             whileHover={{ y: -5 }}
-            className="bg-surface/40 border border-divider rounded-[2.5rem] p-8 hover:bg-violet-500/5 hover:border-primary/20 transition-all group h-full relative overflow-hidden"
+            className="bg-surface/40 border border-divider rounded-[2.5rem] p-8 hover:bg-jade-hl hover:border-jade/30 transition-all group h-full relative overflow-hidden"
           >
-            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-violet-500/5 rounded-full blur-3xl group-hover:bg-violet-500/10 transition-all" />
-            <div className="w-12 h-12 bg-violet-500/10 rounded-2xl flex items-center justify-center text-violet-400 mb-6 group-hover:scale-110 transition-transform">
+            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-jade-hl rounded-full blur-3xl group-hover:bg-jade-hl transition-all" />
+            <div className="w-12 h-12 bg-jade-hl rounded-2xl flex items-center justify-center text-jade mb-6 group-hover:scale-110 transition-transform">
               <FlaskConical className="w-6 h-6" />
             </div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xl font-black text-foreground uppercase tracking-tighter">Simulador de Casos</h3>
-              <ChevronRight className="w-5 h-5 text-faint group-hover:text-violet-400 transform group-hover:translate-x-1 transition-all" />
+              <ChevronRight className="w-5 h-5 text-faint group-hover:text-jade transform group-hover:translate-x-1 transition-all" />
             </div>
             <p className="text-faint text-xs leading-relaxed font-medium">
               Prueba el algoritmo con parámetros personalizados sobre el pool real de técnicos sin afectar datos de producción.
@@ -237,10 +237,10 @@ export default function AdminPage() {
         <Link href="/dashboard/admin/contactguard">
           <motion.div
             whileHover={{ y: -5 }}
-            className="bg-surface/40 border border-divider rounded-[2.5rem] p-8 hover:bg-error hover:border-error/20 transition-all group h-full relative overflow-hidden"
+            className="bg-surface/40 border border-divider rounded-[2.5rem] p-8 hover:bg-error-hl hover:border-error/30 transition-all group h-full relative overflow-hidden"
           >
-            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-error rounded-full blur-3xl group-hover:bg-error transition-all" />
-            <div className="w-12 h-12 bg-error rounded-2xl flex items-center justify-center text-error mb-6 group-hover:scale-110 transition-transform">
+            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-error-hl rounded-full blur-3xl group-hover:bg-error-hl transition-all" />
+            <div className="w-12 h-12 bg-error-hl rounded-2xl flex items-center justify-center text-error mb-6 group-hover:scale-110 transition-transform">
               <Shield className="w-6 h-6" />
             </div>
             <div className="flex items-center justify-between mb-2">
@@ -256,15 +256,15 @@ export default function AdminPage() {
         <Link href="/dashboard/admin/fauchard/monitor">
           <motion.div
             whileHover={{ y: -5 }}
-            className="bg-surface/40 border border-divider rounded-[2.5rem] p-8 hover:bg-sky-500/5 hover:border-primary/20 transition-all group h-full relative overflow-hidden"
+            className="bg-surface/40 border border-divider rounded-[2.5rem] p-8 hover:bg-primary/5 hover:border-primary/30 transition-all group h-full relative overflow-hidden"
           >
-            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-sky-500/5 rounded-full blur-3xl group-hover:bg-sky-500/10 transition-all" />
-            <div className="w-12 h-12 bg-sky-500/10 rounded-2xl flex items-center justify-center text-sky-400 mb-6 group-hover:scale-110 transition-transform">
+            <div className="absolute -right-4 -bottom-4 w-32 h-32 bg-primary/5 rounded-full blur-3xl group-hover:bg-primary-hl transition-all" />
+            <div className="w-12 h-12 bg-primary-hl rounded-2xl flex items-center justify-center text-primary mb-6 group-hover:scale-110 transition-transform">
               <Activity className="w-6 h-6" />
             </div>
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xl font-black text-foreground uppercase tracking-tighter">Monitor de Equidad</h3>
-              <ChevronRight className="w-5 h-5 text-faint group-hover:text-sky-400 transform group-hover:translate-x-1 transition-all" />
+              <ChevronRight className="w-5 h-5 text-faint group-hover:text-primary transform group-hover:translate-x-1 transition-all" />
             </div>
             <p className="text-faint text-xs leading-relaxed font-medium">
               Métricas de distribución, alertas de concentración y ranking de técnicos por período.

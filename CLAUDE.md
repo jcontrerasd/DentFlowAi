@@ -90,6 +90,17 @@ cd frontend && npm run validate:full      # lint + type-check + build
 npx tsx frontend/scripts/seed-uat.ts      # seed UAT local (.env.local)
 ```
 
+## Flujo Git y Deploy
+
+- Ramas: **develop** (trabajo diario, staging) → **main** (producción). Nunca commitear directo a `main`.
+- Deploy: `cd frontend && bash deploy.sh [develop|production]`.
+- **Staging**: Cloud Run `dentflowai-frontend-dev` + Cloud SQL `dentflowai-psql-dev` (BD aislada de prod).
+- **Producción**: Cloud Run `dentflowai-frontend` + Cloud SQL `dentflowai-cbcf2-instance`.
+- Variables por entorno (`DATABASE_URL_DEV`/`_PROD`, `AUTH_URL_DEV`/`_PROD`, `NEXT_PUBLIC_APP_URL_DEV`/`_PROD`) viven en `frontend/.env.local` y se inyectan en Cloud Run por `deploy.sh`.
+- Crear BD staging (one-time): `export DB_PASS=$(openssl rand -base64 24) && bash scripts/setup-staging-db.sh`.
+- Refrescar staging con datos de prod (clone completo, incluye usuarios y passwordHash): `bash scripts/clone-prod-to-staging.sh`.
+- Flujo paso a paso completo: [Doc/Ciclo_Desarrollo.md](Doc/Ciclo_Desarrollo.md).
+
 ## Almacenamiento GCS — compresión y lifecycle
 
 - **Gzip transparente en uploads**: los modelos 3D (`.stl/.ply/.obj`) se comprimen en el cliente con `CompressionStream('gzip')` antes del PUT. La URL firmada se genera con `extensionHeaders['content-encoding']='gzip'` (`frontend/lib/gcs.ts` → `getUploadUrl`). GCS persiste `Content-Encoding: gzip` y aplica decompressive transcoding al servir, por lo que el visor 3D no requiere cambios. Helper: `frontend/lib/uploadCompression.ts` (`maybeGzipForUpload`, `isGzipCompressible`). Imágenes/PDF/WebP pasan intactos.

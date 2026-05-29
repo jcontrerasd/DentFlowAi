@@ -116,7 +116,18 @@
       "Bash(git commit -m 'perf\\(db\\): add missing indexes v4.7 *)",
       "Bash(git commit -m 'perf\\(actions\\): static imports, select projections, remove urgencyLabel dup, test-identity guard *)",
       "Bash(git commit -m 'perf\\(fauchard\\): bulk load technician scoring data — N×5 queries → 5 parallel *)",
-      "Bash(git commit -m 'perf\\(misc\\): batch lastActivityAt updates in acceptProposalAction *)"
+      "Bash(git commit -m 'perf\\(misc\\): batch lastActivityAt updates in acceptProposalAction *)",
+      "Bash(git pull *)",
+      "Bash(git commit -m 'fix\\(types\\): add *Hours fields to InvitationItem type *)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(xargs -I {} basename {})",
+      "Bash(bash -n frontend/deploy.sh)",
+      "Bash(bash -n scripts/setup-staging-db.sh)",
+      "Bash(chmod +x /Users/jaimecontreras/Documents/Projects/DentFlowAi/scripts/setup-staging-db.sh /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/deploy.sh)",
+      "Bash(bash -n /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/deploy.sh)",
+      "Bash(lsof -i :3000 -sTCP:LISTEN)",
+      "Bash(chmod +x /Users/jaimecontreras/Documents/Projects/DentFlowAi/scripts/clone-prod-to-staging.sh)",
+      "Bash(bash -n /Users/jaimecontreras/Documents/Projects/DentFlowAi/scripts/clone-prod-to-staging.sh)"
     ],
     "additionalDirectories": [
       "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/invitations",
