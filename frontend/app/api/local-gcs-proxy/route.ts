@@ -40,7 +40,7 @@ export async function PUT(req: NextRequest) {
   const res = await fetch(fakeGcsUrl, {
     method: 'POST',
     headers: { 'Content-Type': contentType },
-    body: finalBuffer,
+    body: new Uint8Array(finalBuffer),
   });
 
   if (!res.ok) {
