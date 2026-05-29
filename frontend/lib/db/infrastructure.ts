@@ -38,6 +38,77 @@ export async function ensureInfrastructure(db: any) {
   console.log("[DB] Verificando infraestructura...");
 
   try {
+    // 0. clinical_case — tabla base de la que dependen todas las FKs
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS clinical_case (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        organization_id UUID NOT NULL REFERENCES organization(id) ON DELETE CASCADE,
+        doctor_id TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        internal_name TEXT NOT NULL DEFAULT '',
+        needs_fabrication BOOLEAN NOT NULL DEFAULT false,
+        notes_esthetic TEXT,
+        notes_oclusal TEXT,
+        patient_id_anon TEXT,
+        status TEXT NOT NULL DEFAULT 'borrador',
+        teeth JSONB,
+        updated_at TIMESTAMPTZ DEFAULT NOW() NOT NULL,
+        material_id UUID,
+        restoration_type_id UUID,
+        shade_id UUID,
+        urgency_id UUID REFERENCES urgency_level(id) ON DELETE RESTRICT,
+        assigned_technician_id TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+        assigned_at TIMESTAMPTZ,
+        started_at TIMESTAMPTZ,
+        published_at TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ,
+        last_activity_at TIMESTAMPTZ DEFAULT NOW(),
+        current_responsibility TEXT DEFAULT 'dentista',
+        doctor_notes TEXT,
+        special_instructions TEXT,
+        lab_notes TEXT,
+        pending_action_request TEXT,
+        pending_action_actor TEXT,
+        case_number TEXT,
+        commercial_version INTEGER NOT NULL DEFAULT 1,
+        change_summary TEXT,
+        is_archived BOOLEAN NOT NULL DEFAULT false,
+        can_be_deleted BOOLEAN NOT NULL DEFAULT true,
+        dispatch_info JSONB DEFAULT '{"courier":"","trackingId":"","status":"pending","photos":[]}',
+        proposed_price DOUBLE PRECISION,
+        proposed_delivery_days INTEGER,
+        proposed_shipping_price DOUBLE PRECISION,
+        proposed_shipping_days INTEGER,
+        proposed_design_price DOUBLE PRECISION,
+        proposed_design_days INTEGER,
+        proposed_fabrication_price DOUBLE PRECISION,
+        proposed_fabrication_days INTEGER,
+        proposed_delivery_hours INTEGER,
+        proposed_design_hours INTEGER,
+        proposed_fabrication_hours INTEGER,
+        proposed_shipping_hours INTEGER,
+        proposal_expires_at TIMESTAMPTZ,
+        platform_fee NUMERIC(5,4),
+        internal_status TEXT,
+        case_complexity TEXT,
+        service_type TEXT,
+        case_league TEXT NOT NULL DEFAULT 'bronce',
+        dentist_rejection_reason TEXT,
+        work_started_at TIMESTAMPTZ,
+        work_deadline TIMESTAMPTZ,
+        fauchard_config_id UUID REFERENCES fauchard_config(id) ON DELETE SET NULL,
+        copied_from_case_id UUID
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS clinical_case_case_number_uidx ON clinical_case(case_number);
+      CREATE INDEX IF NOT EXISTS clinical_case_assignedTechnicianId_idx ON clinical_case(assigned_technician_id);
+      CREATE INDEX IF NOT EXISTS clinical_case_organizationId_idx ON clinical_case(organization_id);
+      CREATE INDEX IF NOT EXISTS clinical_case_fauchardConfigId_idx ON clinical_case(fauchard_config_id);
+    `);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando clinical_case:", e);
+  }
+
+  try {
     // 1. Tablas base
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS "file" (

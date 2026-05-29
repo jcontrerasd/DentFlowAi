@@ -2,10 +2,15 @@
 
 import { Storage } from '@google-cloud/storage';
 
-const storage = new Storage({
+const storageOptions: ConstructorParameters<typeof Storage>[0] = {
   projectId: process.env.GCP_PROJECT_ID,
-  keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-});
+};
+if (process.env.GCS_API_ENDPOINT) {
+  storageOptions.apiEndpoint = process.env.GCS_API_ENDPOINT;
+} else {
+  storageOptions.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+}
+const storage = new Storage(storageOptions);
 
 const bucketName = process.env.GCP_BUCKET_NAME || 'dentflowai-assets-prod';
 
@@ -14,11 +19,17 @@ const bucketName = process.env.GCP_BUCKET_NAME || 'dentflowai-assets-prod';
 const _urlCache = new Map<string, { url: string; expiresAt: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
 
+const LOCAL_GCS = !!process.env.GCS_API_ENDPOINT;
+
 /**
  * Genera (o recupera del caché en proceso) una URL firmada de lectura para un archivo en GCS.
  */
 export async function getSignedUrl(fileName: string) {
   try {
+    if (LOCAL_GCS) {
+      return `${process.env.GCS_API_ENDPOINT}/download/storage/v1/b/${bucketName}/o/${encodeURIComponent(fileName)}?alt=media`;
+    }
+
     const cached = _urlCache.get(fileName);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.url;
@@ -52,6 +63,11 @@ export async function getUploadUrl(
   options?: { contentEncoding?: 'gzip' }
 ) {
   try {
+    if (LOCAL_GCS) {
+      const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+      return `${base}/api/local-gcs-proxy?name=${encodeURIComponent(fileName)}`;
+    }
+
     const signOptions = {
       version: 'v4' as const,
       action: 'write' as const,

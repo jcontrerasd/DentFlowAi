@@ -892,7 +892,10 @@ export async function getCaseDetails(caseId: string) {
       canDelete,
     };
   } catch (error: any) {
-    console.error("[getCaseDetails] CRITICAL DATABASE ERROR:", error);
+    console.error("==== [getCaseDetails] CRITICAL ERROR ====");
+    console.error("MESSAGE:", error?.message);
+    console.error("CAUSE:", error?.cause?.message ?? error?.cause);
+    console.error("=========================================");
     return {
       _error: "SystemError",
       _debug: { 

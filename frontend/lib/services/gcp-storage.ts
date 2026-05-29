@@ -10,13 +10,18 @@ class GCPStorageService {
   private static getStorage() {
     if (!this._storage) {
       console.log("[GCPStorage] Inicializando con Project:", process.env.GCP_PROJECT_ID);
-      if (!process.env.GCP_PROJECT_ID || !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        console.error("[GCPStorage] ERROR: Faltan variables de entorno esenciales.");
+      if (!process.env.GCP_PROJECT_ID) {
+        console.error("[GCPStorage] ERROR: GCP_PROJECT_ID no definido.");
       }
-      this._storage = new Storage({
+      const storageOptions: ConstructorParameters<typeof Storage>[0] = {
         projectId: process.env.GCP_PROJECT_ID,
-        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS,
-      });
+      };
+      if (process.env.GCS_API_ENDPOINT) {
+        storageOptions.apiEndpoint = process.env.GCS_API_ENDPOINT;
+      } else {
+        storageOptions.keyFilename = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+      }
+      this._storage = new Storage(storageOptions);
     }
     return this._storage;
   }

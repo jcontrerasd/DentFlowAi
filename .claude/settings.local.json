@@ -108,7 +108,15 @@
       "Bash(npm --prefix frontend run lint)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k,v\\) for k,v in {**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}.items\\(\\)]\")",
+      "Bash(git checkout *)",
+      "Bash(tee /tmp/test_before_phase1.txt)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(git commit -m 'perf\\(db\\): add missing indexes v4.7 *)",
+      "Bash(git commit -m 'perf\\(actions\\): static imports, select projections, remove urgencyLabel dup, test-identity guard *)",
+      "Bash(git commit -m 'perf\\(fauchard\\): bulk load technician scoring data — N×5 queries → 5 parallel *)",
+      "Bash(git commit -m 'perf\\(misc\\): batch lastActivityAt updates in acceptProposalAction *)"
     ],
     "additionalDirectories": [
       "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/invitations",

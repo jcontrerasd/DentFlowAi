@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: dentflow_admin
+      POSTGRES_PASSWORD: dentflow_secure_pass_2026
+      POSTGRES_DB: dentflowai_local
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  storage:
+    image: fsouza/fake-gcs-server:1.54.0
+    ports:
+      - "4443:4443"
+    command: -data /data -scheme http -public-host localhost:4443
+    volumes:
+      - gcs_data:/data
+
+volumes:
+  postgres_data:
+  gcs_data:
