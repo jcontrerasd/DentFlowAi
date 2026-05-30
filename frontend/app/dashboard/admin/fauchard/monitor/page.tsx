@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { getFauchardMetricsAction } from '@/lib/db/actions/fauchard';
 import FauchardNav from '@/components/admin/fauchard/FauchardNav';
 import ConcentrationAlert from '@/components/admin/fauchard/ConcentrationAlert';

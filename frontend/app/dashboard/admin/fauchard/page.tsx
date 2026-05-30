@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { getFauchardConfigAction } from '@/lib/db/actions/fauchard';
 import FauchardNav from '@/components/admin/fauchard/FauchardNav';
 import { Settings2, Sliders, Trophy, History, ShieldCheck, AlertTriangle } from 'lucide-react';
