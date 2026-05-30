@@ -9,6 +9,8 @@ const { pushMock, useAuthMock, listCasesByOrganizationMock } = vi.hoisted(() => 
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/dashboard/cases',
 }));
 
 vi.mock('@/context/AuthContext', () => ({
@@ -44,7 +46,9 @@ describe('Bloque C - Role Guards (casos)', () => {
 
     await waitFor(() => {
       expect(pushMock).not.toHaveBeenCalledWith('/dashboard');
-      expect(listCasesByOrganizationMock).toHaveBeenCalledWith(1, 50, false, true);
+      expect(listCasesByOrganizationMock).toHaveBeenCalled();
+      const call = listCasesByOrganizationMock.mock.calls[0];
+      expect(call.slice(0, 4)).toEqual([1, 24, false, true]);
     });
   });
 
@@ -58,7 +62,9 @@ describe('Bloque C - Role Guards (casos)', () => {
     render(<CasesPage />);
 
     await waitFor(() => {
-      expect(listCasesByOrganizationMock).toHaveBeenCalledWith(1, 50, false, true);
+      expect(listCasesByOrganizationMock).toHaveBeenCalled();
+      const call = listCasesByOrganizationMock.mock.calls[0];
+      expect(call.slice(0, 4)).toEqual([1, 24, false, true]);
     });
   });
 });

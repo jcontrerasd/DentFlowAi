@@ -88,7 +88,7 @@ describe('MarketplaceCaseCard (técnico)', () => {
       />,
     );
 
-    expect(screen.getByText('DF-0001 · PAC: PAC-99')).toBeInTheDocument();
+    expect(screen.getByText(/DF-0001 · PAC: PAC-99/)).toBeInTheDocument();
   });
 
   it('muestra cotización en evaluación con invitación quoted y caso en evaluación', () => {

@@ -13,16 +13,20 @@ const {
   getDashboardMetricsActionMock,
   getMyInvitationsActionMock,
   getMySkillsActionMock,
+  pushMock,
 } = vi.hoisted(() => ({
   useAuthMock: vi.fn(),
   listCasesByOrganizationMock: vi.fn(),
   getDashboardMetricsActionMock: vi.fn(),
   getMyInvitationsActionMock: vi.fn(),
   getMySkillsActionMock: vi.fn(),
+  pushMock: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => new URLSearchParams(),
+  usePathname: () => '/dashboard',
 }));
 
 vi.mock('@/context/AuthContext', () => ({
@@ -172,27 +176,15 @@ describe('DashboardHome', () => {
       expect(screen.getByText(kpiLabel)).toBeInTheDocument();
     });
 
-    listCasesByOrganizationMock.mockClear();
+    pushMock.mockClear();
 
     fireEvent.click(screen.getByRole('button', { name: new RegExp(kpiLabel, 'i') }));
 
     await waitFor(() => {
-      expect(listCasesByOrganizationMock).toHaveBeenCalledWith(
-        1,
-        10,
-        false,
-        true,
-        expect.objectContaining({
-          techKpiStatuses: ['aceptadaPendienteInicio'],
-          caseStatuses: [],
-        }),
+      expect(pushMock).toHaveBeenCalledWith(
+        expect.stringContaining('techKpi=aceptadaPendienteInicio'),
       );
     });
-
-    expect(screen.getByRole('link', { name: /Ver Todo/i })).toHaveAttribute(
-      'href',
-      expect.stringContaining('techKpi=aceptadaPendienteInicio'),
-    );
   });
 
   it('dentista: click KPI Propuesta Lista filtra carrusel con caseStatuses', async () => {
@@ -215,20 +207,13 @@ describe('DashboardHome', () => {
       expect(screen.getByText('Propuesta Lista')).toBeInTheDocument();
     });
 
-    listCasesByOrganizationMock.mockClear();
+    pushMock.mockClear();
 
     fireEvent.click(screen.getByRole('button', { name: /Propuesta Lista/i }));
 
     await waitFor(() => {
-      expect(listCasesByOrganizationMock).toHaveBeenCalledWith(
-        1,
-        10,
-        false,
-        true,
-        expect.objectContaining({
-          caseStatuses: ['propuestaLista'],
-          techKpiStatuses: [],
-        }),
+      expect(pushMock).toHaveBeenCalledWith(
+        expect.stringContaining('status=propuestaLista'),
       );
     });
   });

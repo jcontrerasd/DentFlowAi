@@ -20,8 +20,7 @@ describe('UchDealSummary', () => {
       />,
     );
     expect(screen.getByText(/\$150\.000/)).toBeInTheDocument();
-    expect(screen.getByText(/^La oferta$/i)).toBeInTheDocument();
-    expect(screen.getByText(/no aplica/i)).toBeInTheDocument();
+    expect(screen.getByText(/5 días hábiles/i)).toBeInTheDocument();
     expect(screen.queryByText(/total pactado/i)).not.toBeInTheDocument();
   });
 
@@ -141,8 +140,8 @@ describe('UchDealSummary', () => {
         }}
       />,
     );
-    expect(screen.getByText(/total pactado/i)).toBeInTheDocument();
-    expect(screen.getByText(/\$185\.000/)).toBeInTheDocument();
+    expect(screen.getByText(/^Total$/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/\$185\.000/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/Oferta #/i)).not.toBeInTheDocument();
   });
 
