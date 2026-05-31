@@ -127,12 +127,26 @@
       "Bash(bash -n /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/deploy.sh)",
       "Bash(lsof -i :3000 -sTCP:LISTEN)",
       "Bash(chmod +x /Users/jaimecontreras/Documents/Projects/DentFlowAi/scripts/clone-prod-to-staging.sh)",
-      "Bash(bash -n /Users/jaimecontreras/Documents/Projects/DentFlowAi/scripts/clone-prod-to-staging.sh)"
+      "Bash(bash -n /Users/jaimecontreras/Documents/Projects/DentFlowAi/scripts/clone-prod-to-staging.sh)",
+      "Bash(cd /Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend && rm -rf .next node_modules/.cache)",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs kill -9)",
+      "Bash(gcloud run *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); envs=d['spec']['template']['spec']['containers'][0].get\\('env',[]\\); [print\\(e['name'],'=',e.get\\('value',''\\)[:80]\\) for e in envs]\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://dentflowai.com/)",
+      "Bash(curl -sk -o /dev/null -w \"%{http_code}\\\\n\" https://dentflowai.com/)",
+      "Bash(gcloud sql *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); envs=d['spec']['template']['spec']['containers'][0].get\\('env',[]\\); [print\\(e['name'],'=',e.get\\('value',''\\)[:90]\\) for e in envs if 'DATABASE' in e['name']]\")",
+      "Bash(gcloud iam *)",
+      "Bash(gcloud scheduler *)",
+      "Bash(bash deploy.sh develop)",
+      "Bash(git merge *)"
     ],
     "additionalDirectories": [
       "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/invitations",
       "/private/tmp",
-      "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app"
+      "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app",
+      "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/.next"
     ]
   }
 }
