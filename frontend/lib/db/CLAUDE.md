@@ -16,6 +16,7 @@ Campos clave:
 - `serviceType`: `solo_diseno` | `solo_fabricacion` | `integral` — fuente de verdad del tipo de servicio
 - `needsFabrication`: boolean (`true` para `integral` y `solo_fabricacion`; mantenido por retrocompatibilidad con casos legacy)
 - `proposedPrice`, `proposedDeliveryDays`: oferta aceptada (totales canónicos del único técnico ganador)
+- `proposedDeliveryHours`, `proposedDesignHours`, `proposedFabricationHours`, `proposedShippingHours`: granularidad horaria opcional (v4.6) — usada por `buildProposalAction` + `startWorkAction` para computar `workDeadline` con `addBusinessTime()` respetando jornada y feriados. Si están null, el cálculo cae al equivalente en días
 - `proposalExpiresAt`: deadline del comparativo (fijado por `buildProposalAction`). **No resetear si `status !== enEvaluacion`** (idempotencia).
 - `assignedTechnicianId`: técnico ganador (uno solo por caso; no hay aprobación parcial)
 - `workDeadline`: fecha de entrega comprometida (se muestra en el stepper)
@@ -37,9 +38,10 @@ El motor Fauchard usa estos niveles para filtrar y puntuar invitados.
 ### `fauchardConfig`
 Parámetros del algoritmo. **Como máximo una fila `is_active`** (índice único parcial). El admin actualiza con copy-on-write: nueva fila + desactivar la anterior. Cada `clinicalCase` puede anclar `fauchardConfigId` al publicar.
 
-Campos de **calendario laboral** (v4.6, alimentan `businessTime.ts`):
-- `businessHoursStart` (default 8), `businessHoursEnd` (default 20) — jornada `[start, end)`.
-- `businessDaysMask` (default 31 = L-V) — bitmask: bit 0=Lun … bit 6=Dom.
+Campos de **calendario laboral** (v4.6, alimentan `lib/businessTime.ts`):
+- `businessHoursStart` (default 8), `businessHoursEnd` (default 20) — jornada `[start, end)` abierta a la derecha (8–20 = 12h diarias).
+- `businessDaysMask` (default 31 = `0b0011111` = L-V) — bitmask: bit 0=Lun, 1=Mar, 2=Mié, 3=Jue, 4=Vie, 5=Sáb, 6=Dom. Ej: 63 (`0b0111111`) habilita sábado.
+- Consumidos junto con la tabla `fauchard_holiday` por `addBusinessTime(from, days, hours, cfg, holidays)` para calcular `workDeadline` en `startWorkAction` y `buildProposalAction`. Reloj de feriado/horario aplica también a expiración de invitaciones y propuestas.
 
 ### `fauchardHoliday` (v4.6)
 Lista global de feriados (no por config). Columnas: `holiday_date` (UNIQUE), `label`, `created_by`. Admin CRUD en `/dashboard/admin/fauchard` → panel Calendario. Actions en `lib/db/actions/fauchardHolidays.ts`.
@@ -97,12 +99,14 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 | `files.ts` | Upload/download vía GCS signed URLs |
 | `archiveCaseFiles.ts` | `archiveCaseFilesBestEffort(caseId)` — marca `customTime` en archivos GCS al cerrar el caso (alimenta la lifecycle policy del bucket). Opera sobre el bucket configurado en runtime (`GCP_BUCKET_NAME`): staging y prod tienen buckets distintos (`-dev` / `-prod`), así que la transición en uno no afecta al otro |
 | `impersonation.ts` | `getServerIdentity()` — resolver canónico de identidad |
-| `hubRead.ts` | Cursores de lectura del UCH + contadores no leídos |
+| `hubRead.ts` | Cursores de lectura del UCH (`markCaseAsReadAction`) + contadores no leídos. Actualiza `clinical_case_hub_read` (`lastReadTechHubAt` / `lastReadNegHubAt`); consumido por `lib/uchUnread.ts` |
 | `dashboard.ts` | Métricas y agregados del dashboard |
 | `admin.ts` | Operaciones admin (usuarios, orgs) |
 | `user.ts` / `organization.ts` | Perfil, onboarding, organizaciones |
 | `annotations.ts` | Anotaciones 3D en visor |
 | `catalogs.ts` | Listas administrables del wizard (vita_shade, restoration_type, dental_material, urgency_level): list públicas + CRUD admin |
+| `fauchardHolidays.ts` | CRUD de feriados globales (tabla `fauchard_holiday`, v4.6). Admin UI en `/dashboard/admin/fauchard` → FauchardCalendarPanel |
+| `contactGuard.ts` | CRUD de reglas (regex/keyword) para moderar campos libres. Admin UI en `/dashboard/admin/contactguard`. Las reglas las consume `lib/contactGuard/guardOrFail.ts` en server actions de cotización, despacho y notas |
 
 ## getCaseEventsAction — pipeline de entrega al cliente
 1. Filtra eventos por visibilidad de rol (via `filterCaseEventsForUchViewer`).

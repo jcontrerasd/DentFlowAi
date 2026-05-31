@@ -294,7 +294,41 @@ Es instantáneo: Cloud Run mantiene las revisiones anteriores listas para servir
 
 ---
 
-## 12. Mantenimiento periódico
+## 12. Cron — expiración de invitaciones y evaluación de cotizaciones
+
+El endpoint `GET /api/cron/evaluate-quotes` (ver [frontend/app/api/cron/evaluate-quotes/route.ts](../frontend/app/api/cron/evaluate-quotes/route.ts)) debe invocarse cada 5 min para:
+- Marcar como `expired` invitaciones cuyo `expires_at` ya pasó (Countdown 1 de Fauchard).
+- Disparar `checkAndExpireInvitationsAction`, que reevalúa cotizaciones del caso y construye la propuesta si corresponde.
+
+Protección: header `Authorization: Bearer ${CRON_SECRET}`. Si la env var no está seteada, el endpoint queda abierto (NO recomendado en prod).
+
+### Configurar Cloud Scheduler (una vez por entorno)
+
+```bash
+# Producción
+gcloud scheduler jobs create http evaluate-quotes-prod \
+  --location=southamerica-west1 \
+  --schedule="*/5 * * * *" \
+  --uri="https://dentflowai.com/api/cron/evaluate-quotes" \
+  --http-method=GET \
+  --headers="Authorization=Bearer ${CRON_SECRET_PROD}" \
+  --project=dentflowai-cbcf2
+
+# Staging (opcional — útil para QA de Fauchard end-to-end)
+gcloud scheduler jobs create http evaluate-quotes-dev \
+  --location=southamerica-west1 \
+  --schedule="*/5 * * * *" \
+  --uri="https://dentflowai-frontend-dev-1063035185653.southamerica-west1.run.app/api/cron/evaluate-quotes" \
+  --http-method=GET \
+  --headers="Authorization=Bearer ${CRON_SECRET_DEV}" \
+  --project=dentflowai-cbcf2
+```
+
+`CRON_SECRET` se define en `.env.local` (una por entorno; `deploy.sh` lo inyecta como `CRON_SECRET` en Cloud Run). Para rotar: generar nuevo valor (`openssl rand -hex 32`), actualizar `.env.local`, redeploy, actualizar header del job: `gcloud scheduler jobs update http evaluate-quotes-prod --update-headers="Authorization=Bearer <nuevo>"`.
+
+---
+
+## 13. Mantenimiento periódico
 
 - **Mensual**: revisar costos en GCP Console → Billing. La instancia de staging cuesta ~$10/mes.
 - **Pausar staging si no se usa**: `bash scripts/GCPControl.sh` (toca activation policy).
