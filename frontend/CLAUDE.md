@@ -81,6 +81,35 @@ Reglas:
 - Seed: `npx tsx scripts/seed-uat.ts`.
 - **Bucket por contexto**: `npm run dev` usa `GCP_BUCKET_NAME` (default `dentflowai-local` con fake-gcs). En Cloud Run, `deploy.sh` inyecta `GCP_BUCKET_NAME_DEV` (`dentflowai-assets-dev`) o `_PROD` (`dentflowai-assets-prod`) según el entorno. Staging y producción están aislados a nivel de bucket.
 
+## Scripts auxiliares (`frontend/scripts/`)
+
+Ejecutar con `npx tsx scripts/<archivo>.ts` desde `frontend/` (lee `.env.local`).
+
+| Script | Propósito |
+|---|---|
+| `seed-uat.ts` | Crea usuarios y casos de prueba para UAT local |
+| `migrate-catalogs-fk.ts` | One-time v3.7→v3.8: catálogos texto → FK uuid. **Ya aplicado** |
+| `migrate-catalogs-opaque-codes.ts` | One-time v3.8→v3.9: codes slug → opacos (`mat_001`, …). **Ya aplicado** |
+| `migrate-recovery-v39.ts` | One-time v3.9→v4.0: dedup catálogos + backfill FK + drop columnas text. **Ya aplicado** |
+| `migrate-tokens.ts` | One-time: migración de tokens auth |
+| `reseed-contact-guard-regex.ts` | Re-poblar reglas regex de ContactGuard (idempotente) |
+| `diag-contact-guard.ts` | Diagnóstico — verifica reglas activas + testea inputs |
+
+Scripts marcados "ya aplicado" se conservan como referencia histórica; no volver a ejecutar.
+
+## Feature flags de autenticación (planificadas, no activas)
+
+`.env.example` lista flags para una migración planeada del módulo auth:
+`AUTH_DB_SESSIONS_ENABLED`, `GOOGLE_OAUTH_ENABLED`, `EMAIL_VERIFICATION_ENABLED`,
+`SINGLE_SESSION_ENABLED`, `TAB_CLOSE_LOGOUT_ENABLED`. **Ninguna está cableada al código todavía** (grep no encuentra referencias). El stack actual usa NextAuth 5 con JWT puro, sin sesiones DB ni Google OAuth. Cuando se implemente alguna fase, agregar aquí su comportamiento.
+
+## Tests
+
+- Vitest + Testing Library. Archivos en `frontend/test/`.
+- Helper canónico: `frontend/test/helpers/test-identity.ts` — stub de `getServerIdentity()` para tests de server actions (evita instanciar Auth real). Tests fuera del modo test deben fallar si llaman este helper en producción (guard incluido).
+- Mocks de DB: usar `vi.mock('@/lib/db')` con factory que devuelve queries deterministas. No tocar la DB real en unit tests.
+- Smoke tests (`npm run test:smoke`): cubren páginas críticas (auth, onboarding, ficha de caso, dashboard).
+
 ## Comandos
 ```bash
 npm run dev          # desarrollo (Turbopack, puerto 3000)

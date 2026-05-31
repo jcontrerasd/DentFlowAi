@@ -18,9 +18,10 @@
 - `dashboard/admin/fauchard/` — Config Fauchard, simulación (`simulate/`), monitor (`monitor/`)
 
 ## API routes
-- `api/auth/[...nextauth]/` — NextAuth 5
-- `api/cron/evaluate-quotes/` — Cron externo (expira invitaciones / evalúa cotizaciones); no invocar desde UI
-- `api/telemetry/` — Telemetría cliente
+- `api/auth/[...nextauth]/` — NextAuth 5.
+- `api/cron/evaluate-quotes/` — `GET`. Expira invitaciones vencidas y dispara `checkAndExpireInvitationsAction` (que reevalúa cotizaciones del caso). Protegido por header `Authorization: Bearer ${CRON_SECRET}` cuando `CRON_SECRET` está seteada. Pensado para Cloud Scheduler cada 5 min. NO invocar desde UI.
+- `api/telemetry/` — `POST`. Endpoint interno de logs cliente (errores / warns / info). Aplica: validación de Origin/Referer + `Sec-Fetch-Site` contra `TELEMETRY_ALLOWED_ORIGINS`, rate limit por IP (`TELEMETRY_RATE_LIMIT_PER_MINUTE`), schema strict (`TelemetryPayload`), límite de tamaño (`MAX_BODY_CHARS=16000`), redacción server-side de emails / bearer tokens / claves. Firma HMAC opcional para integraciones S2S (`TELEMETRY_INGEST_TOKEN` + `X-Telemetry-Timestamp` + `X-Telemetry-Signature`). Cliente publica vía `NEXT_PUBLIC_LOG_ENDPOINT` (default `/api/telemetry`).
+- `api/local-gcs-proxy/` — `PUT` y `GET`. Solo activo cuando `GCS_API_ENDPOINT` está definido (entorno local con fake-gcs). Intermedia uploads (descomprime gzip antes de persistir porque fake-gcs no hace decompressive transcoding) y firma URLs de descarga apuntando al proxy. En staging/prod no se monta (las URLs firmadas van directo a GCS).
 
 ## Página del caso (`dashboard/cases/[id]/page.tsx`)
 Esta es la página más compleja del sistema. Puntos clave:
