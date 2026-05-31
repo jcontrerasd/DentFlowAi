@@ -67,8 +67,18 @@ Reglas:
   - `solo_diseno` / `integral` → tres slots de scans (`scan_superior`, `scan_inferior`, `scan_bite`).
   - `solo_fabricacion` → **un único slot** con el archivo de diseño (STL/PLY/OBJ), persistido con `category: 'design_upload'` y `subType: 'dentist_design'`.
 - `app/dashboard/cases/new/page.tsx` envía `serviceType` al `createClinicalCaseAction` y mantiene `needsFabrication` por compatibilidad.
-- Las listas de **material**, **color VITA**, **tipo de restauración** y **urgencia** se cargan vía server actions (`listVitaShadesAction`, etc.) en `lib/db/actions/catalogs.ts`. El form **guarda y envía codes** (slugs como `'zirconio_multicapa_premium'`, `'corona_unitaria'`), no labels. Las server actions resuelven code→id via `resolveCatalogCodesToIds` antes de persistir.
+- Las listas de **material**, **color VITA**, **tipo de restauración** y **urgencia** se cargan vía server actions (`listVitaShadesAction`, etc.) en `lib/db/actions/catalogs.ts`. El form envía `code` opaco para material/restoration/shade y **`label`** para urgency (la lógica de negocio se compara contra labels estándar como `'Alta'`). `resolveCatalogCodesToIds` resuelve a id antes de persistir.
 - **No hay texto libre "Otro"**: si falta una opción, admin la agrega en `/dashboard/admin/catalogos`.
+
+## Tema (claro/oscuro/sistema)
+- Provider en `components/theme/ThemeProvider.tsx` + contexto en `ThemeContext.ts`. Toggle: `ThemeToggleButton.tsx`.
+- Tokens CSS en `app/theme.css`; Tailwind 4 los consume. No instalar `next-themes` — la implementación es propia.
+
+## Entorno local (Docker + fake-gcs)
+- `docker compose up -d` en la raíz levanta Postgres 16 y `fsouza/fake-gcs-server` ([docker-compose.yml](../docker-compose.yml)).
+- `.env.local` apunta `DATABASE_URL` a `localhost:5432` y `GCS_API_ENDPOINT` a `http://localhost:4443`.
+- Cuando `GCS_API_ENDPOINT` está definido, `lib/gcs.ts` firma URLs hacia `/api/local-gcs-proxy` (descomprime gzip antes de servir, ya que fake-gcs no hace decompressive transcoding).
+- Seed: `npx tsx scripts/seed-uat.ts`.
 
 ## Comandos
 ```bash

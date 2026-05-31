@@ -77,6 +77,32 @@ BORRADOR → EN EVALUACIÓN → PROPUESTA LISTA → ESPERANDO INICIO
 - `integral` → desglose obligatorio diseño + fabricación (`kind: 'split'`). Total = suma de ambos.
 - `submitQuoteAction` valida coherencia `serviceType` ⇄ `kind`; persiste totales en `quotedPrice`/`quotedDays` y el desglose en `quotedDesignPrice/Days` + `quotedFabricationPrice/Days`.
 
+## Entorno local (Docker)
+
+Entorno aislado para desarrollo sin tocar staging/prod ([docker-compose.yml](docker-compose.yml)):
+- `db` — PostgreSQL 16 (puerto 5432, BD `dentflowai_local`).
+- `storage` — `fsouza/fake-gcs-server` (puerto 4443) emula GCS. El proxy [frontend/app/api/local-gcs-proxy/route.ts](frontend/app/api/local-gcs-proxy/route.ts) intermedia descargas (descomprime gzip — fake-gcs no hace decompressive transcoding).
+- `frontend/lib/gcs.ts` detecta `GCS_API_ENDPOINT` y firma URLs hacia el proxy local.
+- Levantar: `docker compose up -d` + `.env.local` apuntando a `localhost`.
+
+## Sistema de tema (claro/oscuro/sistema)
+
+- Provider: [frontend/components/theme/ThemeProvider.tsx](frontend/components/theme/ThemeProvider.tsx) + [ThemeContext.ts](frontend/components/theme/ThemeContext.ts).
+- Toggle: [ThemeToggleButton.tsx](frontend/components/theme/ThemeToggleButton.tsx).
+- Tokens y variables CSS en [frontend/app/theme.css](frontend/app/theme.css); Tailwind 4 los consume.
+
+## ContactGuard
+
+Moderación de campos libres (notas, trackingId) — bloquea intentos de saltarse el marketplace (URLs, teléfonos, dominios). Reglas administrables en `/dashboard/admin/contactguard`. Código: [frontend/lib/contactGuard/](frontend/lib/contactGuard/) (`guardOrFail`, `normalize`, `cache`). Allowlist de dominios de courier disponible para `trackingId`.
+
+## Calendario laboral (v4.6) — businessTime + feriados
+
+`workDeadline` y los deadlines Fauchard respetan horario y feriados configurables:
+- Config en `fauchard_config`: `businessHoursStart` (default 8), `businessHoursEnd` (default 20), `businessDaysMask` (bitmask, default 31 = L-V).
+- Feriados globales en tabla `fauchard_holiday` (admin CRUD).
+- Helpers: [frontend/lib/businessTime.ts](frontend/lib/businessTime.ts) (`addBusinessTime`, `isBusinessDay`, `ymd`). Usado por `startWorkAction` para computar `workDeadline` desde días/horas cotizados.
+- Admin UI: [frontend/components/admin/fauchard/FauchardCalendarPanel.tsx](frontend/components/admin/fauchard/FauchardCalendarPanel.tsx); actions en [frontend/lib/db/actions/fauchardHolidays.ts](frontend/lib/db/actions/fauchardHolidays.ts).
+
 ## Comandos
 ```bash
 cd frontend && npm run dev              # desarrollo (Turbopack, puerto 3000)
@@ -114,7 +140,7 @@ Diseño de lookup tables uniforme:
   - `id` (uuid PK) — referenciado por FK desde `clinical_case`.
   - `code` (text UNIQUE) — **opaco, system-generated** (`mat_001`, `vita_001`, `rest_001`, `urg_001`). Identificador estable sin relación semántica con el label.
   - `label` (text) — **único campo editable** por admin.
-  - `sort_order`, `is_active`. DDL + seed en [frontend/lib/db/infrastructure.ts](frontend/lib/db/infrastructure.ts) (`INFRA_VERSION='v4.0'`).
+  - `sort_order`, `is_active`. DDL + seed en [frontend/lib/db/infrastructure.ts](frontend/lib/db/infrastructure.ts) (`INFRA_VERSION='v4.7'` — incluye índices de performance y tabla `fauchard_holiday`).
 - **FKs en clinical_case**: `material_id`, `restoration_type_id`, `shade_id`, `urgency_id` (todos con `ON DELETE RESTRICT`).
 - **Reglas de uso desde código**:
   - Form envía `code` opaco para material/restoration/shade y `label` para urgency. El resolver ([catalogResolver.ts](frontend/lib/db/catalogResolver.ts)) lo convierte a `*_id` antes de persistir.
