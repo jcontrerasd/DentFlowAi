@@ -51,31 +51,27 @@ read_env() {
 if [[ "$ENV_TARGET" == "develop" ]]; then
   SERVICE_NAME="dentflowai-frontend-dev"
   IMAGE_TAG="develop"
+  SUFFIX="DEV"
   DATABASE_URL=$(read_env DATABASE_URL_DEV)
   AUTH_URL=$(read_env AUTH_URL_DEV)
   NEXT_PUBLIC_APP_URL=$(read_env NEXT_PUBLIC_APP_URL_DEV)
+  GCP_BUCKET_NAME=$(read_env GCP_BUCKET_NAME_DEV)
 else
   SERVICE_NAME="dentflowai-frontend"
   IMAGE_TAG="latest"
+  SUFFIX="PROD"
   DATABASE_URL=$(read_env DATABASE_URL_PROD)
   AUTH_URL=$(read_env AUTH_URL_PROD)
   NEXT_PUBLIC_APP_URL=$(read_env NEXT_PUBLIC_APP_URL_PROD)
+  GCP_BUCKET_NAME=$(read_env GCP_BUCKET_NAME_PROD)
 fi
 
 # Variables comunes
 AUTH_SECRET=$(read_env AUTH_SECRET)
 GCP_PROJECT_ID=$(read_env GCP_PROJECT_ID)
-GCP_BUCKET_NAME=$(read_env GCP_BUCKET_NAME)
 RESEND_API_KEY=$(read_env RESEND_API_KEY)
 NOTIFICATION_FROM_EMAIL=$(read_env NOTIFICATION_FROM_EMAIL)
 CRON_SECRET=$(read_env CRON_SECRET)
-
-# Sufijo para mensajes de error (DEV o PROD)
-if [[ "$ENV_TARGET" == "develop" ]]; then
-  SUFFIX="DEV"
-else
-  SUFFIX="PROD"
-fi
 
 # Validar requeridas (AUTH_URL y NEXT_PUBLIC_APP_URL pueden estar vacías
 # en el primer deploy — se completan después con la URL real del servicio).
@@ -83,7 +79,7 @@ missing=()
 [[ -z "$DATABASE_URL" ]]            && missing+=("DATABASE_URL_${SUFFIX}")
 [[ -z "$AUTH_SECRET" ]]             && missing+=("AUTH_SECRET")
 [[ -z "$GCP_PROJECT_ID" ]]          && missing+=("GCP_PROJECT_ID")
-[[ -z "$GCP_BUCKET_NAME" ]]         && missing+=("GCP_BUCKET_NAME")
+[[ -z "$GCP_BUCKET_NAME" ]]         && missing+=("GCP_BUCKET_NAME_${SUFFIX}")
 [[ -z "$RESEND_API_KEY" ]]          && missing+=("RESEND_API_KEY")
 [[ -z "$NOTIFICATION_FROM_EMAIL" ]] && missing+=("NOTIFICATION_FROM_EMAIL")
 
@@ -110,6 +106,7 @@ echo "  Servicio    : $SERVICE_NAME"
 echo "  Imagen      : gcr.io/$PROJECT_ID/frontend:$IMAGE_TAG"
 echo "  Región      : $REGION"
 echo "  BD host     : $DB_HOST"
+echo "  Bucket GCS  : $GCP_BUCKET_NAME"
 echo "  AUTH_URL    : ${AUTH_URL:-<pendiente - bootstrap>}"
 echo "  APP_URL     : ${NEXT_PUBLIC_APP_URL:-<pendiente - bootstrap>}"
 echo "=================================================="

@@ -37,6 +37,13 @@ El motor Fauchard usa estos niveles para filtrar y puntuar invitados.
 ### `fauchardConfig`
 Parámetros del algoritmo. **Como máximo una fila `is_active`** (índice único parcial). El admin actualiza con copy-on-write: nueva fila + desactivar la anterior. Cada `clinicalCase` puede anclar `fauchardConfigId` al publicar.
 
+Campos de **calendario laboral** (v4.6, alimentan `businessTime.ts`):
+- `businessHoursStart` (default 8), `businessHoursEnd` (default 20) — jornada `[start, end)`.
+- `businessDaysMask` (default 31 = L-V) — bitmask: bit 0=Lun … bit 6=Dom.
+
+### `fauchardHoliday` (v4.6)
+Lista global de feriados (no por config). Columnas: `holiday_date` (UNIQUE), `label`, `created_by`. Admin CRUD en `/dashboard/admin/fauchard` → panel Calendario. Actions en `lib/db/actions/fauchardHolidays.ts`.
+
 ### `caseUserArchive`
 Archivo por usuario y caso (`case_user_archive`). Usado por `archiveCaseForUserAction` / `unarchiveCaseForUserAction` en terminal.
 
@@ -55,26 +62,23 @@ Entregas de diseño/revisión. Campos: `technicianId`, `version`, `files` (jsonb
 Cursores de lectura del UCH por usuario + caso: `lastReadTechHubAt`, `lastReadNegHubAt`. Usado por `uchUnread.ts` para los contadores de mensajes no leídos.
 
 ### Catálogos UI — `vitaShade`, `restorationType`, `dentalMaterial`, `urgencyLevel`
-Tablas administrables (v3.9, diseño con 3 identificadores por rol):
+Tablas administrables (v4.0, dos identificadores: opaco + label):
 - `id` (uuid PK) — referenciado por FK desde `clinical_case`.
-- `code` (text UNIQUE NOT NULL) — **opaco** system-generated (`mat_001`, `vita_001`, `rest_001`, `urg_001`). Estable; no relacionado al label.
-- `businessKey` (text UNIQUE, nullable) — **semántica** para branches de código (Fauchard, comparaciones de urgencia). Solo set en filas referenciadas; null para puro UI.
-- `label` (text) — editable por admin sin consecuencias.
+- `code` (text UNIQUE NOT NULL) — **opaco** system-generated (`mat_001`, `vita_001`, `rest_001`, `urg_001`). Estable; sin relación semántica con el label.
+- `label` (text) — único campo editable por admin (los labels de restauración y urgencia son estándares clínicos estables; no renombrar a la ligera).
 - `sortOrder`, `isActive`.
 
-`clinical_case` tiene FKs `material_id`, `restoration_type_id`, `shade_id`, `urgency_id` (`ON DELETE RESTRICT`). Columnas text legacy eliminadas en v3.8.
+`clinical_case` tiene FKs `material_id`, `restoration_type_id`, `shade_id`, `urgency_id` (`ON DELETE RESTRICT`). Columnas text legacy eliminadas (script `migrate-recovery-v39.ts`).
 
-**Reglas de acceso**:
-- Form/wizard → envía `code` opaco para material/restoration/shade; `business_key` para urgency.
-- Resolver (`catalogResolver.ts`) → convierte a id antes de persistir (urgency vía business_key, los otros vía code).
-- App code referencia `business_key` (`urgency === 'alta'`, `RESTORATION_TO_WORK_TYPE[businessKey]`). Nunca el code opaco.
-- Reads (JOIN) aplanan: `material/restorationType/shade` = label, `urgency` = business_key, `urgencyLabel` = label.
+**Reglas de acceso** (ver `catalogResolver.ts`):
+- Form/wizard → envía `code` opaco para material/restoration/shade; **`label`** para urgency (la lógica de negocio compara contra labels estándar).
+- Resolver → convierte code→id (mat/rest/shade) o label→id (urgency) antes de persistir.
+- App code referencia **label** (`urgency === 'Alta'`, `RESTORATION_TO_WORK_TYPE[label]`). Nunca el code opaco.
+- Reads (JOIN) aplanan: `material/restorationType/shade/urgency` = label. Los `*Code` opacos solo se exponen para selects que necesitan persistir code.
 
-**Admin CRUD**: admin solo edita `label`. `code` se genera automáticamente como `${prefix}_${NNN}` (siguiente disponible). `businessKey` es read-only (no se setea desde la UI).
+**Admin CRUD**: admin solo edita `label`. `code` se genera automáticamente como `${prefix}_${NNN}` (siguiente disponible).
 
-Migraciones:
-- `scripts/migrate-catalogs-fk.ts` — v3.7→v3.8 (text → FK).
-- `scripts/migrate-catalogs-opaque-codes.ts` — v3.8→v3.9 (code slug→opaco; copia slug a business_key para restoration_type y urgency_level).
+Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opaque-codes.ts`, `migrate-recovery-v39.ts` (dedup catálogos + backfill FK + drop columnas text + retira `business_key`).
 
 ## Patrón Server Actions
 <important>Todas las funciones retornan `{ success: boolean; data?: T; error?: string }`</important>
@@ -91,7 +95,7 @@ Migraciones:
 | `invitations.ts` | Listado de invitaciones; archivos visibles solo si `invitation.status === confirmed` |
 | `skills.ts` | Matriz habilidades; lee rol desde DB (no JWT) |
 | `files.ts` | Upload/download vía GCS signed URLs |
-| `archiveCaseFiles.ts` | `archiveCaseFilesBestEffort(caseId)` — marca `customTime` en archivos GCS al cerrar el caso (alimenta la lifecycle policy del bucket) |
+| `archiveCaseFiles.ts` | `archiveCaseFilesBestEffort(caseId)` — marca `customTime` en archivos GCS al cerrar el caso (alimenta la lifecycle policy del bucket). Opera sobre el bucket configurado en runtime (`GCP_BUCKET_NAME`): staging y prod tienen buckets distintos (`-dev` / `-prod`), así que la transición en uno no afecta al otro |
 | `impersonation.ts` | `getServerIdentity()` — resolver canónico de identidad |
 | `hubRead.ts` | Cursores de lectura del UCH + contadores no leídos |
 | `dashboard.ts` | Métricas y agregados del dashboard |

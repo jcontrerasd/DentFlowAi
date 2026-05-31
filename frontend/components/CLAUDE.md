@@ -5,7 +5,8 @@
 - `cases/uch/` — Subcomponentes del UCH (ver sección UCH abajo)
 - `profile/` — SkillMatrixForm (matriz habilidades 0-7 por tipo de trabajo), AvailabilityToggle
 - `invitations/` — InvitationCard, QuoteFormDrawer
-- `admin/` — FauchardWeightsPanel, FauchardFiltersPanel, ImpersonationSelector
+- `admin/` — FauchardWeightsPanel, FauchardFiltersPanel, FauchardCalendarPanel (feriados + horario laboral v4.6), LeagueConfigPanel, QuotationMetricsPanel, SimulatorPanel, TechnicianRankingTable, ImpersonationSelector
+- `theme/` — ThemeProvider, ThemeContext, ThemeToggleButton (modo claro/oscuro/sistema; tokens en `app/theme.css`)
 - `ui/` — Primitivos: Button, Input, StatusBadge, FocusTrap
 - `DentalViewer3D.tsx` — Visor Three.js para STL (lazy-loaded)
 

@@ -47,6 +47,9 @@ Usar `resolveUchThreadLane()` de `lib/uchThreadLane.ts`. No reimplementar lógic
 - **Etapa 2 (elegir oferta):** `proposalExpiresAt` — HMS **solo en cabecera UCH** (dentista, `propuestaLista`). No duplicar en `ComparativeOffersPanel`.
 - `serverClockAnchor` + `uchPanelMounted` para sincronía y persistencia del timer.
 
+### Calendario laboral (v4.6)
+- `workDeadline` mostrado en stepper/UCH se calcula con `addBusinessTime()` (`lib/businessTime.ts`) usando `businessHoursStart/End` + `businessDaysMask` de `fauchard_config` y la tabla `fauchard_holiday`. No reimplementar offsets en el cliente.
+
 ### Anonimato
 - Dentista NUNCA ve nombre del técnico, precio cotizado ni cantidad de invitados.
 - Técnico NUNCA ve eventos de otros técnicos del mismo caso.

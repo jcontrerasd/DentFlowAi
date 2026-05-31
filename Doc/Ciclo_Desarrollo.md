@@ -70,8 +70,8 @@ Edita `frontend/.env.local` y completa:
 - `AUTH_SECRET` → genera con `openssl rand -base64 32`
 - `DATABASE_URL` → ya viene apuntando al Postgres de Docker
 - `GCP_BUCKET_NAME`, `GCP_PROJECT_ID` → para local pueden quedar como están (fake-gcs)
-- `DATABASE_URL_DEV`, `AUTH_URL_DEV`, `NEXT_PUBLIC_APP_URL_DEV` → se llenan tras crear staging (paso 3.4)
-- `DATABASE_URL_PROD`, `AUTH_URL_PROD`, `NEXT_PUBLIC_APP_URL_PROD` → se llenan tras el primer deploy a prod (o ya están si las tienes)
+- `DATABASE_URL_DEV`, `AUTH_URL_DEV`, `NEXT_PUBLIC_APP_URL_DEV`, `GCP_BUCKET_NAME_DEV` → se llenan tras crear staging (paso 3.4). `GCP_BUCKET_NAME_DEV=dentflowai-assets-dev`.
+- `DATABASE_URL_PROD`, `AUTH_URL_PROD`, `NEXT_PUBLIC_APP_URL_PROD`, `GCP_BUCKET_NAME_PROD` → se llenan tras el primer deploy a prod. `GCP_BUCKET_NAME_PROD=dentflowai-assets-prod`.
 
 ### 3.3 Crear la rama `develop` (la primera vez que el repo no la tiene)
 
@@ -273,10 +273,10 @@ Es instantáneo: Cloud Run mantiene las revisiones anteriores listas para servir
 | `AUTH_URL` | `http://localhost:3000` | URL del servicio dev | `https://dentflowai.com` |
 | `NEXT_PUBLIC_APP_URL` | `http://localhost:3000` | URL del servicio dev | `https://dentflowai.com` |
 | `AUTH_SECRET` | Aleatorio local | Mismo que `.env.local` | Mismo que `.env.local` |
-| `GCP_BUCKET_NAME` | `dentflowai-local` (fake-gcs) | `dentflowai-assets-prod` | `dentflowai-assets-prod` |
+| `GCP_BUCKET_NAME` | `dentflowai-local` (fake-gcs) | `dentflowai-assets-dev` | `dentflowai-assets-prod` |
 | `RESEND_API_KEY` | `re_123` (stub, no envía) | Real (envía emails) | Real (envía emails) |
 
-> Hoy staging y prod comparten bucket GCS. Si en el futuro quieres separar, crea `dentflowai-assets-dev` y agrega `GCP_BUCKET_NAME_DEV` en `.env.local` y en `deploy.sh`.
+> Staging usa `dentflowai-assets-dev` y producción usa `dentflowai-assets-prod`. Ambos buckets están aislados y aplican la misma lifecycle policy ([infra/gcs/lifecycle.json](../infra/gcs/lifecycle.json)). `deploy.sh` lee `GCP_BUCKET_NAME_DEV` o `GCP_BUCKET_NAME_PROD` de `.env.local` según el entorno e inyecta el valor en Cloud Run como `GCP_BUCKET_NAME`.
 
 ---
 
@@ -289,6 +289,7 @@ Es instantáneo: Cloud Run mantiene las revisiones anteriores listas para servir
 | Login redirige a localhost | `AUTH_URL` en Cloud Run apunta a localhost | Actualizar `AUTH_URL_DEV` o `AUTH_URL_PROD` en `.env.local` y redeploy |
 | "Database connection refused" en Cloud Run | Cloud SQL no autoriza la IP de Cloud Run | GCP Console → Cloud SQL → Connections → autorizar `0.0.0.0/0` (temporal) o configurar VPC connector |
 | `deploy.sh` dice "falta variable" | El `.env.local` no tiene `*_DEV` o `*_PROD` | Completar según `.env.example` |
+| Archivos subidos en staging aparecen en bucket de prod (o viceversa) | `GCP_BUCKET_NAME_DEV/PROD` mal configurado en `.env.local`, o falta permiso de la SA de Cloud Run dev sobre `dentflowai-assets-dev` | `grep GCP_BUCKET_NAME frontend/.env.local` y `gsutil iam get gs://dentflowai-assets-dev` — la SA del servicio dev debe tener `objectAdmin` |
 | Quiero ver qué tocó Claude antes de commitar | — | `git diff --stat` (resumen) y `git diff` (línea por línea) |
 
 ---
