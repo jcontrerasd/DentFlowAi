@@ -28,6 +28,8 @@ DEV_INSTANCE="dentflowai-psql-dev"
 DEV_DB="dentflowai_dev"
 DEV_USER="dentflow_admin"
 
+# Bucket donde se deposita el dump SQL (artefacto origen prod).
+# No relacionado con dentflowai-assets-dev (bucket de archivos de staging).
 BUCKET="gs://dentflowai-assets-prod"
 DUMP_PREFIX="backups/db-clones"
 TS="$(date +%Y%m%d-%H%M%S)"

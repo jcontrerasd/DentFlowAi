@@ -95,7 +95,7 @@ El script lee variables `*_DEV`/`*_PROD` de `frontend/.env.local`, construye ima
 |---|---|---|
 | Cloud Run | `dentflowai-frontend-dev` | `dentflowai-frontend` |
 | Cloud SQL | `dentflowai-psql-dev` | `dentflowai-cbcf2-instance` |
-| Bucket GCS | `dentflowai-assets-prod` (compartido) | `dentflowai-assets-prod` |
+| Bucket GCS | `dentflowai-assets-dev` | `dentflowai-assets-prod` |
 | Región | `southamerica-west1` | `southamerica-west1` |
 
 Setup inicial de staging (one-time): `export DB_PASS=$(openssl rand -base64 24) && bash scripts/setup-staging-db.sh`.

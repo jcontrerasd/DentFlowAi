@@ -95,7 +95,7 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 | `invitations.ts` | Listado de invitaciones; archivos visibles solo si `invitation.status === confirmed` |
 | `skills.ts` | Matriz habilidades; lee rol desde DB (no JWT) |
 | `files.ts` | Upload/download vía GCS signed URLs |
-| `archiveCaseFiles.ts` | `archiveCaseFilesBestEffort(caseId)` — marca `customTime` en archivos GCS al cerrar el caso (alimenta la lifecycle policy del bucket) |
+| `archiveCaseFiles.ts` | `archiveCaseFilesBestEffort(caseId)` — marca `customTime` en archivos GCS al cerrar el caso (alimenta la lifecycle policy del bucket). Opera sobre el bucket configurado en runtime (`GCP_BUCKET_NAME`): staging y prod tienen buckets distintos (`-dev` / `-prod`), así que la transición en uno no afecta al otro |
 | `impersonation.ts` | `getServerIdentity()` — resolver canónico de identidad |
 | `hubRead.ts` | Cursores de lectura del UCH + contadores no leídos |
 | `dashboard.ts` | Métricas y agregados del dashboard |

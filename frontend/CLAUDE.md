@@ -79,6 +79,7 @@ Reglas:
 - `.env.local` apunta `DATABASE_URL` a `localhost:5432` y `GCS_API_ENDPOINT` a `http://localhost:4443`.
 - Cuando `GCS_API_ENDPOINT` está definido, `lib/gcs.ts` firma URLs hacia `/api/local-gcs-proxy` (descomprime gzip antes de servir, ya que fake-gcs no hace decompressive transcoding).
 - Seed: `npx tsx scripts/seed-uat.ts`.
+- **Bucket por contexto**: `npm run dev` usa `GCP_BUCKET_NAME` (default `dentflowai-local` con fake-gcs). En Cloud Run, `deploy.sh` inyecta `GCP_BUCKET_NAME_DEV` (`dentflowai-assets-dev`) o `_PROD` (`dentflowai-assets-prod`) según el entorno. Staging y producción están aislados a nivel de bucket.
 
 ## Comandos
 ```bash
