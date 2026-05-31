@@ -1,159 +1,142 @@
 # DentFlowAi
 
-Plataforma clínica/laboratorio con frontend en Next.js y backend de datos en Firebase (Auth, Storage y Data Connect).
+Plataforma clínica-laboratorio dental: los dentistas crean casos con modelos 3D, el motor **Fauchard** selecciona técnicos de forma anónima, y los técnicos entregan diseños y/o fabricaciones.
 
-## Arquitectura actual
+La guía canónica para agentes (Claude Code, Cursor) y desarrolladores está en [CLAUDE.md](CLAUDE.md). Este README es la entrada rápida.
 
-- Frontend: Next.js App Router (TypeScript)
-- Identidad: Firebase Authentication
-- Datos de negocio: Firebase Data Connect
-- Base de datos de Data Connect: Cloud SQL PostgreSQL (`dentflowai-psql`)
-- Archivos 3D e imágenes: Firebase Storage
-- Herramientas admin: scripts Python (`scripts/toolkit.py`, `scripts/toolkit_gui.py`)
+## Stack
 
-## Base de datos
+- **Next.js 15** (App Router) · **React 19** · **TypeScript** · **Tailwind CSS 4**
+- **Drizzle ORM** + **PostgreSQL** (Cloud SQL)
+- **NextAuth 5 beta** (JWT)
+- **Google Cloud Storage** (modelos 3D STL/PLY/OBJ + imágenes, con gzip transparente y lifecycle policy)
+- **Three.js** (visor 3D)
+- **Vitest** + Testing Library
+- Despliegue: **Cloud Run** (imagen Docker `standalone`)
 
-La base de datos NO está en Docker.
+Requisitos: Node ≥ 20.19, npm ≥ 10, Docker Desktop, Google Cloud CLI.
 
-Data Connect está configurado para usar Cloud SQL:
+## Estructura
 
-- Archivo: `firebase/dataconnect/dataconnect.yaml`
-- Instancia: `dentflowai-psql`
-- Base: `dentflowai`
+```
+frontend/              Aplicación Next.js (único deploy)
+  app/                 Rutas App Router
+  components/          Componentes React (cases/, cases/uch/, admin/, theme/, ui/)
+  lib/db/              Drizzle: schema, infrastructure (migraciones runtime), actions/
+  lib/services/        GCP Storage, notificaciones (Resend)
+  lib/contactGuard/    Moderación de campos libres
+  lib/businessTime.ts  Calendario laboral (horario + feriados)
+  test/                Vitest + Testing Library
+  scripts/             seed-uat.ts
+docker-compose.yml     Postgres 16 + fake-gcs (entorno local)
+Doc/                   Documentación operativa (ciclo de desarrollo, especs)
+.cursor/skills/        Skills para Cursor (UCH)
+```
 
-## Ejecución local
+## Entorno local (Docker)
 
-### Frontend
+```bash
+docker compose up -d                # Postgres + fake-gcs
+cd frontend && npm install          # solo la primera vez
+cp .env.example .env.local          # editar AUTH_SECRET, etc.
+npm run dev                         # http://localhost:3000
+npx tsx scripts/seed-uat.ts         # datos de prueba
+```
+
+`docker-compose.yml` levanta:
+- **db** — PostgreSQL 16 en `localhost:5432`, BD `dentflowai_local`.
+- **storage** — `fsouza/fake-gcs-server` en `localhost:4443` emulando GCS. `lib/gcs.ts` firma URLs hacia `/api/local-gcs-proxy` (descomprime gzip antes de servir).
+
+## Comandos frontend
 
 ```bash
 cd frontend
-npm install
-npm run dev
+npm run dev              # desarrollo (Turbopack, :3000)
+npm run build            # build producción (standalone)
+npm run type-check       # tsc --noEmit
+npm run test             # vitest watch
+npm run test:run         # vitest una pasada
+npm run test:smoke       # smoke tests páginas clave
+npm run lint             # eslint
+npm run validate:full    # lint + type-check + build (~3 min)
+npm run audit:unused     # knip (auditoría de código no usado)
 ```
 
-### Validaciones recomendadas antes de merge
+Correr `npm run validate:full` antes de mergear a `main`.
+
+## Ciclo de desarrollo y deploy
+
+Detalle completo en [Doc/Ciclo_Desarrollo.md](Doc/Ciclo_Desarrollo.md). Resumen:
+
+```
+LOCAL → push a develop → bash deploy.sh develop → STAGING (Cloud Run dev + Cloud SQL dev)
+                                        ↓ merge
+                                       main → bash deploy.sh production → PROD
+```
+
+**Reglas de oro:**
+- Nunca commitear directo a `main`. `main` = lo que está en `dentflowai.com`.
+- Toda feature pasa por `develop` y se prueba en staging antes de producción.
+- Las BD de staging y producción están totalmente separadas.
+
+### Deploy
 
 ```bash
 cd frontend
-npm run lint
-npm run type-check
-npm run build
-npm run test:run
+bash deploy.sh develop      # staging (servicio dentflowai-frontend-dev)
+bash deploy.sh production   # producción (pide confirmación 'SI')
 ```
 
-### Docker mínimo
+El script lee variables `*_DEV`/`*_PROD` de `frontend/.env.local`, construye imagen en Cloud Build y la despliega en Cloud Run.
 
-Por defecto, `docker-compose.yml` levanta solo el frontend.
+### Infraestructura GCP
 
-```bash
-docker compose up --build
-```
+| | Staging | Producción |
+|---|---|---|
+| Cloud Run | `dentflowai-frontend-dev` | `dentflowai-frontend` |
+| Cloud SQL | `dentflowai-psql-dev` | `dentflowai-cbcf2-instance` |
+| Bucket GCS | `dentflowai-assets-prod` (compartido) | `dentflowai-assets-prod` |
+| Región | `southamerica-west1` | `southamerica-west1` |
 
-### Herramientas Firebase (manual)
+Setup inicial de staging (one-time): `export DB_PASS=$(openssl rand -base64 24) && bash scripts/setup-staging-db.sh`.
+Clonar prod → staging (incluye usuarios y `passwordHash`): `bash scripts/clone-prod-to-staging.sh`.
 
-El servicio `firebase-manager` quedó como perfil opcional `tools`.
+## Conceptos clave del producto
 
-```bash
-docker compose --profile tools run --rm firebase-manager sh
-```
+- **Tipos de servicio** (`clinical_case.service_type`): `solo_diseno`, `solo_fabricacion`, `integral`. Cada uno tiene su propio flujo de estados y formato de cotización (flat vs split). Ver [CLAUDE.md](CLAUDE.md).
+- **Motor Fauchard**: clasifica casos, selecciona técnicos por habilidades + categoría, ancla `fauchard_config_id` al caso al publicar (copy-on-write). Idempotente — las lecturas no resetean deadlines.
+- **UCH (Unified Case Hub)**: pantalla de flujo guiado (NO chat libre). Acciones embebidas en el hilo, anonimato dentista ⇄ técnico, dos countdowns independientes (cotizar / elegir oferta).
+- **Calendario laboral (v4.6)**: `workDeadline` y deadlines Fauchard respetan horario y feriados configurables (`fauchard_config` + tabla `fauchard_holiday`).
+- **Catálogos UI** (v4.0): `vita_shade`, `restoration_type`, `dental_material`, `urgency_level` — administrables desde `/dashboard/admin/catalogos`. Admin solo edita `label`; `code` es opaco system-generated.
+- **GCS lifecycle**: archivos comprimidos con gzip al subir; al cerrar el caso se marca `customTime` y el lifecycle policy transiciona Standard → Nearline (30d) → Coldline (120d) → Archive (365d).
+- **ContactGuard**: moderación de campos libres (notas, trackingId) para bloquear intentos de saltarse el marketplace.
 
-### Toolkits Python (entorno estandarizado)
+## Restricciones críticas
 
-```bash
-cd scripts
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+- **No** acceder a la DB desde componentes — solo Server Actions en `frontend/lib/db/actions/`.
+- **Identidad servidor**: usar `getServerIdentity()` (soporta impersonación admin). Nunca leer JWT directamente.
+- **Migraciones**: runtime vía `frontend/lib/db/infrastructure.ts`. NO usar `drizzle-kit push` en producción.
+- **UCH**: sin overlays `fixed inset-0`, sin chat libre. Acciones embebidas en el hilo (`buildUchTimelineRows`).
+- **Feedback UI**: `useToast()` de `@/context/ToastContext` — nunca `alert()`.
 
-Ejecución CLI:
+## Roles
 
-```bash
-cd scripts
-source .venv/bin/activate
-python toolkit.py --list
-```
+- `dentista` — crea casos, recibe propuestas anónimas, aprueba diseños.
+- `tecnico` — recibe invitaciones, cotiza, entrega diseños y/o fabricaciones.
+- `admin` — panel Fauchard, impersonación, métricas, gestión de catálogos y feriados.
 
-Ejecución GUI:
-
-```bash
-cd scripts
-source .venv/bin/activate
-streamlit run toolkit_gui.py
-```
-
-## Seguridad operativa
-
-- Mantener la service account fuera del workspace y del repositorio.
-- Usar `FIREBASE_CREDENTIALS_PATH` y `FIREBASE_CREDENTIALS_PATH_HOST` apuntando a una ruta externa al proyecto.
-- Habilitar modo admin explícito para toolkits con `DENTFLOW_ADMIN_SECRET` (>=16 chars).
-- Habilitar operaciones destructivas en toolkit GUI solo cuando sea estrictamente necesario con `DENTFLOW_ALLOW_DESTRUCTIVE=true`.
-- Revisar y desplegar reglas de `firebase/storage.rules` y `firebase/dataconnect/default-connector/*.gql` tras cambios.
-- Para observabilidad frontend en producción, definir `NEXT_PUBLIC_LOG_ENDPOINT` (por defecto `/api/telemetry`).
-- Configurar `TELEMETRY_ALLOWED_ORIGINS` (lista separada por comas) para restringir origenes válidos de telemetría.
-- Ajustar `TELEMETRY_RATE_LIMIT_PER_MINUTE` según volumen esperado.
-- Activar reglas de borde (WAF/CDN/bot management) para bloquear abuso automatizado antes de llegar al backend.
-
-### Endpoint de telemetría (seguro)
-
-El endpoint interno `POST /api/telemetry` aplica:
-
-- Validación de origen (`Origin`/`Referer`) y contexto (`Sec-Fetch-Site`) con allowlist configurable.
-- Rate limit por IP en ventana de 1 minuto.
-- Validación estricta de schema y tamaño de payload.
-- Redacción automática en servidor de emails, bearer tokens, claves Firebase y llaves privadas.
-- Firma SHA-256 opcional para integraciones server-to-server (`TELEMETRY_INGEST_TOKEN` + `X-Telemetry-Timestamp` + `X-Telemetry-Signature`).
-
-### Sincronización de claims (obligatorio para Storage Rules por organización)
-
-```bash
-cd scripts
-python toolkit.py --sync-claims
-```
-
-También se puede sincronizar un UID puntual:
-
-```bash
-cd scripts
-python toolkit.py --sync-claims-uid <UID>
-```
-
-Claims aplicados: `role`, `organizationId`, `admin`.
-
-### Deploy manual de seguridad Firebase
-
-```bash
-firebase deploy --only storage,dataconnect --project dentflowai-cbcf2
-```
-
-## CI/CD mínima
+## CI/CD
 
 - Workflow: `.github/workflows/frontend-ci.yml`
-- Trigger: `push` (main/master) y `pull_request` sobre cambios en `frontend/**`
-- Pipeline: `lint` -> `type-check` -> `build` -> `test:run`
+- Trigger: `push` y `pull_request` con cambios en `frontend/**`
+- Pipeline: `lint` → `type-check` → `build` → `test:run`
 
-## Política de versionado de tooling
+## Documentación adicional
 
-- El contenedor Firebase usa imagen oficial versionada de Google Cloud SDK (`infra/Dockerfile.firebase`).
-- `firebase-tools` se mantiene pinneado por `FIREBASE_TOOLS_VERSION`.
-- Las actualizaciones de tooling se hacen por PR dedicado con evidencia de compatibilidad (`lint`, `type-check`, `build`, `test:run`).
-
-## Upgrades mayores de toolchain
-
-- Para upgrades mayores (ej. TypeScript, jsdom, `@types/node`), abrir PR dedicado aislado.
-- Ejecutar siempre la matriz completa con `cd frontend && npm run validate:full`.
-- Incluir ajustes de tipos/config en el mismo PR y documentar impacto de compatibilidad.
-- Mantener separados los cambios funcionales de producto para evitar regresiones silenciosas.
-
-## Mantenimiento de deuda técnica
-
-- Tipado 3D: mantener supresiones centralizadas en `frontend/lib/three-loaders.ts`.
-- Revisar trimestralmente si Three.js expone typings estables para loaders y retirar supresiones cuando sea viable.
-- Código no usado: ejecutar auditoría periódica con `cd frontend && npm run audit:unused` antes de releases y eliminar únicamente hallazgos confirmados.
-- El baseline de knip ignora artefactos generados de Data Connect y excluye categorías de exports/tipos públicos deliberados para mantener reportes accionables.
-
-## Troubleshooting rápido
-
-- Si scripts Python no encuentran credenciales: exportar `FIREBASE_CREDENTIALS_PATH` con la ruta externa del JSON de servicio.
-- Si el contenedor de herramientas no levanta: usar `docker compose --profile tools run --rm firebase-manager sh`.
-- Si cambian operaciones Data Connect: regenerar SDK del frontend y re-ejecutar `npm run type-check`.
+- [CLAUDE.md](CLAUDE.md) — guía canónica del monorepo (stack, Fauchard, UCH, restricciones)
+- [AGENTS.md](AGENTS.md) — puente corto para Cursor y otros agentes
+- [frontend/AGENTS.md](frontend/AGENTS.md) — convenciones Next.js 15 / React 19
+- [frontend/CLAUDE.md](frontend/CLAUDE.md) — auth, impersonación, wizard de casos, tema
+- [frontend/lib/db/CLAUDE.md](frontend/lib/db/CLAUDE.md) — schema y server actions
+- [Doc/Ciclo_Desarrollo.md](Doc/Ciclo_Desarrollo.md) — flujo paso a paso local → staging → prod
+- [Doc/DentFlowAi_Especificaciones.md](Doc/DentFlowAi_Especificaciones.md) — especificación del producto
