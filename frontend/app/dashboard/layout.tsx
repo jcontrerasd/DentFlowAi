@@ -10,7 +10,10 @@ import {
   LogOut,
   Menu,
   Activity,
-  ShieldAlert,
+  Shield,
+  Users,
+  ListChecks,
+  AlertTriangle,
   Inbox,
   Settings2,
   Bell,
@@ -24,6 +27,8 @@ import { getMyInvitationsAction } from '@/lib/db/actions/invitations';
 import { getMyHubUnreadTotalAction } from '@/lib/db/actions/hubRead';
 import ImpersonationSelector from '@/components/admin/ImpersonationSelector';
 import ThemeToggleButton from '@/components/theme/ThemeToggleButton';
+import AvailabilityBadge from '@/components/availability/AvailabilityBadge';
+import RolloutBanner from '@/components/availability/RolloutBanner';
 import Image from 'next/image';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -124,8 +129,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   const menuItems = [
-    { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
-    
+    // Primera posición: Dashboard para todos los roles, excepto admin que ve
+    // "Observabilidad" en su lugar (solo admin).
+    ...(userProfile?.role === 'admin'
+      ? [{ name: 'Observabilidad', icon: Activity, href: '/dashboard/admin/observability' }]
+      : [{ name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' }]),
+
     // Rutas para Dentista
     ...(userProfile?.role === 'dentista' ? [
       { name: 'Casos', icon: FileText, href: '/dashboard/cases' },
@@ -138,10 +147,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { name: 'Financiero', icon: CreditCard, href: '/dashboard/finance' },
     ] : []),
     
-    // Rutas para Admin
+    // Rutas para Admin (bajo "Observabilidad"). La "Zona de Alta Peligrosidad"
+    // se renderiza aparte, al pie del sidebar.
     ...(userProfile?.role === 'admin' ? [
-      { name: 'Admin', icon: ShieldAlert, href: '/dashboard/admin' },
-      { name: 'Fauchard', icon: Settings2, href: '/dashboard/admin/fauchard' },
+      { name: 'Motor Fauchard', icon: Settings2, href: '/dashboard/admin/fauchard' },
+      { name: 'ContactGuard', icon: Shield, href: '/dashboard/admin/contactguard' },
+      { name: 'Control de Usuarios', icon: Users, href: '/dashboard/admin/users' },
+      { name: 'Catálogo UI', icon: ListChecks, href: '/dashboard/admin/catalogos' },
     ] : []),
   ];
 
@@ -197,7 +209,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        <div className="absolute bottom-8 left-0 w-full px-4">
+        <div className="absolute bottom-8 left-0 w-full px-4 space-y-2">
+          {userProfile?.role === 'admin' && (
+            <Link href="/dashboard/admin/danger">
+              <div
+                className={`relative flex items-center gap-4 px-4 py-3 rounded-xl transition-all ${pathname === '/dashboard/admin/danger' ? 'bg-error-hl text-error' : 'text-faint hover:text-error hover:bg-error-hl'}`}
+                title="Zona de Alta Peligrosidad"
+              >
+                <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                {isSidebarOpen && <span className="font-medium">Zona de Alta Peligrosidad</span>}
+              </div>
+            </Link>
+          )}
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-4 px-4 py-3 text-faint hover:text-error hover:bg-error-hl rounded-xl transition-all"
@@ -233,6 +256,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
             )}
 
+            {/* Badge global de disponibilidad (técnico; se auto-oculta si el flag está off) */}
+            {userProfile?.role === 'tecnico' && <AvailabilityBadge />}
+
             {/* Toggle rápido de tema (claro / oscuro / sistema) */}
             <ThemeToggleButton />
 
@@ -262,6 +288,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
 
         <section className="p-10 animate-fade-in relative">
+          {userProfile?.role === 'tecnico' && <RolloutBanner />}
           {children}
         </section>
       </main>

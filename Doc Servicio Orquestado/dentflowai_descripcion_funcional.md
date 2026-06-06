@@ -304,9 +304,9 @@ El técnico tiene un panel especial (`/dashboard/bids`) con 3 pestañas:
 
 ## 12. Panel de Administración
 
-El administrador accede a un panel exclusivo (`/dashboard/admin`) con las siguientes capacidades:
+El administrador accede a un panel exclusivo (`/dashboard/admin`), un hub navegacional que agrupa las áreas de gestión por dominio (Usuarios y accesos · Motor Fauchard · Catálogos y contenido) más una Zona de Peligro. Capacidades:
 
-- **Gestión de usuarios:** Ver todos los usuarios, bloquear/desbloquear cuentas, cambiar contraseñas, eliminar usuarios.
+- **Gestión de usuarios** (`/dashboard/admin/users`): Ver todos los usuarios, bloquear/desbloquear cuentas, cambiar contraseñas, eliminar usuarios, resetear contadores de no-respuesta de técnicos.
 - **Simulación de usuarios:** El admin puede activar la identidad de cualquier usuario para ver exactamente lo que ese usuario ve, facilitando el diagnóstico de problemas. La simulación se activa mediante un selector de usuarios y se desactiva con un botón de "Volver a mi cuenta".
 - **Limpieza de datos de prueba:** Opción de purga total que elimina todos los casos, archivos en GCS y usuarios no-admin. Útil para entornos de desarrollo.
 - **Creación de co-administradores:** El admin puede crear cuentas administrativas adicionales.

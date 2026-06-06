@@ -66,6 +66,54 @@ export const WORK_TYPES = [
   'guia_quirurgica_compleja',
 ] as const;
 
+/**
+ * Categorías canónicas de disponibilidad del técnico (v5.0).
+ * El técnico declara disponibilidad por categoría (5), no por work_type (15).
+ * Estos slugs son la fuente de verdad para las columnas de `technician_availability`
+ * (`cat_<categoria>_cad` / `cat_<categoria>_cam`). NO renombrar sin migración.
+ * Ver Doc Servicio Orquestado/flujo_tiempos.md §1.2.
+ */
+export const WORK_CATEGORIES = [
+  'coronas',
+  'inlays',
+  'puentes',
+  'protesis',
+  'guias',
+] as const;
+
+export type WorkCategory = typeof WORK_CATEGORIES[number];
+
+/** Labels legibles de las 5 categorías. */
+export const WORK_CATEGORY_LABELS: Record<WorkCategory, string> = {
+  coronas: 'Coronas',
+  inlays: 'Inlays, Onlays y Carillas',
+  puentes: 'Puentes y Full Arch',
+  protesis: 'Prótesis Removible',
+  guias: 'Guías Quirúrgicas',
+};
+
+/**
+ * Mapeo work_type (15) → categoría (5). Traduce un caso a la categoría cuyo switch
+ * de disponibilidad consulta Fauchard (regla AND triple, §1.3).
+ */
+export const WORK_TYPE_TO_CATEGORY: Record<WorkType, WorkCategory> = {
+  corona_anterior: 'coronas',
+  corona_posterior: 'coronas',
+  corona_implante: 'coronas',
+  inlay_onlay: 'inlays',
+  carilla_unitaria: 'inlays',
+  carillas_multiples: 'inlays',
+  puente_3u: 'puentes',
+  puente_4mas: 'puentes',
+  full_arch: 'puentes',
+  protesis_parcial_removible: 'protesis',
+  protesis_total: 'protesis',
+  sobredentadura: 'protesis',
+  barra_implantes: 'protesis',
+  guia_quirurgica_simple: 'guias',
+  guia_quirurgica_compleja: 'guias',
+};
+
 /** Labels legibles para los tipos de trabajo */
 export const WORK_TYPE_LABELS: Record<string, string> = {
   corona_anterior: 'Corona Anterior',

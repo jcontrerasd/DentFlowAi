@@ -19,17 +19,24 @@ import {
   review,
   clinicalCaseEvent,
   restorationType as restorationTypeTable,
+  technicianAvailability,
 } from '@/lib/db/schema';
 import { eq, and, sql, inArray, lt, gt, lte, ne, isNotNull, gte, count, avg, desc } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { logCaseEvent } from './cases';
 import { notifyUser } from '../../services/notifications';
 import { subDays } from 'date-fns';
-import { CASE_COMPLEXITY, CASE_STATUSES, INTERNAL_CASE_STATUSES, SERVICE_TYPES, WORK_TYPE_LABELS, type CaseComplexity } from '@/lib/constants/dental';
+import { CASE_COMPLEXITY, CASE_STATUSES, INTERNAL_CASE_STATUSES, SERVICE_TYPES, WORK_TYPE_LABELS, WORK_TYPE_TO_CATEGORY, type CaseComplexity, type WorkType, type WorkCategory } from '@/lib/constants/dental';
 import type { ActionResult } from '@/lib/types/actions';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
 import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
+// ─── v5.0 — Modelo de disponibilidad / sanción rolling (gated por flag) ───
+import { isAvailabilityEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
+import { levelToScoreN, POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
+import { computeEligibleAction, type Capacity } from './availability';
+import { computeLevelForTechnicianAction, recordNoResponseEventAction } from './noResponseEvents';
+import { enterPendingPoolAction } from './poolQueue';
 
 // ─── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -49,7 +56,6 @@ export interface FauchardConfigRow {
   tCooldownMinutes: number;
   dInactivityDays: number;
   nInvited: number;
-  nFloor: number;
   qMinSelection: string;
   tQuoteMinutes: number;
   tProposalHours: number;
@@ -66,6 +72,32 @@ export interface FauchardConfigRow {
   businessHoursStart: number;
   businessHoursEnd: number;
   businessDaysMask: number;
+  /** v5.0 — Plazos, sanción rolling, cola pool y score αN (ver Fase 1). */
+  tDentistReviewHours: number;
+  tNoEligiblePoolHours: number;
+  maxPoolCycles: number;
+  replacementCutoffMinutes: number;
+  noResponseWindowDays: number;
+  noResponseRehabilitationDays: number;
+  level1Threshold: number;
+  level2Threshold: number;
+  level3Threshold: number;
+  inactivityAutoOffDays: number;
+  inactivityReminderDays: number;
+  alphaNoResponse: string;
+  changeReason: string | null;
+}
+
+/** Capacidades (CAD/CAM) requeridas según el tipo de servicio del caso. */
+function capacitiesForServiceType(serviceType: string): Capacity[] {
+  if (serviceType === SERVICE_TYPES.SOLO_FABRICACION) return ['cam'];
+  if (serviceType === SERVICE_TYPES.INTEGRAL) return ['cad', 'cam'];
+  return ['cad']; // solo_diseno
+}
+
+/** Categoría de disponibilidad (5) del caso a partir de su work_type (15). */
+function categoryForWorkType(workType: string): WorkCategory {
+  return WORK_TYPE_TO_CATEGORY[workType as WorkType] ?? 'coronas';
 }
 
 // Nivel mínimo de designLevel requerido según la categoría del caso
@@ -147,10 +179,17 @@ export async function batchExpireInvitationsForCases(caseIds: string[]): Promise
     );
 }
 
+// Dimensiones de calidad (CAD/CAM) relevantes según el tipo de servicio del caso.
+function dimensionsForServiceType(serviceType: string): string[] {
+  if (serviceType === SERVICE_TYPES.INTEGRAL) return ['design', 'fabrication'];
+  if (serviceType === SERVICE_TYPES.SOLO_FABRICACION) return ['fabrication'];
+  return ['design'];
+}
+
 // ─── Bulk data loader for pool scoring (avoids N×5 DB queries in runFauchard) ─
 
 type BulkScoringData = {
-  reviews: { revieweeId: string; rating: number }[];
+  reviews: { revieweeId: string; rating: number; dimension: string }[];
   completedInvs: { technicianId: string; completedAt: Date | null; assignedAt: Date | null; quotedDays: number | null; quotedHours: number | null }[];
   skills: { userId: string; workType: string; designLevel: number; fabricationLevel: number }[];
   recentInvs: { technicianId: string }[];
@@ -169,7 +208,7 @@ async function bulkLoadTechnicianData(
   const loadWindow = new Date(now.getTime() - config.wLoadDays * 86400000);
 
   const [reviews, completedInvs, skills, recentInvs, techUsers] = await Promise.all([
-    db.select({ revieweeId: review.revieweeId, rating: review.rating })
+    db.select({ revieweeId: review.revieweeId, rating: review.rating, dimension: review.dimension })
       .from(review)
       .where(and(inArray(review.revieweeId, techIds), gt(review.createdAt, qualityWindow))),
 
@@ -215,18 +254,27 @@ function calculateScoreFromBulkData(
   data: BulkScoringData,
   config: FauchardConfigRow,
   avgPoolLoad: number,
-  serviceType: string
+  serviceType: string,
+  sanction?: { n: number }
 ): { score: number; components: { Q: number; P: number; E: number; C: number; B: number } } {
+  // Pesos del score: ÚNICA fuente de verdad = la config (6 pesos, Σ6=1.0,
+  // editables en "Pesos del Score"). El término −αN·N solo penaliza cuando hay
+  // sanción (N>0, modelo de disponibilidad on); con N=0 se anula solo.
   const α1 = parseFloat(config.alphaQuality);
   const α2 = parseFloat(config.alphaPunctuality);
   const α3 = parseFloat(config.alphaExperience);
   const α4 = parseFloat(config.alphaLoad);
   const α5 = parseFloat(config.alphaBonus);
+  const αN = parseFloat(config.alphaNoResponse ?? '0.250');
+  const N = sanction?.n ?? 0;
   const cMax = parseFloat(config.cMax);
   const now = new Date();
 
-  // Q
-  const techRatings = data.reviews.filter(r => r.revieweeId === technicianId).map(r => r.rating);
+  // Q — filtrado por dimensión (CAD/CAM) según la capacidad del caso.
+  const qualityDims = dimensionsForServiceType(serviceType);
+  const techRatings = data.reviews
+    .filter(r => r.revieweeId === technicianId && qualityDims.includes(r.dimension))
+    .map(r => r.rating);
   const avgRating = techRatings.length > 0 ? techRatings.reduce((a, b) => a + b, 0) / techRatings.length : null;
   const Q = avgRating !== null ? avgRating / 5 : 0.5;
 
@@ -270,7 +318,7 @@ function calculateScoreFromBulkData(
     : config.dBonusMaxDays;
   const B = Math.min(daysSince / config.dBonusMaxDays, 1.0);
 
-  const score = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B;
+  const score = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B - αN * N;
   return { score: Math.max(0, score), components: { Q, P, E, C, B } };
 }
 
@@ -294,17 +342,21 @@ async function calculateTechnicianScore(
   const qualityWindow = new Date(now.getTime() - config.wQualityDays * 86400000);
   const loadWindow = new Date(now.getTime() - config.wLoadDays * 86400000);
 
-  // Q — Calidad histórica: promedio de ratings en la ventana de calidad
+  // Q — Calidad histórica: promedio de ratings en la ventana de calidad,
+  // filtrado por la(s) dimensión(es) que corresponden a la capacidad evaluada
+  // (CAD→design, CAM→fabrication, integral→ambas).
+  const qualityDims = dimensionsForServiceType(serviceType);
   const qualityRows = await db
     .select({ rating: review.rating })
     .from(review)
     .where(
       and(
         eq(review.revieweeId, technicianId),
+        inArray(review.dimension, qualityDims),
         gt(review.createdAt, qualityWindow)
       )
     );
-  
+
   const ratings = qualityRows.map(r => r.rating);
   const avgRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
   const Q = avgRating !== null ? avgRating / 5 : 0.5; // Default neutro para técnicos nuevos
@@ -490,6 +542,8 @@ export async function runFauchardAction(caseId: string): Promise<{
   technicianIds?: string[];
   fauchardConfigId?: string;
   error?: string;
+  /** v5.0 — el caso entró a la cola `pendiente_pool` (no es un fallo terminal). */
+  pooled?: boolean;
 }> {
   const identity = await getServerIdentity();
   if (!identity) return { success: false, error: 'No autenticado' };
@@ -517,6 +571,9 @@ export async function runFauchardAction(caseId: string): Promise<{
       (cCase.teeth as number[]) || []
     );
     const serviceType = cCase.serviceType || SERVICE_TYPES.SOLO_DISENO;
+    const availabilityOn = isAvailabilityEnabled();
+    const caseCategory = categoryForWorkType(workType);
+    const requiredCaps = capacitiesForServiceType(serviceType);
 
     console.log('[DEBUG] 4. update internalStatus');
     await db.update(clinicalCase)
@@ -549,7 +606,8 @@ export async function runFauchardAction(caseId: string): Promise<{
       noResponse: 0,
       inactive: 0,
       cooldown: 0,
-      lowSkill: 0
+      lowSkill: 0,
+      notAvailable: 0
     };
 
     const attempts = [
@@ -560,7 +618,7 @@ export async function runFauchardAction(caseId: string): Promise<{
 
     for (const attempt of attempts) {
       filtered = [];
-      exclusionReasons = { notInLeague: 0, suspended: 0, noResponse: 0, inactive: 0, cooldown: 0, lowSkill: 0 };
+      exclusionReasons = { notInLeague: 0, suspended: 0, noResponse: 0, inactive: 0, cooldown: 0, lowSkill: 0, notAvailable: 0 };
       
       console.log(`[DEBUG] Attempt ${attempt.category}`);
       const [caseData] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
@@ -583,7 +641,10 @@ export async function runFauchardAction(caseId: string): Promise<{
 
       for (const tech of leaguePool) {
         if (tech.suspendedUntil && new Date(tech.suspendedUntil) > now) { exclusionReasons.suspended++; continue; }
-        if ((tech.consecutiveNoResponse ?? 0) >= 3) { exclusionReasons.noResponse++; continue; }
+        // Exclusión binaria legacy por no-respuesta: SOLO cuando el modelo nuevo está
+        // apagado. Con el flag on, la sanción se absorbe en el término −αN·N del score
+        // y el auto-OFF de Nivel 3 (que apaga level_global) saca al técnico vía AND triple.
+        if (!availabilityOn && (tech.consecutiveNoResponse ?? 0) >= 3) { exclusionReasons.noResponse++; continue; }
         // Inactividad: solo excluir si tenemos registro de último login y es antiguo
         if (tech.lastLoginAt && new Date(tech.lastLoginAt) < inactivityThreshold) { exclusionReasons.inactive++; continue; }
 
@@ -619,6 +680,17 @@ export async function runFauchardAction(caseId: string): Promise<{
         // Para servicios integrales: fabricación también debe cumplir el nivel mínimo
         if (serviceType === SERVICE_TYPES.INTEGRAL && (skill.fabricationLevel ?? 0) < minSkillLevel) { exclusionReasons.lowSkill++; continue; }
 
+        // Regla de elegibilidad AND triple (v5.0) — solo con el modelo habilitado.
+        // Se evalúa en tiempo real (sin caché del estado efectivo). Integral exige
+        // CAD y CAM; solo_diseno exige CAD; solo_fabricacion exige CAM.
+        if (availabilityOn) {
+          let eligible = true;
+          for (const cap of requiredCaps) {
+            if (!(await computeEligibleAction(tech.id, caseCategory, cap))) { eligible = false; break; }
+          }
+          if (!eligible) { exclusionReasons.notAvailable++; continue; }
+        }
+
         filtered.push(tech);
       }
 
@@ -637,6 +709,18 @@ export async function runFauchardAction(caseId: string): Promise<{
         content: `No se encontraron técnicos disponibles. Total evaluados: ${candidates.length}. Excluidos por - Liga: ${exclusionReasons.notInLeague}, Suspendidos: ${exclusionReasons.suspended}, Sin respuesta: ${exclusionReasons.noResponse}, Inactivos: ${exclusionReasons.inactive}, Cooldown: ${exclusionReasons.cooldown}, Habilidades insuficientes: ${exclusionReasons.lowSkill}.`,
         payload: { exclusionReasons, candidatesTotal: candidates.length, visibleTo: 'sistema' },
       });
+
+      // v5.0: con el modelo habilitado Y la cola activa, 0 elegibles NO es fallo
+      // terminal. El caso entra a `pendiente_pool` (escenario A); el dentista ve
+      // "buscando técnicos" (banner Fase 6), no un error. Solo una vez por ciclo.
+      // `POOL_PENDIENTE_ENABLED` es el kill-switch secundario: si está apagado,
+      // Fauchard ignora la cola y falla directo aunque el modelo esté on.
+      if (availabilityOn && isPoolPendienteEnabled()) {
+        if (cCase?.internalStatus !== POOL_INTERNAL_STATUS) {
+          await enterPendingPoolAction(caseId);
+        }
+        return { success: false, pooled: true, error: 'pendiente_pool', fauchardConfigId: config.id };
+      }
 
       if (cCase) {
         if (cCase.doctorId) await notifyUser(cCase.doctorId, 'FALLO_SELECCION_DENTISTA', { caseId });
@@ -660,9 +744,19 @@ export async function runFauchardAction(caseId: string): Promise<{
 
     // Calcular scores para el pool elegible — bulk load (5 queries paralelas en vez de N×5)
     const bulkData = await bulkLoadTechnicianData(filtered.map(t => t.id), config, workType);
+
+    // v5.0: factor N (no-respuesta) por técnico para el término −αN·N del score.
+    const nByTech = new Map<string, number>();
+    if (availabilityOn) {
+      for (const tech of filtered) {
+        const lvl = await computeLevelForTechnicianAction(tech.id);
+        nByTech.set(tech.id, levelToScoreN(lvl.level));
+      }
+    }
+
     const scored: { id: string; score: number }[] = [];
     for (const tech of filtered) {
-      const { score } = calculateScoreFromBulkData(tech.id, bulkData, config, avgPoolLoad, serviceType);
+      const { score } = calculateScoreFromBulkData(tech.id, bulkData, config, avgPoolLoad, serviceType, { n: nByTech.get(tech.id) ?? 0 });
       scored.push({ id: tech.id, score });
     }
 
@@ -693,6 +787,129 @@ export async function runFauchardAction(caseId: string): Promise<{
     return { success: true, technicianIds: selected, fauchardConfigId: config.id };
   } catch (error) {
     console.error('[runFauchardAction] Error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// ─── v5.0 — Helpers de elegibilidad, reemplazo y reactivación de cola ────────
+
+/** ¿El técnico cumple el AND triple para el caso? (true si el modelo está apagado). */
+export async function isTechnicianEligibleForCaseAction(caseId: string, technicianId: string): Promise<boolean> {
+  if (!isAvailabilityEnabled()) return true;
+  const [cRow] = await db
+    .select({ cc: clinicalCase, restorationCode: restorationTypeTable.label })
+    .from(clinicalCase)
+    .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
+    .where(eq(clinicalCase.id, caseId))
+    .limit(1) as any;
+  if (!cRow) return false;
+  const workType = getWorkTypeForCase(cRow.restorationCode || '', (cRow.cc.teeth as number[]) || []);
+  const serviceType = cRow.cc.serviceType || SERVICE_TYPES.SOLO_DISENO;
+  const category = categoryForWorkType(workType);
+  for (const cap of capacitiesForServiceType(serviceType)) {
+    if (!(await computeEligibleAction(technicianId, category, cap))) return false;
+  }
+  return true;
+}
+
+/**
+ * Selecciona el mejor candidato de reemplazo (§3.3): técnico elegible no excluido,
+ * con skill suficiente, AND triple cumplido (si el modelo está on), mayor score.
+ * Devuelve `technicianId` undefined si no hay candidato disponible.
+ */
+export async function selectReplacementCandidateAction(
+  caseId: string,
+  excludeTechIds: string[],
+): Promise<{ success: boolean; technicianId?: string; error?: string }> {
+  try {
+    const config = await getConfigForCase(caseId);
+    const [cRow] = await db
+      .select({ cc: clinicalCase, restorationCode: restorationTypeTable.label })
+      .from(clinicalCase)
+      .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
+      .where(eq(clinicalCase.id, caseId))
+      .limit(1) as any;
+    if (!cRow) return { success: false, error: 'Caso no encontrado' };
+    const cCase = cRow.cc;
+    const workType = getWorkTypeForCase(cRow.restorationCode || '', (cCase.teeth as number[]) || []);
+    const serviceType = cCase.serviceType || SERVICE_TYPES.SOLO_DISENO;
+    const caseLeague = cCase.caseLeague || 'bronce';
+    const minSkillLevel = MIN_SKILL_FOR_CATEGORY[caseLeague] ?? 1;
+    const category = categoryForWorkType(workType);
+    const requiredCaps = capacitiesForServiceType(serviceType);
+    const availabilityOn = isAvailabilityEnabled();
+    const isSoloFab = serviceType === SERVICE_TYPES.SOLO_FABRICACION;
+    const exclude = new Set(excludeTechIds);
+    const now = new Date();
+
+    const candidates = await db
+      .select()
+      .from(user)
+      .where(and(eq(user.role, 'tecnico'), eq(user.isAvailable, true), eq(user.isActive, true)));
+
+    const eligible: string[] = [];
+    for (const tech of candidates) {
+      if (exclude.has(tech.id)) continue;
+      if (tech.suspendedUntil && new Date(tech.suspendedUntil) > now) continue;
+      if (!availabilityOn && (tech.consecutiveNoResponse ?? 0) >= 3) continue;
+
+      const skillFilter = isSoloFab
+        ? gte(technicianSkill.fabricationLevel, minSkillLevel)
+        : gte(technicianSkill.designLevel, minSkillLevel);
+      const [skill] = await db.select().from(technicianSkill)
+        .where(and(eq(technicianSkill.userId, tech.id), eq(technicianSkill.workType, workType), skillFilter))
+        .limit(1);
+      if (!skill) continue;
+      if (serviceType === SERVICE_TYPES.INTEGRAL && (skill.fabricationLevel ?? 0) < minSkillLevel) continue;
+
+      if (availabilityOn) {
+        let ok = true;
+        for (const cap of requiredCaps) {
+          if (!(await computeEligibleAction(tech.id, category, cap))) { ok = false; break; }
+        }
+        if (!ok) continue;
+      }
+      eligible.push(tech.id);
+    }
+
+    if (!eligible.length) return { success: true };
+
+    const bulkData = await bulkLoadTechnicianData(eligible, config, workType);
+    const nByTech = new Map<string, number>();
+    if (availabilityOn) {
+      for (const id of eligible) {
+        const lvl = await computeLevelForTechnicianAction(id);
+        nByTech.set(id, levelToScoreN(lvl.level));
+      }
+    }
+    let best: { id: string; score: number } | null = null;
+    for (const id of eligible) {
+      const { score } = calculateScoreFromBulkData(id, bulkData, config, 1, serviceType, { n: nByTech.get(id) ?? 0 });
+      if (!best || score > best.score) best = { id, score };
+    }
+    return { success: true, technicianId: best?.id };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Reactivación de cola (§5.2): re-corre la selección completa para un caso en
+ * `pendiente_pool`. Si ahora hay elegibles, invita y limpia la marca; si no, el
+ * caso permanece en cola (runFauchard no re-incrementa el ciclo si ya está pooled).
+ */
+export async function reevaluatePendingPoolCaseAction(
+  caseId: string,
+): Promise<{ success: boolean; reactivated?: boolean; error?: string }> {
+  try {
+    const sel = await runFauchardAction(caseId);
+    if (sel.success && sel.technicianIds?.length && sel.fauchardConfigId) {
+      await db.update(clinicalCase).set({ internalStatus: null, updatedAt: new Date() }).where(eq(clinicalCase.id, caseId));
+      await sendInvitationsAction(caseId, sel.technicianIds, { fauchardConfigId: sel.fauchardConfigId, pinCaseToConfig: true });
+      return { success: true, reactivated: true };
+    }
+    return { success: true, reactivated: false };
+  } catch (error) {
     return { success: false, error: String(error) };
   }
 }
@@ -1143,7 +1360,7 @@ export async function expirePendingInvitationsForCase(caseId: string) {
       },
     });
 
-    await penalizeNoResponseAction(inv.technicianId);
+    await penalizeNoResponseAction(inv.technicianId, inv.id);
   }
 
   return { expired: expiredPending.length };
@@ -1209,7 +1426,7 @@ export async function evaluateQuotesAction(caseId: string) {
     // no debemos volver a "construir la propuesta": eso resetea `proposalExpiresAt`,
     // limpia `assignedTechnicianId`, y duplica eventos/notificaciones en cada lectura.
     const [c0] = await db
-      .select({ status: clinicalCase.status })
+      .select({ status: clinicalCase.status, serviceType: clinicalCase.serviceType })
       .from(clinicalCase)
       .where(eq(clinicalCase.id, caseId))
       .limit(1);
@@ -1275,12 +1492,18 @@ export async function evaluateQuotesAction(caseId: string) {
 
     const qMinSelection = parseFloat(config.qMinSelection);
     const qualityWindow = new Date(Date.now() - config.wQualityDays * 86400000);
+    // Q por dimensión (CAD/CAM) según el tipo de servicio, igual que el score.
+    const qualityDims = dimensionsForServiceType(c0.serviceType ?? SERVICE_TYPES.SOLO_DISENO);
     const qualifiedQuotes: typeof quotes = [];
     for (const q of quotes) {
       const reviewRows = await db
         .select({ rating: review.rating })
         .from(review)
-        .where(and(eq(review.revieweeId, q.technicianId), gt(review.createdAt, qualityWindow)));
+        .where(and(
+          eq(review.revieweeId, q.technicianId),
+          inArray(review.dimension, qualityDims),
+          gt(review.createdAt, qualityWindow),
+        ));
       const ratings = reviewRows.map(r => r.rating);
       const Q = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length / 5 : 0.5;
       if (Q >= qMinSelection) qualifiedQuotes.push(q);
@@ -1414,8 +1637,38 @@ export async function checkAndExpireProposalsAction() {
 
 // ─── S2-10: Penalizar técnico por no responder ───────────────────────────────
 
-export async function penalizeNoResponseAction(technicianId: string) {
+export async function penalizeNoResponseAction(technicianId: string, invitationId?: string) {
   try {
+    // ─── v5.0: sanción rolling gradual cuando el modelo está habilitado ───
+    if (isAvailabilityEnabled()) {
+      await recordNoResponseEventAction(technicianId, invitationId ?? null);
+      const lvl = await computeLevelForTechnicianAction(technicianId);
+
+      if (lvl.level >= 3) {
+        // Nivel 3 → Auto-OFF del switch global + auto-rechazo de pendientes + email.
+        await db
+          .update(technicianAvailability)
+          .set({ levelGlobal: false, updatedAt: new Date() })
+          .where(eq(technicianAvailability.userId, technicianId));
+
+        const pendings = await db
+          .select({ id: caseInvitation.id })
+          .from(caseInvitation)
+          .where(and(eq(caseInvitation.technicianId, technicianId), eq(caseInvitation.status, 'pending')));
+        if (pendings.length) {
+          const { autoRejectOnAutoOffAction } = await import('./rejection');
+          await autoRejectOnAutoOffAction(technicianId, pendings.map((p) => p.id));
+        }
+        await notifyUser(technicianId, 'NIVEL_3_AUTO_OFF', { count: lvl.count });
+      } else if (lvl.level === 2) {
+        // Nivel 2 → penalización al score (ya aplicada vía −αN·N) + email informativo.
+        await notifyUser(technicianId, 'NIVEL_2_ALCANZADO', { count: lvl.count });
+      }
+      // Nivel 1 → solo aviso in-app (sin email); se refleja en el panel del técnico (Fase 4).
+      return;
+    }
+
+    // ─── Modelo legacy (flag off): exclusión binaria + suspensión a las 3 ───
     const [tech] = await db
       .select()
       .from(user)
@@ -1514,7 +1767,7 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
         tCooldownMinutes: fauchardConfig.tCooldownMinutes,
         dInactivityDays: fauchardConfig.dInactivityDays,
         nInvited: fauchardConfig.nInvited,
-        nFloor: fauchardConfig.nFloor,
+        qMinSelection: fauchardConfig.qMinSelection,
         tQuoteMinutes: fauchardConfig.tQuoteMinutes,
         tProposalHours: fauchardConfig.tProposalHours,
         platformFee: fauchardConfig.platformFee,
@@ -1529,6 +1782,19 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
         businessHoursStart: fauchardConfig.businessHoursStart,
         businessHoursEnd: fauchardConfig.businessHoursEnd,
         businessDaysMask: fauchardConfig.businessDaysMask,
+        // v5.0 — Plazos, sanción rolling, cola pool y score αN.
+        tDentistReviewHours: fauchardConfig.tDentistReviewHours,
+        tNoEligiblePoolHours: fauchardConfig.tNoEligiblePoolHours,
+        maxPoolCycles: fauchardConfig.maxPoolCycles,
+        replacementCutoffMinutes: fauchardConfig.replacementCutoffMinutes,
+        noResponseWindowDays: fauchardConfig.noResponseWindowDays,
+        noResponseRehabilitationDays: fauchardConfig.noResponseRehabilitationDays,
+        level1Threshold: fauchardConfig.level1Threshold,
+        level2Threshold: fauchardConfig.level2Threshold,
+        level3Threshold: fauchardConfig.level3Threshold,
+        inactivityAutoOffDays: fauchardConfig.inactivityAutoOffDays,
+        inactivityReminderDays: fauchardConfig.inactivityReminderDays,
+        alphaNoResponse: fauchardConfig.alphaNoResponse,
         updatedAt: fauchardConfig.updatedAt,
         updatedBy: fauchardConfig.updatedBy,
         updatedByName: user.fullName,
@@ -1550,7 +1816,7 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
 
 // ─── S6-02: Actualizar parámetros del algoritmo (Admin) ──────────────────────
 
-export async function updateFauchardParamsAction(params: Record<string, any>): Promise<ActionResult<{ newVersion: number }>> {
+export async function updateFauchardParamsAction(params: Record<string, any>, reason?: string): Promise<ActionResult<{ newVersion: number }>> {
   const identity = await getServerIdentity();
   if (!identity?.isSystemAdmin) return { success: false, error: 'No autorizado' };
 
@@ -1565,19 +1831,23 @@ export async function updateFauchardParamsAction(params: Record<string, any>): P
 
       if (!current) throw new Error('No hay configuración activa');
 
-      // 1. Validaciones de pesos (α)
-      const αKeys = ['alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaBonus'];
-      let αSum = 0;
-      for (const key of αKeys) {
-        const val = parseFloat(params[key] ?? current[key as keyof typeof current]);
-        if (isNaN(val) || val < 0 || val > 0.5) {
-          throw new Error(`Peso ${key} inválido (0.0 - 0.50)`);
+      // 1. Validaciones de pesos (α) — suma SOLO los α presentes en params.
+      // El panel legacy envía 5 (αQ..αB → suma 1.0); el panel v5.0 envía 6
+      // incluyendo αN (re-normalizado → suma 1.0). |Σα| siempre = 1.0.
+      const ALL_ALPHA_KEYS = ['alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaBonus', 'alphaNoResponse'];
+      const presentAlphaKeys = ALL_ALPHA_KEYS.filter((k) => params[k] !== undefined);
+      if (presentAlphaKeys.length > 0) {
+        let αSum = 0;
+        for (const key of presentAlphaKeys) {
+          const val = parseFloat(params[key]);
+          if (isNaN(val) || val < 0 || val > 0.5) {
+            throw new Error(`Peso ${key} inválido (0.0 - 0.50)`);
+          }
+          αSum += val;
         }
-        αSum += val;
-      }
-
-      if (Math.abs(αSum - 1.0) > 0.001) {
-        throw new Error(`La suma de los pesos debe ser exactamente 1.0 (suma actual: ${αSum.toFixed(3)})`);
+        if (Math.abs(αSum - 1.0) > 0.001) {
+          throw new Error(`La suma de los pesos debe ser exactamente 1.0 (suma actual: ${αSum.toFixed(3)})`);
+        }
       }
 
       // 2. Otras validaciones
@@ -1617,12 +1887,46 @@ export async function updateFauchardParamsAction(params: Record<string, any>): P
         }
       }
 
+      // v5.0 — Plazos, sanción, umbrales y heartbeat (cotas §11.2).
+      const intParam = (k: string) => (params[k] !== undefined ? parseInt(params[k]) : (current as any)[k]);
+      const range = (k: string, min: number, max: number, label: string) => {
+        if (params[k] === undefined) return;
+        const v = parseInt(params[k]);
+        if (isNaN(v) || v < min || v > max) throw new Error(`${label} debe estar entre ${min} y ${max}`);
+      };
+      range('tDentistReviewHours', 1, 336, 'Plazo de revisión del dentista (h)');
+      range('tNoEligiblePoolHours', 1, 168, 'Tiempo de espera de técnicos (h)');
+      range('maxPoolCycles', 1, 10, 'Ciclos de espera');
+      range('replacementCutoffMinutes', 0, 120, 'Margen de reemplazo (min)');
+      range('noResponseWindowDays', 1, 90, 'Ventana de no-respuesta (días)');
+      range('noResponseRehabilitationDays', 1, 180, 'Días de rehabilitación');
+      range('level1Threshold', 1, 50, 'Umbral Nivel 1');
+      range('level2Threshold', 1, 50, 'Umbral Nivel 2');
+      range('level3Threshold', 1, 50, 'Umbral Nivel 3');
+      range('inactivityAutoOffDays', 1, 365, 'Días para auto-OFF preventivo');
+      range('inactivityReminderDays', 1, 365, 'Días para recordatorio');
+
+      // Orden estricto de umbrales y heartbeat.
+      const l1 = intParam('level1Threshold');
+      const l2 = intParam('level2Threshold');
+      const l3 = intParam('level3Threshold');
+      if (!(l1 < l2 && l2 < l3)) {
+        throw new Error('Los umbrales deben cumplir Nivel 1 < Nivel 2 < Nivel 3');
+      }
+      const reminder = intParam('inactivityReminderDays');
+      const autoOff = intParam('inactivityAutoOffDays');
+      if (!(reminder < autoOff)) {
+        throw new Error('El recordatorio debe ser anterior al auto-OFF (recordatorio < auto-OFF)');
+      }
+
       // 3. Detectar cambios para el log
       const changes: { key: string; old: any; new: any }[] = [];
       const updatedFields: Record<string, any> = {
         updatedBy: identity.adminId ?? identity.id,
         updatedAt: new Date(),
         version: current.version + 1,
+        // v5.0 — motivo del cambio (auditoría); null si el panel no lo provee.
+        changeReason: reason?.trim() || null,
       };
 
       const metadataKeys = ['id', 'version', 'isActive', 'updatedBy', 'createdAt', 'updatedAt'];

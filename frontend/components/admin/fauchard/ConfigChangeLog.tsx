@@ -5,6 +5,9 @@ import { getFauchardConfigLogAction } from '@/lib/db/actions/fauchard';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { History, User, Settings, ArrowRight, Loader2, Search } from 'lucide-react';
+import FauchardHelpButton from './FauchardHelpButton';
+import FauchardHelpWindow from './FauchardHelpWindow';
+import { HISTORY_HELP } from '@/lib/constants/fauchardHelp';
 
 const KEY_LABELS: Record<string, string> = {
   // Pesos del Score
@@ -13,7 +16,8 @@ const KEY_LABELS: Record<string, string> = {
   alphaExperience: 'Experiencia Especializada (E)',
   alphaLoad: 'Penalización por Carga (C)',
   alphaBonus: 'Bono de Infrautilización (B)',
-  
+  alphaNoResponse: 'Penalización por No-respuesta (N)',
+
   // Filtros y Tiempos / General
   wQualityDays: 'Calidad Histórica (días)',
   wLoadDays: 'Carga Reciente (días)',
@@ -22,7 +26,6 @@ const KEY_LABELS: Record<string, string> = {
   tCooldownMinutes: 'Cooldown Invitaciones (min)',
   dInactivityDays: 'Inactividad Máxima (días)',
   nInvited: 'Técnicos a invitar por caso',
-  nFloor: 'Mínimo Cuartil Inferior (nFloor)',
   tQuoteMinutes: 'Tiempo para Cotizar (minutos)',
   tProposalHours: 'Validez de Propuesta (horas)',
   platformFee: 'Margen de Plataforma (Platform Fee)',
@@ -58,6 +61,7 @@ export default function ConfigChangeLog() {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     const fetchLogs = async () => {
@@ -98,17 +102,22 @@ export default function ConfigChangeLog() {
           <History className="w-5 h-5 text-muted" />
           <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Historial de Cambios</h3>
         </div>
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-faint" />
-          <input
-            type="text"
-            placeholder="Filtrar por parámetro o admin..."
-            className="w-full bg-surface border border-divider rounded-xl pl-9 pr-4 py-2 text-[11px] text-foreground focus:outline-none focus:border-divider transition-colors"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          />
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-faint" />
+            <input
+              type="text"
+              placeholder="Filtrar por parámetro o admin..."
+              className="w-full bg-surface border border-divider rounded-xl pl-9 pr-4 py-2 text-[11px] text-foreground focus:outline-none focus:border-divider transition-colors"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+          </div>
+          <FauchardHelpButton onClick={() => setShowHelp(true)} label="Historial" />
         </div>
       </div>
+
+      <FauchardHelpWindow isOpen={showHelp} onClose={() => setShowHelp(false)} section={HISTORY_HELP} />
 
       <div className="rounded-[2rem] border border-divider overflow-hidden bg-surface/20 shadow-xl">
         <table className="w-full text-left border-collapse">

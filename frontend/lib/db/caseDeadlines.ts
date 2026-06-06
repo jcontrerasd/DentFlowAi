@@ -8,8 +8,9 @@
  */
 
 import { db } from '@/lib/db';
-import { caseInvitation, clinicalCase } from '@/lib/db/schema';
+import { caseInvitation, clinicalCase, fauchardConfig } from '@/lib/db/schema';
 import { eq, and, inArray, max } from 'drizzle-orm';
+import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
 
 /** Etapa 1 — plazo para que invitados envíen cotización (`enEvaluacion`). */
 export type QuoteWindow = {
@@ -85,4 +86,40 @@ export function getCaseProposalDeadlineAt(
   if (raw == null) return null;
   const d = raw instanceof Date ? raw : new Date(raw);
   return Number.isFinite(d.getTime()) ? d : null;
+}
+
+/**
+ * Etapa 3 (v5.0) — plazo del dentista para revisar una entrega del técnico
+ * (`enRevision`). Wall-clock: `last_revision_submitted_at + tDentistReviewHours`.
+ * Cada nueva entrega reinicia `last_revision_submitted_at` (§4.2), así que el
+ * countdown se recalcula solo. Devuelve null si el modelo está apagado o no hay
+ * entrega registrada. Self-contained: lee la config anclada al caso o la activa.
+ */
+export async function getCaseReviewDeadlineAt(caseId: string): Promise<Date | null> {
+  if (!isAvailabilityEnabled()) return null;
+
+  const [row] = await db
+    .select({
+      submittedAt: clinicalCase.lastRevisionSubmittedAt,
+      anchoredHours: fauchardConfig.tDentistReviewHours,
+    })
+    .from(clinicalCase)
+    .leftJoin(fauchardConfig, eq(fauchardConfig.id, clinicalCase.fauchardConfigId))
+    .where(eq(clinicalCase.id, caseId))
+    .limit(1);
+
+  if (!row?.submittedAt) return null;
+
+  let hours = row.anchoredHours ?? null;
+  if (hours == null) {
+    const [active] = await db
+      .select({ hours: fauchardConfig.tDentistReviewHours })
+      .from(fauchardConfig)
+      .where(eq(fauchardConfig.isActive, true))
+      .limit(1);
+    hours = active?.hours ?? 48;
+  }
+
+  const deadline = new Date(new Date(row.submittedAt).getTime() + hours * 3_600_000);
+  return Number.isFinite(deadline.getTime()) ? deadline : null;
 }

@@ -3,7 +3,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-export const INFRA_VERSION = 'v4.7';
+export const INFRA_VERSION = 'v5.4';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -289,6 +289,7 @@ export async function ensureInfrastructure(db: any) {
           reviewer_id TEXT NOT NULL REFERENCES "user"(id),
           reviewee_id TEXT NOT NULL REFERENCES "user"(id),
           rating INTEGER NOT NULL,
+          dimension TEXT NOT NULL DEFAULT 'design',
           comment TEXT,
           created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
         );
@@ -935,6 +936,198 @@ export async function ensureInfrastructure(db: any) {
       CREATE INDEX IF NOT EXISTS ci_case_pending_idx
         ON case_invitation(clinical_case_id) WHERE (status = 'pending');
     `);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // v5.0 — Modelo de disponibilidad del técnico, sanción rolling y cola pool.
+    // Ver Doc Servicio Orquestado/{flujo_tiempos,plan_flujo_tiempos}.md.
+    // Todas las tablas/columnas se crean siempre (idempotente); el comportamiento
+    // queda inerte hasta encender AVAILABILITY_MODEL_ENABLED. El único paso gated
+    // es el backfill de technician_availability (más abajo).
+    // ─────────────────────────────────────────────────────────────────────────
+
+    // 1) Disponibilidad declarada (modelo aplanado: 1 fila por técnico).
+    //    5 categorías canónicas × 2 capacidades (CAD/CAM) = 10 columnas hijas.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS technician_availability (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+        level_global BOOLEAN NOT NULL DEFAULT TRUE,
+        level_cad BOOLEAN NOT NULL DEFAULT FALSE,
+        level_cam BOOLEAN NOT NULL DEFAULT FALSE,
+        cat_coronas_cad BOOLEAN NOT NULL DEFAULT TRUE,
+        cat_coronas_cam BOOLEAN NOT NULL DEFAULT TRUE,
+        cat_inlays_cad BOOLEAN NOT NULL DEFAULT TRUE,
+        cat_inlays_cam BOOLEAN NOT NULL DEFAULT TRUE,
+        cat_puentes_cad BOOLEAN NOT NULL DEFAULT TRUE,
+        cat_puentes_cam BOOLEAN NOT NULL DEFAULT TRUE,
+        cat_protesis_cad BOOLEAN NOT NULL DEFAULT TRUE,
+        cat_protesis_cam BOOLEAN NOT NULL DEFAULT TRUE,
+        cat_guias_cad BOOLEAN NOT NULL DEFAULT TRUE,
+        cat_guias_cam BOOLEAN NOT NULL DEFAULT TRUE,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS technician_availability_user_uidx ON technician_availability(user_id);
+    `);
+
+    // v5.1 — marca de recordatorio de inactividad enviado (idempotencia del cron
+    // process-availability: se re-arma cuando el técnico vuelve a tener actividad).
+    await db.execute(sql`
+      ALTER TABLE technician_availability
+        ADD COLUMN IF NOT EXISTS inactivity_reminder_sent_at TIMESTAMPTZ;
+    `);
+
+    // 2) Eventos individuales de no-respuesta (timestamps para ventana rolling).
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS technician_no_response_event (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        technician_user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+        case_invitation_id UUID REFERENCES case_invitation(id) ON DELETE SET NULL,
+        occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        status TEXT NOT NULL DEFAULT 'active', -- active | expired_window | pardoned
+        pardoned_by_user_id TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+        pardoned_at TIMESTAMPTZ,
+        pardon_reason TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS tnre_tech_occurred_idx ON technician_no_response_event(technician_user_id, occurred_at);
+      CREATE INDEX IF NOT EXISTS tnre_status_idx ON technician_no_response_event(status);
+    `);
+
+    // 3) Catálogos de motivos de rechazo (mismo patrón que vita_shade, etc.).
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS invitation_rejection_reason (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        code TEXT NOT NULL UNIQUE,
+        label TEXT NOT NULL,
+        description TEXT,
+        sort_order INTEGER NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS bulk_rejection_reason (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        code TEXT NOT NULL UNIQUE,
+        label TEXT NOT NULL,
+        description TEXT,
+        sort_order INTEGER NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Seed de motivos (idempotente).
+    await db.execute(sql`
+      INSERT INTO invitation_rejection_reason (code, label, sort_order) VALUES
+        ('rej_001','Carga de trabajo alta',1),
+        ('rej_002','Plazo demasiado corto',2),
+        ('rej_003','Precio sugerido fuera de rango',3),
+        ('rej_004','No manejo el material requerido',4),
+        ('rej_005','Caso fuera de mi especialidad clínica',5),
+        ('rej_006','Información del caso insuficiente',6),
+        ('rej_007','Otro',7)
+      ON CONFLICT (code) DO NOTHING;
+    `);
+    await db.execute(sql`
+      INSERT INTO bulk_rejection_reason (code, label, sort_order) VALUES
+        ('brej_001','Vacaciones',1),
+        ('brej_002','Carga de trabajo alta',2),
+        ('brej_003','Pausa temporal',3),
+        ('brej_004','Problema personal',4),
+        ('brej_005','Otro',5)
+      ON CONFLICT (code) DO NOTHING;
+    `);
+
+    // 4) Columnas nuevas en case_invitation (rechazo individual + masivo + reemplazo).
+    await db.execute(sql`
+      ALTER TABLE case_invitation
+        ADD COLUMN IF NOT EXISTS rejection_reason_id UUID REFERENCES invitation_rejection_reason(id) ON DELETE RESTRICT,
+        ADD COLUMN IF NOT EXISTS rejection_comment TEXT,
+        ADD COLUMN IF NOT EXISTS rejected_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS bulk_rejection_reason_id UUID REFERENCES bulk_rejection_reason(id) ON DELETE RESTRICT,
+        ADD COLUMN IF NOT EXISTS bulk_rejection_comment TEXT,
+        ADD COLUMN IF NOT EXISTS is_replacement BOOLEAN NOT NULL DEFAULT FALSE;
+    `);
+
+    // 5) Columnas nuevas en clinical_case (cola pendiente_pool + countdown revisión).
+    await db.execute(sql`
+      ALTER TABLE clinical_case
+        ADD COLUMN IF NOT EXISTS pending_pool_cycle_count INTEGER NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS pending_pool_started_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS pending_pool_checkin_sent_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS last_revision_submitted_at TIMESTAMPTZ;
+    `);
+
+    // v5.2 — idempotencia de la escalación del countdown de revisión del dentista
+    // (cron process-availability). Se reinician en cada submitRevisionAction.
+    await db.execute(sql`
+      ALTER TABLE clinical_case
+        ADD COLUMN IF NOT EXISTS review_reminder_sent_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS review_overdue_notified_at TIMESTAMPTZ;
+    `);
+
+    // 6) Columnas nuevas en fauchard_config (plazos, sanción, umbrales, heartbeat,
+    //    score αN, auditoría). Defaults = sección 6.1 del doc funcional.
+    await db.execute(sql`
+      ALTER TABLE fauchard_config
+        ADD COLUMN IF NOT EXISTS t_dentist_review_hours INTEGER NOT NULL DEFAULT 48,
+        ADD COLUMN IF NOT EXISTS t_no_eligible_pool_hours INTEGER NOT NULL DEFAULT 24,
+        ADD COLUMN IF NOT EXISTS max_pool_cycles INTEGER NOT NULL DEFAULT 2,
+        ADD COLUMN IF NOT EXISTS replacement_cutoff_minutes INTEGER NOT NULL DEFAULT 10,
+        ADD COLUMN IF NOT EXISTS no_response_window_days INTEGER NOT NULL DEFAULT 14,
+        ADD COLUMN IF NOT EXISTS no_response_rehabilitation_days INTEGER NOT NULL DEFAULT 30,
+        ADD COLUMN IF NOT EXISTS level_1_threshold INTEGER NOT NULL DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS level_2_threshold INTEGER NOT NULL DEFAULT 2,
+        ADD COLUMN IF NOT EXISTS level_3_threshold INTEGER NOT NULL DEFAULT 3,
+        ADD COLUMN IF NOT EXISTS inactivity_auto_off_days INTEGER NOT NULL DEFAULT 30,
+        ADD COLUMN IF NOT EXISTS inactivity_reminder_days INTEGER NOT NULL DEFAULT 7,
+        ADD COLUMN IF NOT EXISTS alpha_no_response NUMERIC(4,3) NOT NULL DEFAULT 0.250,
+        ADD COLUMN IF NOT EXISTS change_reason TEXT;
+    `);
+
+    // v5.3 — Calificación por dimensión (CAD/CAM). Una reseña por caso+dentista+fase.
+    await db.execute(sql`
+      ALTER TABLE review
+        ADD COLUMN IF NOT EXISTS dimension TEXT NOT NULL DEFAULT 'design';
+      CREATE UNIQUE INDEX IF NOT EXISTS review_case_reviewer_dimension_uq
+        ON review (clinical_case_id, reviewer_id, dimension);
+    `);
+
+    // v5.4 — Unifica los pesos del score a un solo esquema de 6 (Σ6=1.0 con αN).
+    // Antes coexistían dos convenciones: "Pesos del Score" (Σ5=1) y el motor con
+    // constantes hardcodeadas (RENORMALIZED_ALPHAS). Ahora el motor lee la config,
+    // así que las filas deben sumar 1.0 con los 6 pesos. Normaliza a los valores
+    // renormalizados las filas que no cumplan. Idempotente: tras correr, Σ6=1.0 y
+    // el WHERE deja de coincidir.
+    await db.execute(sql`
+      UPDATE fauchard_config
+      SET alpha_quality = 0.200, alpha_punctuality = 0.150, alpha_experience = 0.150,
+          alpha_load = 0.150, alpha_bonus = 0.100, alpha_no_response = 0.250
+      WHERE ABS(
+        COALESCE(alpha_quality,0) + COALESCE(alpha_punctuality,0) + COALESCE(alpha_experience,0)
+        + COALESCE(alpha_load,0) + COALESCE(alpha_bonus,0) + COALESCE(alpha_no_response,0) - 1.0
+      ) > 0.001;
+    `);
+
+    // 7) Backfill de disponibilidad — SOLO si el modelo está habilitado.
+    //    Evita correr el INSERT masivo en cada deploy con el feature apagado.
+    //    Inferencia CAD/CAM desde technician_skill; categorías todo ON; caso
+    //    degenerado (sin skills) → global ON, CAD/CAM OFF.
+    if (process.env.AVAILABILITY_MODEL_ENABLED === 'true') {
+      await db.execute(sql`
+        INSERT INTO technician_availability (user_id, level_global, level_cad, level_cam)
+        SELECT
+          u.id,
+          TRUE,
+          EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.design_level > 0),
+          EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.fabrication_level > 0)
+        FROM "user" u
+        WHERE u.role = 'tecnico'
+        ON CONFLICT (user_id) DO NOTHING;
+      `);
+      console.log("[DB] v5.0 backfill de technician_availability ejecutado (flag ON).");
+    }
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
     console.log("[DB] Infraestructura verificada con éxito.");

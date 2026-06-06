@@ -8,9 +8,13 @@ import { motion } from 'framer-motion';
 export default function FauchardNav() {
   const pathname = usePathname();
 
+  // Demo guiada (guided-demo) y Esquema vivo (sandbox-diagram) quedan descolgados
+  // del menú: las rutas siguen existiendo y son accesibles por URL directa, pero
+  // no se exponen en la navegación. El Radar de Pesos del sandbox se adoptó como
+  // tab "Radar y Simulación" dentro de Configuración (vinculado a BD).
   const links = [
     { href: '/dashboard/admin/fauchard', label: 'Configuración', icon: Settings2 },
-    { href: '/dashboard/admin/fauchard/monitor', label: 'Monitoreo', icon: Activity },
+    { href: '/dashboard/admin/fauchard/monitor', label: 'Monitoreo y Equidad', icon: Activity },
     { href: '/dashboard/admin/fauchard/simulate', label: 'Simulador', icon: FlaskConical },
   ];
 

@@ -55,3 +55,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `startWorkAction` (`proposal.ts`): `solo_fabricacion` → `enFabricacion`; resto → `enEjecucion`.
 - `transitionToManufacturingAction`, `registerDispatchAction`, `confirmReceptionAction` viven en `cases.ts` (no en `proposal.ts`).
 - `solo_diseno` cierra en `approveWorkAction` → `completado`; flujos con despacho cierran con `confirmReceptionAction`.
+
+### Disponibilidad del técnico (v5.0, flag `AVAILABILITY_MODEL_ENABLED`)
+- 3 niveles jerárquicos (global · CAD/CAM · 5 categorías) → regla AND triple en `availability.ts`. Rechazo individual ≠ rechazo masivo (catálogos `invitation_rejection_reason` / `bulk_rejection_reason`).
+- **Rechazo individual en UCH** (flag `REJECTION_INDIVIDUAL_ENABLED`): botón "Rechazar invitación" en `UchFauchardActionsPanel` → `UchRejectInvitationDialog` → `rejectInvitationIndividualAction`. Solo el técnico invitado, mientras la invitación esté `pending`. **No** cuenta como no-respuesta y dispara reemplazo automático (`tryReplaceAfterRejectAction`). El **rechazo masivo** es distinto: lo hace el técnico al pausar el switch global (`rejectInvitationsBulkAction`). El flag server-only se expone al cliente con `getRejectionUiEnabledAction`.
+- Sanción rolling 14d (`noResponseEvents.ts`) reemplaza `consecutiveNoResponse` con el flag on; nivel 3 = auto-OFF. Cola `pendiente_pool` (`poolQueue.ts`) cuando no hay elegibles.
+- **Crons (v5.0)**: `/api/cron/process-availability` (hora) y `/api/cron/process-pool-queue` (10 min), header `Authorization: Bearer ${CRON_SECRET}`, inertes con el flag off. Dentista: banner `pendiente_pool` + check-in 50% TTL (`cancelPendingPoolAction`) y Republicar (`republicarCaseAction`) en `sin_cotizaciones_fallo`.
+- Notificaciones por **EmailJS** (no Resend) vía `lib/services/notifications.ts` (API REST server-side).

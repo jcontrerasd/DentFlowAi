@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { user, organization, clinicalCase, bid, file, annotation, accounts, sessions, review, caseInvitation, clinicalCaseDelivery, clinicalCaseEvent, commercialRound, contactGuardAudit, auditLog } from "@/lib/db/schema";
+import { user, organization, clinicalCase, bid, file, annotation, accounts, sessions, review, caseInvitation, clinicalCaseDelivery, clinicalCaseEvent, commercialRound, contactGuardAudit, auditLog, technicianNoResponseEvent } from "@/lib/db/schema";
 import { eq, ne, desc, sql } from "drizzle-orm";
 import * as bcrypt from "bcryptjs";
 import GCPStorageService from "@/lib/services/gcp-storage";
@@ -94,6 +94,32 @@ export async function changeUserPasswordAdmin(userId: string, newPassword: strin
 export async function deleteUserAdmin(userId: string) {
   await ensureAdmin();
   try {
+    // 0. Protección de acceso: un usuario ADMIN no se puede eliminar.
+    //    Evita que el panel quede sin administradores (y con mayor razón si
+    //    solo existe uno). El bloqueo es por rol, así que el último admin
+    //    nunca es borrable.
+    const [target] = await db
+      .select({ role: user.role })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    if (!target) {
+      return { success: false, error: 'Usuario no encontrado.' };
+    }
+    if (target.role === 'admin') {
+      const [{ count: adminCount }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(user)
+        .where(eq(user.role, 'admin'));
+      return {
+        success: false,
+        error: adminCount <= 1
+          ? 'No se puede eliminar el único usuario administrador del sistema.'
+          : 'No se puede eliminar un usuario administrador.',
+      };
+    }
+
     // 1. Encontrar todos los archivos subidos por este usuario
     const filesToPurge = await db
       .select({ gcsPath: file.gcsPath })
@@ -262,6 +288,12 @@ export async function purgeAllBusinessDataAdmin(): Promise<PurgeReport> {
 
     const delDeliveries = await db.delete(clinicalCaseDelivery).returning({ id: clinicalCaseDelivery.id });
     log('clinicalCaseDelivery', 'Entregas de trabajo', delDeliveries.length);
+
+    // v5.0: eventos de no-respuesta (sanción rolling). Borrar antes de caseInvitation:
+    // su FK case_invitation_id es SET NULL, pero la purga limpia el historial completo.
+    // technician_availability NO se toca (declaración personal del técnico, modo never).
+    const delNoResponseEvents = await db.delete(technicianNoResponseEvent).returning({ id: technicianNoResponseEvent.id });
+    log('technicianNoResponseEvent', 'Eventos de no-respuesta (sanción rolling)', delNoResponseEvents.length);
 
     const delInvitations = await db.delete(caseInvitation).returning({ id: caseInvitation.id });
     log('caseInvitation', 'Invitaciones a técnicos', delInvitations.length);

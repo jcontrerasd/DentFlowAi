@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  AlertCircle, AlertTriangle, CheckCircle2, Clock, Hammer, Package, Send, Undo2, XCircle,
+  AlertCircle, AlertTriangle, Ban, CheckCircle2, Clock, Hammer, Package, Send, Undo2, XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -12,6 +12,8 @@ import ComparativeOffersPanel from '@/components/cases/ComparativeOffersPanel';
 import OfferConditionsBlock from '@/components/cases/OfferConditionsBlock';
 import UchQuoteBreakdown from '@/components/cases/uch/UchQuoteBreakdown';
 import { startWorkAction, withdrawQuoteAction } from '@/lib/db/actions/proposal';
+import { getRejectionUiEnabledAction } from '@/lib/db/actions/rejection';
+import UchRejectInvitationDialog from '@/components/cases/uch/UchRejectInvitationDialog';
 import { quoteDisplayFromInvitation } from '@/lib/uchQuoteDisplay';
 import type { InvitationItem } from '@/lib/db/actions/invitations';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
@@ -140,6 +142,21 @@ export default function UchFauchardActionsPanel({
   const [dispatchCourier, setDispatchCourier] = useState('Interno');
   const [dispatchTracking, setDispatchTracking] = useState('');
   const [isRegisteringDispatch, setIsRegisteringDispatch] = useState(false);
+  // Rechazo individual de invitación (v5.0, gated por REJECTION_INDIVIDUAL_ENABLED).
+  const [rejectionEnabled, setRejectionEnabled] = useState(false);
+  const [showRejectInvitation, setShowRejectInvitation] = useState(false);
+
+  const canRejectInvitation =
+    actingAsTecnico && myInvitation?.status === 'pending' && caseStatus === 'enEvaluacion';
+
+  useEffect(() => {
+    if (!canRejectInvitation) return;
+    let active = true;
+    getRejectionUiEnabledAction()
+      .then((res) => { if (active) setRejectionEnabled(res.enabled); })
+      .catch(() => { if (active) setRejectionEnabled(false); });
+    return () => { active = false; };
+  }, [canRejectInvitation]);
 
   const canWithdrawQuote =
     actingAsTecnico &&
@@ -548,6 +565,17 @@ export default function UchFauchardActionsPanel({
                   </div>
                 );
               })()}
+              {rejectionEnabled && canRejectInvitation && (
+                <button
+                  type="button"
+                  onClick={() => setShowRejectInvitation(true)}
+                  data-testid="uch-reject-invitation-open"
+                  className="w-full py-2 border border-error/20 text-error hover:bg-error-hl text-[10px] font-black uppercase rounded-xl transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/30"
+                >
+                  <Ban className="w-3.5 h-3.5" />
+                  Rechazar invitación
+                </button>
+              )}
               {canWithdrawQuote && myInvitation.quotedPrice != null && (
                 <div className="rounded-xl border border-divider bg-surface p-3 space-y-3">
                   <p className="text-[9px] font-black text-muted uppercase tracking-widest">Tu oferta enviada</p>
@@ -710,6 +738,19 @@ export default function UchFauchardActionsPanel({
           )}
         </div>
       </div>
+
+      {myInvitation && (
+        <UchRejectInvitationDialog
+          isOpen={showRejectInvitation}
+          onClose={() => setShowRejectInvitation(false)}
+          invitationId={myInvitation.id}
+          onRejected={async () => {
+            showSuccess('Invitación rechazada. El caso queda libre para otro técnico.');
+            dispatchDashboardMetricsRefresh();
+            await onInvitationUpdate?.();
+          }}
+        />
+      )}
 
       <AnimatePresence>
         {showDispatchForm && actingAsTecnico && caseStatus === 'enFabricacion' && (

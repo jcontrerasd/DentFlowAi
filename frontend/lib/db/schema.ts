@@ -128,6 +128,15 @@ export const clinicalCase = pgTable("clinical_case", {
   fauchardConfigId: uuid("fauchard_config_id").references(() => fauchardConfig.id, { onDelete: 'set null' }),
   /** Caso origen si este registro es copia (Crear copia desde terminal). */
   copiedFromCaseId: uuid("copied_from_case_id"),
+  // v5.0 — Cola pendiente_pool (Fauchard sin elegibles) + countdown revisión dentista.
+  pendingPoolCycleCount: integer("pending_pool_cycle_count").default(0).notNull(),
+  pendingPoolStartedAt: timestamp("pending_pool_started_at", { withTimezone: true, mode: 'date' }),
+  pendingPoolCheckinSentAt: timestamp("pending_pool_checkin_sent_at", { withTimezone: true, mode: 'date' }),
+  /** Reinicia el countdown `tDentistReviewHours` en cada entrega del técnico (v5.0). */
+  lastRevisionSubmittedAt: timestamp("last_revision_submitted_at", { withTimezone: true, mode: 'date' }),
+  /** Idempotencia de la escalación del countdown de revisión (v5.2). Reset en cada entrega. */
+  reviewReminderSentAt: timestamp("review_reminder_sent_at", { withTimezone: true, mode: 'date' }),
+  reviewOverdueNotifiedAt: timestamp("review_overdue_notified_at", { withTimezone: true, mode: 'date' }),
 }, (table) => [
 	uniqueIndex("clinical_case_case_number_uidx").on(table.caseNumber),
 	index("clinical_case_assignedTechnicianId_idx").on(table.assignedTechnicianId),
@@ -180,6 +189,8 @@ export const review = pgTable("review", {
   reviewerId: text("reviewer_id").notNull().references(() => user.id),
   revieweeId: text("reviewee_id").notNull().references(() => user.id),
   rating: integer("rating").notNull(),
+  /** Fase calificada: 'design' (CAD) | 'fabrication' (CAM). v5.3. */
+  dimension: text("dimension").default('design').notNull(),
   comment: text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 });
@@ -323,6 +334,26 @@ export const fauchardConfig = pgTable("fauchard_config", {
   // Categoría — descenso
   lDescentRating: numeric("l_descent_rating", { precision: 3, scale: 2 }).default('3.00').notNull(),
   lDescentDays: integer("l_descent_days").default(60).notNull(),
+  // ─── v5.0 — Disponibilidad, sanción rolling, cola pool y revisión dentista ───
+  // Plazos (wall-clock).
+  tDentistReviewHours: integer("t_dentist_review_hours").default(48).notNull(),
+  tNoEligiblePoolHours: integer("t_no_eligible_pool_hours").default(24).notNull(),
+  maxPoolCycles: integer("max_pool_cycles").default(2).notNull(),
+  replacementCutoffMinutes: integer("replacement_cutoff_minutes").default(10).notNull(),
+  // Sanción por no-respuesta (días).
+  noResponseWindowDays: integer("no_response_window_days").default(14).notNull(),
+  noResponseRehabilitationDays: integer("no_response_rehabilitation_days").default(30).notNull(),
+  // Umbrales de niveles (cantidad de no-respuestas en ventana).
+  level1Threshold: integer("level_1_threshold").default(1).notNull(),
+  level2Threshold: integer("level_2_threshold").default(2).notNull(),
+  level3Threshold: integer("level_3_threshold").default(3).notNull(),
+  // Heartbeat (días).
+  inactivityAutoOffDays: integer("inactivity_auto_off_days").default(30).notNull(),
+  inactivityReminderDays: integer("inactivity_reminder_days").default(7).notNull(),
+  // Score — coeficiente del término −αN·N (re-normalización aplicada en Fase 2 con flag on).
+  alphaNoResponse: numeric("alpha_no_response", { precision: 4, scale: 3 }).default('0.250').notNull(),
+  // Auditoría: motivo del cambio (obligatorio en UI admin, nullable en BD para filas históricas).
+  changeReason: text("change_reason"),
   // Metadatos
   isActive: boolean("is_active").default(true).notNull(),
   updatedBy: text("updated_by").references(() => user.id, { onDelete: 'set null' }),
@@ -398,6 +429,16 @@ export const caseInvitation = pgTable("case_invitation", {
   workType: text("work_type"),
   /** Feedback obligatorio cuando el dentista rechaza esa oferta en el comparativo */
   dentistRejectionFeedback: text("dentist_rejection_feedback"),
+  // ─── v5.0 — Rechazo explícito (individual / masivo) + marca de reemplazo ───
+  /** Rechazo individual del técnico (§3.2). FK al catálogo, RESTRICT. */
+  rejectionReasonId: uuid("rejection_reason_id").references(() => invitationRejectionReason.id, { onDelete: 'restrict' }),
+  rejectionComment: text("rejection_comment"),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true, mode: 'date' }),
+  /** Rechazo masivo al apagar el switch / auto-OFF Nivel 3 (§3.1). */
+  bulkRejectionReasonId: uuid("bulk_rejection_reason_id").references(() => bulkRejectionReason.id, { onDelete: 'restrict' }),
+  bulkRejectionComment: text("bulk_rejection_comment"),
+  /** Invitación generada por reemplazo automático tras un rechazo (§3.3). */
+  isReplacement: boolean("is_replacement").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (table) => [
@@ -678,6 +719,107 @@ export const urgencyLevel = pgTable("urgency_level", {
 }, (table) => [
   uniqueIndex("urgency_level_code_uidx").on(table.code),
 ]);
+
+// ─── v5.0 — Disponibilidad del técnico, sanción rolling y catálogos de rechazo ──
+
+/**
+ * Disponibilidad declarada del técnico (modelo aplanado, 1 fila por técnico).
+ * Regla de elegibilidad AND triple: level_global ∧ level_<cap> ∧ cat_<categoria>_<cap>.
+ * Las columnas hijas se preservan aunque el padre esté OFF (§1.5).
+ */
+export const technicianAvailability = pgTable("technician_availability", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  levelGlobal: boolean("level_global").default(true).notNull(),
+  levelCad: boolean("level_cad").default(false).notNull(),
+  levelCam: boolean("level_cam").default(false).notNull(),
+  catCoronasCad: boolean("cat_coronas_cad").default(true).notNull(),
+  catCoronasCam: boolean("cat_coronas_cam").default(true).notNull(),
+  catInlaysCad: boolean("cat_inlays_cad").default(true).notNull(),
+  catInlaysCam: boolean("cat_inlays_cam").default(true).notNull(),
+  catPuentesCad: boolean("cat_puentes_cad").default(true).notNull(),
+  catPuentesCam: boolean("cat_puentes_cam").default(true).notNull(),
+  catProtesisCad: boolean("cat_protesis_cad").default(true).notNull(),
+  catProtesisCam: boolean("cat_protesis_cam").default(true).notNull(),
+  catGuiasCad: boolean("cat_guias_cad").default(true).notNull(),
+  catGuiasCam: boolean("cat_guias_cam").default(true).notNull(),
+  inactivityReminderSentAt: timestamp("inactivity_reminder_sent_at", { withTimezone: true, mode: 'date' }),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("technician_availability_user_uidx").on(table.userId),
+]);
+
+/**
+ * Evento individual de no-respuesta (timeout sin cotizar ni rechazar).
+ * Los timestamps alimentan la ventana rolling de `noResponseWindowDays` (§2.3).
+ */
+export const technicianNoResponseEvent = pgTable("technician_no_response_event", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  technicianUserId: text("technician_user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  caseInvitationId: uuid("case_invitation_id").references(() => caseInvitation.id, { onDelete: 'set null' }),
+  occurredAt: timestamp("occurred_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  // active | expired_window | pardoned
+  status: text("status").default('active').notNull(),
+  pardonedByUserId: text("pardoned_by_user_id").references(() => user.id, { onDelete: 'set null' }),
+  pardonedAt: timestamp("pardoned_at", { withTimezone: true, mode: 'date' }),
+  pardonReason: text("pardon_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  index("tnre_tech_occurred_idx").on(table.technicianUserId, table.occurredAt),
+  index("tnre_status_idx").on(table.status),
+]);
+
+/** Catálogo de motivos de rechazo individual (§3.2). Code opaco `rej_NNN`. */
+export const invitationRejectionReason = pgTable("invitation_rejection_reason", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  code: text().notNull(),
+  label: text().notNull(),
+  description: text(),
+  sortOrder: integer("sort_order").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("invitation_rejection_reason_code_uidx").on(table.code),
+]);
+
+/** Catálogo de motivos de rechazo masivo / auto-OFF (§3.1). Code opaco `brej_NNN`. */
+export const bulkRejectionReason = pgTable("bulk_rejection_reason", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  code: text().notNull(),
+  label: text().notNull(),
+  description: text(),
+  sortOrder: integer("sort_order").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("bulk_rejection_reason_code_uidx").on(table.code),
+]);
+
+export const technicianAvailabilityRelations = relations(technicianAvailability, ({ one }) => ({
+  user: one(user, {
+    fields: [technicianAvailability.userId],
+    references: [user.id],
+  }),
+}));
+
+export const technicianNoResponseEventRelations = relations(technicianNoResponseEvent, ({ one }) => ({
+  technician: one(user, {
+    fields: [technicianNoResponseEvent.technicianUserId],
+    references: [user.id],
+    relationName: 'noResponseTechnician',
+  }),
+  invitation: one(caseInvitation, {
+    fields: [technicianNoResponseEvent.caseInvitationId],
+    references: [caseInvitation.id],
+  }),
+  pardonedBy: one(user, {
+    fields: [technicianNoResponseEvent.pardonedByUserId],
+    references: [user.id],
+    relationName: 'noResponsePardonedBy',
+  }),
+}));
 
 // ─── ContactGuard (anti-desintermediación) ──────────────────────────────────
 // Reglas configurables de detección de datos de contacto + auditoría de intentos.

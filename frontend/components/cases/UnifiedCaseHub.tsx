@@ -22,6 +22,7 @@ import UchDeliveryPanel, { newDeliveryEntry } from '@/components/cases/uch/UchDe
 import type { DeliveryFileEntry } from '@/components/cases/uch/UchDeliveryPanel';
 import UchDentistReviewPanel from '@/components/cases/uch/UchDentistReviewPanel';
 import UchFauchardActionsPanel from '@/components/cases/uch/UchFauchardActionsPanel';
+import UchRatingPanel from '@/components/cases/uch/UchRatingPanel';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { useRemainingMsUntil, formatCountdownHMS } from '@/lib/hooks/useRemainingUntil';
 import { splitCasoPublicadoForDentista } from '@/lib/uchCasoPublicadoSplit';
@@ -74,6 +75,8 @@ interface UnifiedCaseHubProps {
   /** Técnico perdedor o invitación rechazada: hilo y resumen solo su participación. */
   techOfferRejectedView?: boolean;
   proposalDeadlineMs?: number | null;
+  /** v5.0 — Etapa 3: plazo de revisión del dentista (`enRevision`). */
+  reviewDeadlineMs?: number | null;
   serverClockAnchor?: ServerClockAnchor | null;
 }
 
@@ -103,6 +106,7 @@ export default function UnifiedCaseHub({
   onActionTriggered,
   techOfferRejectedView = false,
   proposalDeadlineMs,
+  reviewDeadlineMs,
   serverClockAnchor,
 }: UnifiedCaseHubProps) {
   const { showSuccess, showError } = useToast();
@@ -119,6 +123,21 @@ export default function UnifiedCaseHub({
       : null;
   const headerCountdownRemainingMs = useRemainingMsUntil(headerCountdownDeadlineMs, serverClockAnchor);
   const showHeaderCountdown = headerCountdownDeadlineMs != null && headerCountdownRemainingMs >= 0;
+
+  /**
+   * Countdown 3 (v5.0): plazo de revisión del dentista (`enRevision`). Visible para
+   * el dentista y el técnico que entregó (ambos en el flujo de revisión) y para admin.
+   * Al expirar no hay auto-acción: solo se marca "Respuesta vencida" (§4.2).
+   */
+  const showReviewWindow =
+    caseStatus === 'enRevision' &&
+    reviewDeadlineMs != null &&
+    (actingAsDentista || actingAsTecnico || viewingAsAdmin);
+  const reviewRemainingMs = useRemainingMsUntil(showReviewWindow ? reviewDeadlineMs ?? null : null, serverClockAnchor);
+  // `useRemainingMsUntil` clampa a 0 al vencer (solo devuelve -1 si el deadline es
+  // null/inválido). Con `showReviewWindow` el deadline es válido (> 0), así que
+  // `<= 0` ⇒ vencido (robusto ante cambios del clamp del hook).
+  const reviewExpired = showReviewWindow && reviewRemainingMs <= 0;
 
   useEffect(() => {
     setEvents(initialEvents);
@@ -323,6 +342,26 @@ export default function UnifiedCaseHub({
     ['enEjecucion', 'enRevision', 'cambiosEnProceso'].includes(caseStatus) &&
     !!clinicalCase?.workDeadline &&
     !uchHeaderShowsWorkDeadline;
+
+  // v5.3 — Calificación del trabajo (caras emotivas), separada CAD/CAM.
+  // CAD aparece cuando el dentista aprobó el diseño; CAM al confirmar la recepción.
+  const reviewedDims: string[] = Array.isArray(clinicalCase?.myReviewedDimensions)
+    ? clinicalCase.myReviewedDimensions
+    : [];
+  const svcType: string = clinicalCase?.serviceType ?? '';
+  const canRate = actingAsDentista && !!uchAssignedId;
+  const designApprovedStatuses = ['disenoAprobado', 'enFabricacion', 'enviado', 'completado'];
+  const showRateDesignPanel =
+    canRate &&
+    (svcType === 'solo_diseno' || svcType === 'integral') &&
+    (svcType === 'solo_diseno' ? caseStatus === 'completado' : designApprovedStatuses.includes(caseStatus)) &&
+    !reviewedDims.includes('design');
+  const showRateFabricationPanel =
+    canRate &&
+    (svcType === 'solo_fabricacion' || svcType === 'integral') &&
+    caseStatus === 'completado' &&
+    !reviewedDims.includes('fabrication');
+  const showAnyRatingPanel = showRateDesignPanel || showRateFabricationPanel;
 
   const roleScopedEvents = useMemo(
     () =>
@@ -766,6 +805,28 @@ export default function UnifiedCaseHub({
                 </motion.div>
               </motion.div>
             )}
+            {showReviewWindow && (
+              <motion.div
+                className="flex flex-col items-end gap-0.5"
+                aria-label={actingAsTecnico && !actingAsDentista ? 'Plazo de revisión del dentista' : 'Plazo para revisar la entrega'}
+                title="Plazo de revisión del dentista (tDentistReviewHours)"
+              >
+                <span className={`text-[8px] font-black uppercase tracking-widest ${reviewExpired ? 'text-error/80' : 'text-warning/70'}`}>
+                  {actingAsTecnico && !actingAsDentista
+                    ? (reviewExpired ? 'Esperando — plazo vencido' : 'Revisión del dentista')
+                    : (reviewExpired ? 'Respuesta vencida' : 'Plazo para revisar')}
+                </span>
+                <motion.div
+                  data-testid="uch-review-countdown"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${reviewExpired ? 'bg-error-hl border-error/20' : 'bg-warning-hl border-warning/20'}`}
+                >
+                  <Clock className={`w-3.5 h-3.5 shrink-0 ${reviewExpired ? 'text-error' : 'text-warning'}`} />
+                  <span className={`text-[11px] font-mono font-black tabular-nums ${reviewExpired ? 'text-error' : 'text-warning'}`}>
+                    {reviewExpired ? 'Vencido' : formatCountdownHMS(reviewRemainingMs)}
+                  </span>
+                </motion.div>
+              </motion.div>
+            )}
             <button
               onClick={onClose}
               aria-label="Cerrar Centro de Control"
@@ -918,6 +979,30 @@ export default function UnifiedCaseHub({
                     </div>
                   );
                 })()}
+              </div>
+            )}
+
+            {showAnyRatingPanel && uchAssignedId && (
+              <div
+                data-testid="uch-rating-panels"
+                className="px-3 pt-2 pb-2 space-y-2 flex-shrink-0 border-b border-divider bg-background"
+              >
+                {showRateDesignPanel && (
+                  <UchRatingPanel
+                    caseId={caseId}
+                    revieweeId={uchAssignedId}
+                    dimension="design"
+                    onRated={async () => { await onInvitationUpdate?.(); }}
+                  />
+                )}
+                {showRateFabricationPanel && (
+                  <UchRatingPanel
+                    caseId={caseId}
+                    revieweeId={uchAssignedId}
+                    dimension="fabrication"
+                    onRated={async () => { await onInvitationUpdate?.(); }}
+                  />
+                )}
               </div>
             )}
 

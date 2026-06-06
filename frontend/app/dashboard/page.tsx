@@ -187,7 +187,12 @@ export default function DashboardHome() {
     [featuredFiltersForFetch],
   );
 
-  if (loading) {
+  // El admin no tiene "Dashboard": su primera pantalla es Observabilidad.
+  useEffect(() => {
+    if (isAdmin) router.replace('/dashboard/admin/observability');
+  }, [isAdmin, router]);
+
+  if (loading || isAdmin) {
     return (
       <motion.div
         className="flex items-center justify-center h-[60vh]"

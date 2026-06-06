@@ -7,6 +7,7 @@ import {
   Copy,
   Edit,
   Globe,
+  RefreshCw,
   Save,
   Trash2,
   X,
@@ -28,6 +29,9 @@ type Props = {
   onArchive: () => void;
   onUnarchive: () => void;
   onCreateCopy: () => void;
+  /** v5.0 — republicar caso que agotó el pool (sin_cotizaciones_fallo). */
+  onRepublicar?: () => void;
+  isRepublishing?: boolean;
 };
 
 function iconBtnClass(
@@ -114,6 +118,8 @@ export default function CaseDetailManagementBar({
   onArchive,
   onUnarchive,
   onCreateCopy,
+  onRepublicar,
+  isRepublishing,
 }: Props) {
   const showDraftGroup =
     actions.edit.visible ||
@@ -122,6 +128,7 @@ export default function CaseDetailManagementBar({
     actions.delete.visible;
   const showArchiveGroup =
     actions.archive.visible || actions.unarchive.visible || actions.createCopy.visible;
+  const showRepublicar = actions.republicar?.visible && !!onRepublicar;
 
   return (
     <div
@@ -183,7 +190,21 @@ export default function CaseDetailManagementBar({
         </>
       )}
 
-      {showDraftGroup && showArchiveGroup && <BarSeparator />}
+      {showRepublicar && (
+        <>
+          {showDraftGroup && <BarSeparator />}
+          <ManagementIconButton
+            icon={RefreshCw}
+            tooltip="Republicar Caso"
+            enabled={actions.republicar.enabled}
+            loading={isRepublishing}
+            onClick={onRepublicar!}
+            accent="teal"
+          />
+        </>
+      )}
+
+      {(showDraftGroup || showRepublicar) && showArchiveGroup && <BarSeparator />}
 
       {showArchiveGroup && (
         <>

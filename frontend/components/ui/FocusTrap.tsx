@@ -22,6 +22,11 @@ export default function FocusTrap({
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
+  // Mantener onEscape en un ref para que el handler siempre lea la versión
+  // actual sin re-ejecutar el efecto (y re-robar el foco) en cada render.
+  const onEscapeRef = useRef(onEscape);
+  onEscapeRef.current = onEscape;
+
   useEffect(() => {
     if (!active) return;
     const el = ref.current;
@@ -32,7 +37,7 @@ export default function FocusTrap({
     focusables[0]?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onEscape?.(); return; }
+      if (e.key === 'Escape') { onEscapeRef.current?.(); return; }
       if (e.key !== 'Tab') return;
 
       const items = Array.from(el.querySelectorAll<HTMLElement>(FOCUSABLE));
@@ -50,7 +55,7 @@ export default function FocusTrap({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [active, onEscape]);
+  }, [active]);
 
   return <div ref={ref}>{children}</div>;
 }

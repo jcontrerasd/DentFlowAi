@@ -28,6 +28,7 @@ Fauchard prioriza **una acción primaria** expandida en el hilo; el resto puede 
 | OFERTAS_COMPARATIVAS_LISTAS | Dentista | `ComparativeOffersPanel.tsx` (embebido en hilo) |
 | PROPUESTA_ACEPTADA | Ambos | `AcceptedProposalSummary.tsx`, `UchDealSummary.tsx` |
 | OFERTA_RECHAZADA / OFERTA_NO_SELECCIONADA | Técnico (perdedor) | `UchEventBubble.tsx` + snapshot en payload |
+| OFERTA_RECHAZADA_POR_TECNICO | Sistema (voz Fauchard) | `UchRejectInvitationDialog.tsx` + `rejectInvitationIndividualAction`. Solo el técnico invitado, mientras su invitación esté `pending` (gated por `REJECTION_INDIVIDUAL_ENABLED`). **No** cuenta como no-respuesta; dispara reemplazo automático. Distinto del rechazo masivo (pausar switch global). |
 | TRABAJO_INICIADO | Ambos | `UchFauchardActionsPanel.tsx` + `startWorkAction` |
 | REVISION_ENVIADA | Ambos | `UchDeliveryPanel.tsx` + entrega en `cases.ts` |
 | TRABAJO_APROBADO / REVISION_SOLICITADA | Ambos | `UchDentistReviewPanel.tsx` + `approveWorkAction` / `requestRevisionAction` |
@@ -45,7 +46,13 @@ Usar `resolveUchThreadLane()` de `lib/uchThreadLane.ts`. No reimplementar lógic
 ### Countdowns
 - **Etapa 1 (cotizar):** `case_invitation.expires_at` — banner ficha + HMS en tarjetas/UCH.
 - **Etapa 2 (elegir oferta):** `proposalExpiresAt` — HMS **solo en cabecera UCH** (dentista, `propuestaLista`). No duplicar en `ComparativeOffersPanel`.
+- **Etapa 3 (revisión dentista, v5.0):** `tDentistReviewHours`; `last_revision_submitted_at` reinicia la ventana en cada entrega. Al vencer, marca "respuesta vencida".
 - `serverClockAnchor` + `uchPanelMounted` para sincronía y persistencia del timer.
+
+### Espera y republicación (v5.0)
+- **Banner "Buscando técnicos disponibles…"**: dentista, caso en `pendiente_pool` (`PendingPoolBanner`). Incluye "Cancelar publicación" (`cancelPendingPoolAction`).
+- **Check-in al dentista** al 50% del TTL: `CheckInDentistaModal` (lo marca el cron `process-pool-queue` vía `pendingPoolCheckinSentAt`).
+- **Republicar**: caso en `sin_cotizaciones_fallo` → `RepublicarModal` (doble confirmación) → `republicarCaseAction`. Botón en `CaseDetailManagementBar`.
 
 ### Calendario laboral (v4.6)
 - `workDeadline` mostrado en stepper/UCH se calcula con `addBusinessTime()` (`lib/businessTime.ts`) usando `businessHoursStart/End` + `businessDaysMask` de `fauchard_config` y la tabla `fauchard_holiday`. No reimplementar offsets en el cliente.

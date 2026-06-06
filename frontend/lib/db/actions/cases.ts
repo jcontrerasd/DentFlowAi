@@ -22,7 +22,7 @@ import { getServerIdentity } from "./impersonation";
 import { resolveCatalogCodesToIds } from "@/lib/db/catalogResolver";
 import { dentalMaterial, restorationType as restorationTypeTable, vitaShade, urgencyLevel } from "@/lib/db/schema";
 import type { ActionResult } from "@/lib/types/actions";
-import { CASE_STATUSES } from '@/lib/constants/dental';
+import { CASE_STATUSES, INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { UCH_CASE_EVENTS_DEFAULT_PAGE_SIZE } from '@/lib/constants/uchCaseEvents';
 import {
@@ -43,7 +43,7 @@ import {
   buildTechFacetCondition,
 } from '@/lib/db/caseListQueryBuilder';
 import { pickInvitationStatusForKpi } from '@/lib/cases/technicianInvitationForKpi';
-import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt } from '@/lib/db/caseDeadlines';
+import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt, getCaseReviewDeadlineAt } from '@/lib/db/caseDeadlines';
 
 
 /**
@@ -768,6 +768,12 @@ export async function getCaseDetails(caseId: string) {
       evaluationExpiresAt = await getCaseQuoteDeadlineAt(caseId);
     }
 
+    // v5.0 — Etapa 3: plazo de revisión del dentista (solo en enRevision, flag on).
+    let reviewDeadlineAt: Date | null = null;
+    if (cCase.status === 'enRevision') {
+      reviewDeadlineAt = await getCaseReviewDeadlineAt(caseId);
+    }
+
     let comparativeOffers: Array<{
       invitationId: string;
       rank: number;
@@ -881,15 +887,28 @@ export async function getCaseDetails(caseId: string) {
 
     const canDelete = await canDeleteCase(caseId);
 
+    // v5.3 — Dimensiones (CAD/CAM) que el viewer ya calificó en este caso.
+    // Permite al UCH mostrar/ocultar el panel de calificación de cada fase.
+    let myReviewedDimensions: string[] = [];
+    if (userId) {
+      const reviewedRows = await db
+        .select({ dimension: review.dimension })
+        .from(review)
+        .where(and(eq(review.clinicalCaseId, caseId), eq(review.reviewerId, userId as string)));
+      myReviewedDimensions = reviewedRows.map(r => r.dimension);
+    }
+
     return {
       ...cCase,
       evaluationExpiresAt,
+      reviewDeadlineAt,
       comparativeOffers,
       serverNowMs: Date.now(),
       archivedByCurrentUser,
       myInvitationStatus,
       copiedFromCaseNumber,
       canDelete,
+      myReviewedDimensions,
     };
   } catch (error: any) {
     console.error("==== [getCaseDetails] CRITICAL ERROR ====");
@@ -1063,12 +1082,16 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
 
       // 3. Actualizar caso
       const [updatedCase] = await tx.update(clinicalCase)
-        .set({ 
+        .set({
           status: 'enRevision',
           labNotes: notes,
           currentResponsibility: 'dentista',
           lastActivityAt: new Date(),
-
+          // v5.0: cada entrega reinicia el countdown tDentistReviewHours (§4.2)
+          // y la escalación de notificaciones del cron (v5.2).
+          lastRevisionSubmittedAt: new Date(),
+          reviewReminderSentAt: null,
+          reviewOverdueNotifiedAt: null,
           updatedAt: new Date()
         })
         .where(and(...whereConditions))
@@ -1375,39 +1398,58 @@ export async function confirmReceptionAction(caseId: string): Promise<ActionResu
   }
 }
 
-export async function submitUserRatingAction(data: { caseId: string, revieweeId: string, rating: number, comment?: string }) {
+export async function submitUserRatingAction(data: { caseId: string, revieweeId: string, rating: number, dimension?: 'design' | 'fabrication', comment?: string }) {
   const identity = await getServerIdentity();
   if (!identity?.id) return { success: false, error: "No autorizado" };
 
-  try {
-    await db.insert(review).values({
-      clinicalCaseId: data.caseId,
-      reviewerId: identity.id,
-      revieweeId: data.revieweeId,
-      rating: data.rating,
-      comment: data.comment,
-    });
+  // Validación de rango (1–5 entero). El selector de caras emotivas mapea a 1–5.
+  const rating = Math.round(Number(data.rating));
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return { success: false, error: "La calificación debe estar entre 1 y 5" };
+  }
+  // CAD = 'design', CAM = 'fabrication'. Default 'design' por retrocompatibilidad.
+  const dimension: 'design' | 'fabrication' = data.dimension === 'fabrication' ? 'fabrication' : 'design';
 
-    // S8-08: Recalcular niveles efectivos del técnico basado en desempeño real
+  try {
+    // Upsert: una sola reseña por caso + dentista + dimensión (índice único v5.3).
+    // Re-calificar actualiza la nota y refresca created_at (cuenta como reciente).
+    await db
+      .insert(review)
+      .values({
+        clinicalCaseId: data.caseId,
+        reviewerId: identity.id,
+        revieweeId: data.revieweeId,
+        rating,
+        dimension,
+        comment: data.comment,
+      })
+      .onConflictDoUpdate({
+        target: [review.clinicalCaseId, review.reviewerId, review.dimension],
+        set: { rating, comment: data.comment ?? null, createdAt: new Date() },
+      });
+
+    // S8-08: Recalcular el nivel efectivo del técnico SOLO de la capacidad calificada
+    // (diseño→effectiveDesignLevel, fabricación→effectiveFabricationLevel).
     const [reviewee] = await db.select({ role: user.role }).from(user).where(eq(user.id, data.revieweeId)).limit(1);
     if (reviewee?.role === 'tecnico') {
       const [avgResult] = await db
         .select({ avg: avg(review.rating) })
         .from(review)
-        .where(eq(review.revieweeId, data.revieweeId));
+        .where(and(eq(review.revieweeId, data.revieweeId), eq(review.dimension, dimension)));
 
       const avgRating = parseFloat(String(avgResult?.avg ?? '5'));
 
-      // Calcular penalización de nivel: -0 si >=4.0 | -1 si >=3.0 | -2 si <3.0
+      // Penalización de nivel: -0 si >=4.0 | -1 si >=3.0 | -2 si <3.0
       const penalty = avgRating >= 4.0 ? 0 : avgRating >= 3.0 ? 1 : 2;
 
       const skills = await db.select().from(technicianSkill).where(eq(technicianSkill.userId, data.revieweeId));
       for (const skill of skills) {
+        const set =
+          dimension === 'design'
+            ? { effectiveDesignLevel: Math.max(1, (skill.designLevel ?? 1) - penalty) }
+            : { effectiveFabricationLevel: skill.fabricationLevel ? Math.max(0, skill.fabricationLevel - penalty) : 0 };
         await db.update(technicianSkill)
-          .set({
-            effectiveDesignLevel: Math.max(1, (skill.designLevel ?? 1) - penalty),
-            effectiveFabricationLevel: skill.fabricationLevel ? Math.max(0, skill.fabricationLevel - penalty) : 0,
-          })
+          .set(set)
           .where(and(eq(technicianSkill.userId, data.revieweeId), eq(technicianSkill.workType, skill.workType)));
       }
     }
@@ -2285,6 +2327,11 @@ export async function republishCaseAction(caseId: string, changeSummary?: string
     const { classifyCaseAction, runFauchardAction, sendInvitationsAction } = await import('./fauchard');
     await classifyCaseAction(caseId);
     const selectionResult = await runFauchardAction(caseId);
+    // v5.0: 0 elegibles con el modelo on entra a `pendiente_pool`; el caso queda
+    // publicado (enEvaluacion) esperando técnicos, no se revierte a borrador.
+    if (selectionResult.pooled) {
+      return { success: true };
+    }
     if (!selectionResult.success || !selectionResult.technicianIds?.length || !selectionResult.fauchardConfigId) {
       await db.update(clinicalCase)
         .set({ status: 'borrador', internalStatus: null, canBeDeleted: true, updatedAt: new Date(), lastActivityAt: new Date() })
@@ -2489,6 +2536,11 @@ export async function publishCaseAction(caseId: string): Promise<ActionResult> {
     const { classifyCaseAction, runFauchardAction, sendInvitationsAction } = await import('./fauchard');
     await classifyCaseAction(caseId);
     const selectionResult = await runFauchardAction(caseId);
+    // v5.0: 0 elegibles con el modelo on entra a `pendiente_pool`; el caso queda
+    // publicado (enEvaluacion) esperando técnicos, no se revierte a borrador.
+    if (selectionResult.pooled) {
+      return { success: true };
+    }
     if (!selectionResult.success || !selectionResult.technicianIds?.length || !selectionResult.fauchardConfigId) {
       await db.update(clinicalCase)
         .set({ status: 'borrador', internalStatus: null, canBeDeleted: true, updatedAt: new Date(), lastActivityAt: new Date() })
@@ -2504,5 +2556,70 @@ export async function publishCaseAction(caseId: string): Promise<ActionResult> {
   } catch (error) {
     console.error("[publishCaseAction] Error:", error);
     return { success: false, error: "No se pudo publicar el caso" };
+  }
+}
+
+/**
+ * Republicar un caso terminal `sin_cotizaciones_fallo` (v5.0, §5.5). Arranca una
+ * ronda Fauchard nueva desde cero (conserva id y archivos; no pasa por borrador).
+ * Resetea los contadores de cola. No confundir con `republishCaseAction` (ronda
+ * comercial legacy en el mismo caseId, no usar en UI).
+ */
+export async function republicarCaseAction(caseId: string): Promise<ActionResult> {
+  const identity = await getServerIdentity();
+  if (!identity?.id) return { success: false, error: 'No autorizado' };
+
+  try {
+    const [current] = await db
+      .select({ status: clinicalCase.status, doctorId: clinicalCase.doctorId })
+      .from(clinicalCase)
+      .where(eq(clinicalCase.id, caseId))
+      .limit(1);
+
+    if (!current) return { success: false, error: 'Caso no encontrado' };
+    const isAdmin = identity.role === 'admin' || identity.isSystemAdmin;
+    if (!isAdmin && current.doctorId !== identity.id) return { success: false, error: 'No autorizado' };
+    if (current.status !== INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO) {
+      return { success: false, error: 'Solo se puede republicar un caso sin cotizaciones' };
+    }
+
+    await db.update(clinicalCase)
+      .set({
+        status: CASE_STATUSES.EN_EVALUACION,
+        internalStatus: 'caso_recibido',
+        pendingPoolCycleCount: 0,
+        pendingPoolStartedAt: null,
+        pendingPoolCheckinSentAt: null,
+        updatedAt: new Date(),
+        lastActivityAt: new Date(),
+      })
+      .where(eq(clinicalCase.id, caseId));
+
+    await logCaseEvent({
+      caseId,
+      userId: identity.id as string,
+      type: 'sistema',
+      action: CASE_EVENTS.CASO_REPUBLICADO,
+      content: 'He vuelto a publicar el caso. Estamos buscando técnicos disponibles.',
+      payload: { visibleTo: 'dentista', ...UCH_PAYLOAD_PRESENTATION_FAUCHARD },
+      stateChange: { from: INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO, to: CASE_STATUSES.EN_EVALUACION },
+    });
+
+    const { classifyCaseAction, runFauchardAction, sendInvitationsAction } = await import('./fauchard');
+    await classifyCaseAction(caseId);
+    const selectionResult = await runFauchardAction(caseId);
+    if (selectionResult.pooled) return { success: true };
+    if (!selectionResult.success || !selectionResult.technicianIds?.length || !selectionResult.fauchardConfigId) {
+      return { success: false, error: selectionResult.error || 'No se encontraron técnicos disponibles' };
+    }
+    await sendInvitationsAction(caseId, selectionResult.technicianIds, {
+      fauchardConfigId: selectionResult.fauchardConfigId,
+      pinCaseToConfig: true,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('[republicarCaseAction] Error:', error);
+    return { success: false, error: 'No se pudo republicar el caso' };
   }
 }

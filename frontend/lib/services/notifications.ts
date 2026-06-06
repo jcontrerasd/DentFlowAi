@@ -1,17 +1,74 @@
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { Resend } from 'resend';
 
-let resendInstance: Resend | null = null;
-function getResend() {
-  if (!resendInstance) {
-    resendInstance = new Resend(process.env.RESEND_API_KEY || 're_dummy_key_for_build_purposes');
-  }
-  return resendInstance;
+// ─── Transport: EmailJS (API REST server-side) ───────────────────────────────
+// Reemplaza Resend (v5.0 / Fase 2). Las 3+1 credenciales son server-only (sin
+// prefijo NEXT_PUBLIC_). Si las credenciales faltan o son 'stub', se loguea sin
+// enviar (modo dev local). Best-effort: nunca reintenta ni bloquea la acción.
+
+const EMAILJS_ENDPOINT = 'https://api.emailjs.com/api/v1.0/email/send';
+
+function emailJsConfig() {
+  return {
+    serviceId: process.env.EMAILJS_SERVICE_ID,
+    templateId: process.env.EMAILJS_TEMPLATE_ID,
+    publicKey: process.env.EMAILJS_PUBLIC_KEY,
+    privateKey: process.env.EMAILJS_PRIVATE_KEY,
+  };
 }
 
-const FROM_EMAIL = process.env.NOTIFICATION_FROM_EMAIL || 'DentFlowAi <notifications@dentflow.ai>';
+function isStubMode(cfg: ReturnType<typeof emailJsConfig>): boolean {
+  const required = [cfg.serviceId, cfg.templateId, cfg.publicKey];
+  return required.some((v) => !v || v === 'stub');
+}
+
+/**
+ * Interruptor maestro de envío real (seguridad por ambiente). Solo se envían correos
+ * de verdad si `NOTIFICATIONS_LIVE === 'true'`. En cualquier otro caso (local, o
+ * staging con datos clonados de prod) se loguea sin enviar, **aunque** haya
+ * credenciales EmailJS válidas. Evita mandar correos a usuarios reales desde
+ * ambientes que no son producción.
+ */
+function notificationsLive(): boolean {
+  return process.env.NOTIFICATIONS_LIVE === 'true';
+}
+
+/**
+ * Envía un correo vía la API REST de EmailJS. Mantiene el contrato del template
+ * `te60drn` / `template_DentFlowAi`: `{{subject}}`, `{{to_email}}`, `{{body}}`.
+ */
+async function sendViaEmailJS(params: { subject: string; toEmail: string; body: string }): Promise<{ ok: boolean; error?: string }> {
+  const cfg = emailJsConfig();
+  if (!notificationsLive() || isStubMode(cfg)) {
+    const reason = !notificationsLive() ? 'NOTIFICATIONS_LIVE!=true' : 'sin credenciales';
+    console.log(`[STUB-EMAIL] (${reason}) To: ${params.toEmail} | Subject: ${params.subject}`);
+    return { ok: true };
+  }
+
+  try {
+    const response = await fetch(EMAILJS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service_id: cfg.serviceId,
+        template_id: cfg.templateId,
+        user_id: cfg.publicKey,
+        accessToken: cfg.privateKey,
+        template_params: { subject: params.subject, to_email: params.toEmail, body: params.body },
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      console.error(`[EmailJS] HTTP ${response.status}: ${text}`);
+      return { ok: false, error: `EmailJS HTTP ${response.status}` };
+    }
+    return { ok: true };
+  } catch (error) {
+    console.error('[EmailJS] Error de red:', error);
+    return { ok: false, error: String(error) };
+  }
+}
 
 export type NotificationType =
   | 'NUEVA_INVITACION'
@@ -31,9 +88,54 @@ export type NotificationType =
   | 'FALLO_SELECCION_DENTISTA'
   | 'SIN_COTIZACIONES_FALLO'
   | 'FABRICACION_INICIADA'
-  | 'CASO_ASIGNADO_OTRO';
+  | 'CASO_ASIGNADO_OTRO'
+  // ─── v5.0 — Disponibilidad, sanción rolling y cola pool (tono informativo, no punitivo) ───
+  | 'NIVEL_2_ALCANZADO'
+  | 'NIVEL_3_AUTO_OFF'
+  | 'AUTO_OFF_PREVENTIVO'
+  | 'RECORDATORIO_ACTIVIDAD'
+  | 'PERDON_ADMIN'
+  | 'CHECK_IN_DENTISTA'
+  | 'REPUBLICAR_DISPONIBLE'
+  /** Dentista: plazo de revisión de entrega por vencer / vencido (§4.2, sin auto-acción). */
+  | 'REVISION_PLAZO_POR_VENCER'
+  | 'REVISION_PLAZO_VENCIDO'
+  /** Técnico: comunicación de rollout del modelo de disponibilidad (Fase 7). */
+  | 'ROLLOUT_PROXIMO'
+  | 'ROLLOUT_ACTIVADO';
 
 const baseUrl = () => process.env.NEXT_PUBLIC_APP_URL || '';
+
+/**
+ * Reglas de canal por tipo (v5.0, §9.5). `email` controla el envío real por
+ * EmailJS; `inApp` documenta la intención (el feed in-app se materializa en una
+ * fase posterior). Regla del modelo de disponibilidad:
+ *  - Nivel 1 (warning) → solo in-app, NO email (no existe tipo dedicado: el aviso
+ *    se refleja en el badge; aquí queda la regla por si se agrega un tipo).
+ *  - Nivel 2 / Nivel 3 / auto-OFF / recordatorio / perdón / check-in dentista /
+ *    republicar → email + in-app.
+ * Tipos no listados (legacy) usan el default `email + in-app`.
+ */
+export type NotificationChannels = { email: boolean; inApp: boolean };
+const DEFAULT_CHANNELS: NotificationChannels = { email: true, inApp: true };
+
+const NOTIFICATION_CHANNELS: Partial<Record<NotificationType, NotificationChannels>> = {
+  NIVEL_2_ALCANZADO: { email: true, inApp: true },
+  NIVEL_3_AUTO_OFF: { email: true, inApp: true },
+  AUTO_OFF_PREVENTIVO: { email: true, inApp: true },
+  RECORDATORIO_ACTIVIDAD: { email: true, inApp: true },
+  PERDON_ADMIN: { email: true, inApp: true },
+  CHECK_IN_DENTISTA: { email: true, inApp: true },
+  REPUBLICAR_DISPONIBLE: { email: true, inApp: true },
+  REVISION_PLAZO_POR_VENCER: { email: true, inApp: true },
+  REVISION_PLAZO_VENCIDO: { email: true, inApp: true },
+  ROLLOUT_PROXIMO: { email: true, inApp: true },
+  ROLLOUT_ACTIVADO: { email: true, inApp: true },
+};
+
+export function channelsForNotification(type: NotificationType): NotificationChannels {
+  return NOTIFICATION_CHANNELS[type] ?? DEFAULT_CHANNELS;
+}
 
 const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) => string }> = {
   NUEVA_INVITACION: {
@@ -100,10 +202,55 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
     subject: 'Fauchard: caso asignado a otra oferta',
     body: (data) => `Hola ${data.name},\n\nFauchard te informa que el caso ${data.caseNumber || data.caseId} ya fue asignado a otra oferta. Gracias por participar; seguirás recibiendo nuevas invitaciones.\n\nVer casos: ${baseUrl()}/dashboard/cases?preset=nuevas`,
   },
+  // ─── v5.0 — Disponibilidad y sanción rolling (informativo, nunca punitivo) ───
+  NIVEL_2_ALCANZADO: {
+    subject: 'Fauchard: estado de tus respuestas',
+    body: (data) => `Hola ${data.name},\n\nHas dejado de responder ${data.count ?? 2} invitaciones recientes en los últimos ${data.windowDays ?? 14} días. Esto puede afectar la prioridad con la que recibes nuevas invitaciones. Las no-respuestas salen solas de la ventana con el tiempo.\n\nVer mi historial de respuesta: ${baseUrl()}/dashboard/profile/availability`,
+  },
+  NIVEL_3_AUTO_OFF: {
+    subject: 'Fauchard: pusimos tu disponibilidad en pausa',
+    body: (data) => `Hola ${data.name},\n\nComo no se registraron respuestas a varias invitaciones recientes, pusimos tu disponibilidad en pausa para evitar que acumules más. Puedes reactivarla cuando estés disponible.\n\nReactivar disponibilidad: ${baseUrl()}/dashboard/profile/availability`,
+  },
+  AUTO_OFF_PREVENTIVO: {
+    subject: 'Fauchard: tu disponibilidad quedó en pausa',
+    body: (data) => `Hola ${data.name},\n\nNotamos que tu disponibilidad estuvo activa sin actividad por más de ${data.days ?? 30} días, así que la pusimos en pausa por seguridad. Vuelve a activarla cuando quieras recibir invitaciones.\n\nGestionar disponibilidad: ${baseUrl()}/dashboard/profile/availability`,
+  },
+  RECORDATORIO_ACTIVIDAD: {
+    subject: 'Fauchard: ¿sigues disponible?',
+    body: (data) => `Hola ${data.name},\n\nTu disponibilidad lleva ${data.days ?? 7} días activa sin actividad reciente. Si sigues disponible no necesitas hacer nada; si prefieres pausar, puedes hacerlo desde tu panel.\n\nGestionar disponibilidad: ${baseUrl()}/dashboard/profile/availability`,
+  },
+  PERDON_ADMIN: {
+    subject: 'Fauchard: actualización en tu historial de respuesta',
+    body: (data) => `Hola ${data.name},\n\nUn administrador perdonó ${data.count ?? 1} no-respuesta(s) en tu historial. Tu nivel actual es ahora Nivel ${data.level ?? 1}.\n\nVer mi historial de respuesta: ${baseUrl()}/dashboard/profile/availability`,
+  },
+  CHECK_IN_DENTISTA: {
+    subject: 'Fauchard: tu caso sigue buscando técnicos',
+    body: (data) => `Hola,\n\nTu caso ${data.caseNumber || data.caseId} lleva un tiempo esperando técnicos disponibles. ¿Sigues necesitándolo? Si no haces nada, seguiremos buscando; también puedes cancelar la publicación.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  REPUBLICAR_DISPONIBLE: {
+    subject: 'Fauchard: técnicos disponibles para tu caso',
+    body: (data) => `Hola,\n\nHay nuevos técnicos disponibles que podrían atender tu caso ${data.caseNumber || data.caseId}. Fauchard reanudó la búsqueda automáticamente.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  REVISION_PLAZO_POR_VENCER: {
+    subject: 'Fauchard: tienes una entrega por revisar',
+    body: (data) => `Hola,\n\nTu caso ${data.caseNumber || data.caseId} tiene una entrega esperando tu revisión y el plazo está por vencer. Ingresa para aprobar o solicitar ajustes.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  REVISION_PLAZO_VENCIDO: {
+    subject: 'Fauchard: el plazo para revisar tu entrega venció',
+    body: (data) => `Hola,\n\nEl plazo para revisar la entrega de tu caso ${data.caseNumber || data.caseId} venció. No se aprobó ni rechazó nada automáticamente; el técnico sigue esperando tu respuesta. Te recomendamos revisarla cuanto antes.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  ROLLOUT_PROXIMO: {
+    subject: 'DentFlowAi: pronto tendrás más control sobre tus invitaciones',
+    body: (data) => `Hola ${data.name},\n\nPróximamente vas a poder decidir cuándo y para qué tipo de trabajo recibes invitaciones en DentFlowAi. Te avisaremos cuando esté disponible.`,
+  },
+  ROLLOUT_ACTIVADO: {
+    subject: 'DentFlowAi: ya puedes gestionar tu disponibilidad',
+    body: (data) => `Hola ${data.name},\n\nYa puedes gestionar tu disponibilidad. Por defecto estás activo en todas las categorías que ya manejas; puedes pausar o ajustar cuando quieras.\n\nGestionar disponibilidad: ${baseUrl()}/dashboard/profile/availability`,
+  },
 };
 
 /**
- * Servicio central de notificaciones (Email vía Resend)
+ * Servicio central de notificaciones por email (transport EmailJS).
  */
 export async function notifyUser(userId: string, type: NotificationType, data: any) {
   try {
@@ -119,24 +266,20 @@ export async function notifyUser(userId: string, type: NotificationType, data: a
     const template = TEMPLATES[type];
     if (!template) return { success: false, error: 'Template not found' };
 
-    // 2. Enviar email si hay API Key, de lo contrario loggear (para dev)
-    if (!process.env.RESEND_API_KEY || process.env.RESEND_API_KEY === 're_123') {
-      console.log(`[STUB-EMAIL] To: ${userData.email} | Subject: ${template.subject} | Body: ${template.body({ ...data, name: userData.fullName })}`);
-      return { success: true, stub: true };
+    // 1.b Regla de canal (§9.5): si el tipo no usa email, no se envía (el aviso vive
+    //      solo en el canal in-app / badge).
+    if (!channelsForNotification(type).email) {
+      return { success: true };
     }
 
-    const { error } = await getResend().emails.send({
-      from: FROM_EMAIL,
-      to: [userData.email],
+    // 2. Enviar vía EmailJS (modo stub interno loguea sin enviar en dev local).
+    const result = await sendViaEmailJS({
       subject: `Fauchard · DentFlowAi: ${template.subject}`,
-      text: template.body({ ...data, name: userData.fullName }),
+      toEmail: userData.email,
+      body: template.body({ ...data, name: userData.fullName }),
     });
 
-    if (error) {
-      console.error("[Resend Error]:", error);
-      return { success: false, error: error.message };
-    }
-
+    if (!result.ok) return { success: false, error: result.error };
     return { success: true };
   } catch (error) {
     console.error("Error in notification service:", error);

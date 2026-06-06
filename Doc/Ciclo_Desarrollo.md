@@ -205,6 +205,12 @@ cd frontend
 bash deploy.sh develop
 ```
 
+> **Asistente gráfico** (alternativa recomendada, sobre todo durante el rollout v5.0):
+> `bash deploy-wizard.sh` guía el proceso con un panel por ambiente — elige staging/prod,
+> activa o apaga los flags v5.0 y `NOTIFICATIONS_LIVE` **solo para ese deploy** (no toca
+> `.env.local`), muestra a qué recursos apunta y avisa si staging enviaría correos reales.
+> Es autónomo (no llama a `deploy.sh`). Prueba sin desplegar con `bash deploy-wizard.sh --dry-run`.
+
 El script:
 
 1. Lee `DATABASE_URL_DEV`, `AUTH_URL_DEV`, `NEXT_PUBLIC_APP_URL_DEV` del `.env.local`.
@@ -326,6 +332,51 @@ gcloud scheduler jobs create http evaluate-quotes-dev \
 
 `CRON_SECRET` se define en `.env.local` (una por entorno; `deploy.sh` lo inyecta como `CRON_SECRET` en Cloud Run). Para rotar: generar nuevo valor (`openssl rand -hex 32`), actualizar `.env.local`, redeploy, actualizar header del job: `gcloud scheduler jobs update http evaluate-quotes-prod --update-headers="Authorization=Bearer <nuevo>"`.
 
+#### Crons del modelo de disponibilidad (v5.0 — solo cuando `AVAILABILITY_MODEL_ENABLED=true`)
+
+Dos jobs adicionales por entorno (usan `--http-method=POST` y el mismo `CRON_SECRET`):
+
+```bash
+# process-availability: cada hora (expira no-respuestas, auto-OFF preventivo, recordatorio)
+gcloud scheduler jobs create http process-availability-prod \
+  --location=southamerica-west1 \
+  --schedule="0 * * * *" \
+  --uri="https://dentflowai.com/api/cron/process-availability" \
+  --http-method=POST \
+  --headers="Authorization=Bearer ${CRON_SECRET_PROD}" \
+  --attempt-deadline=120s \
+  --project=dentflowai-cbcf2
+
+# process-pool-queue: cada 10 min (check-in dentista 50% TTL + expiración/re-encole de la cola)
+gcloud scheduler jobs create http process-pool-queue-prod \
+  --location=southamerica-west1 \
+  --schedule="*/10 * * * *" \
+  --uri="https://dentflowai.com/api/cron/process-pool-queue" \
+  --http-method=POST \
+  --headers="Authorization=Bearer ${CRON_SECRET_PROD}" \
+  --attempt-deadline=60s \
+  --project=dentflowai-cbcf2
+```
+
+Para staging: mismos 2 jobs apuntando a `https://dentflowai-frontend-dev-…run.app` con `CRON_SECRET_DEV`. En local no corren solos; probar con `curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/process-availability`. Rollback: `gcloud scheduler jobs pause/delete` (no requiere redeploy); el código permanece inerte con el flag off.
+
+#### Aislamiento por ambiente — EmailJS, flags y secretos
+
+EmailJS es **una sola cuenta** y el clon inicial prod→staging (`clone-prod-to-staging.sh`, ejecutado **una única vez** al montar staging — **no** es una operación recurrente) dejó usuarios reales en la BD de staging. Por eso, y porque cualquier correo desde staging saldría desde la misma cuenta EmailJS que producción, hay que mantener los controles de envío. Controles disponibles (todos retrocompatibles con la clave plana):
+
+- **`NOTIFICATIONS_LIVE`** (interruptor maestro de envío real): `notifyUser` solo envía si vale `true`; en cualquier otro caso loguea sin enviar **aunque** haya credenciales EmailJS. Dejar `false` en local/staging, `true` solo en prod. `deploy.sh` lo muestra en el resumen y **avisa** si se deploya staging con `NOTIFICATIONS_LIVE=true`.
+- **Override por ambiente**: `deploy.sh` lee `<VAR>_DEV` / `<VAR>_PROD` y cae a `<VAR>` plana si no existe — aplica a `NOTIFICATIONS_LIVE`, `CRON_SECRET` y los 5 flags `AVAILABILITY_*` / `REJECTION_INDIVIDUAL_ENABLED` / `POOL_PENDIENTE_ENABLED`. Ejemplo para encender el modelo en staging sin tocar prod:
+  ```bash
+  # en .env.local
+  AVAILABILITY_MODEL_ENABLED_DEV=true
+  AVAILABILITY_MODEL_ENABLED_PROD=false
+  NOTIFICATIONS_LIVE_DEV=false      # staging silenciado
+  NOTIFICATIONS_LIVE_PROD=true      # prod envía real
+  ```
+  Sin sufijos, la clave plana se usa para ambos ambientes (comportamiento anterior).
+
+> **Estado actual (pre-lanzamiento).** Mientras producción no tenga usuarios reales, los flags `AVAILABILITY_MODEL_ENABLED` y secundarios se tratan así: **ON en staging/test** (`*_DEV=true`) para que los usuarios de prueba ejerciten el modelo v5.0, y **la decisión en producción se posterga al día del estreno** (`*_PROD=false` hasta entonces). El control de prod sigue siendo "no desplegar lo que no quieras allí"; el flag solo da el control fino de qué corre en test **desde la misma rama `main`**, sin mantener una rama paralela divergente. Recién cuando prod tenga usuarios el flag cumple su rol de kill-switch en caliente (ver §9 y §14).
+
 ---
 
 ## 13. Mantenimiento periódico
@@ -333,3 +384,11 @@ gcloud scheduler jobs create http evaluate-quotes-dev \
 - **Mensual**: revisar costos en GCP Console → Billing. La instancia de staging cuesta ~$10/mes.
 - **Pausar staging si no se usa**: `bash scripts/GCPControl.sh` (toca activation policy).
 - **Backups**: Cloud SQL hace backup diario a las 03:00 (configurado en `setup-staging-db.sh` y en la instancia de producción).
+
+## 14. Rollback del modelo de disponibilidad (v5.0)
+
+El modelo de disponibilidad vive detrás de feature flags (`AVAILABILITY_MODEL_ENABLED` + secundarios). Rollback:
+
+- **Inmediato (sin redeploy de código)**: poner los flags a `false` en `.env.local` y re-inyectarlos en Cloud Run (`bash deploy.sh production` con las vars en `false`, o `gcloud run services update --update-env-vars AVAILABILITY_MODEL_ENABLED=false,...`). **Reiniciar la instancia** (los flags se leen al arrancar el proceso, no es hot-reload; ~30s de switching). Fauchard vuelve al comportamiento previo (exclusión binaria `consecutiveNoResponse >= 3` + score viejo); las tablas v5.x quedan en BD pero sin uso.
+- **Completo (con deploy)**: revertir el merge en `develop`/`main` y redeploy. Las tablas nuevas permanecen (no se borran automáticamente; DDL inverso documentado en el plan, solo si se retira el feature definitivamente).
+- **Crons**: pausar/eliminar los jobs de Cloud Scheduler (`process-availability`, `process-pool-queue`) no requiere redeploy; con el flag off las actions ya retornan `skipped`.

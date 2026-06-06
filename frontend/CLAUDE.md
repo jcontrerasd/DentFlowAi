@@ -70,6 +70,12 @@ Reglas:
 - Las listas de **material**, **color VITA**, **tipo de restauración** y **urgencia** se cargan vía server actions (`listVitaShadesAction`, etc.) en `lib/db/actions/catalogs.ts`. El form envía `code` opaco para material/restoration/shade y **`label`** para urgency (la lógica de negocio se compara contra labels estándar como `'Alta'`). `resolveCatalogCodesToIds` resuelve a id antes de persistir.
 - **No hay texto libre "Otro"**: si falta una opción, admin la agrega en `/dashboard/admin/catalogos`.
 
+## Badge global de disponibilidad (v5.0)
+- `components/availability/AvailabilityBadge.tsx` — pill en el header (`app/dashboard/layout.tsx`, entre Bell y ThemeToggle). Solo se monta para rol `tecnico`; además se **auto-oculta** si `AVAILABILITY_UI_TECNICO_ENABLED` está off (el gating server-side viaja en `enabled` de `getMyAvailabilityStatusAction`, porque el flag es server-only y el layout es Client Component).
+- Punto de aviso ámbar (Nivel 2) / rojo (Nivel 3). Click → popover con `GlobalAvailabilitySwitch` + `ResponseStatusStepper` condensado + link al panel.
+- Panel completo en `/dashboard/profile/availability` (`AvailabilityPanel`): switch global, columnas CAD/CAM con 5 categorías (`WORK_CATEGORIES`), historial de respuesta. Padre OFF deshabilita hijos visualmente pero **preserva** sus valores.
+- Toggle del switch global: OFF con invitaciones pendientes → `BulkRejectDialog` (mantener / rechazar todas); ON desde Nivel 3 → `ReactivationModal` (informativo, no bloqueante). Orquestado por `GlobalAvailabilitySwitch`.
+
 ## Tema (claro/oscuro/sistema)
 - Provider en `components/theme/ThemeProvider.tsx` + contexto en `ThemeContext.ts`. Toggle: `ThemeToggleButton.tsx`.
 - Tokens CSS en `app/theme.css`; Tailwind 4 los consume. No instalar `next-themes` — la implementación es propia.
@@ -94,6 +100,8 @@ Ejecutar con `npx tsx scripts/<archivo>.ts` desde `frontend/` (lee `.env.local`)
 | `migrate-tokens.ts` | One-time: migración de tokens auth |
 | `reseed-contact-guard-regex.ts` | Re-poblar reglas regex de ContactGuard (idempotente) |
 | `diag-contact-guard.ts` | Diagnóstico — verifica reglas activas + testea inputs |
+| `backfill-availability.ts` | One-time v5.0 (Fase 7): puebla `technician_availability` por técnico (infiere CAD/CAM de skills). Idempotente. Correr una vez en la activación |
+| `send-rollout-email.ts proximo\|activado` | One-time v5.0 (Fase 7): comunicación masiva de rollout a técnicos vía EmailJS (best-effort) |
 
 Scripts marcados "ya aplicado" se conservan como referencia histórica; no volver a ejecutar.
 

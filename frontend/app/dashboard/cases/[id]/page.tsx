@@ -56,6 +56,10 @@ import {
 import { getCaseDetailActionState } from '@/lib/cases/caseDetailActions';
 import { isActiveCaseStatus } from '@/lib/constants/dental';
 import CaseDetailManagementBar from '@/components/cases/CaseDetailManagementBar';
+import RepublicarModal from '@/components/cases/RepublicarModal';
+import PendingPoolBanner from '@/components/cases/PendingPoolBanner';
+import CheckInDentistaModal from '@/components/cases/CheckInDentistaModal';
+import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import Link from 'next/link';
 import { startWorkAction } from '@/lib/db/actions/proposal';
 import { createAnnotationAction, deleteAnnotationAction } from '@/lib/db/actions/annotations';
@@ -320,6 +324,10 @@ function CaseDetailPageContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  // v5.0 — pendiente_pool / republicar (modelo de disponibilidad).
+  const [republicarOpen, setRepublicarOpen] = useState(false);
+  const [checkInOpen, setCheckInOpen] = useState(false);
+  const [checkInDismissed, setCheckInDismissed] = useState(false);
   const [deleteStep, setDeleteStep] = useState(1);
   const [deleteInput, setDeleteInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -372,6 +380,20 @@ function CaseDetailPageContent() {
           ? clinicalCase.proposalExpiresAt
           : clinicalCase.proposalExpiresAt instanceof Date
             ? clinicalCase.proposalExpiresAt.getTime()
+            : 0,
+    ],
+  );
+
+  // v5.0 — Etapa 3: plazo de revisión del dentista (lo computa getCaseDetails con la config).
+  const reviewDeadlineMs = useMemo(
+    () => toDeadlineMs(clinicalCase?.reviewDeadlineAt),
+    [
+      clinicalCase?.reviewDeadlineAt == null
+        ? 0
+        : typeof clinicalCase.reviewDeadlineAt === 'string'
+          ? clinicalCase.reviewDeadlineAt
+          : clinicalCase.reviewDeadlineAt instanceof Date
+            ? clinicalCase.reviewDeadlineAt.getTime()
             : 0,
     ],
   );
@@ -1668,6 +1690,18 @@ function CaseDetailPageContent() {
     ],
   );
 
+  // v5.0 — caso esperando técnicos en la cola pendiente_pool.
+  const isPendingPool = clinicalCase?.internalStatus === POOL_INTERNAL_STATUS;
+  const showPendingPoolBanner = isPendingPool && actingAsDentista && !viewingAsAdmin;
+
+  // Check-in al dentista: el cron marca pendingPoolCheckinSentAt al 50% del TTL;
+  // al entrar al caso le mostramos el modal una vez por sesión.
+  useEffect(() => {
+    if (showPendingPoolBanner && clinicalCase?.pendingPoolCheckinSentAt && !checkInDismissed) {
+      setCheckInOpen(true);
+    }
+  }, [showPendingPoolBanner, clinicalCase?.pendingPoolCheckinSentAt, checkInDismissed]);
+
   const isEditingStatus = fieldsEditable && editForm ? editForm.status : caseStatus;
 
   const canToggleEdit = actingAsDentista;
@@ -1898,6 +1932,7 @@ function CaseDetailPageContent() {
                 isDeleting={isDeleting}
                 isCloning={isCloning}
                 savingChanges={savingChanges}
+                onRepublicar={() => setRepublicarOpen(true)}
                 onEdit={handleStartEdit}
                 onCancelEdit={handleCancelEdit}
                 onSave={() => void handleSaveChanges()}
@@ -2078,6 +2113,53 @@ function CaseDetailPageContent() {
       </div>
 
       {/* S3-07: Banner Nudge — REMOVED PER USER REQUEST */}
+
+      {/* v5.0 — Banner pendiente_pool (dentista): buscando técnicos disponibles */}
+      {showPendingPoolBanner && (
+        <PendingPoolBanner
+          caseId={id as string}
+          startedAt={clinicalCase?.pendingPoolStartedAt}
+          onCancelled={async () => {
+            const refreshed = await getCaseDetails(id as string);
+            if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+            await loadCaseEvents();
+            showSuccessToastMessage('Publicación cancelada. El caso quedó cerrado.');
+            dispatchDashboardMetricsRefresh();
+          }}
+          onError={(msg) => showErrorToast(msg)}
+        />
+      )}
+
+      {/* v5.0 — Modal republicar caso sin cotizaciones */}
+      <RepublicarModal
+        isOpen={republicarOpen}
+        onClose={() => setRepublicarOpen(false)}
+        caseId={id as string}
+        caseLabel={clinicalCase?.caseNumber ? `#${clinicalCase.caseNumber}` : undefined}
+        onDone={async () => {
+          const refreshed = await getCaseDetails(id as string);
+          if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+          await loadCaseEvents();
+          showSuccessToastMessage('Caso republicado. Estamos buscando técnicos disponibles.');
+          dispatchDashboardMetricsRefresh();
+        }}
+      />
+
+      {/* v5.0 — Check-in al dentista al 50% del TTL en pendiente_pool */}
+      <CheckInDentistaModal
+        isOpen={checkInOpen}
+        onClose={() => { setCheckInOpen(false); setCheckInDismissed(true); }}
+        caseId={id as string}
+        caseLabel={clinicalCase?.caseNumber ? `#${clinicalCase.caseNumber}` : undefined}
+        onCancelled={async () => {
+          const refreshed = await getCaseDetails(id as string);
+          if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+          await loadCaseEvents();
+          showSuccessToastMessage('Publicación cancelada. El caso quedó cerrado.');
+          dispatchDashboardMetricsRefresh();
+        }}
+        onError={(msg) => showErrorToast(msg)}
+      />
 
       {/* Estado "En Evaluación" para el dentista */}
       {showCaseToolbar && clinicalCase?.status === 'enEvaluacion' && (
@@ -2363,6 +2445,7 @@ function CaseDetailPageContent() {
                   onClose={() => setIsHubOpen(false)}
                   onActionTriggered={handleHubAction}
                   proposalDeadlineMs={proposalDeadlineMs}
+                  reviewDeadlineMs={reviewDeadlineMs}
                   serverClockAnchor={serverClockAnchor}
                 />
               </motion.div>

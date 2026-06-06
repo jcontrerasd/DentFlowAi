@@ -13,7 +13,7 @@ Plataforma clínica-laboratorio dental: dentistas crean casos con modelos 3D, el
 - Next.js 15 App Router · React 19 · TypeScript · Tailwind CSS 4
 - Drizzle ORM + PostgreSQL (Cloud SQL) · NextAuth 5 beta
 - Google Cloud Storage (archivos STL/imágenes) · Three.js (visor 3D)
-- Vitest + Testing Library · framer-motion · lucide-react
+- Vitest + Testing Library · framer-motion · lucide-react · recharts (gráficos del dashboard de observabilidad admin, v5.0)
 - Node ≥ 20.19 · npm ≥ 10 (`frontend/package.json` → `engines`)
 
 ## Estructura
@@ -124,7 +124,7 @@ npx tsx frontend/scripts/seed-uat.ts      # seed UAT local (.env.local)
 - **Producción**: Cloud Run `dentflowai-frontend` + Cloud SQL `dentflowai-cbcf2-instance`.
 - Variables por entorno (`DATABASE_URL_DEV`/`_PROD`, `AUTH_URL_DEV`/`_PROD`, `NEXT_PUBLIC_APP_URL_DEV`/`_PROD`) viven en `frontend/.env.local` y se inyectan en Cloud Run por `deploy.sh`.
 - Crear BD staging (one-time): `export DB_PASS=$(openssl rand -base64 24) && bash scripts/setup-staging-db.sh`.
-- Refrescar staging con datos de prod (clone completo, incluye usuarios y passwordHash): `bash scripts/clone-prod-to-staging.sh`.
+- Clon inicial prod→staging (**one-time**, ya ejecutado al montar staging — no es rutina recurrente): `bash scripts/clone-prod-to-staging.sh` (clone completo, incluye usuarios y passwordHash).
 - Flujo paso a paso completo: [Doc/Ciclo_Desarrollo.md](Doc/Ciclo_Desarrollo.md).
 
 ## Almacenamiento GCS — compresión y lifecycle
@@ -141,7 +141,7 @@ Diseño de lookup tables uniforme:
   - `id` (uuid PK) — referenciado por FK desde `clinical_case`.
   - `code` (text UNIQUE) — **opaco, system-generated** (`mat_001`, `vita_001`, `rest_001`, `urg_001`). Identificador estable sin relación semántica con el label.
   - `label` (text) — **único campo editable** por admin.
-  - `sort_order`, `is_active`. DDL + seed en [frontend/lib/db/infrastructure.ts](frontend/lib/db/infrastructure.ts) (`INFRA_VERSION='v4.7'` — incluye índices de performance y tabla `fauchard_holiday`).
+  - `sort_order`, `is_active`. DDL + seed en [frontend/lib/db/infrastructure.ts](frontend/lib/db/infrastructure.ts) (`INFRA_VERSION='v5.0'` — agrega el modelo de disponibilidad del técnico: tablas `technician_availability`, `technician_no_response_event` y los catálogos de rechazo `invitation_rejection_reason` (`rej_NNN`) + `bulk_rejection_reason` (`brej_NNN`), más columnas nuevas en `case_invitation`, `clinical_case` y `fauchard_config`. Todo detrás del flag `AVAILABILITY_MODEL_ENABLED`. Ver [Doc Servicio Orquestado/plan_flujo_tiempos.md](Doc%20Servicio%20Orquestado/plan_flujo_tiempos.md)).
 - **FKs en clinical_case**: `material_id`, `restoration_type_id`, `shade_id`, `urgency_id` (todos con `ON DELETE RESTRICT`).
 - **Reglas de uso desde código**:
   - Form envía `code` opaco para material/restoration/shade y `label` para urgency. El resolver ([catalogResolver.ts](frontend/lib/db/catalogResolver.ts)) lo convierte a `*_id` antes de persistir.
@@ -173,17 +173,28 @@ El motor Fauchard es el núcleo de orquestación. Flujo de vida de un caso:
 6. **Fabricación** (`integral` / `solo_fabricacion`) → `transitionToManufacturingAction` → `registerDispatchAction`.
 7. **Cierre físico** → dentista confirma recepción con `confirmReceptionAction` → `completado`. (`solo_diseno` cierra en `approveWorkAction`.)
 
+### Modelo de disponibilidad del técnico (v5.0, detrás de `AVAILABILITY_MODEL_ENABLED`)
+Reemplaza la exclusión binaria `consecutiveNoResponse >= 3` por un sistema gradual (todo inerte hasta encender el flag). Ver `Doc Servicio Orquestado/`:
+- **Elegibilidad AND triple**: el técnico declara disponibilidad en 3 niveles (global · CAD/CAM · 5 categorías). Fauchard filtra por `computeEligibleAction` en cada corrida (sin caché).
+- **Sanción rolling 14d**: las no-respuestas suman a un nivel 1/2/3 (warning · penalización al score `−αN·N` · auto-OFF del switch global). Decae sola al salir de la ventana. Tablas `technician_availability` / `technician_no_response_event`.
+- **Cola `pendiente_pool`**: si no hay elegibles, el caso espera técnicos (TTL + check-in al dentista) en vez de fallar; `runFauchardAction` retorna `{ pooled: true }`. Reactivación event-driven al encender un técnico.
+- **Rechazo explícito** (individual/masivo) + **reemplazo automático** del siguiente del pool. Notificaciones vía EmailJS (`lib/services/notifications.ts`); reglas de canal por tipo en `channelsForNotification` (§9.5). **Envío real gated por `NOTIFICATIONS_LIVE`** (interruptor maestro de seguridad por ambiente: si no es `true`, `notifyUser` loguea sin enviar aunque haya credenciales — evita correos reales desde staging con datos clonados). Actions en `lib/db/actions/{availability,availabilityCron,noResponseEvents,rejection,replacement,poolQueue}.ts`.
+- **Crons (Cloud Scheduler, header `Authorization: Bearer ${CRON_SECRET}`)**: además de `evaluate-quotes` (cada 5 min), v5.0 agrega `/api/cron/process-availability` (cada hora → expira no-respuestas fuera de ventana, auto-OFF preventivo por inactividad, recordatorio) y `/api/cron/process-pool-queue` (cada 10 min → check-in al dentista al 50% del TTL + expiración/re-encole de la cola). Ambos inertes con `AVAILABILITY_MODEL_ENABLED` off. Comandos `gcloud` en `Doc/Ciclo_Desarrollo.md`.
+- **Republicar / cancelar**: caso en `sin_cotizaciones_fallo` → botón Republicar (`republicarCaseAction`, modal de doble confirmación); durante `pendiente_pool` el dentista ve banner "Buscando técnicos…" + Cancelar publicación (`cancelPendingPoolAction`) y un check-in modal al 50% del TTL.
+
 ### Idempotencia garantizada
 - `evaluateQuotesAction` y `buildProposalAction`: solo transicionan desde `enEvaluacion`; `buildProposal` no reescribe `proposalExpiresAt` si el caso ya avanzó.
 - **Lecturas** (`getCaseDetails`, `listCasesByOrganization`): solo `expirePendingInvitationsForCase` — **no** llaman `evaluateQuotes` (evita reset del countdown 2 al refrescar).
 
-### Dos countdowns independientes (etapas distintas)
+### Countdowns independientes (etapas distintas)
 | Etapa | Config | Campo BD | Estado caso |
 |-------|--------|----------|-------------|
 | Técnicos cotizan | `tQuoteMinutes` | `case_invitation.expires_at` | `enEvaluacion` |
 | Dentista elige oferta | `tProposalHours` | `clinical_case.proposal_expires_at` | `propuestaLista` |
+| Dentista revisa entrega (v5.0) | `tDentistReviewHours` | `clinical_case.last_revision_submitted_at` (+config) | `enRevision` |
 
 Helpers: `frontend/lib/db/caseDeadlines.ts`. Evaluación/cierre de comparativo: `submitQuote`, cron, `checkAndExpireInvitationsAction` (no en lecturas).
+- **Etapa 3 (revisión, v5.0):** `getCaseReviewDeadlineAt` = `last_revision_submitted_at + tDentistReviewHours` (wall-clock, gated). HMS en cabecera UCH (dentista + técnico); cada entrega reinicia el countdown. **Sin auto-acción** al vencer: marca "Respuesta vencida" + escalación por cron (`REVISION_PLAZO_POR_VENCER` / `REVISION_PLAZO_VENCIDO`).
 
 ### Config Fauchard
 - **Global:** `getActiveConfig()` — config activa actual.
@@ -208,6 +219,7 @@ Fauchard prioriza **una acción primaria** visible expandida en el hilo (revisi�
 | OFERTAS_COMPARATIVAS_LISTAS | Dentista | `ComparativeOffersPanel.tsx` (embebido en hilo) |
 | PROPUESTA_ACEPTADA | Ambos | `AcceptedProposalSummary.tsx`, `UchDealSummary.tsx` |
 | OFERTA_RECHAZADA / OFERTA_NO_SELECCIONADA | Técnico (perdedor) | `UchEventBubble.tsx` con bloque de detalle snapshot |
+| OFERTA_RECHAZADA_POR_TECNICO | Sistema (enmascarado Fauchard) | `UchRejectInvitationDialog.tsx` + `rejectInvitationIndividualAction` — el técnico invitado rechaza explícitamente su invitación pendiente (gated por `REJECTION_INDIVIDUAL_ENABLED`). **No** cuenta como no-respuesta; dispara reemplazo automático si `AVAILABILITY_MODEL_ENABLED`. El dentista no ve nada explícito (el reemplazo aparece como nueva invitación). Distinto del rechazo **masivo** (`rejectInvitationsBulkAction`, al pausar el switch global). |
 | TRABAJO_INICIADO | Ambos | `UchFauchardActionsPanel.tsx` + `startWorkAction` |
 | REVISION_ENVIADA | Ambos | `UchDeliveryPanel.tsx` + `submitRevisionAction` |
 | TRABAJO_APROBADO / REVISION_SOLICITADA | Ambos | `UchDentistReviewPanel.tsx` + `approveWorkAction` / `requestRevisionAction` |
