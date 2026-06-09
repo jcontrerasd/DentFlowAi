@@ -5,6 +5,7 @@ import { technicianSkill, user, caseInvitation } from '@/lib/db/schema';
 import { eq, and, or, gt } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { WORK_TYPES } from '@/lib/constants/dental';
+import { ensureTechnicianAvailabilityAction } from './availability';
 
 export type SkillRow = {
   workType: string;
@@ -105,6 +106,15 @@ export async function updateSkillsAction(skills: SkillInput[]) {
             },
           });
       }
+    }
+
+    // Capa 1 (correcto por construcción): garantizar la fila de disponibilidad del
+    // técnico apenas declara skills, para que Fauchard nunca lo excluya por falta de
+    // fila. Best-effort: un fallo aquí no debe impedir guardar la matriz de habilidades.
+    try {
+      await ensureTechnicianAvailabilityAction(identity.id);
+    } catch (availErr) {
+      console.error('[updateSkillsAction] No se pudo asegurar disponibilidad:', availErr);
     }
 
     return { success: true };
