@@ -3,7 +3,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-export const INFRA_VERSION = 'v5.5';
+export const INFRA_VERSION = 'v5.6';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -462,7 +462,8 @@ export async function ensureInfrastructure(db: any) {
           ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ,
           ADD COLUMN IF NOT EXISTS suspended_until TIMESTAMPTZ,
           ADD COLUMN IF NOT EXISTS consecutive_no_response INTEGER DEFAULT 0,
-          ADD COLUMN IF NOT EXISTS sub_roles JSONB;
+          ADD COLUMN IF NOT EXISTS sub_roles JSONB,
+          ADD COLUMN IF NOT EXISTS country TEXT;
 
         -- S0-04b: work_type en case_invitation (cooldown por tipo de trabajo)
         ALTER TABLE case_invitation ADD COLUMN IF NOT EXISTS work_type TEXT;

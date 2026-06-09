@@ -2,17 +2,23 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  Award, 
-  Calendar, 
-  Save, 
-  Camera, 
+import {
+  User,
+  Mail,
+  Phone,
+  Award,
+  Calendar,
+  Save,
+  Camera,
   FileText,
-  AlertCircle
+  AlertCircle,
+  Building2,
+  MapPin,
+  Globe,
+  Briefcase,
+  Fingerprint
 } from 'lucide-react';
+import { countriesByContinent } from '@/app/auth/register/constants/countries';
 import { useAuth, UserProfile } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { updateUserAction } from '@/lib/db/actions/user';
@@ -37,8 +43,16 @@ export default function ProfilePage() {
     phone: '',
     specialty: '',
     registrationNumber: '',
+    country: 'CL',
     experienceYears: 0,
     bio: '',
+  });
+
+  // Datos de la organización (clínica / laboratorio). RUT se muestra pero no se edita.
+  const [orgData, setOrgData] = useState({
+    name: '',
+    giro: '',
+    legalAddress: '',
   });
 
   const DENTIST_SPECIALTIES = [
@@ -61,8 +75,15 @@ export default function ProfilePage() {
         phone: userProfile.phone || '',
         specialty: userProfile.specialty || 'Odontología General',
         registrationNumber: userProfile.registrationNumber || '',
+        country: userProfile.country || 'CL',
         experienceYears: userProfile.experienceYears || 0,
         bio: userProfile.bio || '',
+      });
+
+      setOrgData({
+        name: userProfile.organization?.name || '',
+        giro: userProfile.organization?.giro || '',
+        legalAddress: userProfile.organization?.legalAddress || '',
       });
 
       if (userProfile.image) {
@@ -121,12 +142,23 @@ export default function ProfilePage() {
       const result = await updateUserAction(userProfile.id, formData);
       if (!result.success) throw new Error(result.error);
 
+      const orgId = userProfile.organization?.id;
+      if (orgId) {
+        const orgResult = await updateOrganizationDetailsAction(orgId, orgData);
+        if (!orgResult.success) throw new Error(orgResult.error);
+      }
+
       if (userProfile?.role === 'tecnico' && skillFormRef.current) {
         const skillsResult = await skillFormRef.current.save();
         if (!skillsResult.success) throw new Error(skillsResult.error);
       }
 
-      updateProfileOptimistically({ ...formData });
+      updateProfileOptimistically({
+        ...formData,
+        organization: userProfile.organization
+          ? { ...userProfile.organization, ...orgData }
+          : userProfile.organization,
+      });
       showSuccess('Perfil actualizado con éxito');
     } catch (err: any) {
       setError(err.message || "Error al actualizar el perfil");
@@ -245,11 +277,31 @@ export default function ProfilePage() {
                     <label className="text-[10px] font-bold uppercase tracking-wider text-faint ml-1">Nº Registro / Licencia</label>
                     <div className="relative">
                       <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
-                      <input 
+                      <input
                         className="w-full bg-surface border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-foreground focus:border-primary/30 focus:outline-none transition-all"
                         value={formData.registrationNumber}
                         onChange={e => setFormData({...formData, registrationNumber: e.target.value})}
                       />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-faint ml-1">País</label>
+                    <div className="relative">
+                      <Globe className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint pointer-events-none" />
+                      <select
+                        className="w-full bg-surface border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-foreground focus:border-primary/30 focus:outline-none transition-all appearance-none"
+                        value={formData.country}
+                        onChange={e => setFormData({...formData, country: e.target.value})}
+                      >
+                        {countriesByContinent.map(g => (
+                          <optgroup key={g.continent} label={g.continent}>
+                            {g.countries.map(c => (
+                              <option key={c.code} value={c.code}>{c.name}</option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </>
@@ -282,6 +334,67 @@ export default function ProfilePage() {
                 value={formData.bio}
                 onChange={e => setFormData({...formData, bio: e.target.value})}
               />
+            </div>
+
+            {/* Organización (clínica / laboratorio) */}
+            <div className="space-y-6 border-t border-divider pt-8">
+              <div className="ml-1">
+                <h3 className="text-sm font-black text-foreground uppercase tracking-widest">
+                  {userProfile?.role === 'tecnico' ? 'Tu Laboratorio' : 'Tu Clínica'}
+                </h3>
+                <p className="text-[11px] text-faint mt-1">Datos de tu organización. El RUT no se puede modificar.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-faint ml-1">Organización</label>
+                  <div className="relative">
+                    <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
+                    <input
+                      className="w-full bg-surface border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-foreground focus:border-primary/30 focus:outline-none transition-all"
+                      value={orgData.name}
+                      onChange={e => setOrgData({...orgData, name: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-faint ml-1">RUT</label>
+                  <div className="relative">
+                    <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
+                    <input
+                      disabled
+                      readOnly
+                      className="w-full bg-surface-2 border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-muted cursor-not-allowed"
+                      value={userProfile?.organization?.rut || '—'}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-faint ml-1">Giro</label>
+                  <div className="relative">
+                    <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
+                    <input
+                      className="w-full bg-surface border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-foreground focus:border-primary/30 focus:outline-none transition-all"
+                      value={orgData.giro}
+                      onChange={e => setOrgData({...orgData, giro: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-faint ml-1">Dirección Legal</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
+                    <input
+                      className="w-full bg-surface border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-foreground focus:border-primary/30 focus:outline-none transition-all"
+                      value={orgData.legalAddress}
+                      onChange={e => setOrgData({...orgData, legalAddress: e.target.value})}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
             </div>
 

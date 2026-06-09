@@ -141,6 +141,18 @@ export async function updateAvailabilityLevelAction(
       .where(eq(technicianAvailability.userId, input.userId))
       .returning();
 
+    // Sincronización con el campo legacy `user.is_available`: el switch global v5.0 y
+    // el toggle legacy del perfil deben reflejar el mismo estado. Mantenerlos espejados
+    // evita que diverjan entre las superficies (badge del header / panel / perfil) y que
+    // Fauchard lea estados contradictorios según el flag activo (`AVAILABILITY_MODEL_ENABLED`
+    // lee levelGlobal; con el flag off el filtro legacy lee `user.is_available`).
+    if (target.kind === 'global') {
+      await db
+        .update(user)
+        .set({ isAvailable: value, updatedAt: new Date() })
+        .where(eq(user.id, input.userId));
+    }
+
     // Al encender CUALQUIER nivel del switch (global · capacidad · categoría),
     // dispara la reactivación de casos en cola (event-driven, §5.2: "cualquier
     // nivel de switch"). El técnico puede volverse elegible para un caso en pool

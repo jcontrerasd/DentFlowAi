@@ -9,6 +9,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { checkUserStatusAction } from '@/lib/db/actions/user';
 import AuthNavbar from '@/components/auth/AuthNavbar';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
   return (
@@ -23,13 +24,18 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { status } = useSession();
+  const { userProfile, loading: authLoading } = useAuth();
 
-  // Redirect authenticated users away from the login page
+  // Redirigir usuarios autenticados fuera del login SOLO si su onboarding está
+  // completo (o son admin). Si hay una inscripción a medio terminar, dejamos el
+  // login accesible en vez de rebotar al wizard de registro.
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (status !== 'authenticated' || authLoading) return;
+    const isOnboarded = userProfile?.onboardingStep === 100 || userProfile?.role === 'admin';
+    if (isOnboarded) {
       router.replace('/dashboard');
     }
-  }, [status, router]);
+  }, [status, authLoading, userProfile, router]);
 
   useEffect(() => {
     const emailParam = searchParams.get('email');

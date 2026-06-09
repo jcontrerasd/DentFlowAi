@@ -36,6 +36,7 @@ export const user = pgTable("user", {
 	phone: text(),
 	registrationNumber: text("registration_number"),
 	specialty: text(),
+	country: text(),
 	subRoles: jsonb("sub_roles"),
   image: text(),
   emailVerified: timestamp("email_verified", { withTimezone: true, mode: 'date' }),

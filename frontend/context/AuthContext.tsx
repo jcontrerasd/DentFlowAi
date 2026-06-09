@@ -12,12 +12,15 @@ export interface UserProfile {
   phone: string | null;
   specialty: string | null;
   registrationNumber: string | null;
+  country?: string | null;
   suspendedUntil?: string | null;
   organization?: {
     id: string;
     name: string;
     type: string;
     rut?: string | null;
+    giro?: string | null;
+    legalAddress?: string | null;
     logoUrl?: string | null;
     technicalCapabilities?: string[] | null;
   } | null;
