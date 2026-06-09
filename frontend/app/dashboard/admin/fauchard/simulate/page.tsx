@@ -1,5 +1,7 @@
 export const dynamic = 'force-dynamic';
 
+import { redirect } from 'next/navigation';
+import { getServerIdentity } from '@/lib/db/actions/impersonation';
 import { getFauchardConfigAction } from '@/lib/db/actions/fauchard';
 import FauchardNav from '@/components/admin/fauchard/FauchardNav';
 import SimulatorPanel from '@/components/admin/fauchard/SimulatorPanel';
@@ -10,6 +12,12 @@ export const metadata = {
 };
 
 export default async function AdminFauchardSimulatePage() {
+  // Guard server-side: solo admin.
+  const identity = await getServerIdentity();
+  if (!identity || (identity.role !== 'admin' && !identity.isSystemAdmin)) {
+    redirect('/dashboard');
+  }
+
   const res = await getFauchardConfigAction();
 
   if (!res.success) {
@@ -25,7 +33,7 @@ export default async function AdminFauchardSimulatePage() {
   }
 
   return (
-    <div className="flex flex-col gap-10 p-4 md:p-8 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-10 p-4 md:p-8 max-w-[1700px] mx-auto">
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-3">

@@ -56,6 +56,10 @@ import {
 import { getCaseDetailActionState } from '@/lib/cases/caseDetailActions';
 import { isActiveCaseStatus } from '@/lib/constants/dental';
 import CaseDetailManagementBar from '@/components/cases/CaseDetailManagementBar';
+import RepublicarModal from '@/components/cases/RepublicarModal';
+import PendingPoolBanner from '@/components/cases/PendingPoolBanner';
+import CheckInDentistaModal from '@/components/cases/CheckInDentistaModal';
+import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import Link from 'next/link';
 import { startWorkAction } from '@/lib/db/actions/proposal';
 import { createAnnotationAction, deleteAnnotationAction } from '@/lib/db/actions/annotations';
@@ -86,7 +90,8 @@ import { dispatchDashboardMetricsRefresh } from '@/lib/dashboard/dashboardRefres
 import { getMyInvitationForCaseAction } from '@/lib/db/actions/invitations';
 import type { InvitationItem } from '@/lib/db/actions/invitations';
 import { getCaseHubReadStateAction, markCaseHubReadAction } from '@/lib/db/actions/hubRead';
-import { countUnreadNegChannel, countUnreadTechChannel, type UchUnreadEvent } from '@/lib/uchUnread';
+import { countUnreadNegChannel, countUnreadTechChannel, filterOthersNegChannel, filterOthersTechChannel, type UchUnreadEvent } from '@/lib/uchUnread';
+import { dispatchHubUnreadRefresh } from '@/lib/hubUnreadEvents';
 import {
   responsibilityAttentionBump,
   isHubInboxSuppressedForCompletedCase,
@@ -320,6 +325,10 @@ function CaseDetailPageContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  // v5.0 — pendiente_pool / republicar (modelo de disponibilidad).
+  const [republicarOpen, setRepublicarOpen] = useState(false);
+  const [checkInOpen, setCheckInOpen] = useState(false);
+  const [checkInDismissed, setCheckInDismissed] = useState(false);
   const [deleteStep, setDeleteStep] = useState(1);
   const [deleteInput, setDeleteInput] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -372,6 +381,20 @@ function CaseDetailPageContent() {
           ? clinicalCase.proposalExpiresAt
           : clinicalCase.proposalExpiresAt instanceof Date
             ? clinicalCase.proposalExpiresAt.getTime()
+            : 0,
+    ],
+  );
+
+  // v5.0 — Etapa 3: plazo de revisión del dentista (lo computa getCaseDetails con la config).
+  const reviewDeadlineMs = useMemo(
+    () => toDeadlineMs(clinicalCase?.reviewDeadlineAt),
+    [
+      clinicalCase?.reviewDeadlineAt == null
+        ? 0
+        : typeof clinicalCase.reviewDeadlineAt === 'string'
+          ? clinicalCase.reviewDeadlineAt
+          : clinicalCase.reviewDeadlineAt instanceof Date
+            ? clinicalCase.reviewDeadlineAt.getTime()
             : 0,
     ],
   );
@@ -510,7 +533,8 @@ function CaseDetailPageContent() {
           );
           return false;
         }
-        const res = await registerDispatchAction(id as string, { courier, trackingId });
+        const dispatchMode = data?.dispatchMode === 'externo' ? 'externo' : data?.dispatchMode === 'interno' ? 'interno' : undefined;
+        const res = await registerDispatchAction(id as string, { courier, trackingId, dispatchMode });
         if (!res.success) {
           const msg = (res as { error?: string }).error || 'Error al registrar despacho';
           showErrorToast(msg);
@@ -559,8 +583,61 @@ function CaseDetailPageContent() {
     if (clinicalCase?.id && String(clinicalCase.id) !== String(id)) return;
     const now = new Date();
     setHubServerReads({ lastReadTech: now, lastReadNeg: now });
-    void markCaseHubReadAction(id as string);
+    // Persistir y avisar a la campana/listados para que descuenten al instante.
+    void markCaseHubReadAction(id as string).then(() => dispatchHubUnreadRefresh());
   }, [isHubOpen, id, clinicalCase?.id]);
+
+  /** Reconoce los mensajes entrantes mostrados con el UCH abierto: re-marca leído y sincroniza. */
+  const acknowledgeNewHubMessages = useCallback(() => {
+    if (!id) return;
+    const now = new Date();
+    setHubServerReads({ lastReadTech: now, lastReadNeg: now });
+    void markCaseHubReadAction(id as string).then(() => dispatchHubUnreadRefresh());
+  }, [id]);
+
+  /**
+   * Polling de eventos mientras el Centro de control está abierto (no hay realtime).
+   * Pausa en pestaña oculta para no consumir recursos; se limpia al cerrar/cambiar de caso.
+   */
+  useEffect(() => {
+    if (!isHubOpen || !id) return;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (intervalId != null) return;
+      intervalId = setInterval(() => { void loadCaseEvents(); }, 15000);
+    };
+    const stop = () => {
+      if (intervalId != null) { clearInterval(intervalId); intervalId = null; }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') start();
+      else stop();
+    };
+    if (typeof document === 'undefined' || document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
+    // loadCaseEvents lee `id` (estable) y solo usa setters; deps mínimas evitan reiniciar el interval cada render.
+  }, [isHubOpen, id]);
+
+  /**
+   * Detecta mensajes nuevos del otro rol y avisa con un toast mientras el UCH está abierto.
+   * Funciona para cualquier recarga (polling o acción). Excluye eventos propios → sin falsos positivos.
+   */
+  const lastOtherMaxMsRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!authUserProfile?.id) return;
+    const others = [
+      ...filterOthersTechChannel(caseEvents as UchUnreadEvent[], String(authUserProfile.id)),
+      ...filterOthersNegChannel(caseEvents as UchUnreadEvent[], String(authUserProfile.id)),
+    ];
+    const maxMs = others.reduce((m, e) => Math.max(m, new Date(e.createdAt).getTime() || 0), 0);
+    const prev = lastOtherMaxMsRef.current;
+    lastOtherMaxMsRef.current = maxMs;
+    if (prev === null) return; // primer cálculo: solo fija la línea base, sin avisar
+    if (maxMs > prev && isHubOpen) {
+      showSuccessToastMessage('Nuevo mensaje en este caso');
+    }
+  }, [caseEvents, authUserProfile?.id, isHubOpen, showSuccessToastMessage]);
 
   useEffect(() => {
     openHubAppliedRef.current = false;
@@ -570,6 +647,7 @@ function CaseDetailPageContent() {
     setUchPanelMounted(false);
     setIsDeleting(false);
     setDeleteInput('');
+    lastOtherMaxMsRef.current = null;
   }, [id]);
 
   useEffect(() => {
@@ -1668,6 +1746,18 @@ function CaseDetailPageContent() {
     ],
   );
 
+  // v5.0 — caso esperando técnicos en la cola pendiente_pool.
+  const isPendingPool = clinicalCase?.internalStatus === POOL_INTERNAL_STATUS;
+  const showPendingPoolBanner = isPendingPool && actingAsDentista && !viewingAsAdmin;
+
+  // Check-in al dentista: el cron marca pendingPoolCheckinSentAt al 50% del TTL;
+  // al entrar al caso le mostramos el modal una vez por sesión.
+  useEffect(() => {
+    if (showPendingPoolBanner && clinicalCase?.pendingPoolCheckinSentAt && !checkInDismissed) {
+      setCheckInOpen(true);
+    }
+  }, [showPendingPoolBanner, clinicalCase?.pendingPoolCheckinSentAt, checkInDismissed]);
+
   const isEditingStatus = fieldsEditable && editForm ? editForm.status : caseStatus;
 
   const canToggleEdit = actingAsDentista;
@@ -1898,6 +1988,7 @@ function CaseDetailPageContent() {
                 isDeleting={isDeleting}
                 isCloning={isCloning}
                 savingChanges={savingChanges}
+                onRepublicar={() => setRepublicarOpen(true)}
                 onEdit={handleStartEdit}
                 onCancelEdit={handleCancelEdit}
                 onSave={() => void handleSaveChanges()}
@@ -2078,6 +2169,53 @@ function CaseDetailPageContent() {
       </div>
 
       {/* S3-07: Banner Nudge — REMOVED PER USER REQUEST */}
+
+      {/* v5.0 — Banner pendiente_pool (dentista): buscando técnicos disponibles */}
+      {showPendingPoolBanner && (
+        <PendingPoolBanner
+          caseId={id as string}
+          startedAt={clinicalCase?.pendingPoolStartedAt}
+          onCancelled={async () => {
+            const refreshed = await getCaseDetails(id as string);
+            if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+            await loadCaseEvents();
+            showSuccessToastMessage('Publicación cancelada. El caso quedó cerrado.');
+            dispatchDashboardMetricsRefresh();
+          }}
+          onError={(msg) => showErrorToast(msg)}
+        />
+      )}
+
+      {/* v5.0 — Modal republicar caso sin cotizaciones */}
+      <RepublicarModal
+        isOpen={republicarOpen}
+        onClose={() => setRepublicarOpen(false)}
+        caseId={id as string}
+        caseLabel={clinicalCase?.caseNumber ? `#${clinicalCase.caseNumber}` : undefined}
+        onDone={async () => {
+          const refreshed = await getCaseDetails(id as string);
+          if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+          await loadCaseEvents();
+          showSuccessToastMessage('Caso republicado. Estamos buscando técnicos disponibles.');
+          dispatchDashboardMetricsRefresh();
+        }}
+      />
+
+      {/* v5.0 — Check-in al dentista al 50% del TTL en pendiente_pool */}
+      <CheckInDentistaModal
+        isOpen={checkInOpen}
+        onClose={() => { setCheckInOpen(false); setCheckInDismissed(true); }}
+        caseId={id as string}
+        caseLabel={clinicalCase?.caseNumber ? `#${clinicalCase.caseNumber}` : undefined}
+        onCancelled={async () => {
+          const refreshed = await getCaseDetails(id as string);
+          if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+          await loadCaseEvents();
+          showSuccessToastMessage('Publicación cancelada. El caso quedó cerrado.');
+          dispatchDashboardMetricsRefresh();
+        }}
+        onError={(msg) => showErrorToast(msg)}
+      />
 
       {/* Estado "En Evaluación" para el dentista */}
       {showCaseToolbar && clinicalCase?.status === 'enEvaluacion' && (
@@ -2363,7 +2501,10 @@ function CaseDetailPageContent() {
                   onClose={() => setIsHubOpen(false)}
                   onActionTriggered={handleHubAction}
                   proposalDeadlineMs={proposalDeadlineMs}
+                  reviewDeadlineMs={reviewDeadlineMs}
                   serverClockAnchor={serverClockAnchor}
+                  newMessageCount={unreadTechMessages + unreadNegotiationMessages}
+                  onAcknowledgeNew={acknowledgeNewHubMessages}
                 />
               </motion.div>
             )}

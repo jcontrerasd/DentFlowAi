@@ -59,8 +59,10 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
     const proposedPrice = (quotedTotal - shipping) * (1 + fee) + shipping;
 
     return await db.transaction(async (tx) => {
-      // Incluye invitaciones ya rejected para técnico (evento + notificación CASO_ASIGNADO_OTRO).
-      // UCH dentista: no duplicar "quedó fuera al elegir otra" si esa oferta ya tenía rechazo manual (status rejected).
+      // Solo losers aún activos (pending/quoted). Los ya 'rejected' —rechazo manual del
+      // dentista (OFERTA_RECHAZADA) o del propio técnico (OFERTA_RECHAZADA_POR_TECNICO)—
+      // ya recibieron su evento de cierre + notificación; re-emitir OFERTA_NO_SELECCIONADA
+      // aquí les duplicaría el aviso en el UCH ("Otra oferta fue elegida" dos veces).
       const losers = await tx
         .select({
           id: caseInvitation.id,
@@ -69,12 +71,11 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
           quotedDays: caseInvitation.quotedDays,
           quotedHours: caseInvitation.quotedHours,
           techNotes: caseInvitation.techNotes,
-          status: caseInvitation.status,
         })
         .from(caseInvitation)
         .where(and(
           eq(caseInvitation.clinicalCaseId, caseId),
-          inArray(caseInvitation.status, ['pending', 'quoted', 'rejected']),
+          inArray(caseInvitation.status, ['pending', 'quoted']),
           ne(caseInvitation.id, invitationId),
         ));
 
@@ -177,24 +178,22 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
           skipActivityUpdate: true,
         }, tx);
 
-        if (loser.status !== 'rejected') {
-          await logCaseEvent({
-            caseId,
-            userId: identity.id as string,
-            type: 'sistema',
-            action: CASE_EVENTS.OFERTA_NO_SELECCIONADA,
-            content: 'Esta oferta quedó fuera al elegir otra propuesta para el caso.',
-            payload: {
-              visibleTo: 'dentista',
-              invitationId: loser.id,
-              quotedPrice: quotedPricePayload,
-              quotedDays: quotedDaysPayload,
-              quotedHours: quotedHoursPayload,
-              techNotes: techNotesPayload,
-            },
-            skipActivityUpdate: true,
-          }, tx);
-        }
+        await logCaseEvent({
+          caseId,
+          userId: identity.id as string,
+          type: 'sistema',
+          action: CASE_EVENTS.OFERTA_NO_SELECCIONADA,
+          content: 'Esta oferta quedó fuera al elegir otra propuesta para el caso.',
+          payload: {
+            visibleTo: 'dentista',
+            invitationId: loser.id,
+            quotedPrice: quotedPricePayload,
+            quotedDays: quotedDaysPayload,
+            quotedHours: quotedHoursPayload,
+            techNotes: techNotesPayload,
+          },
+          skipActivityUpdate: true,
+        }, tx);
 
         await notifyUser(loser.technicianId, 'CASO_ASIGNADO_OTRO', { caseId, caseNumber: cCase.caseNumber });
       }

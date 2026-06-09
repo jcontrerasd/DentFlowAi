@@ -23,6 +23,8 @@ const TABS: TabDef[] = [
   { key: 'restoration_type', label: 'Restauraciones' },
   { key: 'dental_material', label: 'Materiales' },
   { key: 'urgency_level', label: 'Urgencias' },
+  { key: 'invitation_rejection_reason', label: 'Motivos de rechazo individual' },
+  { key: 'bulk_rejection_reason', label: 'Motivos de rechazo masivo' },
 ];
 
 export default function AdminCatalogosPage() {

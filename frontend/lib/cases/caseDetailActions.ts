@@ -1,5 +1,6 @@
 import {
   CASE_STATUSES,
+  INTERNAL_CASE_STATUSES,
   isDraftCaseStatus,
   isTerminalCaseStatus,
   TECH_ARCHIVE_INVITATION_STATUSES,
@@ -12,7 +13,8 @@ export type CaseDetailActionKey =
   | 'delete'
   | 'archive'
   | 'unarchive'
-  | 'createCopy';
+  | 'createCopy'
+  | 'republicar';
 
 export type CaseDetailActionState = {
   visible: boolean;
@@ -46,6 +48,11 @@ function action(
 
 function hidden(): CaseDetailActionState {
   return { visible: false, enabled: false };
+}
+
+/** Caso que agotó la cola pendiente_pool y quedó sin cotizaciones (v5.0). */
+function isNoQuotesFailed(status: string | null | undefined): boolean {
+  return status === INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO;
 }
 
 function dentistActions(input: GetCaseDetailActionStateInput): CaseDetailActionsMap {
@@ -84,6 +91,9 @@ function dentistActions(input: GetCaseDetailActionStateInput): CaseDetailActions
       input.isArchivedByUser ? undefined : 'El caso no está en tu archivo',
     ),
     createCopy: action(terminal, 'Solo en casos finalizados (completado, rechazado o cerrado)'),
+    republicar: isNoQuotesFailed(input.status)
+      ? action(true)
+      : hidden(),
   };
 }
 
@@ -121,6 +131,7 @@ function adminActions(input: GetCaseDetailActionStateInput): CaseDetailActionsMa
       input.isArchivedByUser ? undefined : 'El caso no está en tu archivo',
     ),
     createCopy: action(terminal, 'Solo en casos finalizados (completado, rechazado o cerrado)'),
+    republicar: isNoQuotesFailed(input.status) ? action(true) : hidden(),
   };
 }
 
@@ -141,6 +152,7 @@ function technicianActions(input: GetCaseDetailActionStateInput): CaseDetailActi
       input.isArchivedByUser ? undefined : 'El caso no está en tu archivo',
     ),
     createCopy: hidden(),
+    republicar: hidden(),
   };
 }
 

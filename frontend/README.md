@@ -37,6 +37,15 @@ npx tsx scripts/seed-uat.ts       # datos de prueba
 
 Antes de mergear a `main`: `npm run validate:full`.
 
+### Scripts one-time del rollout de disponibilidad (v5.0, Fase 7)
+
+Ejecutar con `npx tsx scripts/<archivo>.ts` desde `frontend/` (lee `.env.local` — confirmar que apunta a la BD destino antes de correr en prod).
+
+| Script | Propósito |
+|---|---|
+| `backfill-availability.ts` | Inserta `technician_availability` por técnico (infiere CAD/CAM de `technician_skill`). Idempotente. Se corre **una vez** en la activación |
+| `send-rollout-email.ts proximo\|activado` | Comunicación masiva a técnicos vía EmailJS (best-effort). `proximo` antes del rollout, `activado` tras encender el flag |
+
 ## Stack
 
 - **NextAuth 5** (JWT). Identidad servidor: `getServerIdentity()` (`@/lib/db/actions/impersonation`).
@@ -48,8 +57,16 @@ Antes de mergear a `main`: `npm run validate:full`.
 ## Deploy
 
 ```bash
+# Asistente gráfico (recomendado): guía paso a paso, explica cada parámetro,
+# muestra el impacto por ambiente y confirma antes de desplegar.
+bash deploy-wizard.sh            # interactivo
+bash deploy-wizard.sh --dry-run  # muestra el plan, NO despliega
+
+# Script directo (no interactivo, para CI):
 bash deploy.sh develop      # staging (Cloud Run dentflowai-frontend-dev)
 bash deploy.sh production   # producción (pide confirmación 'SI')
 ```
 
-Flujo completo: [../Doc/Ciclo_Desarrollo.md](../Doc/Ciclo_Desarrollo.md). Las variables `*_DEV`/`*_PROD` viven en `.env.local` y `deploy.sh` las inyecta en Cloud Run.
+`deploy-wizard.sh` es autónomo (replica la lógica de `deploy.sh`, no lo invoca): elige ambiente, permite activar/desactivar los flags v5.0 y `NOTIFICATIONS_LIVE` **solo para ese deploy** (sin tocar `.env.local`), y avisa si staging enviaría correos reales.
+
+Flujo completo: [../Doc/Ciclo_Desarrollo.md](../Doc/Ciclo_Desarrollo.md). Las variables `*_DEV`/`*_PROD` viven en `.env.local` y se inyectan en Cloud Run. Override por ambiente de flags/secretos: sufijo `_DEV`/`_PROD` (cae a la clave plana).

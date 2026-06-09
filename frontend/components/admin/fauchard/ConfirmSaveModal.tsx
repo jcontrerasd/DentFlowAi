@@ -12,6 +12,10 @@ interface ConfirmSaveModalProps {
   title?: string;
   description?: string;
   isLoading?: boolean;
+  /** Si está activo, muestra un textarea de motivo obligatorio (v5.0, auditoría). */
+  requireReason?: boolean;
+  reasonValue?: string;
+  onReasonChange?: (value: string) => void;
 }
 
 export default function ConfirmSaveModal({
@@ -20,8 +24,12 @@ export default function ConfirmSaveModal({
   onConfirm,
   title = '¿Confirmar cambios?',
   description = 'Estás a punto de modificar parámetros críticos del algoritmo de selección. Estos cambios afectarán la asignación de casos en tiempo real.',
-  isLoading = false
+  isLoading = false,
+  requireReason = false,
+  reasonValue = '',
+  onReasonChange,
 }: ConfirmSaveModalProps) {
+  const reasonMissing = requireReason && !reasonValue.trim();
   return (
     <AnimatePresence>
       {isOpen && (
@@ -65,10 +73,26 @@ export default function ConfirmSaveModal({
                   </p>
                 </div>
 
+                {requireReason && (
+                  <div className="mb-6 space-y-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-faint">
+                      Motivo del cambio (obligatorio)
+                    </label>
+                    <textarea
+                      value={reasonValue}
+                      onChange={(e) => onReasonChange?.(e.target.value)}
+                      rows={3}
+                      placeholder="Ej: ajuste de calibración tras revisión de métricas de no-respuesta"
+                      className="w-full rounded-2xl bg-surface-2 border border-divider p-3 text-sm text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 resize-none"
+                    />
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-3">
                   <Button
                     onClick={onConfirm}
                     loading={isLoading}
+                    disabled={reasonMissing}
                     variant="primary"
                     className="w-full bg-primary hover:opacity-90 text-inverse font-bold uppercase tracking-wider text-[10px] h-12 rounded-2xl"
                     icon={<Save className="w-4 h-4" />}

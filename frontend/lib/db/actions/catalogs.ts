@@ -1,6 +1,6 @@
 'use server';
 import { db } from '@/lib/db';
-import { vitaShade, restorationType, dentalMaterial, urgencyLevel } from '@/lib/db/schema';
+import { vitaShade, restorationType, dentalMaterial, urgencyLevel, invitationRejectionReason, bulkRejectionReason } from '@/lib/db/schema';
 import { asc, eq, inArray } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 
@@ -11,6 +11,8 @@ const TABLE_CODE_PREFIX: Record<CatalogTableKey, string> = {
   restoration_type: 'rest',
   dental_material: 'mat',
   urgency_level: 'urg',
+  invitation_rejection_reason: 'rej',
+  bulk_rejection_reason: 'brej',
 };
 
 export type CatalogOption = {
@@ -22,13 +24,21 @@ export type CatalogOption = {
   isActive: boolean;
 };
 
-export type CatalogTableKey = 'vita_shade' | 'restoration_type' | 'dental_material' | 'urgency_level';
+export type CatalogTableKey =
+  | 'vita_shade'
+  | 'restoration_type'
+  | 'dental_material'
+  | 'urgency_level'
+  | 'invitation_rejection_reason'
+  | 'bulk_rejection_reason';
 
 const TABLE_MAP = {
   vita_shade: vitaShade,
   restoration_type: restorationType,
   dental_material: dentalMaterial,
   urgency_level: urgencyLevel,
+  invitation_rejection_reason: invitationRejectionReason,
+  bulk_rejection_reason: bulkRejectionReason,
 } as const;
 
 function resolveTable(key: CatalogTableKey) {
@@ -58,6 +68,12 @@ export async function listDentalMaterialsAction() {
 }
 export async function listUrgencyLevelsAction() {
   return listActive('urgency_level');
+}
+
+/** Lista pública (sin guard admin) de opciones activas de cualquier catálogo.
+ *  Usada por la UI del técnico (motivos de rechazo individual/masivo, v5.0). */
+export async function listActiveCatalogOptionsAction(key: CatalogTableKey): Promise<CatalogOption[]> {
+  return listActive(key);
 }
 
 // ─── Admin CRUD ─────────────────────────────────────────────────────────────

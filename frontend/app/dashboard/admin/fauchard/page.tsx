@@ -1,8 +1,11 @@
 export const dynamic = 'force-dynamic';
 
+import { redirect } from 'next/navigation';
+import { getServerIdentity } from '@/lib/db/actions/impersonation';
 import { getFauchardConfigAction } from '@/lib/db/actions/fauchard';
+import { isAvailabilityAdminPanelEnabled } from '@/lib/constants/availabilityFlags';
 import FauchardNav from '@/components/admin/fauchard/FauchardNav';
-import { Settings2, Sliders, Trophy, History, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Settings2, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -11,6 +14,13 @@ export const metadata = {
 };
 
 export default async function AdminFauchardPage() {
+  // Guard server-side: solo admin. Un técnico/dentista que escriba la URL es
+  // redirigido a su dashboard (el menú ya no expone esta ruta a esos roles).
+  const identity = await getServerIdentity();
+  if (!identity || (identity.role !== 'admin' && !identity.isSystemAdmin)) {
+    redirect('/dashboard');
+  }
+
   const res = await getFauchardConfigAction();
 
   if (!res.success) {
@@ -28,7 +38,7 @@ export default async function AdminFauchardPage() {
   const config = res.config;
 
   return (
-    <div className="flex flex-col gap-10 p-4 md:p-8 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-10 p-4 md:p-8 max-w-[1700px] mx-auto">
       {/* Header Section */}
       <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-1">
@@ -36,7 +46,7 @@ export default async function AdminFauchardPage() {
             <div className="w-10 h-10 rounded-2xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary">
               <Settings2 className="w-5 h-5" />
             </div>
-            <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter">Motor Fauchardón</h1>
+            <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter">Motor Fauchard</h1>
           </div>
           <p className="text-faint text-sm font-medium">Configura los parámetros inteligentes de asignación de técnicos.</p>
         </div>
@@ -59,14 +69,20 @@ export default async function AdminFauchardPage() {
       <FauchardNav />
 
       {/* Tabs / Content Section */}
-      <TabContainer config={config} />
+      <TabContainer config={config} showAvailabilityPanel={isAvailabilityAdminPanelEnabled()} />
     </div>
   );
 }
 
 // Client Component for Tabs
+import { Suspense } from 'react';
 import { TabClient } from './TabClient';
 
-function TabContainer({ config }: { config: any }) {
-  return <TabClient config={config} />;
+function TabContainer({ config, showAvailabilityPanel }: { config: any; showAvailabilityPanel: boolean }) {
+  // Suspense: TabClient usa useSearchParams (deep-link de parámetros vía ?focus=).
+  return (
+    <Suspense fallback={null}>
+      <TabClient config={config} showAvailabilityPanel={showAvailabilityPanel} />
+    </Suspense>
+  );
 }

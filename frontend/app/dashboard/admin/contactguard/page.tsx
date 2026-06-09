@@ -47,7 +47,7 @@ export default function AdminContactGuardPage() {
         <div className="flex items-center gap-3">
           <Shield className="w-6 h-6 text-primary" />
           <div>
-            <h1 className="text-2xl font-black uppercase tracking-tighter">ContactGuard</h1>
+            <h1 className="text-2xl font-black uppercase tracking-tighter">Contact Guard</h1>
             <p className="text-xs text-faint">Reglas anti-desintermediación, couriers permitidos e historial de intentos</p>
           </div>
         </div>

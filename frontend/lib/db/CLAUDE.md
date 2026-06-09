@@ -41,13 +41,22 @@ Parámetros del algoritmo. **Como máximo una fila `is_active`** (índice único
 Campos de **calendario laboral** (v4.6, alimentan `lib/businessTime.ts`):
 - `businessHoursStart` (default 8), `businessHoursEnd` (default 20) — jornada `[start, end)` abierta a la derecha (8–20 = 12h diarias).
 - `businessDaysMask` (default 31 = `0b0011111` = L-V) — bitmask: bit 0=Lun, 1=Mar, 2=Mié, 3=Jue, 4=Vie, 5=Sáb, 6=Dom. Ej: 63 (`0b0111111`) habilita sábado.
-- Consumidos junto con la tabla `fauchard_holiday` por `addBusinessTime(from, days, hours, cfg, holidays)` para calcular `workDeadline` en `startWorkAction` y `buildProposalAction`. Reloj de feriado/horario aplica también a expiración de invitaciones y propuestas.
+- Consumidos junto con la tabla `fauchard_holiday` por `addBusinessTime(from, days, hours, cfg, holidays)` para calcular `workDeadline` en `startWorkAction` y `buildProposalAction`. El reloj de feriado/horario aplica **solo** a `workDeadline` (no a la expiración de invitaciones ni de propuestas, que usan tiempo absoluto).
 
 ### `fauchardHoliday` (v4.6)
 Lista global de feriados (no por config). Columnas: `holiday_date` (UNIQUE), `label`, `created_by`. Admin CRUD en `/dashboard/admin/fauchard` → panel Calendario. Actions en `lib/db/actions/fauchardHolidays.ts`.
 
 ### `caseUserArchive`
 Archivo por usuario y caso (`case_user_archive`). Usado por `archiveCaseForUserAction` / `unarchiveCaseForUserAction` en terminal.
+
+### Modelo de disponibilidad y sanción (v5.0)
+Tablas y columnas detrás del flag `AVAILABILITY_MODEL_ENABLED` (inertes con el flag off). Ver `Doc Servicio Orquestado/`.
+
+- **`technicianAvailability`** (`technician_availability`) — disponibilidad declarada, **modelo aplanado** (1 fila por técnico, unique en `user_id`). Columna `inactivity_reminder_sent_at` (v5.1) da idempotencia al recordatorio de inactividad del cron `process-availability`. Regla de elegibilidad **AND triple**: `levelGlobal ∧ level<Cad|Cam> ∧ cat<Categoria><Cad|Cam>`. 10 columnas hijas `cat_<categoria>_<cap>` para las 5 categorías canónicas (`coronas`, `inlays`, `puentes`, `protesis`, `guias` — ver `WORK_CATEGORIES` / `WORK_TYPE_TO_CATEGORY` en `lib/constants/dental.ts`). Los hijos se preservan aunque el padre esté OFF. Backfill condicional al flag: infiere CAD/CAM desde `technicianSkill` (design/fab level > 0).
+- **`technicianNoResponseEvent`** (`technician_no_response_event`) — timestamps individuales de no-respuesta para la ventana rolling. `status`: `active | expired_window | pardoned`. FK `caseInvitationId` ON DELETE SET NULL. Sustituye al modelo binario `user.consecutiveNoResponse` cuando el flag está on.
+- **`clinicalCase`** nuevas columnas: `pendingPoolCycleCount`, `pendingPoolStartedAt`, `pendingPoolCheckinSentAt` (cola `pendiente_pool` cuando Fauchard no halla elegibles) + `lastRevisionSubmittedAt` (reinicia el countdown `tDentistReviewHours` en cada entrega) + `reviewReminderSentAt`/`reviewOverdueNotifiedAt` (v5.2, idempotencia de la escalación de revisión; se reinician en cada entrega).
+- **`caseInvitation`** nuevas columnas: `rejectionReasonId`/`rejectionComment`/`rejectedAt` (rechazo individual), `bulkRejectionReasonId`/`bulkRejectionComment` (rechazo masivo / auto-OFF), `isReplacement` (invitación de reemplazo automático). FKs a catálogos con ON DELETE RESTRICT.
+- **`fauchardConfig`** nuevas columnas (defaults entre paréntesis): `tDentistReviewHours` (48), `tNoEligiblePoolHours` (24), `maxPoolCycles` (2), `replacementCutoffMinutes` (10), `noResponseWindowDays` (14), `noResponseRehabilitationDays` (30), `level1Threshold`/`level2Threshold`/`level3Threshold` (1/2/3), `inactivityAutoOffDays` (30), `inactivityReminderDays` (7), `alphaNoResponse` (0.250), `changeReason` (auditoría).
 
 ### `clinicalCaseEvent`
 Log de todos los eventos UCH. Campos: `userId`, `type`, `action`, `content`, `payload` (jsonb), `stateChange` (jsonb), `createdAt`.
@@ -80,6 +89,8 @@ Tablas administrables (v4.0, dos identificadores: opaco + label):
 
 **Admin CRUD**: admin solo edita `label`. `code` se genera automáticamente como `${prefix}_${NNN}` (siguiente disponible).
 
+**Catálogos de rechazo (v5.0)** — `invitationRejectionReason` (code `rej_NNN`, seed de 7) y `bulkRejectionReason` (code `brej_NNN`, seed de 5). Mismo patrón uniforme (code opaco + label editable + description nullable + sortOrder + isActive). Referenciados por FK desde `caseInvitation` (`rejection_reason_id` / `bulk_rejection_reason_id`, ON DELETE RESTRICT). El CRUD admin se cablea en Fase 3 (los `CatalogTableKey` se amplían en `catalogs.ts` en Fase 2).
+
 Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opaque-codes.ts`, `migrate-recovery-v39.ts` (dedup catálogos + backfill FK + drop columnas text + retira `business_key`).
 
 ## Patrón Server Actions
@@ -107,6 +118,13 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 | `catalogs.ts` | Listas administrables del wizard (vita_shade, restoration_type, dental_material, urgency_level): list públicas + CRUD admin |
 | `fauchardHolidays.ts` | CRUD de feriados globales (tabla `fauchard_holiday`, v4.6). Admin UI en `/dashboard/admin/fauchard` → FauchardCalendarPanel |
 | `contactGuard.ts` | CRUD de reglas (regex/keyword) para moderar campos libres. Admin UI en `/dashboard/admin/contactguard`. Las reglas las consume `lib/contactGuard/guardOrFail.ts` en server actions de cotización, despacho y notas |
+| `availability.ts` (v5.0) | Disponibilidad declarada del técnico. `computeEligibleAction` = regla **AND triple** (`levelGlobal ∧ level<cap> ∧ cat<cat><cap>`), en tiempo real. `getAvailabilityForUserAction` crea fila default (infiere CAD/CAM de skills). `updateAvailabilityLevelAction`, `getAllEligibleForCategoryCapacityAction`. Gated por `AVAILABILITY_MODEL_ENABLED` (lo consulta Fauchard) |
+| `noResponseEvents.ts` (v5.0) | Sanción rolling: `recordNoResponseEventAction`, `getActiveEventsInWindowAction`, `expireEventsOutsideWindowAction` (cron), `pardonEventsAction` (admin), `computeLevelForTechnicianAction` (nivel 0–3 + nextExitDate). Reemplaza `user.consecutiveNoResponse` cuando el flag está on |
+| `rejection.ts` (v5.0) | Rechazo explícito: `rejectInvitationIndividualAction` (§3.2), `rejectInvitationsBulkAction` (§3.1), `autoRejectOnAutoOffAction` (§3.2.bis). No cuenta como no-respuesta; dispara reemplazo si el flag está on |
+| `replacement.ts` (v5.0) | `tryReplaceAfterRejectAction` — invita al siguiente elegible del pool scoreado tras un rechazo, respetando cutoff temporal (`replacementCutoffMinutes`) y truncando `expiresAt` al deadline del caso. NO se dispara por no-respuesta |
+| `poolQueue.ts` (v5.0) | Cola `pendiente_pool`: `enterPendingPoolAction`, `processPendingPoolCheckInAction` (50% TTL, cron), `processPendingPoolExpirationAction` (re-encola o falla a `sin_cotizaciones_fallo`, cron), `cancelPendingPoolAction` (dentista/admin cierra el caso durante la espera), `triggerPoolReevaluationOnTechnicianOnAction` (event-driven). Importa Fauchard dinámicamente (evita ciclo) |
+| `availabilityCron.ts` (v5.0/v5.1) | `processAvailabilityMaintenanceAction` — invocado por `/api/cron/process-availability` (cada hora). Expira no-respuestas fuera de ventana, auto-OFF preventivo (inactivo > `inactivityAutoOffDays`) y recordatorio (> `inactivityReminderDays`, idempotente vía `inactivity_reminder_sent_at`). Inerte con el flag off |
+| `dentistReviewCron.ts` (v5.0/v5.2) | `processDentistReviewDeadlinesAction` — invocado por el mismo cron horario. Escala el countdown de revisión del dentista: recordatorio cuando queda ≤25% del plazo + aviso al vencer, **sin auto-acción**. Idempotente por entrega (`review_reminder_sent_at`/`review_overdue_notified_at`). Inerte con el flag off |
 
 ## getCaseEventsAction — pipeline de entrega al cliente
 1. Filtra eventos por visibilidad de rol (via `filterCaseEventsForUchViewer`).
@@ -120,7 +138,15 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 - `expirePendingInvitationsForCase` vs `tryEvaluateQuotesIfReady`: las **lecturas** solo expiran invitaciones; evaluación en `submitQuote`, cron y `checkAndExpireInvitationsAction`.
 - Countdown 1: `expires_at` se fija en `sendInvitationsAction` (`tQuoteMinutes`); dedupe por técnico activo.
 - Countdown 2: `proposalExpiresAt` se fija una vez en `buildProposalAction` (`tProposalHours`).
+- Countdown 3 (v5.0): revisión del dentista — `tDentistReviewHours` (default 48); `clinical_case.last_revision_submitted_at` reinicia la ventana en cada entrega del técnico. Deadline wall-clock vía `getCaseReviewDeadlineAt(caseId)` (`caseDeadlines.ts`, gated), expuesto como `reviewDeadlineAt` en `getCaseDetails` y mostrado como HMS en la cabecera del UCH (dentista + técnico). **Sin auto-acción** al vencer: solo marca "Respuesta vencida" + escalación de notificaciones por cron (`processDentistReviewDeadlinesAction`, idempotente vía `review_reminder_sent_at`/`review_overdue_notified_at`, columnas v5.2 que `submitRevisionAction` reinicia).
 - Ver `frontend/lib/db/caseDeadlines.ts`.
+
+## Modelo de disponibilidad (v5.0) en Fauchard — gated por `AVAILABILITY_MODEL_ENABLED`
+- **Elegibilidad**: antes del scoring, `runFauchardAction` aplica el AND triple (`computeEligibleAction(tech, categoría, capacidad)`) en cada `runFauchard` (sin caché del estado efectivo). La categoría se deriva del `workType` (`WORK_TYPE_TO_CATEGORY`); las capacidades del `serviceType` (solo_diseno→CAD, solo_fabricacion→CAM, integral→CAD∧CAM). Con el flag **off**, se mantiene el filtro legacy `consecutiveNoResponse >= 3`.
+- **Score**: con el flag on, los α se re-normalizan (`lib/availabilityScore.ts → RENORMALIZED_ALPHAS`, `0.20·Q + 0.15·P + 0.15·E − 0.15·C + 0.10·B − 0.25·N`) manteniendo `|Σα|=1`. `N ∈ {0, 0.5, 1}` viene de `computeLevelForTechnicianAction`. αN sale de `fauchard_config.alpha_no_response`.
+- **0 elegibles**: con el modelo on **y `POOL_PENDIENTE_ENABLED` on**, el caso entra a la cola `pendiente_pool` (`enterPendingPoolAction`) en vez de fallar; `runFauchardAction` retorna `{ pooled: true }` y el caller (publish/republish) deja el caso en `enEvaluacion`. `POOL_PENDIENTE_ENABLED` es el kill-switch secundario: apagado, Fauchard ignora la cola y falla directo a `sin_cotizaciones_fallo` aunque el modelo esté on.
+- **Sanción**: `penalizeNoResponseAction(techId, invitationId)` — con el flag on registra un evento rolling, recalcula nivel y aplica Nivel 2 (email) / Nivel 3 (auto-OFF de `level_global` + `autoRejectOnAutoOffAction` + email). Con el flag off, mantiene `consecutiveNoResponse` + suspensión a las 3.
+- Helpers expuestos para reemplazo/cola: `selectReplacementCandidateAction`, `isTechnicianEligibleForCaseAction`, `reevaluatePendingPoolCaseAction`.
 
 ## Fauchard selección por tipo de servicio
 - `classifyCaseAction`: si el caso tiene `serviceType` poblado (wizard v3) lo respeta como fuente de verdad; si no, lo deriva de `needsFabrication`.

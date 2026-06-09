@@ -47,6 +47,18 @@ read_env() {
   echo "${line#*=}" | sed -E 's/^"(.*)"$/\1/'
 }
 
+# Lee una variable con override por ambiente: prueba VAR_<SUFFIX> (p.ej.
+# AVAILABILITY_MODEL_ENABLED_PROD) y cae a la VAR plana (compartida) si no existe.
+# Permite encender flags / cambiar secretos por ambiente sin tocar .env.local entre
+# deploys, manteniendo retrocompatibilidad con las claves planas existentes.
+read_env_scoped() {
+  local base="$1"
+  local v
+  v=$(read_env "${base}_${SUFFIX}")
+  [[ -z "$v" ]] && v=$(read_env "$base")
+  echo "$v"
+}
+
 # Configuración por entorno
 if [[ "$ENV_TARGET" == "develop" ]]; then
   SERVICE_NAME="dentflowai-frontend-dev"
@@ -71,7 +83,25 @@ AUTH_SECRET=$(read_env AUTH_SECRET)
 GCP_PROJECT_ID=$(read_env GCP_PROJECT_ID)
 RESEND_API_KEY=$(read_env RESEND_API_KEY)
 NOTIFICATION_FROM_EMAIL=$(read_env NOTIFICATION_FROM_EMAIL)
-CRON_SECRET=$(read_env CRON_SECRET)
+CRON_SECRET=$(read_env_scoped CRON_SECRET)
+# Interruptor maestro de envío real de correos (seguridad por ambiente). Si no es
+# 'true', notifyUser loguea sin enviar aunque haya credenciales EmailJS. Por defecto
+# se deja apagado en develop/staging (datos clonados de prod) y on solo en producción.
+NOTIFICATIONS_LIVE=$(read_env_scoped NOTIFICATIONS_LIVE)
+# EmailJS (transport email v5.0 — reemplaza Resend gradualmente). Cuenta compartida.
+EMAILJS_SERVICE_ID=$(read_env EMAILJS_SERVICE_ID)
+EMAILJS_TEMPLATE_ID=$(read_env EMAILJS_TEMPLATE_ID)
+EMAILJS_PUBLIC_KEY=$(read_env EMAILJS_PUBLIC_KEY)
+EMAILJS_PRIVATE_KEY=$(read_env EMAILJS_PRIVATE_KEY)
+# Feature flags — Modelo de disponibilidad (v5.0). Override por ambiente con sufijo
+# _DEV/_PROD (p.ej. AVAILABILITY_MODEL_ENABLED_PROD); cae a la clave plana si no existe.
+AVAILABILITY_MODEL_ENABLED=$(read_env_scoped AVAILABILITY_MODEL_ENABLED)
+AVAILABILITY_UI_TECNICO_ENABLED=$(read_env_scoped AVAILABILITY_UI_TECNICO_ENABLED)
+AVAILABILITY_ADMIN_PANEL_ENABLED=$(read_env_scoped AVAILABILITY_ADMIN_PANEL_ENABLED)
+REJECTION_INDIVIDUAL_ENABLED=$(read_env_scoped REJECTION_INDIVIDUAL_ENABLED)
+POOL_PENDIENTE_ENABLED=$(read_env_scoped POOL_PENDIENTE_ENABLED)
+# Motor de ligas (Fase 2).
+LEAGUE_ENGINE_ENABLED=$(read_env_scoped LEAGUE_ENGINE_ENABLED)
 
 # Validar requeridas (AUTH_URL y NEXT_PUBLIC_APP_URL pueden estar vacías
 # en el primer deploy — se completan después con la URL real del servicio).
@@ -80,8 +110,12 @@ missing=()
 [[ -z "$AUTH_SECRET" ]]             && missing+=("AUTH_SECRET")
 [[ -z "$GCP_PROJECT_ID" ]]          && missing+=("GCP_PROJECT_ID")
 [[ -z "$GCP_BUCKET_NAME" ]]         && missing+=("GCP_BUCKET_NAME_${SUFFIX}")
-[[ -z "$RESEND_API_KEY" ]]          && missing+=("RESEND_API_KEY")
-[[ -z "$NOTIFICATION_FROM_EMAIL" ]] && missing+=("NOTIFICATION_FROM_EMAIL")
+# Email: requerimos EmailJS (transport actual). Resend queda deprecado y opcional
+# hasta que Fase 2 retire el código que lo consume.
+[[ -z "$EMAILJS_SERVICE_ID" ]]      && missing+=("EMAILJS_SERVICE_ID")
+[[ -z "$EMAILJS_TEMPLATE_ID" ]]     && missing+=("EMAILJS_TEMPLATE_ID")
+[[ -z "$EMAILJS_PUBLIC_KEY" ]]      && missing+=("EMAILJS_PUBLIC_KEY")
+[[ -z "$EMAILJS_PRIVATE_KEY" ]]     && missing+=("EMAILJS_PRIVATE_KEY")
 
 # Aviso de bootstrap (primer deploy sin URL aún)
 BOOTSTRAP_MODE=false
@@ -109,7 +143,16 @@ echo "  BD host     : $DB_HOST"
 echo "  Bucket GCS  : $GCP_BUCKET_NAME"
 echo "  AUTH_URL    : ${AUTH_URL:-<pendiente - bootstrap>}"
 echo "  APP_URL     : ${NEXT_PUBLIC_APP_URL:-<pendiente - bootstrap>}"
+echo "  Emails real : ${NOTIFICATIONS_LIVE:-false} (NOTIFICATIONS_LIVE)"
+echo "  Modelo disp.: ${AVAILABILITY_MODEL_ENABLED:-false} (AVAILABILITY_MODEL_ENABLED)"
 echo "=================================================="
+if [[ "$ENV_TARGET" == "develop" && "$NOTIFICATIONS_LIVE" == "true" ]]; then
+  echo ""
+  echo "⚠️  ATENCIÓN: NOTIFICATIONS_LIVE=true en STAGING. Si la BD tiene datos"
+  echo "   clonados de producción, se enviarán correos REALES a usuarios reales."
+  echo "   Usa NOTIFICATIONS_LIVE_DEV=false para silenciar staging."
+  echo "=================================================="
+fi
 if [[ "$BOOTSTRAP_MODE" == "true" ]]; then
   echo ""
   echo "MODO BOOTSTRAP: primer deploy sin AUTH_URL_${SUFFIX} ni"
@@ -150,13 +193,25 @@ ENV_VARS+=",AUTH_SECRET=$AUTH_SECRET"
 ENV_VARS+=",AUTH_TRUST_HOST=true"
 ENV_VARS+=",GCP_PROJECT_ID=$GCP_PROJECT_ID"
 ENV_VARS+=",GCP_BUCKET_NAME=$GCP_BUCKET_NAME"
-ENV_VARS+=",RESEND_API_KEY=$RESEND_API_KEY"
-ENV_VARS+=",NOTIFICATION_FROM_EMAIL=$NOTIFICATION_FROM_EMAIL"
+ENV_VARS+=",EMAILJS_SERVICE_ID=$EMAILJS_SERVICE_ID"
+ENV_VARS+=",EMAILJS_TEMPLATE_ID=$EMAILJS_TEMPLATE_ID"
+ENV_VARS+=",EMAILJS_PUBLIC_KEY=$EMAILJS_PUBLIC_KEY"
+ENV_VARS+=",EMAILJS_PRIVATE_KEY=$EMAILJS_PRIVATE_KEY"
 ENV_VARS+=",NEXT_TELEMETRY_DISABLED=1"
 ENV_VARS+=",NODE_ENV=production"
-[[ -n "$AUTH_URL" ]]            && ENV_VARS+=",AUTH_URL=$AUTH_URL"
-[[ -n "$NEXT_PUBLIC_APP_URL" ]] && ENV_VARS+=",NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL"
-[[ -n "$CRON_SECRET" ]]         && ENV_VARS+=",CRON_SECRET=$CRON_SECRET"
+[[ -n "$RESEND_API_KEY" ]]          && ENV_VARS+=",RESEND_API_KEY=$RESEND_API_KEY"
+[[ -n "$NOTIFICATION_FROM_EMAIL" ]] && ENV_VARS+=",NOTIFICATION_FROM_EMAIL=$NOTIFICATION_FROM_EMAIL"
+[[ -n "$AUTH_URL" ]]                && ENV_VARS+=",AUTH_URL=$AUTH_URL"
+[[ -n "$NEXT_PUBLIC_APP_URL" ]]     && ENV_VARS+=",NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL"
+[[ -n "$CRON_SECRET" ]]             && ENV_VARS+=",CRON_SECRET=$CRON_SECRET"
+[[ -n "$NOTIFICATIONS_LIVE" ]]      && ENV_VARS+=",NOTIFICATIONS_LIVE=$NOTIFICATIONS_LIVE"
+# Feature flags v5.0 (solo se inyectan si están definidos; default = false en el código)
+[[ -n "$AVAILABILITY_MODEL_ENABLED" ]]        && ENV_VARS+=",AVAILABILITY_MODEL_ENABLED=$AVAILABILITY_MODEL_ENABLED"
+[[ -n "$AVAILABILITY_UI_TECNICO_ENABLED" ]]   && ENV_VARS+=",AVAILABILITY_UI_TECNICO_ENABLED=$AVAILABILITY_UI_TECNICO_ENABLED"
+[[ -n "$AVAILABILITY_ADMIN_PANEL_ENABLED" ]]  && ENV_VARS+=",AVAILABILITY_ADMIN_PANEL_ENABLED=$AVAILABILITY_ADMIN_PANEL_ENABLED"
+[[ -n "$REJECTION_INDIVIDUAL_ENABLED" ]]      && ENV_VARS+=",REJECTION_INDIVIDUAL_ENABLED=$REJECTION_INDIVIDUAL_ENABLED"
+[[ -n "$POOL_PENDIENTE_ENABLED" ]]            && ENV_VARS+=",POOL_PENDIENTE_ENABLED=$POOL_PENDIENTE_ENABLED"
+[[ -n "$LEAGUE_ENGINE_ENABLED" ]]             && ENV_VARS+=",LEAGUE_ENGINE_ENABLED=$LEAGUE_ENGINE_ENABLED"
 
 # 3. Deploy a Cloud Run
 echo ""

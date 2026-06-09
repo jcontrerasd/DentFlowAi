@@ -26,6 +26,10 @@ export const CASE_EVENTS = {
   INVITACION_EXPIRADA: 'INVITACION_EXPIRADA',
   /** Técnico envió cotización (visible técnico) */
   OFERTA_ENVIADA: 'OFERTA_ENVIADA',
+  /** Técnico rechazó explícitamente su invitación (v5.0, visibleTo sistema; el dentista no lo ve) */
+  OFERTA_RECHAZADA_POR_TECNICO: 'OFERTA_RECHAZADA_POR_TECNICO',
+  /** Caso re-publicado tras sin_cotizaciones_fallo (v5.0) */
+  CASO_REPUBLICADO: 'CASO_REPUBLICADO',
   CASO_SIN_OFERTAS_CERRADO: 'CASO_SIN_OFERTAS_CERRADO',
   OFERTAS_COMPARATIVAS_LISTAS: 'OFERTAS_COMPARATIVAS_LISTAS',
   CASO_OFERTAS_TODAS_RECHAZADAS: 'CASO_OFERTAS_TODAS_RECHAZADAS',
@@ -39,6 +43,8 @@ export const CASE_EVENTS = {
   CASO_DESPACHADO: 'CASO_DESPACHADO',
   RECEPCION_CONFIRMADA: 'RECEPCION_CONFIRMADA',
   TRABAJO_APROBADO: 'TRABAJO_APROBADO',
+  /** Calificación (CAD/CAM) que el dentista deja al técnico; queda reflejada en el UCH de ambos (técnico la ve enmascarada/anónima) y la ve el admin para arbitrar. */
+  CALIFICACION_ENVIADA: 'CALIFICACION_ENVIADA',
   REANUDADO: 'REANUDADO',
 
   /** Mutuo acuerdo: pausa o cancelación aprobada */

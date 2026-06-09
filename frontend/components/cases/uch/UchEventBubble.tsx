@@ -4,7 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import {
-  Activity, AlertCircle, CheckCircle2, Download, FileText, Hammer, Send, Sparkles, Undo2, User, XCircle,
+  Activity, AlertCircle, CheckCircle2, Download, FileText, Hammer, Send, Sparkles, Star, Undo2, User, XCircle,
 } from 'lucide-react';
 import { resolveUchThreadLane } from '@/lib/uchThreadLane';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
@@ -92,13 +92,6 @@ export default function UchEventBubble({
     uchPresentationRole,
   });
   const isSelfLane = lane === 'self';
-  /** Bloque de detalle snapshot en cierres comparativa solo técnico (independiente del carril hilo/propio). */
-  const isTechComparativeOutcomeDetail =
-    !viewingAsAdmin &&
-    actingAsTecnico &&
-    payloadVisibleTo === 'tecnico' &&
-    (event.action === CASE_EVENTS.OFERTA_RECHAZADA ||
-      event.action === CASE_EVENTS.OFERTA_NO_SELECCIONADA);
 
   const isOutcomeNotice =
     event.action === 'OFERTA_NO_SELECCIONADA' ||
@@ -184,7 +177,7 @@ export default function UchEventBubble({
       <div className={`relative max-w-[78%] transition-all ${bubbleShell}`}>
         <div className="space-y-2">
           <>
-            {!['TRABAJO_INICIADO', 'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO', 'COMENTARIO_TECNICO', CASE_EVENTS.OFERTA_ENVIADA, CASE_EVENTS.OFERTA_RETIRADA].includes(event.action) &&
+            {!['TRABAJO_INICIADO', 'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO', 'COMENTARIO_TECNICO', CASE_EVENTS.CALIFICACION_ENVIADA, CASE_EVENTS.OFERTA_ENVIADA, CASE_EVENTS.OFERTA_RETIRADA].includes(event.action) &&
               !isOutcomeNotice &&
               event.content && (
               <p className="text-xs leading-relaxed whitespace-pre-wrap">{event.content}</p>
@@ -239,7 +232,13 @@ export default function UchEventBubble({
                 })()}
               {(() => {
                 if (event.action !== 'OFERTA_RECHAZADA' || actingAsDentista) return null;
-                const raw = (event.payload as { feedbackDentista?: unknown } | null)?.feedbackDentista;
+                // El payload llega sanitizado para el técnico: `feedbackDentista` se
+                // renombra a `comentarioDelSolicitante` (uchPresentation). Fallback a la
+                // clave cruda para vistas no sanitizadas (p. ej. admin).
+                const p = event.payload as
+                  | { comentarioDelSolicitante?: unknown; feedbackDentista?: unknown }
+                  | null;
+                const raw = p?.comentarioDelSolicitante ?? p?.feedbackDentista;
                 const fb = typeof raw === 'string' ? raw.trim() : '';
                 if (!fb) return null;
                 const detailBorder = isSelfLane ? 'border-primary/30' : 'border-divider';
@@ -252,28 +251,9 @@ export default function UchEventBubble({
                   </div>
                 );
               })()}
-              {event.action === CASE_EVENTS.OFERTA_NO_SELECCIONADA &&
-                actingAsTecnico &&
-                isTechComparativeOutcomeDetail &&
-                (() => {
-                  const raw =
-                    event.payload && typeof event.payload === 'object'
-                      ? (event.payload as Record<string, unknown>)
-                      : {};
-                  const q = quoteDisplayFromPayload(raw);
-                  if (q.totalPrice == null && q.totalDays == null && !q.techNotes) return null;
-                  return (
-                    <div className="pl-5 pt-1.5 mt-1">
-                      <EventOfferQuoteDetail
-                        raw={raw}
-                        tone={isSelfLane ? 'self' : 'thread'}
-                        showCostLabels
-                        commentLabel="Tu comentario en la oferta"
-                        emptyComment="Sin comentario en la oferta."
-                      />
-                    </div>
-                  );
-                })()}
+              {/* En el descarte por aceptarse otra oferta (OFERTA_NO_SELECCIONADA), el
+                  técnico NO necesita ver su propio snapshot (costo/plazo/comentario):
+                  es info que ya tiene y el comentario propio no aporta. Basta el aviso. */}
             </div>
           )}
 
@@ -482,6 +462,41 @@ export default function UchEventBubble({
                       {actingAsDentista && isSelfLane ? 'Tu comentario' : 'Comentario del solicitante'}
                     </p>
                     <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/95">{commentBody}</p>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()}
+
+          {event.action === CASE_EVENTS.CALIFICACION_ENVIADA && (() => {
+            const payload = (event.payload ?? {}) as Record<string, unknown>;
+            const ratingNum = Number(payload.rating);
+            const rating = Number.isFinite(ratingNum) ? Math.max(0, Math.min(5, Math.round(ratingNum))) : 0;
+            const dim = payload.dimension === 'fabrication' ? 'Fabricación (CAM)' : 'Diseño (CAD)';
+            // ratingComment se elimina del payload para el técnico (anonimato);
+            // dentista y admin sí lo reciben.
+            const comment = typeof payload.ratingComment === 'string' ? payload.ratingComment.trim() : '';
+            return (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-primary">
+                  <Star className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[11px] font-bold">Calificación · {dim}</span>
+                </div>
+                <div className="flex items-center gap-1 pl-5" aria-label={`${rating} de 5`}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Star
+                      key={n}
+                      className={`w-3.5 h-3.5 ${n <= rating ? 'text-warning fill-current' : 'text-faint'}`}
+                    />
+                  ))}
+                  <span className="ml-1 text-[11px] font-semibold text-foreground/95 tabular-nums">{rating}/5</span>
+                </div>
+                {comment ? (
+                  <div className="pl-5 space-y-0.5">
+                    <p className="text-[10px] font-medium text-faint">
+                      {actingAsDentista && isSelfLane ? 'Tu comentario' : 'Comentario'}
+                    </p>
+                    <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/95">{comment}</p>
                   </div>
                 ) : null}
               </div>
