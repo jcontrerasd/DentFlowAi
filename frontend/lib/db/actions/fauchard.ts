@@ -35,7 +35,7 @@ import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
 import { isAvailabilityEnabled, isLeagueEngineEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
 import { applyLeagueTransitionPenalty } from '@/lib/leagueScore';
 import { levelToScoreN, POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
-import { computeEligibleAction, type Capacity } from './availability';
+import { computeEligibleAction, ensureTechnicianAvailabilityAction, type Capacity } from './availability';
 import { computeLevelForTechnicianAction, recordNoResponseEventAction } from './noResponseEvents';
 import { enterPendingPoolAction } from './poolQueue';
 
@@ -695,6 +695,11 @@ export async function runFauchardAction(caseId: string): Promise<{
         // Se evalúa en tiempo real (sin caché del estado efectivo). Integral exige
         // CAD y CAM; solo_diseno exige CAD; solo_fabricacion exige CAM.
         if (availabilityOn) {
+          // Capa 2 (red de seguridad): garantizar la fila de disponibilidad antes de
+          // evaluar elegibilidad. computeEligibleAction excluye a quien no tiene fila;
+          // esto cubre técnicos legacy / inserts manuales / altas que no pasaron por la
+          // Capa 1, para que nadie quede excluido por carecer de fila. Idempotente.
+          await ensureTechnicianAvailabilityAction(tech.id);
           let eligible = true;
           for (const cap of requiredCaps) {
             if (!(await computeEligibleAction(tech.id, caseCategory, cap))) { eligible = false; break; }
@@ -817,6 +822,8 @@ export async function isTechnicianEligibleForCaseAction(caseId: string, technici
   const workType = getWorkTypeForCase(cRow.restorationCode || '', (cRow.cc.teeth as number[]) || []);
   const serviceType = cRow.cc.serviceType || SERVICE_TYPES.SOLO_DISENO;
   const category = categoryForWorkType(workType);
+  // Self-heal: garantizar la fila antes de evaluar (computeEligibleAction excluye sin fila).
+  await ensureTechnicianAvailabilityAction(technicianId);
   for (const cap of capacitiesForServiceType(serviceType)) {
     if (!(await computeEligibleAction(technicianId, category, cap))) return false;
   }
@@ -874,6 +881,8 @@ export async function selectReplacementCandidateAction(
       if (serviceType === SERVICE_TYPES.INTEGRAL && (skill.fabricationLevel ?? 0) < minSkillLevel) continue;
 
       if (availabilityOn) {
+        // Self-heal: garantizar la fila antes de evaluar (excluye sin fila).
+        await ensureTechnicianAvailabilityAction(tech.id);
         let ok = true;
         for (const cap of requiredCaps) {
           if (!(await computeEligibleAction(tech.id, category, cap))) { ok = false; break; }

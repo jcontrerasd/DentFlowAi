@@ -91,6 +91,19 @@ export async function getAvailabilityForUserAction(userId: string): Promise<Acti
   }
 }
 
+/**
+ * Garantiza que un técnico tenga su fila de `technician_availability` (la crea con la
+ * política de migración si falta). Idempotente y seguro de llamar repetidamente.
+ *
+ * Se usa en dos capas para que ningún técnico quede excluido por carecer de fila:
+ * (1) seed en el ciclo de vida (al guardar skills) y (2) self-heal en Fauchard antes
+ * del check de elegibilidad. Delega en `getAvailabilityForUserAction`, que solo crea la
+ * fila para usuarios con rol `tecnico`.
+ */
+export async function ensureTechnicianAvailabilityAction(userId: string): Promise<ActionResult<{ availability: AvailabilityRow | null }>> {
+  return getAvailabilityForUserAction(userId);
+}
+
 export type AvailabilityTarget =
   | { kind: 'global' }
   | { kind: 'capacity'; capacidad: Capacity }
