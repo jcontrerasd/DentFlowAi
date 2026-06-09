@@ -3,7 +3,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-export const INFRA_VERSION = 'v5.4';
+export const INFRA_VERSION = 'v5.5';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -801,6 +801,21 @@ export async function ensureInfrastructure(db: any) {
       );
       CREATE INDEX IF NOT EXISTS contact_guard_audit_user_created_idx ON contact_guard_audit(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS contact_guard_audit_case_idx ON contact_guard_audit(clinical_case_id);
+
+      -- Reconciliar tablas legacy de contact_guard_audit creadas con el esquema antiguo
+      -- (trigger_type / matched_rule_id / matched_text / action_taken). CREATE TABLE IF NOT EXISTS
+      -- no las re-crea, así que el SELECT del historial fallaba por columnas inexistentes.
+      ALTER TABLE contact_guard_audit ADD COLUMN IF NOT EXISTS org_id UUID REFERENCES organization(id) ON DELETE SET NULL;
+      ALTER TABLE contact_guard_audit ADD COLUMN IF NOT EXISTS user_role TEXT;
+      ALTER TABLE contact_guard_audit ADD COLUMN IF NOT EXISTS field_name TEXT;
+      ALTER TABLE contact_guard_audit ADD COLUMN IF NOT EXISTS action_name TEXT;
+      ALTER TABLE contact_guard_audit ADD COLUMN IF NOT EXISTS original_text TEXT;
+      ALTER TABLE contact_guard_audit ADD COLUMN IF NOT EXISTS normalized_text TEXT;
+      ALTER TABLE contact_guard_audit ADD COLUMN IF NOT EXISTS violated_rules JSONB NOT NULL DEFAULT '[]'::jsonb;
+      ALTER TABLE contact_guard_audit DROP COLUMN IF EXISTS trigger_type;
+      ALTER TABLE contact_guard_audit DROP COLUMN IF EXISTS matched_rule_id;
+      ALTER TABLE contact_guard_audit DROP COLUMN IF EXISTS matched_text;
+      ALTER TABLE contact_guard_audit DROP COLUMN IF EXISTS action_taken;
     `);
 
     // v4.2/v4.3: regex con backslashes correctos. Usar inserts individuales
@@ -1108,6 +1123,29 @@ export async function ensureInfrastructure(db: any) {
         COALESCE(alpha_quality,0) + COALESCE(alpha_punctuality,0) + COALESCE(alpha_experience,0)
         + COALESCE(alpha_load,0) + COALESCE(alpha_bonus,0) + COALESCE(alpha_no_response,0) - 1.0
       ) > 0.001;
+    `);
+
+    // v5.5 — Motor de ligas (Fase 2, detrás de LEAGUE_ENGINE_ENABLED).
+    //   Columnas de estado del motor en user (las de gating league_level /
+    //   league_transition_count ya existen) + tabla de auditoría de cambios de liga.
+    //   DDL idempotente; sin backfill (league_level ya tiene default 'bronce').
+    await db.execute(sql`
+      ALTER TABLE "user"
+        ADD COLUMN IF NOT EXISTS league_transition_started_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS league_demotion_watch_since TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS league_last_evaluated_at TIMESTAMPTZ;
+
+      CREATE TABLE IF NOT EXISTS league_change_event (
+        id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+        technician_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+        from_league TEXT NOT NULL,
+        to_league TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        reason TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS lce_tech_created_idx ON league_change_event(technician_id, created_at);
+      CREATE INDEX IF NOT EXISTS lce_kind_idx ON league_change_event(kind);
     `);
 
     // 7) Backfill de disponibilidad — SOLO si el modelo está habilitado.

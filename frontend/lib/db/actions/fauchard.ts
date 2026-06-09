@@ -32,7 +32,8 @@ import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
 import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
 // ─── v5.0 — Modelo de disponibilidad / sanción rolling (gated por flag) ───
-import { isAvailabilityEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
+import { isAvailabilityEnabled, isLeagueEngineEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
+import { applyLeagueTransitionPenalty } from '@/lib/leagueScore';
 import { levelToScoreN, POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { computeEligibleAction, type Capacity } from './availability';
 import { computeLevelForTechnicianAction, recordNoResponseEventAction } from './noResponseEvents';
@@ -193,7 +194,7 @@ type BulkScoringData = {
   completedInvs: { technicianId: string; completedAt: Date | null; assignedAt: Date | null; quotedDays: number | null; quotedHours: number | null }[];
   skills: { userId: string; workType: string; designLevel: number; fabricationLevel: number }[];
   recentInvs: { technicianId: string }[];
-  techUsers: { id: string; lastInvitedAt: Date | null }[];
+  techUsers: { id: string; lastInvitedAt: Date | null; leagueTransitionStartedAt: Date | null }[];
 };
 
 async function bulkLoadTechnicianData(
@@ -241,7 +242,7 @@ async function bulkLoadTechnicianData(
       .from(caseInvitation)
       .where(and(inArray(caseInvitation.technicianId, techIds), gt(caseInvitation.invitedAt, loadWindow))),
 
-    db.select({ id: user.id, lastInvitedAt: user.lastInvitedAt })
+    db.select({ id: user.id, lastInvitedAt: user.lastInvitedAt, leagueTransitionStartedAt: user.leagueTransitionStartedAt })
       .from(user)
       .where(inArray(user.id, techIds)),
   ]);
@@ -318,7 +319,13 @@ function calculateScoreFromBulkData(
     : config.dBonusMaxDays;
   const B = Math.min(daysSince / config.dBonusMaxDays, 1.0);
 
-  const score = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B - αN * N;
+  const baseScore = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B - αN * N;
+
+  // Penalización de transición de liga (Fase 2): mientras el técnico está en su
+  // período de prueba en la liga superior, su score se reduce por (1 - lPenaltyTransition).
+  const inTransition = isLeagueEngineEnabled() && !!techUser?.leagueTransitionStartedAt;
+  const score = applyLeagueTransitionPenalty(baseScore, inTransition, parseFloat(config.lPenaltyTransition));
+
   return { score: Math.max(0, score), components: { Q, P, E, C, B } };
 }
 
@@ -427,7 +434,7 @@ async function calculateTechnicianScore(
 
   // B — Bono de infrautilización
   const [techRow] = await db
-    .select({ lastInvitedAt: user.lastInvitedAt })
+    .select({ lastInvitedAt: user.lastInvitedAt, leagueTransitionStartedAt: user.leagueTransitionStartedAt })
     .from(user)
     .where(eq(user.id, technicianId))
     .limit(1);
@@ -438,7 +445,11 @@ async function calculateTechnicianScore(
     : config.dBonusMaxDays; // Si nunca fue invitado, bono máximo
   const B = Math.min(daysSince / config.dBonusMaxDays, 1.0);
 
-  const score = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B;
+  const baseScore = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B;
+
+  // Penalización de transición de liga (Fase 2) — ver calculateScoreFromBulkData.
+  const inTransition = isLeagueEngineEnabled() && !!techRow?.leagueTransitionStartedAt;
+  const score = applyLeagueTransitionPenalty(baseScore, inTransition, parseFloat(config.lPenaltyTransition));
 
   return { score: Math.max(0, score), components: { Q, P, E, C, B } };
 }
@@ -2033,6 +2044,7 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
         technicianId: user.id,
         fullName: user.fullName,
         leagueLevel: user.leagueLevel,
+        leagueTransitionStartedAt: user.leagueTransitionStartedAt,
         isAvailable: user.isAvailable,
         lastInvitedAt: user.lastInvitedAt,
         status: caseInvitation.status,
@@ -2050,6 +2062,7 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
           technicianId: row.technicianId,
           fullName: row.fullName,
           leagueLevel: row.leagueLevel,
+          leagueInTransition: !!row.leagueTransitionStartedAt,
           isAvailable: row.isAvailable,
           invitationsCount: 0,
           quotedCount: 0,

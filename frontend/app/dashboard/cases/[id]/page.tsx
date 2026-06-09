@@ -90,7 +90,8 @@ import { dispatchDashboardMetricsRefresh } from '@/lib/dashboard/dashboardRefres
 import { getMyInvitationForCaseAction } from '@/lib/db/actions/invitations';
 import type { InvitationItem } from '@/lib/db/actions/invitations';
 import { getCaseHubReadStateAction, markCaseHubReadAction } from '@/lib/db/actions/hubRead';
-import { countUnreadNegChannel, countUnreadTechChannel, type UchUnreadEvent } from '@/lib/uchUnread';
+import { countUnreadNegChannel, countUnreadTechChannel, filterOthersNegChannel, filterOthersTechChannel, type UchUnreadEvent } from '@/lib/uchUnread';
+import { dispatchHubUnreadRefresh } from '@/lib/hubUnreadEvents';
 import {
   responsibilityAttentionBump,
   isHubInboxSuppressedForCompletedCase,
@@ -532,7 +533,8 @@ function CaseDetailPageContent() {
           );
           return false;
         }
-        const res = await registerDispatchAction(id as string, { courier, trackingId });
+        const dispatchMode = data?.dispatchMode === 'externo' ? 'externo' : data?.dispatchMode === 'interno' ? 'interno' : undefined;
+        const res = await registerDispatchAction(id as string, { courier, trackingId, dispatchMode });
         if (!res.success) {
           const msg = (res as { error?: string }).error || 'Error al registrar despacho';
           showErrorToast(msg);
@@ -581,8 +583,61 @@ function CaseDetailPageContent() {
     if (clinicalCase?.id && String(clinicalCase.id) !== String(id)) return;
     const now = new Date();
     setHubServerReads({ lastReadTech: now, lastReadNeg: now });
-    void markCaseHubReadAction(id as string);
+    // Persistir y avisar a la campana/listados para que descuenten al instante.
+    void markCaseHubReadAction(id as string).then(() => dispatchHubUnreadRefresh());
   }, [isHubOpen, id, clinicalCase?.id]);
+
+  /** Reconoce los mensajes entrantes mostrados con el UCH abierto: re-marca leído y sincroniza. */
+  const acknowledgeNewHubMessages = useCallback(() => {
+    if (!id) return;
+    const now = new Date();
+    setHubServerReads({ lastReadTech: now, lastReadNeg: now });
+    void markCaseHubReadAction(id as string).then(() => dispatchHubUnreadRefresh());
+  }, [id]);
+
+  /**
+   * Polling de eventos mientras el Centro de control está abierto (no hay realtime).
+   * Pausa en pestaña oculta para no consumir recursos; se limpia al cerrar/cambiar de caso.
+   */
+  useEffect(() => {
+    if (!isHubOpen || !id) return;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (intervalId != null) return;
+      intervalId = setInterval(() => { void loadCaseEvents(); }, 15000);
+    };
+    const stop = () => {
+      if (intervalId != null) { clearInterval(intervalId); intervalId = null; }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') start();
+      else stop();
+    };
+    if (typeof document === 'undefined' || document.visibilityState === 'visible') start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
+    // loadCaseEvents lee `id` (estable) y solo usa setters; deps mínimas evitan reiniciar el interval cada render.
+  }, [isHubOpen, id]);
+
+  /**
+   * Detecta mensajes nuevos del otro rol y avisa con un toast mientras el UCH está abierto.
+   * Funciona para cualquier recarga (polling o acción). Excluye eventos propios → sin falsos positivos.
+   */
+  const lastOtherMaxMsRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!authUserProfile?.id) return;
+    const others = [
+      ...filterOthersTechChannel(caseEvents as UchUnreadEvent[], String(authUserProfile.id)),
+      ...filterOthersNegChannel(caseEvents as UchUnreadEvent[], String(authUserProfile.id)),
+    ];
+    const maxMs = others.reduce((m, e) => Math.max(m, new Date(e.createdAt).getTime() || 0), 0);
+    const prev = lastOtherMaxMsRef.current;
+    lastOtherMaxMsRef.current = maxMs;
+    if (prev === null) return; // primer cálculo: solo fija la línea base, sin avisar
+    if (maxMs > prev && isHubOpen) {
+      showSuccessToastMessage('Nuevo mensaje en este caso');
+    }
+  }, [caseEvents, authUserProfile?.id, isHubOpen, showSuccessToastMessage]);
 
   useEffect(() => {
     openHubAppliedRef.current = false;
@@ -592,6 +647,7 @@ function CaseDetailPageContent() {
     setUchPanelMounted(false);
     setIsDeleting(false);
     setDeleteInput('');
+    lastOtherMaxMsRef.current = null;
   }, [id]);
 
   useEffect(() => {
@@ -2447,6 +2503,8 @@ function CaseDetailPageContent() {
                   proposalDeadlineMs={proposalDeadlineMs}
                   reviewDeadlineMs={reviewDeadlineMs}
                   serverClockAnchor={serverClockAnchor}
+                  newMessageCount={unreadTechMessages + unreadNegotiationMessages}
+                  onAcknowledgeNew={acknowledgeNewHubMessages}
                 />
               </motion.div>
             )}

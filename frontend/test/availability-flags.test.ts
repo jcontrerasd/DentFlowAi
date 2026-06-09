@@ -3,6 +3,7 @@ import {
   isAvailabilityAdminPanelEnabled,
   isAvailabilityEnabled,
   isAvailabilityUiTecnicoEnabled,
+  isLeagueEngineEnabled,
   isPoolPendienteEnabled,
   isRejectionIndividualEnabled,
 } from '@/lib/constants/availabilityFlags';
@@ -13,6 +14,7 @@ const FLAG_VARS = [
   'AVAILABILITY_ADMIN_PANEL_ENABLED',
   'REJECTION_INDIVIDUAL_ENABLED',
   'POOL_PENDIENTE_ENABLED',
+  'LEAGUE_ENGINE_ENABLED',
 ] as const;
 
 describe('availabilityFlags', () => {
@@ -36,6 +38,7 @@ describe('availabilityFlags', () => {
     expect(isAvailabilityAdminPanelEnabled()).toBe(false);
     expect(isRejectionIndividualEnabled()).toBe(false);
     expect(isPoolPendienteEnabled()).toBe(false);
+    expect(isLeagueEngineEnabled()).toBe(false);
   });
 
   it('cada flag retorna true solo cuando su env var es exactamente "true"', () => {
@@ -44,12 +47,14 @@ describe('availabilityFlags', () => {
     process.env.AVAILABILITY_ADMIN_PANEL_ENABLED = 'true';
     process.env.REJECTION_INDIVIDUAL_ENABLED = 'true';
     process.env.POOL_PENDIENTE_ENABLED = 'true';
+    process.env.LEAGUE_ENGINE_ENABLED = 'true';
 
     expect(isAvailabilityEnabled()).toBe(true);
     expect(isAvailabilityUiTecnicoEnabled()).toBe(true);
     expect(isAvailabilityAdminPanelEnabled()).toBe(true);
     expect(isRejectionIndividualEnabled()).toBe(true);
     expect(isPoolPendienteEnabled()).toBe(true);
+    expect(isLeagueEngineEnabled()).toBe(true);
   });
 
   it('valores truthy distintos a "true" no activan el flag (no acepta "1", "yes", "TRUE")', () => {

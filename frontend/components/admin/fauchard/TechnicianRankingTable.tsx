@@ -2,21 +2,32 @@
 
 import { useState } from 'react';
 import { toggleTechnicianAvailabilityAdminAction } from '@/lib/db/actions/fauchard';
-import { 
-  User, 
-  Trophy, 
-  Clock, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  User,
+  Trophy,
+  Clock,
+  CheckCircle2,
+  XCircle,
   ExternalLink,
   Search,
   Filter,
-  Activity
+  Activity,
+  Medal,
+  TrendingUp
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface TechnicianRankingTableProps {
   data: any[];
+}
+
+/** Color de la categoría (badge + texto), consistente en toda la tabla. */
+function leagueColor(league: string): string {
+  const l = (league ?? '').toLowerCase();
+  if (l === 'elite') return 'text-primary';
+  if (l === 'oro') return 'text-warning';
+  if (l === 'plata') return 'text-muted';
+  return 'text-orange-600'; // bronce
 }
 
 export default function TechnicianRankingTable({ data }: TechnicianRankingTableProps) {
@@ -90,17 +101,29 @@ export default function TechnicianRankingTable({ data }: TechnicianRankingTableP
               <tr key={t.technicianId} className="hover:bg-surface-2/30 transition-colors group">
                 <td className="px-6 py-5">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-surface-2 border border-divider flex items-center justify-center text-muted">
-                      <User className="w-4 h-4" />
+                    <div className="relative">
+                      <div className="w-8 h-8 rounded-xl bg-surface-2 border border-divider flex items-center justify-center text-muted">
+                        <User className="w-4 h-4" />
+                      </div>
+                      {/* Badge de categoría junto al avatar */}
+                      <span
+                        className={`absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full bg-surface border border-divider flex items-center justify-center ${leagueColor(t.leagueLevel)}`}
+                        title={`Categoría: ${t.leagueLevel}`}
+                      >
+                        <Medal className="w-2.5 h-2.5" />
+                      </span>
                     </div>
                     <div className="flex flex-col">
                       <span className="text-[11px] font-black text-foreground uppercase tracking-tight">{t.fullName}</span>
-                      <span className={`text-[9px] font-bold uppercase tracking-wider ${
-                        t.leagueLevel.toLowerCase() === 'elite' ? 'text-primary' :
-                        t.leagueLevel.toLowerCase() === 'oro' ? 'text-warning' :
-                        t.leagueLevel.toLowerCase() === 'plata' ? 'text-muted' : 'text-orange-600'
-                      }`}>
-                        {t.leagueLevel}
+                      <span className="flex items-center gap-1.5">
+                        <span className={`text-[9px] font-bold uppercase tracking-wider ${leagueColor(t.leagueLevel)}`}>
+                          {t.leagueLevel}
+                        </span>
+                        {t.leagueInTransition && (
+                          <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider text-warning" title="En período de transición tras ascender">
+                            <TrendingUp className="w-2.5 h-2.5" /> Transición
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>

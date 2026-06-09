@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Slider from '@/components/ui/Slider';
 import Button from '@/components/ui/Button';
 import { updateFauchardParamsAction } from '@/lib/db/actions/fauchard';
-import { Save, Trophy, TrendingUp, TrendingDown, Construction } from 'lucide-react';
+import { getLeagueEngineEnabledAction } from '@/lib/db/actions/league';
+import { Save, Trophy, TrendingUp, TrendingDown, Construction, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmSaveModal from './ConfirmSaveModal';
 
@@ -31,8 +32,29 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [engineEnabled, setEngineEnabled] = useState(false);
+
+  useEffect(() => {
+    getLeagueEngineEnabledAction().then((r) => setEngineEnabled(r.enabled)).catch(() => {});
+  }, []);
 
   const set = (k: keyof typeof v, value: number) => setV((p) => ({ ...p, [k]: value }));
+
+  // Invariante: el umbral de descenso debe ser estrictamente menor al de ascenso
+  // (evita el flip-flop ascenso/descenso inmediato).
+  const invariantBroken = v.lDescentRating >= v.lMinRating;
+
+  const requestSave = () => {
+    if (invariantBroken) {
+      setMessage({
+        type: 'error',
+        text: 'La calificación para descenso debe ser menor que la calificación mínima de ascenso.',
+      });
+      return;
+    }
+    setMessage(null);
+    setShowConfirm(true);
+  };
 
   const handleSave = async () => {
     setIsSubmitting(true);
@@ -54,18 +76,31 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
 
   return (
     <div className="flex flex-col gap-12">
-      {/* Banner — motor dormido */}
-      <div className="p-5 rounded-2xl bg-warning-hl border border-warning/30 flex gap-3 items-start">
-        <Construction className="w-5 h-5 text-warning shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <p className="text-sm font-bold text-warning">Motor de categorías en preparación (Fase 2)</p>
-          <p className="text-xs text-warning/80 leading-relaxed">
-            Estos umbrales <strong>se guardan</strong> en la configuración, pero el motor de promoción y
-            descenso automático aún no está cableado: por ahora <strong>no tienen efecto</strong> en la
-            selección. La selección por liga sí opera con la categoría actual de cada técnico.
-          </p>
+      {/* Banner — estado del motor (depende de LEAGUE_ENGINE_ENABLED) */}
+      {engineEnabled ? (
+        <div className="p-5 rounded-2xl bg-primary-hl border border-primary/30 flex gap-3 items-start">
+          <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-primary">Motor de categorías activo</p>
+            <p className="text-xs text-primary/80 leading-relaxed">
+              El motor de ascenso, transición y descenso está <strong>operativo</strong>: el cron diario
+              aplica estos umbrales para mover a los técnicos entre categorías.
+            </p>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="p-5 rounded-2xl bg-warning-hl border border-warning/30 flex gap-3 items-start">
+          <Construction className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-warning">Motor de categorías apagado</p>
+            <p className="text-xs text-warning/80 leading-relaxed">
+              Estos umbrales <strong>se guardan</strong> en la configuración, pero el motor automático está
+              desactivado (<code>LEAGUE_ENGINE_ENABLED=false</code>): por ahora <strong>no tienen efecto</strong>.
+              La selección por liga sí opera con la categoría actual de cada técnico.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
         {/* Requisitos de Ascenso */}
@@ -109,8 +144,15 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         </div>
       </div>
 
+      {invariantBroken && (
+        <div className="p-4 rounded-2xl bg-error-hl border border-error/30 text-sm text-error">
+          La <strong>calificación para descenso</strong> ({v.lDescentRating.toFixed(1)} ⭐) debe ser menor que la
+          <strong> calificación mínima de ascenso</strong> ({v.lMinRating.toFixed(1)} ⭐).
+        </div>
+      )}
+
       <div className="flex justify-end">
-        <Button onClick={() => setShowConfirm(true)} loading={isSubmitting} icon={<Save className="w-4 h-4" />} className="w-full md:w-auto">
+        <Button onClick={requestSave} loading={isSubmitting} disabled={invariantBroken} icon={<Save className="w-4 h-4" />} className="w-full md:w-auto">
           Guardar Configuración de Categorías
         </Button>
       </div>
@@ -121,7 +163,11 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         onConfirm={handleSave}
         isLoading={isSubmitting}
         title="¿Confirmar Sistema de Categorías?"
-        description="Vas a modificar las reglas de ascenso y descenso. Se guardarán, pero no tienen efecto hasta que el motor de ligas se active (Fase 2)."
+        description={
+          engineEnabled
+            ? 'Vas a modificar las reglas de ascenso, transición y descenso. El motor está activo, así que aplicarán en la próxima corrida del cron diario.'
+            : 'Vas a modificar las reglas de ascenso y descenso. Se guardarán, pero no tienen efecto hasta encender el motor (LEAGUE_ENGINE_ENABLED).'
+        }
       />
 
       <AnimatePresence>

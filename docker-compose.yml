@@ -14,7 +14,7 @@ services:
     image: fsouza/fake-gcs-server:1.54.0
     ports:
       - "4443:4443"
-    command: -data /data -scheme http -public-host localhost:4443
+    command: -backend filesystem -filesystem-root /data -data /data -scheme http -public-host localhost:4443
     volumes:
       - gcs_data:/data
 

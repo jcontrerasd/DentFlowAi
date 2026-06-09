@@ -360,6 +360,26 @@ gcloud scheduler jobs create http process-pool-queue-prod \
 
 Para staging: mismos 2 jobs apuntando a `https://dentflowai-frontend-dev-…run.app` con `CRON_SECRET_DEV`. En local no corren solos; probar con `curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/process-availability`. Rollback: `gcloud scheduler jobs pause/delete` (no requiere redeploy); el código permanece inerte con el flag off.
 
+#### Cron del motor de ligas (Fase 2 — solo cuando `LEAGUE_ENGINE_ENABLED=true`)
+
+Un job adicional por entorno, **diario** (POST, mismo `CRON_SECRET`). Evalúa ascenso/transición/descenso de cada técnico; idempotente e inerte con el flag off.
+
+```bash
+# process-league: diario a las 04:00 (ascenso/transición/descenso de ligas)
+gcloud scheduler jobs create http process-league-prod \
+  --location=southamerica-west1 \
+  --schedule="0 4 * * *" \
+  --uri="https://dentflowai.com/api/cron/process-league" \
+  --http-method=POST \
+  --headers="Authorization=Bearer ${CRON_SECRET_PROD}" \
+  --attempt-deadline=300s \
+  --project=dentflowai-cbcf2
+
+# Staging: mismo job apuntando a https://dentflowai-frontend-dev-…run.app con CRON_SECRET_DEV.
+```
+
+**En local sí corre solo**: a diferencia de los crons v5.0, el de ligas se dispara también en local mediante un scheduler in-process ([frontend/instrumentation.ts](../frontend/instrumentation.ts) → [frontend/lib/localCron.ts](../frontend/lib/localCron.ts)) que arranca con `npm run dev`. Solo opera fuera de producción (nunca con `NODE_ENV=production`, que es lo que corre en Cloud Run). Controles en `.env.local`: `LOCAL_CRONS_ENABLED=false` lo apaga; `LOCAL_LEAGUE_CRON_INTERVAL_MS` ajusta el intervalo local (default 1h). También se puede invocar a mano: `curl -X POST -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/process-league`. Rollback en dev/prod: `gcloud scheduler jobs pause/delete` o apagar `LEAGUE_ENGINE_ENABLED`.
+
 #### Aislamiento por ambiente — EmailJS, flags y secretos
 
 EmailJS es **una sola cuenta** y el clon inicial prod→staging (`clone-prod-to-staging.sh`, ejecutado **una única vez** al montar staging — **no** es una operación recurrente) dejó usuarios reales en la BD de staging. Por eso, y porque cualquier correo desde staging saldría desde la misma cuenta EmailJS que producción, hay que mantener los controles de envío. Controles disponibles (todos retrocompatibles con la clave plana):

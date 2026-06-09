@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Activity, AlertCircle, Clock, X, Send, CheckCircle2, XCircle } from 'lucide-react';
+import { Activity, AlertCircle, Clock, X, Send, CheckCircle2, XCircle, ArrowUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getSignedUrlAction } from '@/lib/db/actions/cases';
@@ -78,6 +78,10 @@ interface UnifiedCaseHubProps {
   /** v5.0 — Etapa 3: plazo de revisión del dentista (`enRevision`). */
   reviewDeadlineMs?: number | null;
   serverClockAnchor?: ServerClockAnchor | null;
+  /** Mensajes del otro rol llegados desde que se abrió el hub (badge en cabecera). */
+  newMessageCount?: number;
+  /** Reconoce los mensajes nuevos (marca leído + sincroniza campana/listados). */
+  onAcknowledgeNew?: () => void;
 }
 
 /** Actividad (chat): más reciente arriba; `id` desempata si `createdAt` coincide. */
@@ -108,6 +112,8 @@ export default function UnifiedCaseHub({
   proposalDeadlineMs,
   reviewDeadlineMs,
   serverClockAnchor,
+  newMessageCount = 0,
+  onAcknowledgeNew,
 }: UnifiedCaseHubProps) {
   const { showSuccess, showError } = useToast();
   const [events, setEvents] = useState<CaseEvent[]>(initialEvents);
@@ -165,6 +171,11 @@ export default function UnifiedCaseHub({
     try {
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
+      // Nombre del archivo .zip; la carpeta raíz interna usa el mismo nombre para
+      // que al descomprimir quede un único directorio plano (sin la estructura
+      // profunda organizations/.../deliveries/).
+      const archiveName = `${format(new Date(), 'yyyyMMdd_HHmmss')}_${versionLabel}_${clinicalCase?.caseNumber || 'CASE'}`;
+      const folder = zip.folder(archiveName) ?? zip;
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         const url = await resolveReadableFileUrl(f);
@@ -174,21 +185,26 @@ export default function UnifiedCaseHub({
           const baseName = (() => {
             if (f.startsWith('http://') || f.startsWith('https://')) {
               try {
-                return decodeURIComponent(new URL(f).pathname.split('/').pop() || `archivo_${i + 1}`);
+                // Decodificar primero: las URLs firmadas codifican el path del
+                // objeto como un único segmento con `/` → `%2F`. Si no decodificamos
+                // antes de split('/'), `baseName` arrastra el path completo y JSZip
+                // lo interpreta como subdirectorios.
+                const decodedPath = decodeURIComponent(new URL(f).pathname);
+                return decodedPath.split('/').pop() || `archivo_${i + 1}`;
               } catch {
                 return `archivo_${i + 1}`;
               }
             }
             return f.split('/').pop() || `archivo_${i + 1}`;
           })();
-          zip.file(`${String(i + 1).padStart(2, '0')}_${baseName}`, blob);
+          folder.file(`${String(i + 1).padStart(2, '0')}_${baseName}`, blob);
         }
       }
       const zipBlob = await zip.generateAsync({ type: 'blob' });
       const downloadUrl = window.URL.createObjectURL(zipBlob);
       const a = document.createElement('a');
       a.href = downloadUrl;
-      a.download = `${format(new Date(), 'yyyyMMdd_HHmmss')}_${versionLabel}_${clinicalCase?.caseNumber || 'CASE'}.zip`;
+      a.download = `${archiveName}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -297,6 +313,7 @@ export default function UnifiedCaseHub({
       'TRABAJO_APROBADO',
       'COMENTARIO_TECNICO',
       'REANUDADO',
+      // CALIFICACION_ENVIADA se enruta por dimensión en filteredEvents (CAD aquí, CAM en producción).
     ],
     produccion: ['FABRICACION_INICIADA', 'CASO_DESPACHADO', 'RECEPCION_CONFIRMADA'],
   };
@@ -489,7 +506,17 @@ export default function UnifiedCaseHub({
     const list =
       allowed === null
         ? [...roleScopedEvents]
-        : roleScopedEvents.filter((e) => allowed.includes(e.action));
+        : roleScopedEvents.filter((e) => {
+            // La calificación se enruta por dimensión, no por acción: CAD → Diseño,
+            // CAM → Producción (el filtro de fase es por acción y no las distingue).
+            if (e.action === 'CALIFICACION_ENVIADA') {
+              const dim = (e.payload as Record<string, unknown> | null | undefined)?.dimension;
+              if (phaseTab === 'diseno') return dim !== 'fabrication';
+              if (phaseTab === 'produccion') return dim === 'fabrication';
+              return false;
+            }
+            return allowed.includes(e.action);
+          });
     const expanded = presentingAsDentista ? splitCasoPublicadoForDentista(list) : list;
     return expanded.sort(compareCaseEventsNewestFirst);
   }, [roleScopedEvents, phaseTab, presentingAsDentista]);
@@ -826,6 +853,22 @@ export default function UnifiedCaseHub({
                   </span>
                 </motion.div>
               </motion.div>
+            )}
+            {newMessageCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (scrollRef.current) scrollRef.current.scrollTop = 0;
+                  onAcknowledgeNew?.();
+                }}
+                aria-label={`${newMessageCount} mensaje${newMessageCount === 1 ? '' : 's'} nuevo${newMessageCount === 1 ? '' : 's'} — ir al más reciente`}
+                title="Ir a los mensajes nuevos"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-primary-hl border border-primary/30 text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              >
+                <ArrowUp className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[11px] font-black tabular-nums">{newMessageCount}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wide">Nuevo{newMessageCount === 1 ? '' : 's'}</span>
+              </button>
             )}
             <button
               onClick={onClose}

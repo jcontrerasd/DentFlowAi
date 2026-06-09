@@ -61,6 +61,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Estados para simulación
   const [isSimulating, setIsSimulating] = useState(false);
   const [simulatedProfile, setSimulatedProfile] = useState<UserProfile | null>(null);
+  // True mientras hay un simId persistido que aún no se resolvió a un perfil simulado.
+  // Mantiene loading=true para evitar que el dashboard redirija al admin a Observabilidad
+  // en la ventana transitoria en que el perfil real (admin) ya cargó pero el simulado no.
+  const [simulationLoading, setSimulationLoading] = useState(false);
 
   const fetchProfile = useCallback(async (userId: string, isSimulated: boolean = false) => {
     if (!isSimulated) setProfileLoading(true);
@@ -83,6 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isSimulated) {
         setProfileLoading(false);
         setProfileFetchAttempted(true);
+      } else {
+        setSimulationLoading(false);
       }
     }
   }, []);
@@ -153,13 +159,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setIsSimulating(false);
           setSimulatedProfile(null);
         }
+        setSimulationLoading(false);
       } else if (simId && !simulatedProfile) {
+        setSimulationLoading(true);
         fetchProfile(simId, true);
       }
     } else if (status === 'unauthenticated') {
       setUserProfile(null);
       setSimulatedProfile(null);
       setIsSimulating(false);
+      setSimulationLoading(false);
       setProfileLoading(false);
       setProfileFetchAttempted(false);
     }
@@ -171,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // loading=true while: session resolving, OR authenticated but fetch not yet attempted, OR fetch in progress.
     // profileFetchAttempted prevents both the premature-redirect race and an infinite spinner
     // when getUserProfileDirect returns null after a completed fetch.
-    loading: status === 'loading' || (status === 'authenticated' && (!profileFetchAttempted || profileLoading)),
+    loading: status === 'loading' || (status === 'authenticated' && (!profileFetchAttempted || profileLoading || simulationLoading)),
     isSimulating,
     simulatedProfile,
     startSimulation,

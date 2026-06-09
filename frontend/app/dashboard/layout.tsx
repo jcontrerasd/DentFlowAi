@@ -25,6 +25,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getSignedUrlAction } from '@/lib/db/actions/cases';
 import { getMyInvitationsAction } from '@/lib/db/actions/invitations';
 import { getMyHubUnreadTotalAction } from '@/lib/db/actions/hubRead';
+import { subscribeHubUnreadRefresh } from '@/lib/hubUnreadEvents';
 import ImpersonationSelector from '@/components/admin/ImpersonationSelector';
 import ThemeToggleButton from '@/components/theme/ThemeToggleButton';
 import AvailabilityBadge from '@/components/availability/AvailabilityBadge';
@@ -98,6 +99,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .then(({ total }) => setHubBellTotal(total))
       .catch(() => {});
   }, [pathname, userProfile?.role]);
+
+  // Refresco instantáneo de la campana cuando un caso se marca como leído.
+  useEffect(() => {
+    if (userProfile?.role !== 'dentista' && userProfile?.role !== 'tecnico') return;
+    return subscribeHubUnreadRefresh(() => {
+      void getMyHubUnreadTotalAction().then(({ total }) => setHubBellTotal(total)).catch(() => {});
+    });
+  }, [userProfile?.role]);
 
   // Redirigir si no hay usuario autenticado o si el onboarding no está completo
   useEffect(() => {

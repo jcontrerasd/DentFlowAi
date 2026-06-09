@@ -48,6 +48,7 @@ export const WEIGHTS_HELP: FauchardHelpSection = {
         'Importancia de las valoraciones y el feedback de casos anteriores. Cuanto más alto, más prioridad tienen los técnicos mejor calificados.',
       example:
         'El Dr. Soto publica una corona de zirconio y dos laboratorios pueden tomarla: el Lab. Andes (rating 4.8/5, varias coronas felicitadas) y el Lab. Roble (rating 4.0/5). Si el peso de Calidad está alto (αQ = 0.40), esa diferencia de reputación domina el cálculo y Fauchard invita primero al Lab. Andes. Si lo bajas (αQ = 0.10), la reputación casi no influye: ambos quedan prácticamente empatados y deciden los otros factores.',
+      links: [{ key: 'wQualityDays' }],
     },
     {
       label: 'Puntualidad',
@@ -72,6 +73,7 @@ export const WEIGHTS_HELP: FauchardHelpSection = {
         'Resta score a los técnicos que ya acumulan muchos casos o invitaciones recientes. Reparte el trabajo y evita cuellos de botella.',
       example:
         'El Lab. Andes es excelente, pero esta semana ya tiene 8 casos abiertos; el Lab. Roble, casi tan bueno, solo 1. Si el peso de Carga está alto (αC = 0.20), la saturación penaliza con fuerza y Fauchard le cede el turno al Lab. Roble para cuidar los plazos de todos. Si lo pones en cero (αC = 0), la carga deja de importar: el Lab. Andes seguiría recibiendo todas las invitaciones hasta colapsar y los tiempos del marketplace empeorarían.',
+      links: [{ key: 'cMax' }, { key: 'wLoadDays' }],
     },
     {
       label: 'Bono de Infrautilización',
@@ -80,6 +82,7 @@ export const WEIGHTS_HELP: FauchardHelpSection = {
         'Aumento temporal de score para técnicos que llevan tiempo sin recibir casos. Mantiene activo a todo el pool de laboratorios.',
       example:
         'El Lab. Sur lleva 3 semanas sin recibir un solo caso. Cuando el Dr. Soto publica uno nuevo, si el peso de Bono está alto (αB = 0.10) ese tiempo de espera lo impulsa y Fauchard lo incluye en la ronda de invitaciones para mantenerlo activo. Si lo pones en cero (αB = 0), la inactividad deja de sumar y laboratorios nuevos o poco activos como el Lab. Sur rara vez asomarían: el trabajo se concentraría en los de siempre.',
+      links: [{ key: 'dBonusMaxDays' }],
     },
     {
       label: 'Penalización por No-respuesta',
@@ -88,6 +91,7 @@ export const WEIGHTS_HELP: FauchardHelpSection = {
         'Resta score al técnico que ignora invitaciones (término −αN·N, según su nivel de sanción acumulada). Solo penaliza a quien tiene sanción; un técnico sin sanción no se ve afectado.',
       example:
         'El Lab. Pino dejó vencer 2 invitaciones esta quincena y entró en Nivel 2 de sanción. Si el peso de No-respuesta está alto (αN = 0.25), esa sanción le resta un buen pedazo de score y cae en el ranking aunque su calidad sea buena. Si lo bajas (αN = 0.05), ignorar invitaciones casi no le cuesta y seguiría siendo invitado.',
+      links: [{ key: 'level1Threshold' }],
     },
   ],
   notes: [
@@ -110,6 +114,7 @@ export const FILTERS_HELP: FauchardHelpSection = {
         'Cuántos días hacia atrás se promedian las calificaciones para el factor Calidad. Acota la memoria de reputación.',
       example:
         'Si lo pones en 30, una mala racha del Lab. Andes el mes pasado pesa de lleno, pero sus buenas notas de hace 3 meses ya no cuentan. Subiéndolo a 180, la reputación se vuelve más estable y perdona tropiezos recientes.',
+      links: [{ key: 'alphaQuality' }],
     },
     {
       label: 'Carga Reciente (días)',
@@ -118,14 +123,16 @@ export const FILTERS_HELP: FauchardHelpSection = {
         'Ventana para contar cuánto trabajo reciente acumula un técnico (invitaciones/casos), que alimenta la Penalización por Carga.',
       example:
         'Con 7 días, solo cuenta lo que el Lab. Andes tomó esta semana: se "libera" rápido. Con 30 días, arrastra su carga del último mes y Fauchard lo frena por más tiempo.',
+      links: [{ key: 'alphaLoad' }],
     },
     {
       label: 'Techo Índice de Carga (C_max)',
       symbol: 'cMax',
       description:
-        'Límite máximo de la penalización por carga. Por más saturado que esté un técnico, su castigo por carga no supera este techo.',
+        'El Índice de Carga (C) mide cuántas veces más ocupado está un técnico respecto al promedio del pool: C = sus casos recientes ÷ promedio del pool. No es un conteo de casos, es un múltiplo — C = 1 significa "carga igual al promedio", C = 2 "el doble del promedio". Este techo limita hasta dónde puede crecer ese múltiplo: por saturado que esté un técnico, su penalización por carga se calcula con C como máximo igual a C_max. Ojo: el techo por sí solo no es la penalización. El castigo real al score es α_carga × C (peso "Penalización por Carga (C)" en Pesos del Score), de modo que la penalización máxima es α_carga × C_max.',
       example:
-        'Con C_max = 2, un Lab. Andes con 8 casos recibe el mismo castigo máximo que uno con 20: la carga deja de crecer pasado el techo. Bajarlo suaviza el castigo a los muy ocupados; subirlo lo endurece.',
+        'Si el pool promedia 5 casos y el Lab. Andes lleva 10, su C = 10 ÷ 5 = 2 (el doble del promedio). Con C_max = 2, da igual que el Andes tenga 10, 15 o 30 casos: su penalización se topa en 2× el promedio. Cuánto duele ese tope depende de α_carga: con α_carga = 0.15, cada 1× de carga sobre el promedio resta 0.15 al score y el castigo máximo es 0.15 × 2 = −0.30 (≈ la mitad del score positivo alcanzable). Bajar el techo a 1.5 (o bajar α_carga) suaviza el castigo a los muy ocupados; subirlos lo endurece y los aparta más de las rondas.',
+      links: [{ key: 'alphaLoad' }],
     },
     {
       label: 'Bono Infrautilización (días máx)',
@@ -134,6 +141,7 @@ export const FILTERS_HELP: FauchardHelpSection = {
         'Días tras los cuales el Bono de Infrautilización llega a su tope. Define qué tan rápido madura el empujón a técnicos sin casos.',
       example:
         'Con 30 días, el Lab. Sur alcanza el bono máximo recién al mes sin casos. Bajándolo a 10, su empujón se llena en 10 días y vuelve antes a las rondas.',
+      links: [{ key: 'alphaBonus' }],
     },
     {
       label: 'Cooldown Invitaciones',
@@ -150,6 +158,7 @@ export const FILTERS_HELP: FauchardHelpSection = {
         'Si un técnico no inicia sesión ni interactúa en estos días, queda excluido temporalmente del pool. Filtro previo al score.',
       example:
         'Con 15 días, un Lab. Roble que lleva dos semanas sin entrar no recibe invitaciones (evita asignarle un caso urgente que no verá). Vuelve al pool apenas se reconecta.',
+      links: [{ key: 'inactivityAutoOffDays' }],
     },
     {
       label: 'Técnicos a invitar por caso',
@@ -214,12 +223,14 @@ export const PLAZOS_HELP: FauchardHelpSection = {
       symbol: 'tNoEligiblePoolHours',
       description: 'Cuánto espera un caso buscando técnicos disponibles (cola pendiente_pool) antes de fallar. Hay check-in al dentista al 50%.',
       example: 'Con 24 h, si no hay técnicos elegibles para el caso del Dr. Soto, espera hasta un día a que alguien se active; a las 12 h se le avisa al dentista que sigue buscando.',
+      links: [{ key: 'maxPoolCycles' }],
     },
     {
       label: 'Ciclos de espera',
       symbol: 'maxPoolCycles',
       description: 'Cuántas veces se reintenta la espera antes de marcar el caso como "sin cotizaciones".',
       example: 'Con 2, el caso reintenta la cola dos veces; si tras ambas sigue sin elegibles, pasa a "sin cotizaciones" y el dentista puede republicar.',
+      links: [{ key: 'tNoEligiblePoolHours' }],
     },
     {
       label: 'Margen de reemplazo',
@@ -232,30 +243,35 @@ export const PLAZOS_HELP: FauchardHelpSection = {
       symbol: 'inactivityReminderDays',
       description: 'Días con el switch de disponibilidad en ON sin actividad antes de un recordatorio suave + aviso en el badge.',
       example: 'Con 7 días, un Lab. Roble que dejó su disponibilidad encendida pero no entra hace una semana recibe un recordatorio. Debe ser menor que el auto-OFF.',
+      links: [{ key: 'inactivityAutoOffDays' }],
     },
     {
       label: 'Auto-OFF preventivo',
       symbol: 'inactivityAutoOffDays',
       description: 'Días con el switch en ON sin login antes de pausar la disponibilidad automáticamente (evita invitar a quien no responderá).',
       example: 'Con 30 días, si el Lab. Roble lleva un mes sin entrar pese a estar "disponible", Fauchard apaga su switch para no enviarle casos a ciegas.',
+      links: [{ key: 'inactivityReminderDays' }, { key: 'dInactivityDays' }],
     },
     {
       label: 'Ventana rolling (no-respuesta)',
       symbol: 'noResponseWindowDays',
       description: 'Solo cuentan las no-respuestas ocurridas dentro de esta ventana móvil. Las más viejas salen solas.',
       example: 'Con 14 días, una invitación ignorada hace 3 semanas ya no suma a la sanción del Lab. Pino: la curva "perdona" con el tiempo sin necesidad de intervención.',
+      links: [{ key: 'noResponseRehabilitationDays' }],
     },
     {
       label: 'Rehabilitación',
       symbol: 'noResponseRehabilitationDays',
       description: 'Días sin nuevas no-respuestas para considerar al técnico rehabilitado.',
       example: 'Con 30 días, si el Lab. Pino responde puntualmente por un mes, su historial de sanción se considera saldado.',
+      links: [{ key: 'noResponseWindowDays' }],
     },
     {
       label: 'Umbral Nivel 1 / 2 / 3',
       symbol: 'level1-3',
       description: 'Número de no-respuestas (en la ventana) que dispara cada nivel: 1 = aviso, 2 = penalización al score (−αN·N), 3 = auto-OFF del switch global. Deben cumplir Nivel 1 < Nivel 2 < Nivel 3.',
       example: 'Con 1 / 2 / 3: a la 1ª no-respuesta el Lab. Pino recibe un aviso; a la 2ª, su score baja; a la 3ª, Fauchard apaga su disponibilidad global y rechaza sus invitaciones pendientes.',
+      links: [{ key: 'alphaNoResponse' }],
     },
   ],
   notes: [

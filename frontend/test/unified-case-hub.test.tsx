@@ -970,7 +970,9 @@ describe('UnifiedCaseHub', () => {
           type: 'sistema',
           action: 'OFERTA_RECHAZADA',
           content: 'Tu oferta no fue seleccionada en esta ocasión.',
-          payload: { visibleTo: 'tecnico', invitationId: 'x', feedbackDentista: 'Precio fuera de rango.' },
+          // El técnico recibe el payload sanitizado: feedbackDentista se entrega como
+          // comentarioDelSolicitante (ver uchPresentation.sanitizeUchPayloadForViewer).
+          payload: { visibleTo: 'tecnico', invitationId: 'x', comentarioDelSolicitante: 'Precio fuera de rango.' },
           stateChange: {},
           createdAt: new Date().toISOString(),
           user: { id: 'u-dent', fullName: 'Dr.', role: 'dentista' },

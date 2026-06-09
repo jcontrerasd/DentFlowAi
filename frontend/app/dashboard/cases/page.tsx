@@ -8,6 +8,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { listCasesByOrganization } from '@/lib/db/actions/cases';
 import { getHubUnreadCountsForCasesAction } from '@/lib/db/actions/hubRead';
+import { subscribeHubUnreadRefresh } from '@/lib/hubUnreadEvents';
 import { useAuth } from '@/context/AuthContext';
 import MarketplaceCaseCard from '@/components/cases/MarketplaceCaseCard';
 import CreateCaseLinkButton from '@/components/cases/CreateCaseLinkButton';
@@ -180,7 +181,7 @@ function CasesPageContent() {
     void fetchList({ pageNum: 1, append: false, archived: showArchived });
   }, [profileReady, urlHydrated, showArchived, listQueryKey, fetchList]);
 
-  useEffect(() => {
+  const refreshHubUnread = useCallback(() => {
     const ids = cases.map((c: { id?: string }) => c.id).filter(Boolean) as string[];
     if (!ids.length) {
       setHubUnreadByCase({});
@@ -190,6 +191,11 @@ function CasesPageContent() {
       .then((r) => setHubUnreadByCase(r.byCaseId))
       .catch(() => setHubUnreadByCase({}));
   }, [cases]);
+
+  useEffect(() => { refreshHubUnread(); }, [refreshHubUnread]);
+
+  // Refresco instantáneo de las badges cuando un caso se marca como leído.
+  useEffect(() => subscribeHubUnreadRefresh(refreshHubUnread), [refreshHubUnread]);
 
   useEffect(() => {
     const onVis = () => {

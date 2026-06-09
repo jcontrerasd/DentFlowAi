@@ -43,6 +43,8 @@ export const CASE_EVENTS = {
   CASO_DESPACHADO: 'CASO_DESPACHADO',
   RECEPCION_CONFIRMADA: 'RECEPCION_CONFIRMADA',
   TRABAJO_APROBADO: 'TRABAJO_APROBADO',
+  /** Calificación (CAD/CAM) que el dentista deja al técnico; queda reflejada en el UCH de ambos (técnico la ve enmascarada/anónima) y la ve el admin para arbitrar. */
+  CALIFICACION_ENVIADA: 'CALIFICACION_ENVIADA',
   REANUDADO: 'REANUDADO',
 
   /** Mutuo acuerdo: pausa o cancelación aprobada */

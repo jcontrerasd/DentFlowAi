@@ -38,3 +38,14 @@ export function isRejectionIndividualEnabled(): boolean {
 export function isPoolPendienteEnabled(): boolean {
   return flag('POOL_PENDIENTE_ENABLED');
 }
+
+/**
+ * Motor de ligas (Fase 2) — habilita el cómputo automático de ascenso, transición y
+ * descenso de categoría del técnico (cron diario `process-league`) y la penalización de
+ * score durante el período de transición. Con el flag off el `league_level` queda fijo y el
+ * gating de selección por liga se comporta como hoy.
+ * Ver [Doc/DentFlowAI_Diseño_Funcional_Liga.md](../../../Doc/DentFlowAI_Diseño_Funcional_Liga.md).
+ */
+export function isLeagueEngineEnabled(): boolean {
+  return flag('LEAGUE_ENGINE_ENABLED');
+}

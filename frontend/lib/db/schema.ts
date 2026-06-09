@@ -43,6 +43,10 @@ export const user = pgTable("user", {
   isAvailable: boolean("is_available").default(true).notNull(),
   leagueLevel: text("league_level").default('bronce'),
   leagueTransitionCount: integer("league_transition_count").default(0),
+  // Motor de ligas Fase 2 (detrás de LEAGUE_ENGINE_ENABLED) — estado del motor automático.
+  leagueTransitionStartedAt: timestamp("league_transition_started_at", { withTimezone: true, mode: 'date' }),
+  leagueDemotionWatchSince: timestamp("league_demotion_watch_since", { withTimezone: true, mode: 'date' }),
+  leagueLastEvaluatedAt: timestamp("league_last_evaluated_at", { withTimezone: true, mode: 'date' }),
   lastInvitedAt: timestamp("last_invited_at", { withTimezone: true, mode: 'date' }),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true, mode: 'date' }),
   suspendedUntil: timestamp("suspended_until", { withTimezone: true, mode: 'date' }),
@@ -797,9 +801,34 @@ export const bulkRejectionReason = pgTable("bulk_rejection_reason", {
   uniqueIndex("bulk_rejection_reason_code_uidx").on(table.code),
 ]);
 
+/**
+ * Auditoría del motor de ligas (Fase 2, detrás de LEAGUE_ENGINE_ENABLED).
+ * Una fila por cambio de categoría de un técnico — alimenta la observabilidad admin.
+ */
+export const leagueChangeEvent = pgTable("league_change_event", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  technicianId: text("technician_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  fromLeague: text("from_league").notNull(),
+  toLeague: text("to_league").notNull(),
+  // ascenso | transicion_consolidada | descenso
+  kind: text("kind").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  index("lce_tech_created_idx").on(table.technicianId, table.createdAt),
+  index("lce_kind_idx").on(table.kind),
+]);
+
 export const technicianAvailabilityRelations = relations(technicianAvailability, ({ one }) => ({
   user: one(user, {
     fields: [technicianAvailability.userId],
+    references: [user.id],
+  }),
+}));
+
+export const leagueChangeEventRelations = relations(leagueChangeEvent, ({ one }) => ({
+  technician: one(user, {
+    fields: [leagueChangeEvent.technicianId],
     references: [user.id],
   }),
 }));

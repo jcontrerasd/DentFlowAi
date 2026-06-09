@@ -24,6 +24,7 @@ import DashboardRecentCasesSection from '@/components/dashboard/DashboardRecentC
 import { listCasesByOrganization } from '@/lib/db/actions/cases';
 import { getDashboardMetricsAction } from '@/lib/db/actions/dashboard';
 import { getHubUnreadCountsForCasesAction } from '@/lib/db/actions/hubRead';
+import { subscribeHubUnreadRefresh } from '@/lib/hubUnreadEvents';
 import { getMySkillsAction, toggleAvailabilityAction } from '@/lib/db/actions/skills';
 import { getMyInvitationsAction } from '@/lib/db/actions/invitations';
 import { RECENT_CASES_LIMIT } from '@/lib/dashboard/constants';
@@ -35,7 +36,7 @@ import { logError } from '@/lib/logger';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 
 export default function DashboardHome() {
-  const { userProfile } = useAuth();
+  const { userProfile, loading: authLoading } = useAuth();
   const [metrics, setMetrics] = useState<Record<string, number>>({});
   const [totalCases, setTotalCases] = useState(0);
   const [metricsRole, setMetricsRole] = useState<'dentista' | 'tecnico'>('dentista');
@@ -159,7 +160,7 @@ export default function DashboardHome() {
     });
   }, [fetchDashboardData]);
 
-  useEffect(() => {
+  const refreshHubUnread = useCallback(() => {
     const ids = rawCases.map((c: any) => c.id).filter(Boolean);
     if (!ids.length) {
       setHubUnreadByCase({});
@@ -169,6 +170,11 @@ export default function DashboardHome() {
       .then((r) => setHubUnreadByCase(r.byCaseId))
       .catch(() => setHubUnreadByCase({}));
   }, [rawCases]);
+
+  useEffect(() => { refreshHubUnread(); }, [refreshHubUnread]);
+
+  // Refresco instantáneo de las badges cuando un caso se marca como leído.
+  useEffect(() => subscribeHubUnreadRefresh(refreshHubUnread), [refreshHubUnread]);
 
   const isDentist = userProfile?.role === 'dentista';
   const isAdmin = userProfile?.role === 'admin';
@@ -188,9 +194,12 @@ export default function DashboardHome() {
   );
 
   // El admin no tiene "Dashboard": su primera pantalla es Observabilidad.
+  // Esperar a que el contexto termine de cargar (incluida la resolución de una
+  // simulación pendiente) evita redirigir al admin a Observabilidad en la ventana
+  // transitoria en que userProfile aún es el perfil real del admin y no el simulado.
   useEffect(() => {
-    if (isAdmin) router.replace('/dashboard/admin/observability');
-  }, [isAdmin, router]);
+    if (!authLoading && isAdmin) router.replace('/dashboard/admin/observability');
+  }, [authLoading, isAdmin, router]);
 
   if (loading || isAdmin) {
     return (

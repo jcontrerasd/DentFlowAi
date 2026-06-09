@@ -31,6 +31,8 @@ const FIELD_LABELS: Record<string, string> = {
   // fauchard.ts / proposal.ts — interacción técnico ↔ dentista
   techNotes: 'Notas del técnico',
   dentistRejectionFeedback: 'Motivo del rechazo',
+  // cases.ts — submitUserRatingAction (comentario visible al técnico, anónimo)
+  ratingComment: 'Comentario de la calificación',
 };
 
 /**

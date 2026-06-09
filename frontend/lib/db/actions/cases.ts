@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { notifyUser } from "../../services/notifications";
 import GCPStorageService from '@/lib/services/gcp-storage';
 import { db } from "@/lib/db";
-import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseInvitation, caseUserArchive } from "@/lib/db/schema";
+import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseInvitation, caseUserArchive, contactGuardCourierAllowlist } from "@/lib/db/schema";
 import { eq, desc, and, or, ne, not, sql, inArray, avg, exists, gt } from "drizzle-orm";
 import {
   archiveVisibilityForUser,
@@ -1281,7 +1281,7 @@ export async function transitionToManufacturingAction(caseId: string): Promise<A
 /**
  * El dentista aprueba el trabajo y cierra el caso.
  */
-export async function registerDispatchAction(caseId: string, dispatchData: { courier: string, trackingId: string, photos?: string[] }) {
+export async function registerDispatchAction(caseId: string, dispatchData: { courier: string, trackingId: string, photos?: string[], dispatchMode?: 'interno' | 'externo' }) {
   const identity = await getServerIdentity();
   if (!identity?.id) return { success: false, error: "No autorizado" };
 
@@ -1292,6 +1292,25 @@ export async function registerDispatchAction(caseId: string, dispatchData: { cou
       success: false,
       error: 'Indica un número de seguimiento, enlace o referencia de despacho.',
     };
+  }
+
+  // Despacho externo: el transportista debe ser uno del allowlist de ContactGuard
+  // (no texto libre), para cerrar una vía de desintermediación. Validación
+  // server-side aunque el cliente ya muestre un desplegable.
+  if (dispatchData.dispatchMode === 'externo') {
+    const couriers = await db
+      .select({ domain: contactGuardCourierAllowlist.domain, label: contactGuardCourierAllowlist.label })
+      .from(contactGuardCourierAllowlist)
+      .where(eq(contactGuardCourierAllowlist.isActive, true));
+    const norm = (s: string) => s.trim().toLowerCase();
+    const allowed = new Set<string>();
+    for (const c of couriers) {
+      allowed.add(norm(c.domain));
+      if (c.label?.trim()) allowed.add(norm(c.label));
+    }
+    if (!allowed.has(norm(courier))) {
+      return { success: false, error: 'Selecciona un transportista válido de la lista.' };
+    }
   }
 
   const guarded = await guardTextOrFail({
@@ -1410,6 +1429,18 @@ export async function submitUserRatingAction(data: { caseId: string, revieweeId:
   // CAD = 'design', CAM = 'fabrication'. Default 'design' por retrocompatibilidad.
   const dimension: 'design' | 'fabrication' = data.dimension === 'fabrication' ? 'fabrication' : 'design';
 
+  // El comentario queda visible para el técnico (de forma anónima): debe pasar por
+  // ContactGuard como cualquier campo libre para impedir desintermediación.
+  const guarded = await guardTextOrFail({
+    actionName: 'submitUserRatingAction',
+    caseId: data.caseId,
+    identity: { id: identity.id, orgId: identity.orgId, role: identity.role },
+    fields: [{ text: data.comment, field: 'ratingComment' }],
+  });
+  if (!guarded.ok) {
+    return { success: false, error: guarded.error };
+  }
+
   try {
     // Upsert: una sola reseña por caso + dentista + dimensión (índice único v5.3).
     // Re-calificar actualiza la nota y refresca created_at (cuenta como reciente).
@@ -1452,6 +1483,51 @@ export async function submitUserRatingAction(data: { caseId: string, revieweeId:
           .set(set)
           .where(and(eq(technicianSkill.userId, data.revieweeId), eq(technicianSkill.workType, skill.workType)));
       }
+    }
+
+    // La calificación queda reflejada en el UCH como un evento de timeline visible
+    // a ambos. El enmascaramiento estándar del UCH muestra al técnico la nota de
+    // forma anónima (autor → Fauchard), preserva la identidad real para el admin
+    // (árbitro) y la presenta como propia ("Yo") al dentista que la emitió.
+    // `ratingComment` se oculta al técnico vía sanitizeUchPayloadForViewer.
+    try {
+      const dimensionLabel = dimension === 'fabrication' ? 'fabricación (CAM)' : 'diseño (CAD)';
+      const content = `Calificación de ${dimensionLabel}: ${rating}/5`;
+      const payload = {
+        dimension,
+        rating,
+        ratingComment: data.comment?.trim() || null,
+        visibleTo: 'ambos' as const,
+      };
+      // Upsert del evento: re-calificar actualiza el mismo evento en vez de duplicarlo.
+      const [existing] = await db
+        .select({ id: clinicalCaseEvent.id })
+        .from(clinicalCaseEvent)
+        .where(and(
+          eq(clinicalCaseEvent.clinicalCaseId, data.caseId),
+          eq(clinicalCaseEvent.userId, identity.id as string),
+          eq(clinicalCaseEvent.action, CASE_EVENTS.CALIFICACION_ENVIADA),
+          sql`${clinicalCaseEvent.payload}->>'dimension' = ${dimension}`,
+        ))
+        .limit(1);
+
+      if (existing) {
+        await db.update(clinicalCaseEvent)
+          .set({ content, payload, createdAt: new Date() })
+          .where(eq(clinicalCaseEvent.id, existing.id));
+        await db.update(clinicalCase).set({ lastActivityAt: new Date() }).where(eq(clinicalCase.id, data.caseId));
+      } else {
+        await logCaseEvent({
+          caseId: data.caseId,
+          userId: identity.id as string,
+          type: 'negociacion',
+          action: CASE_EVENTS.CALIFICACION_ENVIADA,
+          content,
+          payload,
+        });
+      }
+    } catch (e) {
+      console.error('[submitUserRatingAction] Error registrando evento de calificación:', e);
     }
 
     return { success: true };

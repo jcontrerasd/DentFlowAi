@@ -13,6 +13,7 @@ import OfferConditionsBlock from '@/components/cases/OfferConditionsBlock';
 import UchQuoteBreakdown from '@/components/cases/uch/UchQuoteBreakdown';
 import { startWorkAction, withdrawQuoteAction } from '@/lib/db/actions/proposal';
 import { getRejectionUiEnabledAction } from '@/lib/db/actions/rejection';
+import { listActiveCouriersAction, type CourierEntry } from '@/lib/db/actions/contactGuard';
 import UchRejectInvitationDialog from '@/components/cases/uch/UchRejectInvitationDialog';
 import { quoteDisplayFromInvitation } from '@/lib/uchQuoteDisplay';
 import type { InvitationItem } from '@/lib/db/actions/invitations';
@@ -142,6 +143,13 @@ export default function UchFauchardActionsPanel({
   const [dispatchCourier, setDispatchCourier] = useState('Interno');
   const [dispatchTracking, setDispatchTracking] = useState('');
   const [isRegisteringDispatch, setIsRegisteringDispatch] = useState(false);
+  // Couriers del allowlist de ContactGuard para el despacho externo (sin texto libre).
+  const [couriers, setCouriers] = useState<CourierEntry[]>([]);
+  const [couriersLoading, setCouriersLoading] = useState(false);
+  // Confirmación de recepción: doble check para no cerrar el caso por error.
+  const [showReceptionConfirm, setShowReceptionConfirm] = useState(false);
+  const [receptionCheck, setReceptionCheck] = useState(false);
+  const [isConfirmingReception, setIsConfirmingReception] = useState(false);
   // Rechazo individual de invitación (v5.0, gated por REJECTION_INDIVIDUAL_ENABLED).
   const [rejectionEnabled, setRejectionEnabled] = useState(false);
   const [showRejectInvitation, setShowRejectInvitation] = useState(false);
@@ -157,6 +165,20 @@ export default function UchFauchardActionsPanel({
       .catch(() => { if (active) setRejectionEnabled(false); });
     return () => { active = false; };
   }, [canRejectInvitation]);
+
+  // Carga el allowlist de couriers cuando se abre el formulario de despacho.
+  // No depender de `couriersLoading`: al ponerlo en true el efecto se re-ejecutaría
+  // y su cleanup cancelaría la petición en vuelo (quedaría "Cargando…" permanente).
+  useEffect(() => {
+    if (!showDispatchForm || couriers.length > 0) return;
+    let active = true;
+    setCouriersLoading(true);
+    listActiveCouriersAction()
+      .then((res) => { if (active && res.success) setCouriers(res.data ?? []); })
+      .catch(() => { /* el desplegable quedará vacío; el técnico podrá cancelar */ })
+      .finally(() => { if (active) setCouriersLoading(false); });
+    return () => { active = false; };
+  }, [showDispatchForm, couriers.length]);
 
   const canWithdrawQuote =
     actingAsTecnico &&
@@ -226,9 +248,7 @@ export default function UchFauchardActionsPanel({
           {actingAsDentista && caseStatus === 'enviado' && (
             <button
               type="button"
-              onClick={() => {
-                void onActionTriggered?.('confirm_reception');
-              }}
+              onClick={() => setShowReceptionConfirm(true)}
               className="flex-1 py-3 bg-jade-hl text-foreground text-[10px] font-bold rounded-xl uppercase hover:bg-jade-hl shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="w-4 h-4" />
@@ -820,14 +840,42 @@ export default function UchFauchardActionsPanel({
                   >
                     Transportista / medio
                   </label>
-                  <input
-                    id="uch-dispatch-courier"
-                    type="text"
-                    value={dispatchCourier}
-                    onChange={(e) => setDispatchCourier(e.target.value)}
-                    placeholder={dispatchMode === 'interno' ? 'Ej. Interno, motorizado propio…' : 'Ej. Chilexpress, Starken, Blue Express…'}
-                    className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-faint focus:border-jade/20 outline-none"
-                  />
+                  {dispatchMode === 'externo' ? (
+                    <>
+                      <select
+                        id="uch-dispatch-courier"
+                        data-testid="uch-dispatch-courier-select"
+                        value={dispatchCourier}
+                        onChange={(e) => setDispatchCourier(e.target.value)}
+                        disabled={couriersLoading}
+                        className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-sm text-foreground focus:border-jade/20 outline-none disabled:opacity-50"
+                      >
+                        <option value="">
+                          {couriersLoading ? 'Cargando transportistas…' : 'Selecciona un transportista…'}
+                        </option>
+                        {couriers.map((c) => {
+                          const value = c.label?.trim() || c.domain;
+                          return (
+                            <option key={c.id} value={value}>{value}</option>
+                          );
+                        })}
+                      </select>
+                      {!couriersLoading && couriers.length === 0 && (
+                        <p className="text-[10px] text-warning">
+                          No hay transportistas habilitados. Contacta al administrador.
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <input
+                      id="uch-dispatch-courier"
+                      type="text"
+                      value={dispatchCourier}
+                      onChange={(e) => setDispatchCourier(e.target.value)}
+                      placeholder="Ej. Interno, motorizado propio…"
+                      className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-faint focus:border-jade/20 outline-none"
+                    />
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <label
@@ -871,11 +919,15 @@ export default function UchFauchardActionsPanel({
                   data-testid="uch-dispatch-confirm"
                   disabled={
                     isRegisteringDispatch ||
-                    (dispatchMode === 'externo' && !dispatchTracking.trim())
+                    (dispatchMode === 'externo' && (!dispatchTracking.trim() || !dispatchCourier.trim()))
                   }
                   onClick={async () => {
                     const trackingId = dispatchTracking.trim();
                     if (dispatchMode === 'externo') {
+                      if (!dispatchCourier.trim()) {
+                        showError('Selecciona un transportista de la lista.');
+                        return;
+                      }
                       if (!trackingId) {
                         showError('Indica la URL de seguimiento del courier.');
                         return;
@@ -1010,6 +1062,82 @@ export default function UchFauchardActionsPanel({
                   className="flex-1 py-3 bg-error hover:bg-error text-inverse text-[10px] font-black uppercase rounded-2xl transition-all disabled:opacity-40"
                 >
                   {isWithdrawingQuote ? 'Retirando…' : 'Retirar oferta'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {showReceptionConfirm && actingAsDentista && (
+          <motion.div
+            className="fixed inset-0 z-[310] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              className="bg-surface border border-jade/20 border-b-0 sm:border-b rounded-t-2xl sm:rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 sm:mx-auto"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="uch-confirm-reception-title"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 bg-jade-hl rounded-2xl flex items-center justify-center mx-auto mb-2">
+                  <Package className="w-6 h-6 text-jade" />
+                </div>
+                <h3 id="uch-confirm-reception-title" className="text-xl font-bold text-foreground">
+                  Confirmar recepción
+                </h3>
+                <p className="text-sm text-muted">
+                  Esta acción cierra el caso y no se puede deshacer. Confírmala solo cuando hayas
+                  recibido la fabricación.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={receptionCheck}
+                  onChange={(e) => setReceptionCheck(e.target.checked)}
+                  className="mt-1 rounded border-divider"
+                />
+                <span className="text-xs text-muted leading-relaxed">
+                  <strong className="text-foreground">Confirmo</strong> que recibí la fabricación de
+                  este caso y que el caso quedará cerrado.
+                </span>
+              </label>
+
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReceptionConfirm(false);
+                    setReceptionCheck(false);
+                  }}
+                  disabled={isConfirmingReception}
+                  className="flex-1 py-3 bg-surface-2 text-muted text-[10px] font-black uppercase rounded-2xl hover:bg-surface-off transition-all disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  data-testid="uch-confirm-reception-confirm"
+                  disabled={isConfirmingReception || !receptionCheck}
+                  onClick={async () => {
+                    setIsConfirmingReception(true);
+                    const ok = await onActionTriggered?.('confirm_reception');
+                    setIsConfirmingReception(false);
+                    // Mantener el sheet abierto si falló, para reintentar.
+                    if (ok === false) return;
+                    setShowReceptionConfirm(false);
+                    setReceptionCheck(false);
+                  }}
+                  className="flex-1 py-3 bg-jade-hl hover:bg-jade-hl text-foreground text-[10px] font-black uppercase rounded-2xl transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  {isConfirmingReception ? 'Confirmando…' : 'Confirmar recepción'}
                 </button>
               </div>
             </motion.div>

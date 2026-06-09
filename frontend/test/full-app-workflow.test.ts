@@ -336,7 +336,7 @@ describe('SUITE B — Dentist Rejects Proposal', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════
-//  SUITE E — Pre-rechazado en comparativo + aceptación de otra oferta (OFERTA_NO_SELECCIONADA)
+//  SUITE E — Pre-rechazado en comparativo + aceptación de otra oferta (sin duplicar cierre)
 // ═══════════════════════════════════════════════════════════════════════════════
 describe('SUITE E — Pre-rechazado + aceptación otra oferta', () => {
   let caseId: string;
@@ -453,7 +453,7 @@ describe('SUITE E — Pre-rechazado + aceptación otra oferta', () => {
     winnerInvId = q2!.id;
   });
 
-  it('E2: Rechazo individual a tech1 y aceptación de tech2 emite OFERTA_NO_SELECCIONADA al pre-rechazado', async () => {
+  it('E2: tech1 pre-rechazado solo conserva OFERTA_RECHAZADA; aceptar a tech2 no le duplica el cierre', async () => {
     mockAs(dentistId, 'dentista');
     const rej = await rejectInvitationOfferAction(caseId, loserInvId, 'Precio elevado para el presupuesto acordado con el paciente.');
     expect(rej.success).toBe(true);
@@ -466,8 +466,11 @@ describe('SUITE E — Pre-rechazado + aceptación otra oferta', () => {
       const p = e.payload as { invitationId?: string; visibleTo?: string } | null;
       return p?.invitationId === loserInvId && p?.visibleTo === 'tecnico';
     });
+    // Tras el rechazo manual, el técnico ya tiene su evento de cierre corto.
     expect(forLoserInv.some((e) => e.action === 'OFERTA_RECHAZADA')).toBe(true);
-    expect(forLoserInv.some((e) => e.action === 'OFERTA_NO_SELECCIONADA')).toBe(true);
+    // Aceptar a tech2 NO debe re-emitir OFERTA_NO_SELECCIONADA al pre-rechazado
+    // (evita el doble "Otra oferta fue elegida" en su UCH).
+    expect(forLoserInv.some((e) => e.action === 'OFERTA_NO_SELECCIONADA')).toBe(false);
   });
 });
 

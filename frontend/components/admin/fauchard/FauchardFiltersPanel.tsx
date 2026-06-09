@@ -66,7 +66,7 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
             value={draft.cMax}
             min={1} max={5} step={0.1}
             onChange={(e) => setParam('cMax', parseFloat(e.target.value))}
-            valueSuffix=" uds"
+            valueFormatter={(v) => `${v.toFixed(1)}×`}
             tooltip={fauchardParamTooltip('cMax')}
             onHelp={() => openHelp('cMax')}
             paramNumber={fauchardParamNumber('cMax')}
@@ -161,7 +161,7 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
               if (v < 60) return `${v} min`;
               const h = Math.floor(v / 60);
               const m = v % 60;
-              return m > 0 ? `${h}h ${m}m` : `${h}h`;
+              return m === 0 ? `${h} h` : `${h} h ${m} min`;
             }}
             tooltip={fauchardParamTooltip('tQuoteMinutes')}
             onHelp={() => openHelp('tQuoteMinutes')}

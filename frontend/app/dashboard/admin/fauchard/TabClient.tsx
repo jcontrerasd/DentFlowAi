@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { SlidersHorizontal, History, CalendarDays, Trophy } from 'lucide-react';
 import { fauchardParamPanel } from '@/lib/constants/fauchardHelp';
 import FauchardWeightsPanel from '@/components/admin/fauchard/FauchardWeightsPanel';
@@ -17,15 +18,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 type Space = 'parametros' | 'calendario' | 'categorias' | 'historial';
 
 export function TabClient({ config, showAvailabilityPanel = false }: { config: any; showAvailabilityPanel?: boolean }) {
+  const searchParams = useSearchParams();
   const [space, setSpace] = useState<Space>('parametros');
-  // Parámetro a enfocar cuando se llega vía deep-link desde Observabilidad
-  // (`?space=parametros&focus=<key>`). Se enruta al panel que lo edita.
+  // Parámetro a enfocar cuando se llega vía deep-link (`?space=...&focus=<key>`).
+  // Se enruta al panel que lo edita.
   const [focusKey, setFocusKey] = useState<string | null>(null);
 
+  // Reacciona a la URL en CADA cambio, no solo al montar: los chips "Ajustar:"
+  // del propio Fauchard hacen router.push en la MISMA ruta (sin remontar), así
+  // que un efecto mount-only solo respondería al entrar desde otra ruta
+  // (p. ej. Observabilidad). Con useSearchParams el deep-link entre parámetros
+  // del configurador también enfoca el destino.
   useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    const fParam = sp.get('focus');
-    const sParam = sp.get('space');
+    const fParam = searchParams.get('focus');
+    const sParam = searchParams.get('space');
     if (sParam && ['parametros', 'calendario', 'categorias', 'historial'].includes(sParam)) {
       setSpace(sParam as Space);
     } else if (fParam) {
@@ -33,7 +39,7 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
       setSpace('parametros');
     }
     if (fParam) setFocusKey(fParam);
-  }, []);
+  }, [searchParams]);
 
   const focusPanel = focusKey ? fauchardParamPanel(focusKey) : undefined;
 

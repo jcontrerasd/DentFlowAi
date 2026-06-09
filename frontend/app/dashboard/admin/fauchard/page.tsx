@@ -75,8 +75,14 @@ export default async function AdminFauchardPage() {
 }
 
 // Client Component for Tabs
+import { Suspense } from 'react';
 import { TabClient } from './TabClient';
 
 function TabContainer({ config, showAvailabilityPanel }: { config: any; showAvailabilityPanel: boolean }) {
-  return <TabClient config={config} showAvailabilityPanel={showAvailabilityPanel} />;
+  // Suspense: TabClient usa useSearchParams (deep-link de parámetros vía ?focus=).
+  return (
+    <Suspense fallback={null}>
+      <TabClient config={config} showAvailabilityPanel={showAvailabilityPanel} />
+    </Suspense>
+  );
 }
