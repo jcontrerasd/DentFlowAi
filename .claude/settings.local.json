@@ -264,7 +264,13 @@
       "Bash(echo \"type-check exit: $?\")",
       "Bash(npx remotion *)",
       "Bash(echo \"RENDER EXIT: $?\")",
-      "Bash(npm --prefix /Users/jaimecontreras/Documents/Projects/DentFlowAi/video run type-check)"
+      "Bash(npm --prefix /Users/jaimecontreras/Documents/Projects/DentFlowAi/video run type-check)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(gh run *)",
+      "Bash(echo \"---- código de salida: $? ----\")",
+      "Bash(git rm *)",
+      "Bash(npm uninstall *)"
     ],
     "additionalDirectories": [
       "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/invitations",
