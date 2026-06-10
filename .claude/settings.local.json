@@ -270,7 +270,8 @@
       "Bash(gh run *)",
       "Bash(echo \"---- código de salida: $? ----\")",
       "Bash(git rm *)",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(echo \"---- exit: $? ----\")"
     ],
     "additionalDirectories": [
       "/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/app/dashboard/invitations",
