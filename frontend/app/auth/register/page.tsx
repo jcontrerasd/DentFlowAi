@@ -18,15 +18,18 @@ import {
   HelpCircle,
   AlertCircle,
   Send,
+  X,
+  Trash2,
 } from 'lucide-react';
-import { countriesByContinent } from './constants/countries';
+import FocusTrap from '@/components/ui/FocusTrap';
+import { REGIONS_BY_COUNTRY, SUPPORTED_COUNTRIES } from '@/lib/constants/addressData';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import AuthNavbar from '@/components/auth/AuthNavbar';
 
 // NATIVE SERVER ACTIONS
-import { createUserAction, updateUserAction, getUserProfileDirect } from '@/lib/db/actions/user';
+import { createUserAction, updateUserAction, getUserProfileDirect, discardOnboardingAccountAction } from '@/lib/db/actions/user';
 import SkillMatrixForm from '@/components/profile/SkillMatrixForm';
 import {
   createOrganizationAction,
@@ -129,6 +132,11 @@ export default function RegisterPage() {
     orgName: '',
     phone: '',
     country: 'CL',
+    region: '',
+    comuna: '',
+    address: '',
+    addressNumber: '',
+    addressOffice: '',
     specialty: 'Odontología General',
     registrationNumber: '',
     experienceYears: '',
@@ -140,6 +148,10 @@ export default function RegisterPage() {
   const [consent, setConsent] = useState(false);
   const [isDesigner, setIsDesigner] = useState(false);
   const [isManufacturer, setIsManufacturer] = useState(false);
+
+  // Cancelar / descartar inscripción a medio terminar
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   // ── Sync with Native Session ──────────────────────────────────────────────
   useEffect(() => {
@@ -326,6 +338,12 @@ export default function RegisterPage() {
       const result = await updateUserAction(userId, {
         fullName,
         phone: formData.phone,
+        country: formData.country,
+        region: formData.region || null,
+        comuna: formData.comuna || null,
+        address: formData.address || null,
+        addressNumber: formData.addressNumber || null,
+        addressOffice: formData.addressOffice || null,
         ...(role === 'dentista' ? {
           specialty: formData.specialty,
           registrationNumber: formData.registrationNumber,
@@ -418,6 +436,37 @@ export default function RegisterPage() {
     }
   };
 
+  // ── CANCELAR / DESCARTAR INSCRIPCIÓN ──────────────────────────────────────
+  const hasOnboardingAccount = () =>
+    !!(formData.userId || window.localStorage.getItem('onboardingUserId') || (session?.user as any)?.id);
+
+  const requestCancel = () => {
+    // Si ya hay una cuenta creada en curso, confirmar el borrado destructivo.
+    // Si aún no existe cuenta (paso 0), ir directo al home sin fricción.
+    if (hasOnboardingAccount()) {
+      setShowCancelConfirm(true);
+    } else {
+      router.push('/');
+    }
+  };
+
+  const handleCancelRegistration = async () => {
+    setCancelling(true);
+    try {
+      // Descartar la cuenta ANTES de cerrar sesión (la action resuelve identidad
+      // desde la sesión real).
+      await discardOnboardingAccountAction();
+    } catch {
+      // best-effort: aunque falle el borrado, igual salimos limpiando la sesión.
+    } finally {
+      window.localStorage.removeItem('onboardingData');
+      window.localStorage.removeItem('onboardingUserId');
+      window.localStorage.removeItem('onboardingOrgId');
+      // signOut destruye la sesión y redirige al home, que ya renderiza limpio.
+      await signOut({ callbackUrl: '/' });
+    }
+  };
+
   const isStepUnlocked = (i: number) => i <= step || i <= maxStep;
 
   // ── YA REGISTRADO: sesión activa con onboarding completo ──────────────────
@@ -459,6 +508,44 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen bg-background text-foreground selection:bg-primary/25 font-sans relative overflow-hidden flex flex-col items-center justify-center px-4 pt-28 pb-20">
       <AuthNavbar />
+
+      {/* Modal de confirmación: descartar inscripción a medio terminar */}
+      {showCancelConfirm && (
+        <FocusTrap active onEscape={() => { if (!cancelling) setShowCancelConfirm(false); }}>
+          <div className="fixed inset-0 z-[60] flex items-center justify-center px-4 bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-md bg-surface border border-divider rounded-[2rem] shadow-2xl p-8 space-y-6">
+              <div className="w-14 h-14 bg-error-hl rounded-2xl flex items-center justify-center mx-auto">
+                <Trash2 className="w-7 h-7 text-error" />
+              </div>
+              <div className="text-center space-y-2">
+                <h2 className="text-xl font-black text-foreground">¿Descartar tu inscripción?</h2>
+                <p className="text-faint text-xs leading-relaxed">
+                  Esto eliminará la cuenta y los datos que ingresaste hasta ahora. Tu correo
+                  quedará libre para registrarte de nuevo. Esta acción no se puede deshacer.
+                </p>
+              </div>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={handleCancelRegistration}
+                  disabled={cancelling}
+                  className="w-full h-12 bg-error text-inverse rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  {cancelling ? <RefreshCcw className="w-5 h-5 animate-spin" /> : <><Trash2 className="w-4 h-4" /> Sí, descartar</>}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelConfirm(false)}
+                  disabled={cancelling}
+                  className="w-full h-12 bg-surface border border-divider rounded-2xl font-black text-xs uppercase tracking-widest text-muted hover:text-foreground hover:border-divider transition-all disabled:opacity-50 disabled:pointer-events-none"
+                >
+                  Volver al registro
+                </button>
+              </div>
+            </div>
+          </div>
+        </FocusTrap>
+      )}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-[-20%] right-[-10%] w-[60%] h-[60%] bg-surface-2 blur-[180px] rounded-full" />
         <div className="absolute bottom-[-20%] left-[-10%] w-[50%] h-[50%] bg-primary-hl blur-[180px] rounded-full" />
@@ -469,6 +556,19 @@ export default function RegisterPage() {
           <h1 className="text-5xl serif-font italic text-foreground mb-2 underline decoration-teal-500/30 underline-offset-8">DentFlowAI.</h1>
           <p className="text-faint text-sm tracking-widest uppercase font-black">Registro de Inscripción</p>
         </div>
+
+        {step < 10 && (
+          <div className="flex justify-center -mt-6 mb-10">
+            <button
+              type="button"
+              onClick={requestCancel}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-divider bg-surface text-xs font-bold uppercase tracking-wider text-muted hover:text-foreground hover:border-primary/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40"
+            >
+              <X className="w-4 h-4" />
+              Cancelar y volver al inicio
+            </button>
+          </div>
+        )}
 
         {step < 10 && !isAwaitingVerification && (
           <div className="flex justify-between items-center mb-12 px-2">
@@ -613,51 +713,35 @@ export default function RegisterPage() {
 
                 {/* Campos exclusivos DENTISTA */}
                 {role === 'dentista' && (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
-                          Especialidad <HelperTooltip text="Tu área principal de ejercicio." />
-                        </label>
-                        <select value={formData.specialty} onChange={e => updateField('specialty', e.target.value)} className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all">
-                          <option>Odontología General</option>
-                          <option>Rehabilitación Oral</option>
-                          <option>Implantología</option>
-                          <option>Ortodoncia</option>
-                          <option>Endodoncia</option>
-                          <option>Periodoncia</option>
-                          <option>Cirugía Maxilofacial</option>
-                          <option>Odontopediatría</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
-                          N° Registro <HelperTooltip text="Número de registro ante la Autoridad Sanitaria." />
-                        </label>
-                        <input
-                          required
-                          value={formData.registrationNumber}
-                          onChange={e => updateField('registrationNumber', e.target.value)}
-                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none transition-all placeholder:text-faint"
-                          placeholder="123456"
-                        />
-                      </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
+                        Especialidad <HelperTooltip text="Tu área principal de ejercicio." />
+                      </label>
+                      <select value={formData.specialty} onChange={e => updateField('specialty', e.target.value)} className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all">
+                        <option>Odontología General</option>
+                        <option>Rehabilitación Oral</option>
+                        <option>Implantología</option>
+                        <option>Ortodoncia</option>
+                        <option>Endodoncia</option>
+                        <option>Periodoncia</option>
+                        <option>Cirugía Maxilofacial</option>
+                        <option>Odontopediatría</option>
+                      </select>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
-                        País <HelperTooltip text="País donde ejerces tu profesión." />
+                        N° Registro <HelperTooltip text="Número de registro ante la Autoridad Sanitaria." />
                       </label>
-                      <select value={formData.country} onChange={e => updateField('country', e.target.value)} className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all">
-                        {countriesByContinent.map(g => (
-                          <optgroup key={g.continent} label={g.continent}>
-                            {g.countries.map(c => (
-                              <option key={c.code} value={c.code}>{c.name}</option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
+                      <input
+                        required
+                        value={formData.registrationNumber}
+                        onChange={e => updateField('registrationNumber', e.target.value)}
+                        className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none transition-all placeholder:text-faint"
+                        placeholder="123456"
+                      />
                     </div>
-                  </>
+                  </div>
                 )}
 
                 {/* Campos exclusivos TÉCNICO */}
@@ -677,6 +761,104 @@ export default function RegisterPage() {
                     />
                   </div>
                 )}
+
+                {/* Dirección — ambos roles */}
+                <div className="space-y-4 pt-2 border-t border-divider">
+                  <p className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 mt-2">Ubicación</p>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
+                      País <HelperTooltip text="País donde ejerces tu profesión." />
+                    </label>
+                    <select
+                      value={formData.country}
+                      onChange={e => { updateField('country', e.target.value); updateField('region', ''); updateField('comuna', ''); }}
+                      className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all"
+                    >
+                      {SUPPORTED_COUNTRIES.map(c => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Región</label>
+                      {REGIONS_BY_COUNTRY[formData.country] ? (
+                        <select
+                          value={formData.region}
+                          onChange={e => { updateField('region', e.target.value); updateField('comuna', ''); }}
+                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all"
+                        >
+                          <option value="">Selecciona región</option>
+                          {REGIONS_BY_COUNTRY[formData.country].map(r => (
+                            <option key={r.code} value={r.code}>{r.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={formData.region}
+                          onChange={e => updateField('region', e.target.value)}
+                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                          placeholder="Región / Estado / Provincia"
+                        />
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Comuna</label>
+                      {REGIONS_BY_COUNTRY[formData.country] && formData.region ? (
+                        <select
+                          value={formData.comuna}
+                          onChange={e => updateField('comuna', e.target.value)}
+                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all"
+                        >
+                          <option value="">Selecciona comuna</option>
+                          {(REGIONS_BY_COUNTRY[formData.country].find(r => r.code === formData.region)?.communes ?? []).map(c => (
+                            <option key={c.code} value={c.code}>{c.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={formData.comuna}
+                          onChange={e => updateField('comuna', e.target.value)}
+                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                          placeholder="Comuna / Ciudad"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Dirección</label>
+                    <input
+                      value={formData.address}
+                      onChange={e => updateField('address', e.target.value)}
+                      className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                      placeholder="Av. Providencia"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Número</label>
+                      <input
+                        value={formData.addressNumber}
+                        onChange={e => updateField('addressNumber', e.target.value)}
+                        className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                        placeholder="1234"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Oficina / Dpto.</label>
+                      <input
+                        value={formData.addressOffice}
+                        onChange={e => updateField('addressOffice', e.target.value)}
+                        className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                        placeholder="Opcional"
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setStep(1)} className="flex-1 h-16 bg-surface rounded-2xl font-bold uppercase tracking-wider text-faint border border-divider hover:text-muted transition-all">Atrás</button>

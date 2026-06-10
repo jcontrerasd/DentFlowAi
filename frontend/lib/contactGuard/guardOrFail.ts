@@ -1,6 +1,8 @@
 import { db } from '@/lib/db';
-import { contactGuardAudit } from '@/lib/db/schema';
+import { contactGuardAudit, clinicalCase, user } from '@/lib/db/schema';
+import { eq, inArray } from 'drizzle-orm';
 import { checkContactExposure, type GuardViolation } from './index';
+import { ALL_SUPPORTED_COUNTRY_CODES } from './phonePatterns';
 
 export const CONTACT_GUARD_BLOCK_MESSAGE =
   'Fauchard detectó un intento de comunicación indebido. El mensaje debe cambiar; de lo contrario no podrá ser enviado. Fauchard ha registrado este evento en su historial.';
@@ -40,6 +42,8 @@ const FIELD_LABELS: Record<string, string> = {
  */
 const RULE_LABELS: Record<string, string> = {
   email: 'una dirección de correo',
+  telefono: 'un número de teléfono',
+  // Claves legacy (filas de auditoría antiguas; detección de teléfono ahora es country-aware).
   telefono_cl_intl: 'un número de teléfono chileno',
   telefono_8plus_digitos: 'un número de teléfono (8+ dígitos)',
   url_http: 'un enlace web (http/https)',
@@ -109,6 +113,40 @@ export type GuardCallOptions = {
 };
 
 /**
+ * Resuelve los códigos de país de los involucrados en el caso (dentista + técnico
+ * asignado + actor) para la detección de teléfonos country-aware. Si ninguno tiene
+ * país declarado (campo `country` nulo), retorna todos los países soportados —
+ * decisión de producto: máxima protección anti-fuga cuando el país es desconocido.
+ */
+async function resolveInvolvedCountryCodes(
+  input: { caseId?: string | null; actorId: string },
+): Promise<string[]> {
+  const ids = new Set<string>([input.actorId]);
+  try {
+    if (input.caseId) {
+      const [c] = await db
+        .select({ doctorId: clinicalCase.doctorId, techId: clinicalCase.assignedTechnicianId })
+        .from(clinicalCase)
+        .where(eq(clinicalCase.id, input.caseId))
+        .limit(1);
+      if (c?.doctorId) ids.add(c.doctorId);
+      if (c?.techId) ids.add(c.techId);
+    }
+    const rows = await db
+      .select({ country: user.country })
+      .from(user)
+      .where(inArray(user.id, Array.from(ids)));
+    const codes = Array.from(
+      new Set(rows.map((r) => r.country).filter((c): c is string => !!c)),
+    );
+    return codes.length > 0 ? codes : ALL_SUPPORTED_COUNTRY_CODES;
+  } catch (e) {
+    console.error('[ContactGuard] Error resolviendo países involucrados:', e);
+    return ALL_SUPPORTED_COUNTRY_CODES;
+  }
+}
+
+/**
  * Valida 1..N campos de texto libre. Si alguno contiene contacto prohibido,
  * registra un evento en contact_guard_audit y devuelve { ok:false, error }.
  * Si pasan todos, devuelve { ok:true }.
@@ -118,11 +156,18 @@ export async function guardTextOrFail(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!opts.identity?.id) return { ok: true };
 
+  // Países de los involucrados, resueltos una sola vez por llamada (no por campo).
+  const countries = await resolveInvolvedCountryCodes({
+    caseId: opts.caseId,
+    actorId: opts.identity.id,
+  });
+
   for (const f of opts.fields) {
     if (!f.text || !f.text.trim()) continue;
     const result = await checkContactExposure(f.text, {
       field: f.field,
       allowCourierUrls: f.field === 'dispatchTracking',
+      countries,
     });
     if (result.ok) continue;
 

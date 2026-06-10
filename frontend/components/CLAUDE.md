@@ -3,10 +3,10 @@
 ## Subdirectorios
 - `cases/` — UnifiedCaseHub, CaseWorkflowStepper, CaseCreationWizard, KanbanBoard, ComparativeOffersPanel, AcceptedProposalSummary, CaseDetailManagementBar, OfferConditionsBlock, **RepublicarModal** + **PendingPoolBanner** + **CheckInDentistaModal** (v5.0, cola pendiente_pool / republicar; gated por el rollout de disponibilidad)
 - `cases/uch/` — Subcomponentes del UCH (ver sección UCH abajo)
-- `profile/` — SkillMatrixForm (matriz habilidades 0-7 por tipo de trabajo), AvailabilityToggle
+- `profile/` — SkillMatrixForm (matriz habilidades 0-7 por tipo de trabajo), AvailabilityToggle (disponibilidad en el perfil: **flag-aware** — con la UI v5.0 habilitada renderiza el `GlobalAvailabilitySwitch` v5.0 con estado en vivo, compartiendo fuente de verdad con el badge del header; con el flag off cae al toggle legacy sobre `user.is_available`)
 - `invitations/` — InvitationCard, QuoteFormDrawer
 - `admin/` — **Configurador Fauchard en 4 espacios** (nav pill en `TabClient`: Parámetros · Calendario · Categorías · Historial; ver [plan_configurador_fauchard.md](../../Doc%20Servicio%20Orquestado/plan_configurador_fauchard.md)). **Observabilidad** se movió a su propia ruta `/dashboard/admin/observability` (ítem del menú lateral admin que reemplaza a "Dashboard"). Solo **Parámetros** usa el borrador + laboratorio: **FauchardDraftContext** (`FauchardDraftProvider` + `useFauchardDraft` — single source of truth de los **params del modelo**; `EDITABLE_KEYS` excluye `business*`, liga y `nFloor`), **GlobalSaveBar** (barra sticky con diff + motivo + copy-on-write; bloquea si hay invariantes rotas), **FauchardLabPanel** (laboratorio read-only sticky: radar α + detalle + KPIs + alertas; distribución de técnicos reales vía `simulateFauchardAction` en un **expander** "Ver técnicos"), con los editores **FauchardWeightsPanel**, **FauchardFiltersPanel** y **PlazosYSancionesPanel** (gated) mutando el borrador (sin guardado propio). Espacios independientes con guardado autónomo (keys disjuntas, sin lost-update): **FauchardCalendarPanel** (horario/días + CRUD feriados), **LeagueConfigPanel** (solo keys `l*`, banner "Fase 2"). Otros: QuotationMetricsPanel, SimulatorPanel, TechnicianRankingTable, ImpersonationSelector, **ObservabilityPanel** (v5.0, dashboard de 13 métricas con Recharts; lazy-loaded vía `next/dynamic`; refresh manual; métricas 3/4/12 marcadas "no disponible" hasta Fase 6), **technicians/ResetNoResponseModal** (v5.0, perdón admin de no-respuestas con motivo obligatorio; cableado en `/dashboard/admin/users` para usuarios técnicos)
-- `availability/` (v5.0) — AvailabilityBadge (header), AvailabilityPanel (`/dashboard/profile/availability`), GlobalAvailabilitySwitch (orquesta toggle + diálogos in-flight), BulkRejectDialog, ReactivationModal, ResponseStatusStepper (3 nodos), ResponseHistoryView, **RolloutBanner** (Fase 7: aviso in-app dismissible con cookie `availability_banner_dismissed`, en `dashboard/layout` para técnicos). Gated por `AVAILABILITY_UI_TECNICO_ENABLED` (server-side vía `getMyAvailabilityStatusAction.enabled`)
+- `availability/` (v5.0) — AvailabilityBadge (header), AvailabilityPanel (`/dashboard/profile/availability`), GlobalAvailabilitySwitch (orquesta toggle + diálogos in-flight; al cambiar el nivel global espeja a `user.is_available` vía `updateAvailabilityLevelAction`), BulkRejectDialog, ReactivationModal, ResponseStatusStepper (3 nodos), ResponseHistoryView, **RolloutBanner** (Fase 7: aviso in-app dismissible con cookie `availability_banner_dismissed`, en `dashboard/layout` para técnicos). Gated por `AVAILABILITY_UI_TECNICO_ENABLED` (server-side vía `getMyAvailabilityStatusAction.enabled`)
 - `theme/` — ThemeProvider, ThemeContext, ThemeToggleButton (modo claro/oscuro/sistema; tokens en `app/theme.css`)
 - `ui/` — Primitivos: Button, Input, StatusBadge, FocusTrap
 - `DentalViewer3D.tsx` — Visor Three.js para STL (lazy-loaded)
@@ -74,8 +74,9 @@ Lógica interna:
 | `UchRejectInvitationDialog.tsx` | Rechazo individual de una invitación pending por el técnico (v5.0). Selector poblado de `invitation_rejection_reason`; "Otro" exige comentario. Lanzado desde `UchFauchardActionsPanel` solo si `getRejectionUiEnabledAction().enabled` (flag `REJECTION_INDIVIDUAL_ENABLED`, server-only surfaced al cliente). No cuenta como no-respuesta; dispara reemplazo si el modelo está on |
 | `UchDeliveryPanel.tsx` | Entrega de diseño/revisión (técnico) |
 | `UchDentistReviewPanel.tsx` | Revisión/aprobación del dentista |
-| `UchDealSummary.tsx` | Resumen del acuerdo aceptado |
+| `UchDealSummary.tsx` | Resumen del acuerdo aceptado (precio, desglose, plazo, entrega). La dirección de envío del dentista se muestra en el header de la ficha del caso (badge junto al ID), no aquí. |
 | `UchQuoteBreakdown.tsx` | Desglose diseño/fabricación en UI de cotización |
+| `UchRatingPanel.tsx` | Calificación anónima del dentista al laboratorio (`dimension: 'design' \| 'fabrication'`, escala `RatingScale`) vía `submitUserRatingAction`. Alimenta el componente Q del score Fauchard. Renderizado desde `UnifiedCaseHub` al cierre del caso |
 | `buildUchTimelineRows.ts` | Combina eventos y filas de acción ordenadas por timestamp |
 | `uchTimelineTypes.ts` | Tipos: `UchTimelineRow`, `UchCaseEventLite`, `UchActionRowId` |
 | `uchHubActionVisibility.ts` | Mostrar/ocultar acciones según estado del caso y rol |
@@ -91,3 +92,10 @@ Lógica interna:
 - Props: `initialCad`, `initialCam` (precargan toggles desde DB)
 - `onSaveSuccess` callback para avanzar paso en onboarding
 - Agrupa tipos de trabajo en `WORK_TYPE_GROUPS` definidos en el propio archivo
+
+## Dirección geográfica en registro y perfil (v5.7)
+- **`auth/register/page.tsx`** — Step 2 "Tu Perfil" incluye un bloque de dirección completo para ambos roles (dentista y técnico): selects en cascada País → Región → Comuna, más inputs de texto Calle, Número y Oficina.
+- **`dashboard/profile/page.tsx`** — mismo bloque editable para ambos roles.
+- Los selects de País se limitan a `SUPPORTED_COUNTRIES` (9 países); las opciones de Región y Comuna se filtran dinámicamente por `REGIONS_BY_COUNTRY[countryCode]`, ambos de `lib/constants/addressData.ts`.
+- Los valores se persisten vía `updateUserAction` (`actions/user.ts`) como códigos (`CL`, `CL-RM`, `CL-RM-SAN`) y texto libre para la calle.
+- El badge de dirección en la ficha del caso (`dashboard/cases/[id]`) resuelve los códigos a nombres legibles en el cliente.

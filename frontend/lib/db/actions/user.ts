@@ -1,9 +1,11 @@
 'use server';
 
 import * as bcrypt from "bcryptjs";
-import { db } from "@/lib/db";
-import { user, organization } from "@/lib/db/schema";
+import { auth } from "@/auth";
+import { db, infraPromise } from "@/lib/db";
+import { user, organization, file } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
+import GCPStorageService from "@/lib/services/gcp-storage";
 
 /**
  * Obtiene el perfil completo de un usuario, incluyendo su organización.
@@ -22,6 +24,12 @@ export async function getUserProfileDirect(userId: string) {
         phone: user.phone,
         specialty: user.specialty,
         registrationNumber: user.registrationNumber,
+        country: user.country,
+        region: user.region,
+        comuna: user.comuna,
+        address: user.address,
+        addressNumber: user.addressNumber,
+        addressOffice: user.addressOffice,
         experienceYears: user.experienceYears,
         subRoles: user.subRoles,
         isActive: user.isActive,
@@ -33,6 +41,8 @@ export async function getUserProfileDirect(userId: string) {
           name: organization.name,
           type: organization.type,
           rut: organization.rut,
+          giro: organization.giro,
+          legalAddress: organization.legalAddress,
           logoUrl: organization.logoUrl,
           technicalCapabilities: organization.technicalCapabilities,
         }
@@ -180,5 +190,87 @@ export async function getUsersByRoleAction(role: 'dentista' | 'tecnico') {
   } catch (error) {
     console.error("[getUsersByRoleAction] Error:", error);
     return [];
+  }
+}
+
+/**
+ * Auto-borrado de una inscripción a medio terminar (botón "Cancelar" del wizard).
+ * Cierra el ciclo de una cuenta creada por el auto-login del registro que el
+ * usuario decide descartar: borra el usuario (libera el email) y su organización
+ * temporal si queda huérfana.
+ *
+ * Seguridad:
+ * - Usa la sesión REAL (`auth()`), nunca `getServerIdentity()`, para que la
+ *   impersonación admin jamás pueda auto-borrar la cuenta simulada.
+ * - Solo procede sobre inscripciones incompletas y no-admin.
+ */
+export async function discardOnboardingAccountAction(): Promise<{ success: boolean; error?: string }> {
+  if (infraPromise) await infraPromise;
+
+  try {
+    const session = await auth();
+    const realUserId = (session?.user as any)?.id as string | undefined;
+
+    // Sin sesión (p. ej. paso 0, antes de crear la cuenta): nada que descartar.
+    if (!realUserId) return { success: true };
+
+    const [target] = await db
+      .select({
+        role: user.role,
+        onboardingStep: user.onboardingStep,
+        organizationId: user.organizationId,
+      })
+      .from(user)
+      .where(eq(user.id, realUserId))
+      .limit(1);
+
+    // El usuario ya no existe: nada que hacer.
+    if (!target) return { success: true };
+
+    // Guard: nunca descartar cuentas completas ni administradores.
+    if (target.role === 'admin' || (target.onboardingStep ?? 0) >= 100) {
+      return { success: false, error: 'Solo se puede descartar una inscripción incompleta.' };
+    }
+
+    // Purga best-effort de archivos GCS subidos por este usuario (avatar, etc.).
+    try {
+      const filesToPurge = await db
+        .select({ gcsPath: file.gcsPath })
+        .from(file)
+        .where(eq(file.uploaderId, realUserId));
+      const paths = filesToPurge.map(f => f.gcsPath).filter(Boolean) as string[];
+      if (paths.length > 0) {
+        await GCPStorageService.deleteFiles(paths);
+      }
+    } catch (gcsErr) {
+      console.error("[discardOnboardingAccountAction] GCS purge best-effort falló:", gcsErr);
+    }
+
+    const orgId = target.organizationId;
+
+    // Borrar el usuario (cascade limpia filas dependientes; libera el email).
+    await db.delete(user).where(eq(user.id, realUserId));
+
+    // Limpiar la organización temporal si queda sin usuarios (el cascade es
+    // org→user, no user→org, así que la org no se borra al borrar el usuario).
+    if (orgId) {
+      try {
+        const [{ count }] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(user)
+          .where(eq(user.organizationId, orgId));
+        if (count === 0) {
+          await db.delete(organization).where(eq(organization.id, orgId));
+        }
+      } catch (orgErr) {
+        // El objetivo crítico (usuario borrado, email liberado) ya se cumplió.
+        console.error("[discardOnboardingAccountAction] Limpieza de org huérfana falló:", orgErr);
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error("[discardOnboardingAccountAction] Error:", error);
+    return { success: false, error: (error as Error).message };
   }
 }

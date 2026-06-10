@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAUCHARD — El motor que ordena tu laboratorio · DentFlowAi</title>
+<link rel="icon" type="image/x-icon" href="../frontend/app/favicon.ico">
+<style>
+  :root{
+    --bg:#020617; --bg2:#0b1220; --panel:#0f172a; --panel2:#111c33;
+    --line:rgba(148,163,184,.18); --line2:rgba(148,163,184,.30);
+    --fg:#f8fafc; --muted:#94a3b8; --muted2:#cbd5e1;
+    --teal:#2dd4bf; --teal2:#14b8a6; --teal3:#0d9488; --tealsoft:rgba(45,212,191,.12);
+    --amber:#fbbf24;
+    --verde:#22c55e; --amarillo:#eab308; --naranja:#f97316; --rojo:#ef4444;
+    --rosa:#f472b6;
+    --serif:"Instrument Serif", Georgia, "Times New Roman", serif;
+    --sans:"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(13,148,136,.18), transparent 60%),
+      radial-gradient(1000px 500px at -10% 20%, rgba(45,212,191,.08), transparent 55%),
+      var(--bg);
+    color:var(--fg); font-family:var(--sans); line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{font-family:var(--serif); font-weight:400; letter-spacing:.2px; line-height:1.1}
+  a{color:var(--teal); text-decoration:none}
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:sticky; top:0; z-index:50; backdrop-filter:blur(12px);
+    background:rgba(2,6,23,.72); border-bottom:1px solid var(--line);
+  }
+  .nav-inner{max-width:1180px; margin:0 auto; padding:12px 22px; display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:.5px}
+  .brand .logo{width:30px;height:30px;border-radius:8px;object-fit:cover;display:block}
+  .brand small{font-family:var(--sans); color:var(--muted); font-weight:600; font-size:11px; letter-spacing:1.5px; text-transform:uppercase}
+  .nav-links{display:flex; gap:6px; flex-wrap:wrap; margin-left:auto}
+  .nav-links a{
+    color:var(--muted2); font-size:13px; font-weight:600; padding:7px 12px; border-radius:999px;
+    border:1px solid transparent; transition:all .15s;
+  }
+  .nav-links a:hover{color:var(--fg); background:var(--tealsoft); border-color:var(--line2)}
+
+  /* ---------- LAYOUT ---------- */
+  main{max-width:1180px; margin:0 auto; padding:0 22px}
+  section{padding:70px 0; border-bottom:1px solid var(--line)}
+  .eyebrow{display:inline-flex; align-items:center; gap:9px; font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--teal); margin-bottom:14px}
+  .eyebrow .chip{padding:3px 10px; border-radius:999px; background:var(--tealsoft); border:1px solid rgba(45,212,191,.3); font-weight:800; letter-spacing:1.5px}
+  h2.section-title{font-size:38px; margin:0 0 10px}
+  .lead{color:var(--muted2); font-size:17px; max-width:760px; margin:0 0 8px}
+  .source-note{font-size:12px; color:var(--muted); margin-top:10px; font-style:italic}
+
+  /* ---------- HERO ---------- */
+  .hero{padding:90px 0 60px; border-bottom:1px solid var(--line)}
+  .hero h1{font-size:64px; margin:0 0 18px; max-width:920px}
+  .hero h1 .hl{
+    background:linear-gradient(135deg,#2dd4bf,#0d9488); -webkit-background-clip:text; background-clip:text; color:transparent;
+    font-style:italic;
+  }
+  .hero p{font-size:20px; color:var(--muted2); max-width:720px}
+  .hero-badges{display:flex; gap:12px; flex-wrap:wrap; margin-top:30px}
+  .hero-badge{display:flex; align-items:center; gap:9px; padding:11px 16px; border-radius:12px; background:var(--panel); border:1px solid var(--line); font-size:14px; font-weight:600; color:var(--muted2)}
+  .hero-badge b{color:var(--fg)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 4px rgba(45,212,191,.15)}
+
+  /* ---------- GENERIC CARD ---------- */
+  .panel{background:linear-gradient(180deg,var(--panel),var(--bg2)); border:1px solid var(--line); border-radius:18px}
+  .grid{display:grid; gap:18px}
+  .legend{display:flex; gap:18px; flex-wrap:wrap; margin:22px 0 6px; font-size:13px; color:var(--muted2)}
+  .legend span{display:inline-flex; align-items:center; gap:8px}
+  .sw{width:14px;height:14px;border-radius:4px;display:inline-block;border:1px solid rgba(255,255,255,.15)}
+
+  /* ---------- MERMAID WRAP ---------- */
+  .diagram-wrap{padding:26px; overflow-x:auto}
+  .mermaid{font-family:var(--sans)!important}
+  /* Alto contraste de las etiquetas de las flechas del diagrama */
+  .mermaid .edgeLabel, .mermaid .edgeLabel p, .mermaid .edgeLabel span,
+  .mermaid .edgeLabel div, .mermaid span.edgeLabel{
+    color:#e2e8f0 !important; fill:#e2e8f0 !important;
+    background-color:#0b1220 !important; line-height:1.4;
+  }
+  .mermaid .edgeLabel rect, .mermaid .edgeLabel foreignObject{ opacity:1 !important }
+  .mermaid .edgeLabel .labelBkg{ background-color:#0b1220 !important; opacity:.92 !important }
+  .mermaid .edgePaths path, .mermaid .flowchart-link{ stroke:#7c8aa0 !important; stroke-width:1.4px !important }
+  .mermaid .marker, .mermaid marker path{ fill:#7c8aa0 !important; stroke:#7c8aa0 !important }
+  .mermaid .nodeLabel, .mermaid .nodeLabel p{ font-weight:600 }
+  .flow-note{display:flex; gap:14px; flex-wrap:wrap; margin-top:20px}
+  .flow-note .nb{flex:1; min-width:230px; background:var(--panel2); border:1px solid var(--line); border-left:3px solid var(--teal); border-radius:10px; padding:13px 15px; font-size:13px; color:var(--muted2)}
+  .flow-note .nb b{color:var(--fg)}
+
+  /* ---------- COMPLEXITY TABLE ---------- */
+  table.cx{width:100%; border-collapse:separate; border-spacing:0; border-radius:16px; overflow:hidden; border:1px solid var(--line); font-size:14px}
+  table.cx th{background:var(--panel2); text-align:left; padding:15px 16px; font-family:var(--sans); font-weight:700; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--muted2); border-bottom:1px solid var(--line)}
+  table.cx td{padding:16px; vertical-align:top; border-bottom:1px solid var(--line); color:var(--muted2)}
+  table.cx tr:last-child td{border-bottom:none}
+  .lvl{display:inline-flex; align-items:center; gap:9px; font-weight:800; font-size:15px; color:var(--fg)}
+  .lvl .bar{width:5px; height:30px; border-radius:3px}
+  .lvl small{display:block; font-weight:600; font-size:11px; letter-spacing:1px; text-transform:uppercase; margin-top:3px}
+  .row-verde   td:first-child{box-shadow:inset 4px 0 0 var(--verde)}
+  .row-amarillo td:first-child{box-shadow:inset 4px 0 0 var(--amarillo)}
+  .row-naranja td:first-child{box-shadow:inset 4px 0 0 var(--naranja)}
+  .row-rojo    td:first-child{box-shadow:inset 4px 0 0 var(--rojo)}
+  .tag{display:inline-block; padding:3px 9px; border-radius:7px; font-size:12px; font-weight:700; margin:2px 4px 2px 0}
+  .tag-explicit{background:rgba(45,212,191,.12); color:var(--teal); border:1px solid rgba(45,212,191,.3)}
+  .tag-infer{background:rgba(251,191,36,.1); color:var(--amber); border:1px solid rgba(251,191,36,.3)}
+  .ej{display:block; margin-top:10px; padding:9px 11px; border-radius:9px; background:rgba(2,6,23,.45); border:1px solid var(--line); font-size:13px; color:var(--muted2)}
+  .ej b{color:var(--fg)}
+  .ej .ej-h{display:inline-block; font-size:10px; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:var(--teal); margin-right:7px}
+  .league-pill{display:inline-block; padding:4px 11px; border-radius:999px; font-weight:800; font-size:12px}
+  .lg-bronce{background:rgba(180,120,70,.18); color:#d8a06a; border:1px solid rgba(180,120,70,.4)}
+  .lg-plata{background:rgba(180,190,205,.15); color:#cbd5e1; border:1px solid rgba(180,190,205,.35)}
+  .lg-oro{background:rgba(234,179,8,.15); color:#fcd34d; border:1px solid rgba(234,179,8,.4)}
+  .lg-elite{background:rgba(167,139,250,.15); color:#c4b5fd; border:1px solid rgba(167,139,250,.4)}
+
+  .validate{margin-top:22px; background:rgba(251,191,36,.06); border:1px solid rgba(251,191,36,.28); border-radius:14px; padding:18px 20px}
+  .validate h4{margin:0 0 8px; font-family:var(--sans); font-size:13px; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:var(--amber); display:flex; gap:9px; align-items:center}
+  .validate ul{margin:0; padding-left:20px; color:var(--muted2); font-size:13.5px}
+  .validate li{margin:6px 0}
+
+  /* ---------- BLACK BOX ---------- */
+  .bb{display:grid; grid-template-columns:1fr 1.25fr 1fr; gap:0; align-items:stretch; margin-top:10px}
+  .bb-col{padding:24px}
+  .bb-in{border-right:1px dashed var(--line2)}
+  .bb-out{border-left:1px dashed var(--line2)}
+  .bb-h{font-size:12px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:16px; text-align:center}
+  .io{background:var(--panel2); border:1px solid var(--line); border-radius:11px; padding:12px 14px; margin-bottom:11px; font-size:13.5px}
+  .io b{color:var(--fg); display:block; font-size:13.5px; margin-bottom:2px}
+  .io span{color:var(--muted)}
+  .core{background:linear-gradient(160deg,rgba(13,148,136,.22),rgba(15,23,42,.5)); border:1px solid rgba(45,212,191,.35); border-radius:16px; padding:22px; box-shadow:0 0 60px rgba(13,148,136,.15) inset}
+  .core-title{text-align:center; margin-bottom:18px}
+  .core-title .name{font-family:var(--serif); font-size:30px; color:var(--fg)}
+  .core-title small{display:block; color:var(--teal); font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-top:2px}
+  .decision{display:flex; gap:11px; align-items:flex-start; background:rgba(2,6,23,.4); border:1px solid var(--line); border-radius:10px; padding:11px 13px; margin-bottom:9px}
+  .decision .n{flex:none; width:23px;height:23px;border-radius:7px; background:linear-gradient(135deg,#0d9488,#2dd4bf); color:#042f2e; font-weight:800; font-size:12px; display:flex; align-items:center; justify-content:center}
+  .decision p{margin:0; font-size:13px; color:var(--muted2)}
+  .decision p b{color:var(--fg)}
+  .bb-arrow{position:relative}
+  .bb-impact{margin-top:0; background:var(--panel2); border:1px solid var(--line); border-top:none; border-radius:0 0 18px 18px; padding:22px 24px}
+  .bb-impact h4{margin:0 0 14px; font-family:var(--sans); font-size:12px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:var(--teal); text-align:center}
+  .impact-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:13px}
+  .impact-grid .ic{background:rgba(2,6,23,.4); border:1px solid var(--line); border-radius:11px; padding:13px; text-align:center; font-size:13px; color:var(--muted2)}
+  .impact-grid .ic b{display:block; color:var(--fg); margin-bottom:3px; font-size:13.5px}
+
+  /* ---------- MOCKUP ---------- */
+  .mock{background:#0a1322; border:1px solid var(--line2); border-radius:20px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.45)}
+  .mock-top{display:flex; align-items:center; gap:8px; padding:13px 18px; background:#0d1626; border-bottom:1px solid var(--line)}
+  .mock-top .tdot{width:11px;height:11px;border-radius:50%}
+  .mock-url{margin-left:14px; font-size:12px; color:var(--muted); background:rgba(2,6,23,.6); padding:5px 14px; border-radius:8px; border:1px solid var(--line)}
+  .mock-body{padding:26px}
+  .case-head{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:24px}
+  .case-id{font-family:var(--serif); font-size:30px; color:var(--fg)}
+  .case-id small{display:block; font-family:var(--sans); font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.5px; margin-top:2px}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  .pill{display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:999px; font-size:13px; font-weight:700}
+  .pill-cx{background:rgba(249,115,22,.15); color:#fdba74; border:1px solid rgba(249,115,22,.4)}
+  .pill-state{background:rgba(45,212,191,.13); color:var(--teal); border:1px solid rgba(45,212,191,.35)}
+  .pill-loc{background:rgba(148,163,184,.12); color:var(--muted2); border:1px solid var(--line2)}
+  .stepper{display:flex; align-items:center; gap:0; margin:8px 0 26px; flex-wrap:wrap}
+  .step{display:flex; align-items:center; gap:9px}
+  .step .sc{width:26px;height:26px;border-radius:50%; display:flex;align-items:center;justify-content:center; font-size:12px; font-weight:800; border:2px solid var(--line2); color:var(--muted)}
+  .step .sl{font-size:12px; color:var(--muted); font-weight:600; white-space:nowrap}
+  .step.done .sc{background:var(--teal3); border-color:var(--teal3); color:#042f2e}
+  .step.done .sl{color:var(--muted2)}
+  .step.now .sc{background:linear-gradient(135deg,#0d9488,#2dd4bf); border-color:var(--teal); color:#042f2e; box-shadow:0 0 0 4px rgba(45,212,191,.18)}
+  .step.now .sl{color:var(--fg); font-weight:800}
+  .step .conn{width:34px; height:2px; background:var(--line2); margin:0 6px}
+  .step.done .conn{background:var(--teal3)}
+  .mock-grid{display:grid; grid-template-columns:1.4fr 1fr; gap:18px}
+  .mcard{background:#0d1626; border:1px solid var(--line); border-radius:14px; padding:18px}
+  .mcard h5{margin:0 0 14px; font-family:var(--sans); font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .kv{display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--line); font-size:14px}
+  .kv:last-child{border-bottom:none}
+  .kv .k{color:var(--muted)}
+  .kv .v{color:var(--fg); font-weight:600; text-align:right}
+  .assigned{display:flex; align-items:center; gap:13px; padding:14px; background:rgba(45,212,191,.06); border:1px solid rgba(45,212,191,.25); border-radius:12px; margin-bottom:14px}
+  .assigned .av{width:42px;height:42px;border-radius:50%; background:linear-gradient(135deg,#0d9488,#2dd4bf); display:flex;align-items:center;justify-content:center; font-weight:800; color:#042f2e}
+  .assigned .meta b{display:block; color:var(--fg); font-size:14px}
+  .assigned .meta span{color:var(--muted); font-size:12.5px}
+  .timer{text-align:center; padding:16px; background:rgba(2,6,23,.5); border:1px solid var(--line); border-radius:12px}
+  .timer .t{font-family:var(--serif); font-size:34px; color:var(--teal); letter-spacing:2px}
+  .timer small{display:block; color:var(--muted); font-size:11.5px; letter-spacing:1px; text-transform:uppercase; margin-top:4px}
+  .ann{position:relative; margin-top:18px; background:rgba(45,212,191,.05); border:1px dashed rgba(45,212,191,.4); border-radius:12px; padding:15px 17px}
+  .ann b{color:var(--teal)}
+  .ann-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px}
+  .ann-grid .a{display:flex; gap:11px; font-size:13px; color:var(--muted2)}
+  .ann-grid .a .ai{flex:none; width:26px;height:26px;border-radius:8px; background:var(--tealsoft); border:1px solid rgba(45,212,191,.3); color:var(--teal); display:flex;align-items:center;justify-content:center; font-weight:800; font-size:13px}
+  .ann-grid .a b{color:var(--fg)}
+
+  /* ---------- SALES ---------- */
+  .sales-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:14px}
+  .scard{background:linear-gradient(180deg,var(--panel),var(--bg2)); border:1px solid var(--line); border-radius:16px; padding:24px; transition:all .18s; position:relative; overflow:hidden}
+  .scard:hover{border-color:rgba(45,212,191,.4); transform:translateY(-3px)}
+  .scard .ico{width:46px;height:46px;border-radius:12px; background:var(--tealsoft); border:1px solid rgba(45,212,191,.3); display:flex;align-items:center;justify-content:center; margin-bottom:16px}
+  .scard h3{font-family:var(--sans); font-weight:800; font-size:17px; margin:0 0 9px; color:var(--fg)}
+  .scard p{margin:0 0 12px; font-size:14px; color:var(--muted2)}
+  .scard .mech{font-size:12px; color:var(--muted); border-top:1px solid var(--line); padding-top:11px}
+  .scard .mech b{color:var(--teal)}
+  svg.ic{width:24px;height:24px;stroke:var(--teal);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+  /* ---------- PARÁMETROS ---------- */
+  .param-path{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12.5px; color:var(--muted); margin:30px 0 14px; padding:10px 14px; background:var(--panel2); border:1px solid var(--line); border-radius:10px}
+  .param-path .crumb{color:var(--muted2); font-weight:600}
+  .param-path .here{color:var(--teal); font-weight:800; background:var(--tealsoft); padding:2px 9px; border-radius:999px; border:1px solid rgba(45,212,191,.3)}
+  .param-path .sep{color:var(--line2)}
+  .param-path .tabchip{margin-left:auto; font-size:11px; letter-spacing:.5px; color:var(--muted)}
+  table.params{width:100%; border-collapse:separate; border-spacing:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; font-size:13.5px}
+  table.params th{background:var(--panel2); text-align:left; padding:12px 14px; font-family:var(--sans); font-weight:700; font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--line)}
+  table.params td{padding:13px 14px; vertical-align:top; border-bottom:1px solid var(--line); color:var(--muted2)}
+  table.params tr:last-child td{border-bottom:none}
+  table.params tr:hover td{background:rgba(45,212,191,.03)}
+  .pn{display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:24px; padding:0 7px; border-radius:7px; background:linear-gradient(135deg,#0d9488,#2dd4bf); color:#042f2e; font-weight:800; font-size:12.5px}
+  .pname{color:var(--fg); font-weight:700}
+  .pdef{display:inline-block; padding:3px 10px; border-radius:7px; background:rgba(2,6,23,.5); border:1px solid var(--line2); color:#7dd3c8; font-weight:700; font-family:var(--serif); font-size:14px; white-space:nowrap}
+  .group-h{display:flex; align-items:center; gap:12px; margin:38px 0 4px}
+  .group-h .gn{width:34px;height:34px;border-radius:10px; background:var(--tealsoft); border:1px solid rgba(45,212,191,.3); color:var(--teal); display:flex;align-items:center;justify-content:center; font-weight:800; font-size:15px}
+  .group-h h3{font-family:var(--sans); font-weight:800; font-size:18px; margin:0; color:var(--fg)}
+  .group-h span{font-size:12.5px; color:var(--muted)}
+  .pstack{display:grid; gap:12px; margin-top:8px}
+  .pcard{background:var(--panel2); border:1px solid var(--line); border-radius:13px; overflow:hidden}
+  .pcard-head{display:flex; align-items:center; gap:12px; padding:12px 16px; background:rgba(2,6,23,.35); border-bottom:1px solid var(--line)}
+  .pcard-head .pname{font-size:14.5px}
+  .pcard-head .pdef{margin-left:auto}
+  .pdesc{margin:0; padding:12px 16px 0; font-size:13px; color:var(--muted2); line-height:1.5}
+  .pf-grid{display:grid; grid-template-columns:1.25fr 1fr 1.25fr 1fr}
+  .pf{padding:12px 16px; border-right:1px solid var(--line)}
+  .pf:last-child{border-right:none}
+  .pf-l{display:block; font-size:10px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:var(--teal); margin-bottom:5px}
+  .pf-v{font-size:12.5px; color:var(--muted2); line-height:1.45}
+  .pf-v b{color:var(--fg)}
+  @media(max-width:880px){ .pf-grid{grid-template-columns:1fr 1fr} .pf{border-right:none; border-bottom:1px solid var(--line)} .pf:nth-child(odd){border-right:1px solid var(--line)} .pf:nth-last-child(-n+1){border-bottom:none} }
+  .pcard-ej{border-top:1px solid var(--line); padding:12px 16px; background:rgba(2,6,23,.30)}
+  .pcard-ej > .pf-l{display:block; margin-bottom:6px}
+  .pcard-ej p{margin:0; font-size:12.5px; color:var(--muted2); line-height:1.5}
+  .pcard-rel{margin-top:11px; display:flex; flex-wrap:wrap; align-items:center; gap:7px}
+  .pcard-rel .pf-l{margin:0}
+  .relchip{display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:999px; background:var(--tealsoft); border:1px solid rgba(45,212,191,.3); color:var(--teal); font-size:11px; font-weight:700; white-space:nowrap}
+  .closing{text-align:center; padding:60px 0 20px}
+  .closing h2{font-size:40px; margin:0 0 14px}
+  .closing p{color:var(--muted2); font-size:18px; max-width:640px; margin:0 auto}
+  footer{padding:36px 0; text-align:center; color:var(--muted); font-size:12.5px}
+  footer b{color:var(--muted2)}
+
+  @media (max-width:880px){
+    .bb{grid-template-columns:1fr} .bb-in{border-right:none;border-bottom:1px dashed var(--line2)} .bb-out{border-left:none;border-top:1px dashed var(--line2)}
+    .impact-grid{grid-template-columns:1fr 1fr}
+    .mock-grid{grid-template-columns:1fr} .ann-grid{grid-template-columns:1fr}
+    .sales-grid{grid-template-columns:1fr} .hero h1{font-size:44px}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="brand"><img class="logo" src="../frontend/public/dentflowai.jpg" alt="DentFlowAi"> <span>DentFlow<span style="color:var(--teal)">Ai</span></span> <small>· Motor FAUCHARD</small></div>
+    <div class="nav-links">
+      <a href="#flujo">Recorrido del caso</a>
+      <a href="#complejidad">Niveles</a>
+      <a href="#motor">El motor</a>
+      <a href="#pantalla">En pantalla</a>
+      <a href="#valor">Por qué importa</a>
+      <a href="#parametros">Parámetros</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> El cerebro que asigna tus casos</div>
+    <h1>Cada caso que entra, <span class="hl">clasificado y asignado solo</span> — sin que nadie tenga que decidirlo a mano.</h1>
+    <p><b style="color:var(--fg)">FAUCHARD</b> es el motor que vive dentro de DentFlowAi. Recibe el caso del dentista, lo lee, decide su nivel de complejidad y elige a los laboratorios o técnicos indicados para cotizarlo. Todo de forma automática, ordenada y trazable.</p>
+    <div class="hero-badges">
+      <div class="hero-badge"><span class="dot"></span> Clasifica en <b>4 niveles</b> de complejidad</div>
+      <div class="hero-badge"><span class="dot"></span> Invita <b>~5 técnicos</b> por caso</div>
+      <div class="hero-badge"><span class="dot"></span> <b>3 relojes</b> que cuidan los plazos</div>
+      <div class="hero-badge"><span class="dot"></span> Nunca deja un caso <b>sin gestionar</b></div>
+    </div>
+    <p class="source-note">Todo el contenido de esta presentación está construido a partir del comportamiento real del sistema. Donde una regla se deduce de la lógica (y no está escrita de forma literal) se marca como “requiere validación”.</p>
+  </header>
+
+  <!-- 1. FLUJO -->
+  <section id="flujo">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 1 · Recorrido completo</div>
+    <h2 class="section-title">El viaje de un caso, de principio a fin</h2>
+    <p class="lead">Desde que el dentista publica un caso hasta que se cierra, se completa o se descarta. Cada flecha indica <b>qué hace que el caso avance</b>. Léelo de arriba hacia abajo.</p>
+
+    <div class="legend">
+      <span><i class="sw" style="background:#334155"></i> Inicio / borrador</span>
+      <span><i class="sw" style="background:#0d9488"></i> En gestión activa</span>
+      <span><i class="sw" style="background:#b45309"></i> En espera</span>
+      <span><i class="sw" style="background:#15803d"></i> Cierre con éxito</span>
+      <span><i class="sw" style="background:#be123c"></i> Cierre sin trabajo</span>
+    </div>
+
+    <div class="panel diagram-wrap" style="margin-top:8px">
+      <pre class="mermaid">
+flowchart TD
+    A([Borrador del caso]):::start
+    B[En evaluación<br/>Técnicos cotizando]:::active
+    POOL[En espera<br/>Buscando técnicos disponibles]:::wait
+    FAIL([Sin técnicos disponibles]):::bad
+    P[Propuesta lista<br/>Dentista compara ofertas]:::active
+    ACC[Aceptada<br/>Esperando inicio del técnico]:::active
+    EJE[En ejecución<br/>Técnico diseñando]:::active
+    REV[En revisión<br/>Dentista revisa la entrega]:::active
+    FAB[En fabricación]:::active
+    ENV[Enviado<br/>Despachado al dentista]:::active
+    OK([Completado]):::good
+    CLOSE([Cerrado]):::bad
+
+    A -->|"Dentista publica · FAUCHARD clasifica el nivel<br/>e invita a ~5 técnicos"| B
+
+    B -->|"No hay técnicos disponibles ahora"| POOL
+    POOL -->|"Un técnico activa su disponibilidad<br/>(reintento automático)"| B
+    POOL -->|"Vence la espera y aún quedan ciclos<br/>(reintenta · máx. 2)"| POOL
+    POOL -->|"Se agotan los ciclos de espera"| FAIL
+    POOL -->|"El dentista cancela la búsqueda"| CLOSE
+
+    B -->|"Un técnico rechaza la invitación →<br/>FAUCHARD invita un reemplazo automático"| B
+    B -->|"Reloj de 30 min: llegan cotizaciones o vence el plazo<br/>→ se arma el comparativo"| P
+    B -->|"Nadie cotiza y no hay reemplazos"| FAIL
+
+    P -->|"Dentista descarta una oferta<br/>(quedan otras)"| P
+    P -->|"Dentista elige una oferta"| ACC
+    P -->|"Dentista descarta todas las ofertas"| CLOSE
+    P -->|"Reloj de 2 h: vence sin que el dentista elija"| CLOSE
+
+    ACC -->|"Técnico inicia · Solo diseño / Integral"| EJE
+    ACC -->|"Técnico inicia · Solo fabricación<br/>(salta la etapa de diseño)"| FAB
+
+    EJE -->|"Técnico entrega el diseño"| REV
+    REV -->|"Reloj de 48 h · Dentista pide cambios<br/>(vuelve a diseño)"| EJE
+    REV -->|"Dentista aprueba · Solo diseño"| OK
+    REV -->|"Dentista aprueba · Integral<br/>(pasa a fabricar)"| FAB
+
+    FAB -->|"Técnico despacha (courier + seguimiento)"| ENV
+    ENV -->|"Dentista confirma recepción"| OK
+
+    classDef start fill:#1e293b,stroke:#475569,color:#e2e8f0,stroke-width:1px;
+    classDef active fill:#0c3b38,stroke:#2dd4bf,color:#d1fae5,stroke-width:1.3px;
+    classDef wait fill:#3a2606,stroke:#f59e0b,color:#fde68a,stroke-width:1.3px;
+    classDef good fill:#0f3d22,stroke:#22c55e,color:#bbf7d0,stroke-width:1.5px;
+    classDef bad fill:#3f1020,stroke:#f43f5e,color:#fecdd3,stroke-width:1.5px;
+      </pre>
+    </div>
+
+    <div class="flow-note">
+      <div class="nb"><b>Tres relojes independientes.</b> 30 minutos para que los técnicos coticen · 2 horas para que el dentista elija · 48 horas para que el dentista revise cada entrega. Cada entrega del técnico reinicia el reloj de revisión.</div>
+      <div class="nb"><b>Nunca se atasca.</b> Si no hay técnicos disponibles, el caso entra en <b>espera</b> y FAUCHARD lo reactiva solo cuando un técnico vuelve a estar disponible — en vez de fallar de inmediato.</div>
+      <div class="nb"><b>Reemplazo sin intervención.</b> Si un técnico rechaza la invitación, FAUCHARD invita automáticamente al siguiente mejor candidato. El dentista ni se entera del cambio.</div>
+    </div>
+    <p class="source-note">Estados y transiciones tomados de la máquina de estados del caso y de las acciones de servidor (publicar, clasificar, cotizar, comparar, iniciar, entregar, revisar, fabricar, despachar, recepcionar, y los caminos de espera/rechazo/expiración).</p>
+  </section>
+
+  <!-- 2. COMPLEJIDAD -->
+  <section id="complejidad">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 2 · Clasificación</div>
+    <h2 class="section-title">Los 4 niveles de complejidad</h2>
+    <p class="lead">Antes de invitar a nadie, FAUCHARD lee el caso y le pone un nivel. Ese nivel define a qué <b>categoría de técnicos</b> se le ofrece. Estos son los criterios reales.</p>
+
+    <div class="legend">
+      <span><span class="tag tag-explicit">criterio explícito</span> está escrito tal cual en el sistema</span>
+      <span><span class="tag tag-infer">comportamiento inferido</span> se deduce de cómo opera la lógica</span>
+    </div>
+
+    <table class="cx">
+      <thead>
+        <tr>
+          <th style="width:15%">Nivel</th>
+          <th style="width:30%">Criterio que lo activa</th>
+          <th style="width:25%">Lectura operativa</th>
+          <th style="width:13%">Liga asignada</th>
+          <th style="width:17%">Perfil de técnico / laboratorio</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-verde">
+          <td><span class="lvl"><span class="bar" style="background:var(--verde)"></span><span>Básico<small style="color:var(--verde)">Verde</small></span></span></td>
+          <td>
+            <span class="tag tag-explicit">explícito</span> Ningún criterio superior se cumple. Trabajos unitarios: <b>corona unitaria, inlay, onlay, carilla simple</b> (1 a 3 piezas).
+            <span class="ej"><span class="ej-h">Ejemplo</span> Una <b>corona de zirconio en un molar</b> (1 pieza). El caso más común del día a día.</span>
+          </td>
+          <td><span class="tag tag-infer">inferido</span> Casos de rutina, alto volumen, riesgo clínico bajo.</td>
+          <td><span class="league-pill lg-bronce">Bronce</span></td>
+          <td>Habilidad mínima <b>nivel 1</b> en la categoría del caso.</td>
+        </tr>
+        <tr class="row-amarillo">
+          <td><span class="lvl"><span class="bar" style="background:var(--amarillo)"></span><span>Intermedio<small style="color:var(--amarillo)">Amarillo</small></span></span></td>
+          <td>
+            <span class="tag tag-explicit">explícito</span> <b>4 o más piezas</b>, o trabajos de <b>puente de 4+ unidades</b> o <b>carillas múltiples</b>.
+            <span class="ej"><span class="ej-h">Ejemplo</span> Un <b>puente de 4 unidades</b>, o <b>carillas en los 4 incisivos superiores</b>.</span>
+          </td>
+          <td><span class="tag tag-infer">inferido</span> Mayor coordinación y planificación; exige experiencia comprobada.</td>
+          <td><span class="league-pill lg-plata">Plata</span></td>
+          <td>Habilidad mínima <b>nivel 3</b> en la categoría del caso.</td>
+        </tr>
+        <tr class="row-naranja">
+          <td><span class="lvl"><span class="bar" style="background:var(--naranja)"></span><span>Avanzado<small style="color:var(--naranja)">Naranja</small></span></span></td>
+          <td>
+            <span class="tag tag-explicit">explícito</span> <b>10 o más piezas</b>, o trabajos de <b>arco completo, prótesis parcial removible, prótesis total, sobredentadura o barra sobre implantes</b>.
+            <span class="ej"><span class="ej-h">Ejemplo</span> Una <b>rehabilitación de arco completo (12 piezas)</b>, o una <b>prótesis total</b>.</span>
+          </td>
+          <td><span class="tag tag-infer">inferido</span> Rehabilitaciones extensas; pocos laboratorios calificados.</td>
+          <td><span class="league-pill lg-oro">Oro</span></td>
+          <td>Habilidad mínima <b>nivel 5</b> en la categoría del caso.</td>
+        </tr>
+        <tr class="row-rojo">
+          <td><span class="lvl"><span class="bar" style="background:var(--rojo)"></span><span>Crítico<small style="color:var(--rojo)">Rojo</small></span></span></td>
+          <td>
+            <span class="tag tag-explicit">explícito</span> <b>Guía quirúrgica</b>, o <b>indicaciones estéticas extensas</b> (nota del dentista de más de 100 caracteres).
+            <span class="ej"><span class="ej-h">Ejemplo</span> Una <b>guía quirúrgica para implantes</b>, o un caso estético donde el dentista escribe una indicación larga y detallada del resultado que espera.</span>
+          </td>
+          <td><span class="tag tag-infer">inferido</span> Máxima exigencia técnica y estética; reservado a los mejores.</td>
+          <td><span class="league-pill lg-elite">Élite</span></td>
+          <td>Habilidad mínima <b>nivel 7</b> (máximo) en la categoría del caso.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="validate">
+      <h4>⚠ Requiere validación</h4>
+      <ul>
+        <li><b>Orden de lectura del nivel.</b> El sistema revisa primero “Avanzado”, luego “Intermedio” y al final “Crítico”. Por eso, un caso de muchas piezas <i>con</i> nota estética extensa se clasificará como <b>Avanzado</b>, no como Crítico. La guía quirúrgica sí cae en Crítico (es de pocas piezas y no califica antes). Conviene confirmar si este orden es el deseado.</li>
+        <li><b>Depende de los nombres del catálogo.</b> La clasificación usa el nombre del tipo de restauración (editable por el administrador). Si se renombra una opción y deja de coincidir con la lista interna, el caso se trata por defecto como “corona” — lo que puede cambiar su nivel.</li>
+        <li><b>La urgencia no cambia el nivel.</b> El nivel de complejidad <i>no</i> considera la urgencia del caso (sí se usa en otras partes del sistema).</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3. CAJA NEGRA -->
+  <section id="motor">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 3 · El motor por dentro</div>
+    <h2 class="section-title">Qué entra, qué decide, qué entrega</h2>
+    <p class="lead">FAUCHARD funciona como un motor autogestionado: recibe la información del caso, la procesa con reglas fijas y resuelve solo la clasificación y la asignación. Nadie tiene que “entenderlo” para que funcione.</p>
+
+    <div class="panel" style="margin-top:8px; border-radius:18px 18px 0 0; border-bottom:none">
+      <div class="bb">
+        <!-- ENTRADAS -->
+        <div class="bb-col bb-in">
+          <div class="bb-h">→ Entra del caso</div>
+          <div class="io"><b>Tipo de servicio</b><span>Solo diseño · Solo fabricación · Diseño + fabricación</span></div>
+          <div class="io"><b>Tipo de restauración</b><span>Corona, puente, carilla, prótesis, guía quirúrgica…</span></div>
+          <div class="io"><b>Número de piezas</b><span>Cuántos dientes involucra el trabajo</span></div>
+          <div class="io"><b>Indicaciones estéticas</b><span>Las notas del dentista sobre el caso</span></div>
+        </div>
+
+        <!-- CORE -->
+        <div class="bb-col">
+          <div class="core">
+            <div class="core-title">
+              <span class="name">FAUCHARD</span>
+              <small>Motor de clasificación y asignación</small>
+            </div>
+            <div class="decision"><span class="n">1</span><p><b>Clasifica el nivel</b> de complejidad y lo traduce a una liga objetivo (Bronce → Élite).</p></div>
+            <div class="decision"><span class="n">2</span><p><b>Filtra a los técnicos:</b> disponibilidad declarada, habilidad mínima para la categoría, y descansos entre invitaciones.</p></div>
+            <div class="decision"><span class="n">3</span><p><b>Puntúa y sortea:</b> calidad, puntualidad, experiencia, carga de trabajo y respuesta reciente deciden quién entra — con ventaja para los mejores, pero sin excluir al resto.</p></div>
+            <div class="decision"><span class="n">4</span><p><b>Invita y arranca los relojes</b> de cotización y de plazos del caso.</p></div>
+          </div>
+        </div>
+
+        <!-- SALIDAS -->
+        <div class="bb-col bb-out">
+          <div class="bb-h">Entrega →</div>
+          <div class="io"><b>Caso clasificado</b><span>Con su nivel y su liga ya asignados</span></div>
+          <div class="io"><b>~5 técnicos invitados</b><span>Los más adecuados, de forma anónima</span></div>
+          <div class="io"><b>Relojes en marcha</b><span>Plazos claros para cotizar y responder</span></div>
+          <div class="io"><b>Reemplazo automático</b><span>Si alguien rechaza, entra el siguiente</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bb-impact">
+      <h4>Impacto en la operación del laboratorio</h4>
+      <div class="impact-grid">
+        <div class="ic"><b>Entrada ordenada</b>Cada caso llega ya clasificado</div>
+        <div class="ic"><b>Sin criterio manual</b>Nadie decide “a ojo” quién lo hace</div>
+        <div class="ic"><b>Asignación pareja</b>Misma regla para todos los casos</div>
+        <div class="ic"><b>Cero casos perdidos</b>Si no hay quién, espera y reintenta</div>
+      </div>
+    </div>
+    <p class="source-note">El detalle de la fórmula de puntuación (calidad, puntualidad, experiencia, carga, bonificación y respuesta reciente) y de los filtros de disponibilidad está implementado en el motor de selección. Aquí se presenta en lenguaje operativo.</p>
+  </section>
+
+  <!-- 4. PANTALLA -->
+  <section id="pantalla">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 4 · En pantalla</div>
+    <h2 class="section-title">Un caso real, ya procesado por FAUCHARD</h2>
+    <p class="lead">Así se ve un caso después de que el motor hizo su trabajo: nivel detectado, estado actual, laboratorio asignado y plazos a la vista.</p>
+
+    <div class="mock" style="margin-top:8px">
+      <div class="mock-top">
+        <span class="tdot" style="background:#f87171"></span><span class="tdot" style="background:#fbbf24"></span><span class="tdot" style="background:#34d399"></span>
+        <span class="mock-url">dentflowai.app › casos › DF-2048</span>
+      </div>
+      <div class="mock-body">
+        <div class="case-head">
+          <div>
+            <div class="case-id">DF-2048<small>Rehabilitación · arco superior</small></div>
+          </div>
+          <div class="badges">
+            <span class="pill pill-cx">● Avanzado</span>
+            <span class="pill pill-state">En revisión</span>
+            <span class="pill pill-loc">📍 Las Condes · Santiago</span>
+          </div>
+        </div>
+
+        <div class="stepper">
+          <div class="step done"><span class="sc">✓</span><span class="sl">Publicado</span></div><span class="conn"></span>
+          <div class="step done"><span class="sc">✓</span><span class="sl">Cotizado</span></div><span class="conn"></span>
+          <div class="step done"><span class="sc">✓</span><span class="sl">Aceptado</span></div><span class="conn"></span>
+          <div class="step done"><span class="sc">✓</span><span class="sl">En diseño</span></div><span class="conn"></span>
+          <div class="step now"><span class="sc">●</span><span class="sl">En revisión</span></div><span class="conn"></span>
+          <div class="step"><span class="sc">6</span><span class="sl">Fabricación</span></div><span class="conn"></span>
+          <div class="step"><span class="sc">7</span><span class="sl">Completado</span></div>
+        </div>
+
+        <div class="mock-grid">
+          <div class="mcard">
+            <h5>Detalle del caso</h5>
+            <div class="kv"><span class="k">Tipo de servicio</span><span class="v">Diseño + Fabricación</span></div>
+            <div class="kv"><span class="k">Restauración</span><span class="v">Arco completo (12 piezas)</span></div>
+            <div class="kv"><span class="k">Nivel detectado por FAUCHARD</span><span class="v" style="color:#fdba74">Avanzado → Liga Oro</span></div>
+            <div class="kv"><span class="k">Categoría</span><span class="v">Puentes y Arco completo</span></div>
+            <div class="kv"><span class="k">Técnicos invitados</span><span class="v">5 (Liga Oro)</span></div>
+            <div class="kv"><span class="k">Entrega comprometida</span><span class="v">14 jun · 18:00</span></div>
+          </div>
+          <div class="mcard">
+            <h5>Asignación</h5>
+            <div class="assigned">
+              <div class="av">A7</div>
+              <div class="meta"><b>Laboratorio asignado</b><span>Identidad reservada · Liga Oro</span></div>
+            </div>
+            <div class="timer">
+              <div class="t">47:12:30</div>
+              <small>Plazo de revisión del dentista</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="ann">
+          <b>¿Qué hizo FAUCHARD en este caso?</b>
+          <div class="ann-grid">
+            <div class="a"><span class="ai">1</span><span>Leyó las <b>12 piezas</b> y lo clasificó como <b>Avanzado</b> automáticamente.</span></div>
+            <div class="a"><span class="ai">2</span><span>Buscó técnicos de <b>Liga Oro</b> disponibles para esta categoría e invitó a <b>5</b>.</span></div>
+            <div class="a"><span class="ai">3</span><span>Recibió las cotizaciones, armó el <b>comparativo anónimo</b> y el dentista eligió.</span></div>
+            <div class="a"><span class="ai">4</span><span>Mantiene el <b>plazo de revisión</b> corriendo y avisa antes de que venza.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="source-note">Mockup ilustrativo con datos representativos. El anonimato del técnico frente al dentista, el nivel detectado, el comparativo y los plazos reflejan el comportamiento real del sistema.</p>
+  </section>
+
+  <!-- 5. VALOR -->
+  <section id="valor">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 5 · Por qué importa</div>
+    <h2 class="section-title">Lo que FAUCHARD resuelve en tu laboratorio</h2>
+    <p class="lead">No es tecnología por tecnología. Es una herramienta pensada para los problemas reales del día a día de un laboratorio dental.</p>
+
+    <div class="sales-grid">
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg></div>
+        <h3>Orden en la entrada de casos</h3>
+        <p>Cada caso llega clasificado por nivel y categoría. Se acabó el “ver caso por caso” para entender qué es y cuánto pesa.</p>
+        <div class="mech"><b>Detrás:</b> clasificación automática en 4 niveles según restauración y número de piezas.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+        <h3>Menos dependencia del criterio manual</h3>
+        <p>La decisión de “quién hace qué” deja de depender de la memoria o el ánimo de una persona. La regla es la misma siempre.</p>
+        <div class="mech"><b>Detrás:</b> filtro por habilidad y disponibilidad + puntuación objetiva por desempeño.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.5 2.5M16.5 16.5L19 19M19 5l-2.5 2.5M7.5 16.5L5 19"/></svg></div>
+        <h3>Asignación más consistente</h3>
+        <p>El caso correcto al técnico correcto, según su nivel real y su carga actual — premiando calidad y puntualidad.</p>
+        <div class="mech"><b>Detrás:</b> ligas por desempeño (Bronce→Élite) y descansos entre invitaciones.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <h3>Mejor trazabilidad</h3>
+        <p>Sabes en qué etapa está cada caso, quién lo tiene y cuánto plazo queda. Todo el recorrido queda registrado.</p>
+        <div class="mech"><b>Detrás:</b> máquina de estados con historial de eventos y 3 relojes de plazos.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <h3>Menos errores y cuellos de botella</h3>
+        <p>Si un técnico no responde o rechaza, otro entra automáticamente. Ningún caso se queda esperando en un cajón.</p>
+        <div class="mech"><b>Detrás:</b> reemplazo automático, cola de espera y reactivación cuando hay disponibilidad.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg></div>
+        <h3>Capacidad de escalar</h3>
+        <p>Más casos no significan más caos. El motor reparte y prioriza solo, así puedes crecer sin sumar trabajo administrativo.</p>
+        <div class="mech"><b>Detrás:</b> orquestación automática extremo a extremo, sin gestión manual de asignación.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. PARÁMETROS -->
+  <section id="parametros">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 6 · Cómo se parametriza</div>
+    <h2 class="section-title">Los controles que ajustan a FAUCHARD</h2>
+    <p class="lead">FAUCHARD no es una caja cerrada: el administrador puede afinar su comportamiento. Estos son <b>todos los parámetros</b>, cada uno con su <b>número (N°)</b> para ubicarlo en el panel. El número es fijo: aparece igual en la app y en esta guía. Cada uno se desglosa en cinco preguntas: <b>qué es · cuándo actúa · cómo actúa · sobre quién · valor por defecto</b>, más un <b>ejemplo real</b> y sus <b>parámetros relacionados</b>.</p>
+
+    <div class="legend">
+      <span><i class="sw" style="background:linear-gradient(135deg,#0d9488,#2dd4bf)"></i> N° = identificador del parámetro en la app</span>
+      <span><i class="sw" style="background:#0b1220;border-color:var(--line2)"></i> Valor por defecto (editable por el administrador)</span>
+    </div>
+
+    <!-- GRUPO 1 -->
+    <div class="param-path">
+      <span class="crumb">Admin</span><span class="sep">›</span>
+      <span class="crumb">FAUCHARD</span><span class="sep">›</span>
+      <span class="crumb">Configuración</span><span class="sep">›</span>
+      <span class="crumb">Parámetros</span><span class="sep">›</span>
+      <span class="here">Pesos del Score</span>
+      <span class="tabchip">N°1 – N°6</span>
+    </div>
+    <div class="group-h"><span class="gn">⚖</span><div><h3>Quién entra primero a cada caso</h3><span>Seis factores deciden el orden de invitación. Su importancia debe sumar 1.000.</span></div></div>
+    <div class="pstack">
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">1</span><span class="pname">Calidad Histórica (Q)</span><span class="pdef">0,20</span></div>
+        <p class="pdesc">Importancia de las valoraciones y el feedback de casos anteriores. Cuanto más alto, más prioridad tienen los técnicos mejor calificados.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto pesa la <b>reputación</b> (valoraciones de casos previos) en el puntaje.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al <b>elegir a quién invitar</b>, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>suma</b>: pondera, no descalifica.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Cada técnico candidato.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>El Dr. Soto publica una corona de zirconio y dos laboratorios pueden tomarla: el Lab. Andes (rating 4.8/5, varias coronas felicitadas) y el Lab. Roble (rating 4.0/5). Si el peso de Calidad está alto (αQ = 0.40), esa diferencia de reputación domina el cálculo y Fauchard invita primero al Lab. Andes. Si lo bajas (αQ = 0.10), la reputación casi no influye: ambos quedan prácticamente empatados y deciden los otros factores.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°7 · Calidad Histórica (días)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">2</span><span class="pname">Puntualidad (P)</span><span class="pdef">0,15</span></div>
+        <p class="pdesc">Mide con qué frecuencia el técnico entrega dentro del plazo que prometió. Subirlo prioriza a quienes no se atrasan.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto pesa el historial de <b>entregas dentro del plazo</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>suma</b>: prioriza a quienes no se atrasan.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Cada técnico candidato.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>El Dr. Soto necesita la pieza antes de una cita ya agendada. El Lab. Andes entrega el 95% de sus casos a tiempo; el Lab. Pino suele atrasarse (70%). Si el peso de Puntualidad está alto (αP = 0.30), el cumplimiento manda y Fauchard prioriza al Lab. Andes para no arriesgar la fecha del paciente. Si lo bajas (αP = 0.05), el historial de atrasos casi no penaliza y el Lab. Pino podría recibir igualmente la invitación.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">3</span><span class="pname">Experiencia Especializada (E)</span><span class="pdef">0,15</span></div>
+        <p class="pdesc">Nivel de habilidad declarado/verificado para el tipo de trabajo específico del caso. Subirlo favorece a los especialistas.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto pesa la <b>habilidad declarada</b> para ese tipo de trabajo.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>suma</b>: favorece a los especialistas.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Cada técnico candidato.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Esta vez el Dr. Soto publica una Guía Quirúrgica, un trabajo exigente. El Lab. Andes declaró habilidad 7/7 en guías; el Lab. Roble, 3/7. Si el peso de Experiencia está alto (αE = 0.35), la especialización pesa fuerte y el Lab. Andes encabeza el ranking para este caso. Si lo bajas (αE = 0.10), un laboratorio generalista podría ganarlo igual destacando en otros factores, aunque tenga menos experiencia en guías.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">4</span><span class="pname">Penalización por Carga (C)</span><span class="pdef">0,15</span></div>
+        <p class="pdesc">Resta score a los técnicos que ya acumulan muchos casos o invitaciones recientes. Reparte el trabajo y evita cuellos de botella.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto <b>resta</b> tener muchos casos recientes. Reparte el trabajo.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>resta</b>: frena al saturado, no lo descalifica.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Técnicos ya ocupados.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>El Lab. Andes es excelente, pero esta semana ya tiene 8 casos abiertos; el Lab. Roble, casi tan bueno, solo 1. Si el peso de Carga está alto (αC = 0.20), la saturación penaliza con fuerza y Fauchard le cede el turno al Lab. Roble para cuidar los plazos de todos. Si lo pones en cero (αC = 0), la carga deja de importar: el Lab. Andes seguiría recibiendo todas las invitaciones hasta colapsar y los tiempos del marketplace empeorarían.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°9 · Techo Índice de Carga (C_max)</span><span class="relchip">N°8 · Carga Reciente (días)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">5</span><span class="pname">Bono de Infrautilización (B)</span><span class="pdef">0,10</span></div>
+        <p class="pdesc">Aumento temporal de score para técnicos que llevan tiempo sin recibir casos. Mantiene activo a todo el pool de laboratorios.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v"><b>Empuje temporal</b> a quienes llevan tiempo sin recibir casos.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>suma</b>: mantiene activo a todo el pool.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Técnicos infrautilizados.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>El Lab. Sur lleva 3 semanas sin recibir un solo caso. Cuando el Dr. Soto publica uno nuevo, si el peso de Bono está alto (αB = 0.10) ese tiempo de espera lo impulsa y Fauchard lo incluye en la ronda de invitaciones para mantenerlo activo. Si lo pones en cero (αB = 0), la inactividad deja de sumar y laboratorios nuevos o poco activos como el Lab. Sur rara vez asomarían: el trabajo se concentraría en los de siempre.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°10 · Bono Infrautilización (días máx)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">6</span><span class="pname">Penalización por No-respuesta (N)</span><span class="pdef">0,25</span></div>
+        <p class="pdesc">Resta score al técnico que ignora invitaciones (término −αN·N, según su nivel de sanción acumulada). Solo penaliza a quien tiene sanción; un técnico sin sanción no se ve afectado.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto <b>resta</b> ignorar invitaciones.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>resta</b>: solo si hay sanción acumulada.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Técnicos con sanción activa.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>El Lab. Pino dejó vencer 2 invitaciones esta quincena y entró en Nivel 2 de sanción. Si el peso de No-respuesta está alto (αN = 0.25), esa sanción le resta un buen pedazo de score y cae en el ranking aunque su calidad sea buena. Si lo bajas (αN = 0.05), ignorar invitaciones casi no le cuesta y seguiría siendo invitado.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°26 · Umbral Nivel 1</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="flow-note" style="margin-top:14px"><div class="nb"><b>Regla de oro:</b> los seis pesos deben sumar exactamente <b>1.000</b>. Si subes uno, debes bajar otro. El panel no deja guardar si no cuadra. Calidad, Puntualidad, Experiencia y Bono <b>suman</b>; Carga y No-respuesta <b>restan</b> (frenan, no descalifican).</div></div>
+
+    <!-- GRUPO 2 -->
+    <div class="param-path">
+      <span class="crumb">Admin</span><span class="sep">›</span>
+      <span class="crumb">FAUCHARD</span><span class="sep">›</span>
+      <span class="crumb">Configuración</span><span class="sep">›</span>
+      <span class="crumb">Parámetros</span><span class="sep">›</span>
+      <span class="here">Selección y Ronda</span>
+      <span class="tabchip">N°7 – N°17</span>
+    </div>
+    <div class="group-h"><span class="gn">🎯</span><div><h3>Cómo elige y con qué plazos abre la ronda</h3><span>Las ventanas con que mide a cada técnico, los filtros que lo excluyen y los tiempos de la ronda comercial.</span></div></div>
+    <div class="pstack">
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">7</span><span class="pname">Calidad Histórica (días)</span><span class="pdef">90 días</span></div>
+        <p class="pdesc">Cuántos días hacia atrás se promedian las calificaciones para el factor Calidad. Acota la memoria de reputación.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuántos días atrás se <b>promedian las calificaciones</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al calcular la calidad, antes de invitar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Ventana de <b>memoria</b> de la reputación.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">La nota de calidad (Q) del técnico.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Si lo pones en 30, una mala racha del Lab. Andes el mes pasado pesa de lleno, pero sus buenas notas de hace 3 meses ya no cuentan. Subiéndolo a 180, la reputación se vuelve más estable y perdona tropiezos recientes.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°1 · Calidad Histórica (Q)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">8</span><span class="pname">Carga Reciente (días)</span><span class="pdef">30 días</span></div>
+        <p class="pdesc">Ventana para contar cuánto trabajo reciente acumula un técnico (invitaciones/casos), que alimenta la Penalización por Carga.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Ventana para contar el <b>trabajo reciente</b> acumulado.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al calcular la carga, antes de invitar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Ventana de tiempo que alimenta la penalización por carga.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">La carga del técnico.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 7 días, solo cuenta lo que el Lab. Andes tomó esta semana: se "libera" rápido. Con 30 días, arrastra su carga del último mes y Fauchard lo frena por más tiempo.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°4 · Penalización por Carga (C)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">9</span><span class="pname">Techo Índice de Carga (C_max)</span><span class="pdef">2,0</span></div>
+        <p class="pdesc">El Índice de Carga (C) mide cuántas veces más ocupado está un técnico respecto al promedio del pool: C = sus casos recientes ÷ promedio del pool. No es un conteo de casos, es un múltiplo — C = 1 significa "carga igual al promedio", C = 2 "el doble del promedio". Este techo limita hasta dónde puede crecer ese múltiplo: por saturado que esté un técnico, su penalización por carga se calcula con C como máximo igual a C_max. Ojo: el techo por sí solo no es la penalización. El castigo real al score es α_carga × C (peso "Penalización por Carga (C)" en Pesos del Score), de modo que la penalización máxima es α_carga × C_max.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v"><b>Tope</b> de cuánto puede penalizar la saturación.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al calcular la penalización por carga.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Límite máximo del castigo (no importa cuán saturado esté).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Técnicos muy saturados.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Si el pool promedia 5 casos y el Lab. Andes lleva 10, su C = 10 ÷ 5 = 2 (el doble del promedio). Con C_max = 2, da igual que el Andes tenga 10, 15 o 30 casos: su penalización se topa en 2× el promedio. Cuánto duele ese tope depende de α_carga: con α_carga = 0.15, cada 1× de carga sobre el promedio resta 0.15 al score y el castigo máximo es 0.15 × 2 = −0.30 (≈ la mitad del score positivo alcanzable). Bajar el techo a 1.5 (o bajar α_carga) suaviza el castigo a los muy ocupados; subirlos lo endurece y los aparta más de las rondas.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°4 · Penalización por Carga (C)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">10</span><span class="pname">Bono Infrautilización (días máx)</span><span class="pdef">30 días</span></div>
+        <p class="pdesc">Días tras los cuales el Bono de Infrautilización llega a su tope. Define qué tan rápido madura el empujón a técnicos sin casos.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Días para que el bono al técnico sin casos llegue a su <b>tope</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al calcular el bono, antes de invitar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Define qué tan rápido <b>madura</b> el empujón.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Técnicos sin casos recientes.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 30 días, el Lab. Sur alcanza el bono máximo recién al mes sin casos. Bajándolo a 10, su empujón se llena en 10 días y vuelve antes a las rondas.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°5 · Bono de Infrautilización (B)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">11</span><span class="pname">Cooldown Invitaciones</span><span class="pdef">720 min</span></div>
+        <p class="pdesc">Tiempo que un técnico queda excluido tras rechazar o dejar expirar una invitación, antes de poder ser invitado de nuevo. Filtro previo al score.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v"><b>Descanso</b> tras rechazar o dejar expirar una invitación.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Justo después de un rechazo o expiración.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v"><b>Filtro de exclusión</b> temporal (antes del puntaje).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico que no respondió o rechazó.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 120 min, si el Lab. Pino deja expirar una invitación, Fauchard no lo vuelve a considerar por 2 horas y le da el turno a otros. Bajarlo lo reintegra más rápido; subirlo lo aparta más tiempo.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">12</span><span class="pname">Inactividad Máxima (días)</span><span class="pdef">15 días</span></div>
+        <p class="pdesc">Si un técnico no inicia sesión ni interactúa en estos días, queda excluido temporalmente del pool. Filtro previo al score.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Días sin entrar tras los cuales se <b>excluye del pool</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Antes de armar el pool de candidatos.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v"><b>Filtro de exclusión</b> (no le asigna casos que no verá).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Técnicos inactivos.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 15 días, un Lab. Roble que lleva dos semanas sin entrar no recibe invitaciones (evita asignarle un caso urgente que no verá). Vuelve al pool apenas se reconecta.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°23 · Auto-OFF preventivo</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">13</span><span class="pname">Técnicos a invitar por caso</span><span class="pdef">5</span></div>
+        <p class="pdesc">Cuántos técnicos selecciona y notifica Fauchard simultáneamente por cada caso nuevo.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v"><b>Cuántos técnicos</b> se invitan por cada caso nuevo.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al invitar (apertura de la ronda).</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Cantidad de cupos. Más = más competencia; menos = más concentrado.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El caso (cuántas cotizaciones competirán).</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 5, el Dr. Soto recibe hasta 5 cotizaciones para comparar. Subirlo a 8 amplía la competencia (mejores precios) pero reparte cada caso entre más técnicos; bajarlo concentra el caso en los mejores rankeados.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">14</span><span class="pname">Umbral Mínimo de Selección (Q)</span><span class="pdef">0,60</span></div>
+        <p class="pdesc">Calidad mínima (Q, en escala 0–1) que debe tener un técnico que ya cotizó para entrar al comparativo que ve el dentista. Es un filtro suave: si ninguna cotización lo alcanza, no bloquea — se usan todas.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v"><b>Calidad mínima</b> para entrar al comparativo del dentista.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al armar el comparativo, <b>después</b> de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Filtro de corte <b>suave</b>: si nadie llega, se usan todas.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Las ofertas ya cotizadas.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 0.60, si el Lab. Pino cotiza pero su calidad histórica equivale a Q=0.45, su oferta se descarta del comparativo del Dr. Soto (entran solo los de Q≥0.60). Si nadie llega a 0.60 en ese caso, el filtro se relaja y entran todas las cotizaciones para no dejar al dentista sin opciones. Subirlo exige más calidad; bajarlo abre la puerta a técnicos con menos historial.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">15</span><span class="pname">Tiempo para Cotizar · Reloj 1</span><span class="pdef">30 min</span></div>
+        <p class="pdesc">Plazo máximo que tiene un técnico invitado para enviar su oferta antes de que la invitación expire (Etapa 1, técnicos cotizan).</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Plazo del técnico para <b>enviar su oferta</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Etapa 1, mientras los técnicos cotizan.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Reloj que <b>expira la invitación</b> al vencer.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico invitado.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 90 min, cada técnico invitado al caso del Dr. Soto tiene hora y media para cotizar; pasado el plazo, su invitación expira y libera el cupo. Plazos cortos aceleran la ronda pero pueden dejar fuera a técnicos ocupados.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">16</span><span class="pname">Validez de Propuesta · Reloj 2</span><span class="pdef">2 h</span></div>
+        <p class="pdesc">Plazo que tiene el dentista para elegir una oferta del comparativo antes de que venza (Etapa 2, dentista elige).</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Plazo del dentista para <b>elegir una oferta</b> del comparativo.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Etapa 2, mientras el dentista compara.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Reloj de la propuesta (corre después del Reloj 1).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El dentista.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 2 h, el Dr. Soto debe escoger entre las ofertas dentro de 2 horas desde que se arma el comparativo. Es un countdown distinto del de cotización: corre después, y del lado del dentista.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">17</span><span class="pname">Margen de Plataforma</span><span class="pdef">15%</span></div>
+        <p class="pdesc">Comisión de DentFlowAi sobre el precio base que cotiza el técnico. Afecta el precio final que ve el dentista (no aplica al flete).</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v"><b>Comisión</b> de la plataforma sobre el precio que cotiza el técnico.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al mostrar el precio al dentista.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Recargo porcentual (no aplica al flete).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El precio final que ve el dentista.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 15%, si el Lab. Andes cotiza $100.000, el Dr. Soto ve $115.000. Subirlo aumenta el ingreso de la plataforma pero encarece al dentista; el flete se cobra aparte, sin fee.</p></div>
+      </div>
+    </div>
+
+    <!-- GRUPO 3 -->
+    <div class="param-path">
+      <span class="crumb">Admin</span><span class="sep">›</span>
+      <span class="crumb">FAUCHARD</span><span class="sep">›</span>
+      <span class="crumb">Configuración</span><span class="sep">›</span>
+      <span class="crumb">Parámetros</span><span class="sep">›</span>
+      <span class="here">Disponibilidad y Sanciones</span>
+      <span class="tabchip">N°18 – N°28</span>
+    </div>
+    <div class="group-h"><span class="gn">🛡</span><div><h3>Disponibilidad, esperas y consecuencias de no responder</h3><span>El plazo de revisión del dentista, la cola de espera, el reemplazo automático y la sanción por no responder.</span></div></div>
+    <div class="pstack">
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">18</span><span class="pname">Revisión del dentista · Reloj 3</span><span class="pdef">48 h</span></div>
+        <p class="pdesc">Plazo para que el dentista apruebe o pida cambios en cada entrega. Cada nueva entrega reinicia el contador.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Plazo del dentista para <b>aprobar o pedir cambios</b> en cada entrega.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Etapa 3, mientras el dentista revisa una entrega.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Reloj que <b>reinicia con cada entrega</b>; sin auto-acción al vencer.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El dentista.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 48 h, el Lab. Andes entrega el diseño y el Dr. Soto tiene 2 días para aprobar o pedir ajustes. Si pide cambios y el lab reentrega, el reloj vuelve a 48 h. Al vencer no hay auto-acción: solo se marca "respuesta vencida" + escalación.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">19</span><span class="pname">Tiempo de espera (TTL)</span><span class="pdef">24 h</span></div>
+        <p class="pdesc">Cuánto espera un caso buscando técnicos disponibles (cola pendiente_pool) antes de fallar. Hay check-in al dentista al 50%.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto <b>espera un caso</b> buscando técnicos disponibles antes de fallar.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Cuando no hay técnicos elegibles (cola de espera).</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Reloj de espera; <b>avisa al dentista al 50%</b>.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El caso en espera.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 24 h, si no hay técnicos elegibles para el caso del Dr. Soto, espera hasta un día a que alguien se active; a las 12 h se le avisa al dentista que sigue buscando.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°20 · Ciclos de espera</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">20</span><span class="pname">Ciclos de espera</span><span class="pdef">2</span></div>
+        <p class="pdesc">Cuántas veces se reintenta la espera antes de marcar el caso como "sin cotizaciones".</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v"><b>Cuántas veces</b> se reintenta la espera antes de fallar.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Durante la espera, al vencer cada ciclo.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Cantidad de reintentos; agotados, pasa a "sin cotizaciones".</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El caso en espera.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 2, el caso reintenta la cola dos veces; si tras ambas sigue sin elegibles, pasa a "sin cotizaciones" y el dentista puede republicar.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°19 · Tiempo de espera (TTL)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">21</span><span class="pname">Margen de reemplazo</span><span class="pdef">10 min</span></div>
+        <p class="pdesc">Margen mínimo antes del cierre de la ronda para enviar una invitación de reemplazo tras un rechazo.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v"><b>Margen mínimo</b> antes del cierre para invitar a un reemplazo.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Tras un rechazo, cerca del cierre de la ronda.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Condición de tiempo: si no alcanza a cotizar, no reemplaza.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El siguiente candidato del pool.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 10 min, si un técnico rechaza cuando faltan 5 min para cerrar la ronda, ya no se invita a un reemplazo (no alcanzaría a cotizar). Si faltan 30, sí entra el siguiente del pool.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">22</span><span class="pname">Recordatorio de actividad</span><span class="pdef">7 días</span></div>
+        <p class="pdesc">Días con el switch de disponibilidad en ON sin actividad antes de un recordatorio suave + aviso en el badge.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Días con disponibilidad ON sin actividad antes de un <b>recordatorio</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Con el switch encendido pero sin uso.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Dispara recordatorio suave + aviso en el badge.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico disponible pero inactivo.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 7 días, un Lab. Roble que dejó su disponibilidad encendida pero no entra hace una semana recibe un recordatorio. Debe ser menor que el auto-OFF.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°23 · Auto-OFF preventivo</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">23</span><span class="pname">Auto-OFF preventivo</span><span class="pdef">30 días</span></div>
+        <p class="pdesc">Días con el switch en ON sin login antes de pausar la disponibilidad automáticamente (evita invitar a quien no responderá).</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Días sin login antes de <b>apagar la disponibilidad</b> solo.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Con el switch ON pero sin entrar a la plataforma.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Apagado automático preventivo (evita invitar a quien no responderá).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico ausente.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 30 días, si el Lab. Roble lleva un mes sin entrar pese a estar "disponible", Fauchard apaga su switch para no enviarle casos a ciegas.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°22 · Recordatorio de actividad</span><span class="relchip">N°12 · Inactividad Máxima (días)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">24</span><span class="pname">Ventana rolling</span><span class="pdef">14 días</span></div>
+        <p class="pdesc">Solo cuentan las no-respuestas ocurridas dentro de esta ventana móvil. Las más viejas salen solas.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Ventana en la que <b>cuentan las no-respuestas</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al contar la sanción acumulada.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Ventana móvil: <b>perdona sola</b> con el tiempo.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico que no responde.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 14 días, una invitación ignorada hace 3 semanas ya no suma a la sanción del Lab. Pino: la curva "perdona" con el tiempo sin necesidad de intervención.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°25 · Rehabilitación</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">25</span><span class="pname">Rehabilitación</span><span class="pdef">30 días</span></div>
+        <p class="pdesc">Días sin nuevas no-respuestas para considerar al técnico rehabilitado.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Días sin nuevas no-respuestas para quedar <b>rehabilitado</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Tras un periodo limpio de no-respuestas.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Plazo de recuperación del historial.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico sancionado.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 30 días, si el Lab. Pino responde puntualmente por un mes, su historial de sanción se considera saldado.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°24 · Ventana rolling</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">26</span><span class="pname">Umbral Nivel 1</span><span class="pdef">1</span></div>
+        <p class="pdesc">Número de no-respuestas (en la ventana) que dispara cada nivel: 1 = aviso, 2 = penalización al score (−αN·N), 3 = auto-OFF del switch global. Deben cumplir Nivel 1 < Nivel 2 < Nivel 3.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">N° de no-respuestas que dispara un <b>aviso</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al acumular no-respuestas en la ventana.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Umbral escalonado (gatillo del Nivel 1).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico que no responde.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 1 / 2 / 3: a la 1ª no-respuesta el Lab. Pino recibe un aviso; a la 2ª, su score baja; a la 3ª, Fauchard apaga su disponibilidad global y rechaza sus invitaciones pendientes.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°6 · Penalización por No-respuesta (N)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">27</span><span class="pname">Umbral Nivel 2</span><span class="pdef">2</span></div>
+        <p class="pdesc">Número de no-respuestas (en la ventana) que dispara cada nivel: 1 = aviso, 2 = penalización al score (−αN·N), 3 = auto-OFF del switch global. Deben cumplir Nivel 1 < Nivel 2 < Nivel 3.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">N° de no-respuestas que <b>penaliza el puntaje</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al acumular no-respuestas en la ventana.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Umbral escalonado (gatillo del Nivel 2).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico que no responde.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 1 / 2 / 3: a la 1ª no-respuesta el Lab. Pino recibe un aviso; a la 2ª, su score baja; a la 3ª, Fauchard apaga su disponibilidad global y rechaza sus invitaciones pendientes.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°6 · Penalización por No-respuesta (N)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">28</span><span class="pname">Umbral Nivel 3</span><span class="pdef">3</span></div>
+        <p class="pdesc">Número de no-respuestas (en la ventana) que dispara cada nivel: 1 = aviso, 2 = penalización al score (−αN·N), 3 = auto-OFF del switch global. Deben cumplir Nivel 1 < Nivel 2 < Nivel 3.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">N° de no-respuestas que <b>apaga la disponibilidad</b> y rechaza pendientes.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al acumular no-respuestas en la ventana.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Umbral escalonado (gatillo del Nivel 3, el más severo).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico que no responde.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 1 / 2 / 3: a la 1ª no-respuesta el Lab. Pino recibe un aviso; a la 2ª, su score baja; a la 3ª, Fauchard apaga su disponibilidad global y rechaza sus invitaciones pendientes.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°6 · Penalización por No-respuesta (N)</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="flow-note" style="margin-top:14px"><div class="nb"><b>Sanción que se cura sola.</b> Los niveles deben cumplir N°26 &lt; N°27 &lt; N°28, y la sanción decae sin que nadie la limpie: cuando las no-respuestas salen de la ventana móvil, el técnico se recupera automáticamente.</div></div>
+
+    <!-- CATEGORÍAS -->
+    <div class="param-path">
+      <span class="crumb">Admin</span><span class="sep">›</span>
+      <span class="crumb">FAUCHARD</span><span class="sep">›</span>
+      <span class="crumb">Configuración</span><span class="sep">›</span>
+      <span class="here">Categorías</span>
+      <span class="tabchip">N°29 – N°36 · pestaña 🏆 Categorías</span>
+    </div>
+    <div class="group-h"><span class="gn">🏆</span><div><h3>Categorías — ascenso y descenso</h3><span>Umbrales con que los técnicos suben o bajan entre Bronce, Plata, Oro y Élite. En la app es la pestaña <b>Categorías</b> (el motor automático se activa en Fase 2).</span></div></div>
+    <div class="pstack">
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">29</span><span class="pname">Calificación Mínima</span><span class="pdef">4,2 ⭐</span></div>
+        <p class="pdesc">Calificación promedio mínima (en la ventana de evaluación) requerida para ascender de categoría.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Calificación promedio mínima para <b>ascender</b> de categoría.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">En el recálculo periódico de ligas.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Condición de ascenso (junto a puntualidad y casos).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico evaluado.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>El Lab. Andes está en Plata y aspira a Oro. Con la Calificación Mínima en 4.2 ⭐, debe sostener un promedio de al menos 4.2 en sus últimos casos para que el motor lo considere apto para subir. Si bajas el umbral a 4.0, más laboratorios alcanzan el ascenso; si lo subes a 4.6, el salto a la categoría superior se vuelve mucho más exigente.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°30 · Ventana de Evaluación (Casos)</span><span class="relchip">N°35 · Calificación para Descenso</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">30</span><span class="pname">Ventana de Evaluación (Casos)</span><span class="pdef">10</span></div>
+        <p class="pdesc">Número de casos recientes que se analizan para verificar requisitos de ascenso.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuántos casos recientes se analizan para el ascenso.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">En el recálculo periódico de ligas.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Ventana de evaluación del desempeño.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico evaluado.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con la ventana en 10, el motor mira los últimos 10 casos del Lab. Andes para promediar su calificación y puntualidad. Bajándola a 5 reacciona más rápido a una buena racha (pero también a una mala); subiéndola a 20 exige un desempeño sostenido en más casos antes de ascender.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°29 · Calificación Mínima</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">31</span><span class="pname">Puntualidad Mínima (%)</span><span class="pdef">85 %</span></div>
+        <p class="pdesc">Porcentaje mínimo de entregas a tiempo exigido para ascender.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">% de entregas a tiempo exigido para ascender.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">En el recálculo periódico de ligas.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Condición de ascenso.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico evaluado.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con la Puntualidad Mínima en 85%, el Lab. Andes solo asciende si entregó a tiempo al menos el 85% de los casos de la ventana, por buena que sea su calificación. Subirla a 95% reserva el ascenso para los más cumplidores; bajarla a 75% da más peso a la calidad por sobre el cumplimiento de plazos.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">32</span><span class="pname">Casos Completados Totales</span><span class="pdef">15</span></div>
+        <p class="pdesc">Casos finalizados exitosamente requeridos como condición absoluta para ascender.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Casos terminados exigidos como mínimo para ascender.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">En el recálculo periódico de ligas.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Condición absoluta de ascenso (piso de experiencia).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico evaluado.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con el umbral en 15, un Lab. Sur nuevo y con excelentes notas todavía no puede saltar a Oro si lleva solo 9 casos terminados: necesita acumular al menos 15. Es un piso de experiencia mínima que no se compensa con buena calificación. Subirlo frena ascensos prematuros; bajarlo agiliza la progresión de laboratorios nuevos.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">33</span><span class="pname">Casos en Transición</span><span class="pdef">3</span></div>
+        <p class="pdesc">Casos a completar en la nueva categoría antes de consolidar el ascenso (período de prueba).</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Casos de prueba en la nueva categoría antes de consolidar.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Justo después de un ascenso.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Período de prueba.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico recién ascendido.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>El Lab. Andes acaba de subir a Oro. Con Casos en Transición en 3, queda "a prueba" sus próximos 3 casos en Oro antes de consolidar la categoría. Subirlo alarga el período de prueba (más casos para confirmar que rinde en la categoría superior); bajarlo lo consolida antes.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°34 · Penalización Transición (%)</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">34</span><span class="pname">Penalización Transición (%)</span><span class="pdef">20 %</span></div>
+        <p class="pdesc">Reducción temporal del score durante el período de transición tras ascender.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto <b>baja el puntaje</b> durante la transición.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Mientras dura la prueba tras ascender.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Descuento temporal al score.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico en transición.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con la penalización en 20%, mientras el Lab. Andes está a prueba en Oro su score se multiplica por 0.80 al competir por casos: entra al ruedo, pero con una pequeña desventaja frente a los Oro ya consolidados. Subirla protege más a los consolidados; bajarla hace que el recién ascendido compita casi de igual a igual.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°33 · Casos en Transición</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">35</span><span class="pname">Calificación para Descenso</span><span class="pdef">3,0 ⭐</span></div>
+        <p class="pdesc">Si el promedio cae bajo este valor durante el período, el técnico desciende de categoría.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Calificación bajo la cual, sostenida, se <b>baja</b> de categoría.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">En el recálculo periódico de ligas.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Condición de descenso (debe ser menor que la de ascenso).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico evaluado.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con la Calificación para Descenso en 3.0 ⭐, si el promedio del Lab. Roble cae por debajo de 3.0 y se mantiene así el tiempo definido, el motor lo baja una categoría. Debe ser estrictamente menor que la Calificación Mínima de ascenso, para evitar que un técnico suba y baje en el acto.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°36 · Días en Baja Calificación</span><span class="relchip">N°29 · Calificación Mínima</span></div>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">36</span><span class="pname">Días en Baja Calificación</span><span class="pdef">60 días</span></div>
+        <p class="pdesc">Días consecutivos bajo el umbral de descenso para que la bajada se haga efectiva.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Días seguidos bajo el umbral para que el descenso se aplique.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">En el recálculo periódico de ligas.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Plazo de gracia del descenso.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">El técnico evaluado.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con 60 días, el Lab. Roble no baja de categoría por una semana mala: su promedio debe permanecer bajo el umbral de descenso durante 60 días seguidos antes de que la bajada se aplique. Subirlo da más margen de recuperación; bajarlo hace el descenso más sensible a las malas rachas.</p>
+          <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°35 · Calificación para Descenso</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRUPO 4 -->
+    <div class="param-path">
+      <span class="crumb">Admin</span><span class="sep">›</span>
+      <span class="crumb">FAUCHARD</span><span class="sep">›</span>
+      <span class="crumb">Configuración</span><span class="sep">›</span>
+      <span class="here">Calendario laboral</span>
+      <span class="tabchip">N°37 – N°40</span>
+    </div>
+    <div class="group-h"><span class="gn">📅</span><div><h3>Jornada y feriados para la fecha de entrega</h3><span>El reloj de la fecha comprometida solo corre dentro de tu horario y salta noches, días libres y feriados.</span></div></div>
+    <div class="pstack">
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">37</span><span class="pname">Hora de apertura</span><span class="pdef">08:00</span></div>
+        <p class="pdesc">Inicio y fin de la jornada laboral. El reloj de entrega solo avanza dentro de esta franja; fuera de ella se "congela".</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Hora en que <b>arranca la jornada</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al calcular la fecha de entrega comprometida.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">El reloj de entrega corre <b>desde</b> esta hora.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">La fecha de entrega del caso.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con jornada 08:00–20:00, si el Lab. Andes promete 6 horas de trabajo y empieza a las 18:00, el plazo no vence a medianoche: corren 2 h hoy y las 4 restantes mañana desde las 08:00.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">38</span><span class="pname">Hora de cierre</span><span class="pdef">20:00</span></div>
+        <p class="pdesc">Inicio y fin de la jornada laboral. El reloj de entrega solo avanza dentro de esta franja; fuera de ella se "congela".</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Hora en que <b>termina la jornada</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al calcular la fecha de entrega comprometida.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Fuera de la franja el plazo se <b>congela</b> hasta el día siguiente.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">La fecha de entrega del caso.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con jornada 08:00–20:00, si el Lab. Andes promete 6 horas de trabajo y empieza a las 18:00, el plazo no vence a medianoche: corren 2 h hoy y las 4 restantes mañana desde las 08:00.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">39</span><span class="pname">Días laborables</span><span class="pdef">Lun–Vie</span></div>
+        <p class="pdesc">Qué días de la semana cuentan como hábiles (default L-V). El cálculo de plazos salta los días apagados.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Qué días de la semana cuentan como <b>hábiles</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al calcular la fecha de entrega comprometida.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">El cálculo <b>salta los días apagados</b>.</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">La fecha de entrega del caso.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Con L-V, un trabajo de 1 día que arranca el viernes vence el lunes, no el sábado. Si tu operación trabaja sábado, enciéndelo y el reloj lo contará.</p></div>
+      </div>
+      <div class="pcard">
+        <div class="pcard-head"><span class="pn">40</span><span class="pname">Feriados</span><span class="pdef">Lista</span></div>
+        <p class="pdesc">Fechas concretas que el cálculo de plazos trata como día no laborable, además de los días apagados de la semana.</p>
+        <div class="pf-grid">
+          <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Fechas concretas que se tratan como <b>no laborables</b>.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al calcular la fecha de entrega comprometida.</span></div>
+          <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Lista de excepciones que el cálculo salta (admin las agrega).</span></div>
+          <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">La fecha de entrega del caso.</span></div>
+        </div>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>Si agregas el 18 de septiembre como feriado, un plazo que cruce esa fecha la salta automáticamente: el Lab. Andes no queda obligado a entregar en feriado.</p></div>
+      </div>
+    </div>
+    <div class="flow-note" style="margin-top:14px"><div class="nb"><b>Ojo:</b> el calendario laboral solo afecta la <b>fecha de entrega comprometida</b>. Los relojes de cotización (N°15) y de propuesta (N°16) corren de corrido — también de noche y fin de semana.</div></div>
+
+    <div class="validate">
+      <h4>⚠ Buenas prácticas y notas</h4>
+      <ul>
+        <li><b>Hay dos espacios que no se editan:</b> <b>Observabilidad</b> (13 métricas, marcadas #1–#13, que son el "termómetro" del modelo y te dicen qué parámetro tocar) e <b>Historial</b> (auditoría de cada cambio: quién, cuándo y qué valor cambió).</li>
+        <li><b>Cada guardado crea una versión nueva</b> (no se sobrescribe la anterior): el historial queda completo y nada se pierde.</li>
+        <li><b>Valores por defecto de los pesos:</b> los mostrados (N°1–N°6) corresponden a la operación con el modelo de disponibilidad activo. <span style="color:var(--amber)">Requiere validación</span> si en tu instalación se usan otros valores base — el panel siempre exige que sumen 1.000.</li>
+      </ul>
+    </div>
+    <p class="source-note">Numeración, nombres, descripciones y agrupación por pestaña tomados de la guía de ayuda integrada del configurador FAUCHARD. Valores por defecto tomados de la configuración base del sistema.</p>
+  </section>
+
+  <div class="closing">
+    <h2><span style="color:var(--teal)">FAUCHARD</span> trabaja, tú produces.</h2>
+    <p>El motor ordena la entrada, asigna con criterio parejo y cuida los plazos. Tu laboratorio se concentra en lo que sabe hacer: trabajos de calidad.</p>
+  </div>
+
+</main>
+
+<footer>
+  <b>DentFlowAi · Motor FAUCHARD</b> — Material de presentación construido sobre el comportamiento real del sistema.<br/>
+  Las reglas marcadas “requiere validación” se deducen de la lógica y conviene confirmarlas antes de comunicarlas como definitivas.
+</footer>
+
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad:true,
+    theme:'base',
+    securityLevel:'loose',
+    flowchart:{ curve:'step', nodeSpacing:55, rankSpacing:60, useMaxWidth:true },
+    themeVariables:{
+      fontFamily:'Inter, system-ui, sans-serif',
+      fontSize:'14px',
+      textColor:'#e2e8f0',
+      lineColor:'#7c8aa0',
+      edgeLabelBackground:'#0b1220',
+      tertiaryColor:'#0b1220',
+      tertiaryTextColor:'#e2e8f0',
+      nodeTextColor:'#e2e8f0'
+    }
+  });
+</script>
+</body>
+</html>

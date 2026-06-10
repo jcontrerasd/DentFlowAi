@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FAUCHARD — El motor que ordena tu laboratorio · DentFlowAI</title>
+<style>
+  :root{
+    --bg:#020617; --bg2:#0b1220; --panel:#0f172a; --panel2:#111c33;
+    --line:rgba(148,163,184,.18); --line2:rgba(148,163,184,.30);
+    --fg:#f8fafc; --muted:#94a3b8; --muted2:#cbd5e1;
+    --teal:#2dd4bf; --teal2:#14b8a6; --teal3:#0d9488; --tealsoft:rgba(45,212,191,.12);
+    --amber:#fbbf24;
+    --verde:#22c55e; --amarillo:#eab308; --naranja:#f97316; --rojo:#ef4444;
+    --rosa:#f472b6;
+    --serif:"Instrument Serif", Georgia, "Times New Roman", serif;
+    --sans:"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(13,148,136,.18), transparent 60%),
+      radial-gradient(1000px 500px at -10% 20%, rgba(45,212,191,.08), transparent 55%),
+      var(--bg);
+    color:var(--fg); font-family:var(--sans); line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{font-family:var(--serif); font-weight:400; letter-spacing:.2px; line-height:1.1}
+  a{color:var(--teal); text-decoration:none}
+
+  /* ---------- NAV ---------- */
+  nav{
+    position:sticky; top:0; z-index:50; backdrop-filter:blur(12px);
+    background:rgba(2,6,23,.72); border-bottom:1px solid var(--line);
+  }
+  .nav-inner{max-width:1180px; margin:0 auto; padding:12px 22px; display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:.5px}
+  .brand .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#0d9488,#2dd4bf);display:flex;align-items:center;justify-content:center;font-size:16px}
+  .brand small{font-family:var(--sans); color:var(--muted); font-weight:600; font-size:11px; letter-spacing:1.5px; text-transform:uppercase}
+  .nav-links{display:flex; gap:6px; flex-wrap:wrap; margin-left:auto}
+  .nav-links a{
+    color:var(--muted2); font-size:13px; font-weight:600; padding:7px 12px; border-radius:999px;
+    border:1px solid transparent; transition:all .15s;
+  }
+  .nav-links a:hover{color:var(--fg); background:var(--tealsoft); border-color:var(--line2)}
+
+  /* ---------- LAYOUT ---------- */
+  main{max-width:1180px; margin:0 auto; padding:0 22px}
+  section{padding:70px 0; border-bottom:1px solid var(--line)}
+  .eyebrow{display:inline-flex; align-items:center; gap:9px; font-size:12px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--teal); margin-bottom:14px}
+  .eyebrow .chip{padding:3px 10px; border-radius:999px; background:var(--tealsoft); border:1px solid rgba(45,212,191,.3); font-weight:800; letter-spacing:1.5px}
+  h2.section-title{font-size:38px; margin:0 0 10px}
+  .lead{color:var(--muted2); font-size:17px; max-width:760px; margin:0 0 8px}
+  .source-note{font-size:12px; color:var(--muted); margin-top:10px; font-style:italic}
+
+  /* ---------- HERO ---------- */
+  .hero{padding:90px 0 60px; border-bottom:1px solid var(--line)}
+  .hero h1{font-size:64px; margin:0 0 18px; max-width:920px}
+  .hero h1 .hl{
+    background:linear-gradient(135deg,#2dd4bf,#0d9488); -webkit-background-clip:text; background-clip:text; color:transparent;
+    font-style:italic;
+  }
+  .hero p{font-size:20px; color:var(--muted2); max-width:720px}
+  .hero-badges{display:flex; gap:12px; flex-wrap:wrap; margin-top:30px}
+  .hero-badge{display:flex; align-items:center; gap:9px; padding:11px 16px; border-radius:12px; background:var(--panel); border:1px solid var(--line); font-size:14px; font-weight:600; color:var(--muted2)}
+  .hero-badge b{color:var(--fg)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 0 4px rgba(45,212,191,.15)}
+
+  /* ---------- GENERIC CARD ---------- */
+  .panel{background:linear-gradient(180deg,var(--panel),var(--bg2)); border:1px solid var(--line); border-radius:18px}
+  .grid{display:grid; gap:18px}
+  .legend{display:flex; gap:18px; flex-wrap:wrap; margin:22px 0 6px; font-size:13px; color:var(--muted2)}
+  .legend span{display:inline-flex; align-items:center; gap:8px}
+  .sw{width:14px;height:14px;border-radius:4px;display:inline-block;border:1px solid rgba(255,255,255,.15)}
+
+  /* ---------- MERMAID WRAP ---------- */
+  .diagram-wrap{padding:26px; overflow-x:auto}
+  .mermaid{font-family:var(--sans)!important}
+  .flow-note{display:flex; gap:14px; flex-wrap:wrap; margin-top:20px}
+  .flow-note .nb{flex:1; min-width:230px; background:var(--panel2); border:1px solid var(--line); border-left:3px solid var(--teal); border-radius:10px; padding:13px 15px; font-size:13px; color:var(--muted2)}
+  .flow-note .nb b{color:var(--fg)}
+
+  /* ---------- COMPLEXITY TABLE ---------- */
+  table.cx{width:100%; border-collapse:separate; border-spacing:0; border-radius:16px; overflow:hidden; border:1px solid var(--line); font-size:14px}
+  table.cx th{background:var(--panel2); text-align:left; padding:15px 16px; font-family:var(--sans); font-weight:700; font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--muted2); border-bottom:1px solid var(--line)}
+  table.cx td{padding:16px; vertical-align:top; border-bottom:1px solid var(--line); color:var(--muted2)}
+  table.cx tr:last-child td{border-bottom:none}
+  .lvl{display:inline-flex; align-items:center; gap:9px; font-weight:800; font-size:15px; color:var(--fg)}
+  .lvl .bar{width:5px; height:30px; border-radius:3px}
+  .lvl small{display:block; font-weight:600; font-size:11px; letter-spacing:1px; text-transform:uppercase; margin-top:3px}
+  .row-verde   td:first-child{box-shadow:inset 4px 0 0 var(--verde)}
+  .row-amarillo td:first-child{box-shadow:inset 4px 0 0 var(--amarillo)}
+  .row-naranja td:first-child{box-shadow:inset 4px 0 0 var(--naranja)}
+  .row-rojo    td:first-child{box-shadow:inset 4px 0 0 var(--rojo)}
+  .tag{display:inline-block; padding:3px 9px; border-radius:7px; font-size:12px; font-weight:700; margin:2px 4px 2px 0}
+  .tag-explicit{background:rgba(45,212,191,.12); color:var(--teal); border:1px solid rgba(45,212,191,.3)}
+  .tag-infer{background:rgba(251,191,36,.1); color:var(--amber); border:1px solid rgba(251,191,36,.3)}
+  .league-pill{display:inline-block; padding:4px 11px; border-radius:999px; font-weight:800; font-size:12px}
+  .lg-bronce{background:rgba(180,120,70,.18); color:#d8a06a; border:1px solid rgba(180,120,70,.4)}
+  .lg-plata{background:rgba(180,190,205,.15); color:#cbd5e1; border:1px solid rgba(180,190,205,.35)}
+  .lg-oro{background:rgba(234,179,8,.15); color:#fcd34d; border:1px solid rgba(234,179,8,.4)}
+  .lg-elite{background:rgba(167,139,250,.15); color:#c4b5fd; border:1px solid rgba(167,139,250,.4)}
+
+  .validate{margin-top:22px; background:rgba(251,191,36,.06); border:1px solid rgba(251,191,36,.28); border-radius:14px; padding:18px 20px}
+  .validate h4{margin:0 0 8px; font-family:var(--sans); font-size:13px; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:var(--amber); display:flex; gap:9px; align-items:center}
+  .validate ul{margin:0; padding-left:20px; color:var(--muted2); font-size:13.5px}
+  .validate li{margin:6px 0}
+
+  /* ---------- BLACK BOX ---------- */
+  .bb{display:grid; grid-template-columns:1fr 1.25fr 1fr; gap:0; align-items:stretch; margin-top:10px}
+  .bb-col{padding:24px}
+  .bb-in{border-right:1px dashed var(--line2)}
+  .bb-out{border-left:1px dashed var(--line2)}
+  .bb-h{font-size:12px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin-bottom:16px; text-align:center}
+  .io{background:var(--panel2); border:1px solid var(--line); border-radius:11px; padding:12px 14px; margin-bottom:11px; font-size:13.5px}
+  .io b{color:var(--fg); display:block; font-size:13.5px; margin-bottom:2px}
+  .io span{color:var(--muted)}
+  .core{background:linear-gradient(160deg,rgba(13,148,136,.22),rgba(15,23,42,.5)); border:1px solid rgba(45,212,191,.35); border-radius:16px; padding:22px; box-shadow:0 0 60px rgba(13,148,136,.15) inset}
+  .core-title{text-align:center; margin-bottom:18px}
+  .core-title .name{font-family:var(--serif); font-size:30px; color:var(--fg)}
+  .core-title small{display:block; color:var(--teal); font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; margin-top:2px}
+  .decision{display:flex; gap:11px; align-items:flex-start; background:rgba(2,6,23,.4); border:1px solid var(--line); border-radius:10px; padding:11px 13px; margin-bottom:9px}
+  .decision .n{flex:none; width:23px;height:23px;border-radius:7px; background:linear-gradient(135deg,#0d9488,#2dd4bf); color:#042f2e; font-weight:800; font-size:12px; display:flex; align-items:center; justify-content:center}
+  .decision p{margin:0; font-size:13px; color:var(--muted2)}
+  .decision p b{color:var(--fg)}
+  .bb-arrow{position:relative}
+  .bb-impact{margin-top:0; background:var(--panel2); border:1px solid var(--line); border-top:none; border-radius:0 0 18px 18px; padding:22px 24px}
+  .bb-impact h4{margin:0 0 14px; font-family:var(--sans); font-size:12px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase; color:var(--teal); text-align:center}
+  .impact-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:13px}
+  .impact-grid .ic{background:rgba(2,6,23,.4); border:1px solid var(--line); border-radius:11px; padding:13px; text-align:center; font-size:13px; color:var(--muted2)}
+  .impact-grid .ic b{display:block; color:var(--fg); margin-bottom:3px; font-size:13.5px}
+
+  /* ---------- MOCKUP ---------- */
+  .mock{background:#0a1322; border:1px solid var(--line2); border-radius:20px; overflow:hidden; box-shadow:0 30px 80px rgba(0,0,0,.45)}
+  .mock-top{display:flex; align-items:center; gap:8px; padding:13px 18px; background:#0d1626; border-bottom:1px solid var(--line)}
+  .mock-top .tdot{width:11px;height:11px;border-radius:50%}
+  .mock-url{margin-left:14px; font-size:12px; color:var(--muted); background:rgba(2,6,23,.6); padding:5px 14px; border-radius:8px; border:1px solid var(--line)}
+  .mock-body{padding:26px}
+  .case-head{display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap; margin-bottom:24px}
+  .case-id{font-family:var(--serif); font-size:30px; color:var(--fg)}
+  .case-id small{display:block; font-family:var(--sans); font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.5px; margin-top:2px}
+  .badges{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+  .pill{display:inline-flex; align-items:center; gap:7px; padding:7px 13px; border-radius:999px; font-size:13px; font-weight:700}
+  .pill-cx{background:rgba(249,115,22,.15); color:#fdba74; border:1px solid rgba(249,115,22,.4)}
+  .pill-state{background:rgba(45,212,191,.13); color:var(--teal); border:1px solid rgba(45,212,191,.35)}
+  .pill-loc{background:rgba(148,163,184,.12); color:var(--muted2); border:1px solid var(--line2)}
+  .stepper{display:flex; align-items:center; gap:0; margin:8px 0 26px; flex-wrap:wrap}
+  .step{display:flex; align-items:center; gap:9px}
+  .step .sc{width:26px;height:26px;border-radius:50%; display:flex;align-items:center;justify-content:center; font-size:12px; font-weight:800; border:2px solid var(--line2); color:var(--muted)}
+  .step .sl{font-size:12px; color:var(--muted); font-weight:600; white-space:nowrap}
+  .step.done .sc{background:var(--teal3); border-color:var(--teal3); color:#042f2e}
+  .step.done .sl{color:var(--muted2)}
+  .step.now .sc{background:linear-gradient(135deg,#0d9488,#2dd4bf); border-color:var(--teal); color:#042f2e; box-shadow:0 0 0 4px rgba(45,212,191,.18)}
+  .step.now .sl{color:var(--fg); font-weight:800}
+  .step .conn{width:34px; height:2px; background:var(--line2); margin:0 6px}
+  .step.done .conn{background:var(--teal3)}
+  .mock-grid{display:grid; grid-template-columns:1.4fr 1fr; gap:18px}
+  .mcard{background:#0d1626; border:1px solid var(--line); border-radius:14px; padding:18px}
+  .mcard h5{margin:0 0 14px; font-family:var(--sans); font-size:12px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .kv{display:flex; justify-content:space-between; gap:12px; padding:9px 0; border-bottom:1px solid var(--line); font-size:14px}
+  .kv:last-child{border-bottom:none}
+  .kv .k{color:var(--muted)}
+  .kv .v{color:var(--fg); font-weight:600; text-align:right}
+  .assigned{display:flex; align-items:center; gap:13px; padding:14px; background:rgba(45,212,191,.06); border:1px solid rgba(45,212,191,.25); border-radius:12px; margin-bottom:14px}
+  .assigned .av{width:42px;height:42px;border-radius:50%; background:linear-gradient(135deg,#0d9488,#2dd4bf); display:flex;align-items:center;justify-content:center; font-weight:800; color:#042f2e}
+  .assigned .meta b{display:block; color:var(--fg); font-size:14px}
+  .assigned .meta span{color:var(--muted); font-size:12.5px}
+  .timer{text-align:center; padding:16px; background:rgba(2,6,23,.5); border:1px solid var(--line); border-radius:12px}
+  .timer .t{font-family:var(--serif); font-size:34px; color:var(--teal); letter-spacing:2px}
+  .timer small{display:block; color:var(--muted); font-size:11.5px; letter-spacing:1px; text-transform:uppercase; margin-top:4px}
+  .ann{position:relative; margin-top:18px; background:rgba(45,212,191,.05); border:1px dashed rgba(45,212,191,.4); border-radius:12px; padding:15px 17px}
+  .ann b{color:var(--teal)}
+  .ann-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px}
+  .ann-grid .a{display:flex; gap:11px; font-size:13px; color:var(--muted2)}
+  .ann-grid .a .ai{flex:none; width:26px;height:26px;border-radius:8px; background:var(--tealsoft); border:1px solid rgba(45,212,191,.3); color:var(--teal); display:flex;align-items:center;justify-content:center; font-weight:800; font-size:13px}
+  .ann-grid .a b{color:var(--fg)}
+
+  /* ---------- SALES ---------- */
+  .sales-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:14px}
+  .scard{background:linear-gradient(180deg,var(--panel),var(--bg2)); border:1px solid var(--line); border-radius:16px; padding:24px; transition:all .18s; position:relative; overflow:hidden}
+  .scard:hover{border-color:rgba(45,212,191,.4); transform:translateY(-3px)}
+  .scard .ico{width:46px;height:46px;border-radius:12px; background:var(--tealsoft); border:1px solid rgba(45,212,191,.3); display:flex;align-items:center;justify-content:center; margin-bottom:16px}
+  .scard h3{font-family:var(--sans); font-weight:800; font-size:17px; margin:0 0 9px; color:var(--fg)}
+  .scard p{margin:0 0 12px; font-size:14px; color:var(--muted2)}
+  .scard .mech{font-size:12px; color:var(--muted); border-top:1px solid var(--line); padding-top:11px}
+  .scard .mech b{color:var(--teal)}
+  svg.ic{width:24px;height:24px;stroke:var(--teal);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+  .closing{text-align:center; padding:60px 0 20px}
+  .closing h2{font-size:40px; margin:0 0 14px}
+  .closing p{color:var(--muted2); font-size:18px; max-width:640px; margin:0 auto}
+  footer{padding:36px 0; text-align:center; color:var(--muted); font-size:12.5px}
+  footer b{color:var(--muted2)}
+
+  @media (max-width:880px){
+    .bb{grid-template-columns:1fr} .bb-in{border-right:none;border-bottom:1px dashed var(--line2)} .bb-out{border-left:none;border-top:1px dashed var(--line2)}
+    .impact-grid{grid-template-columns:1fr 1fr}
+    .mock-grid{grid-template-columns:1fr} .ann-grid{grid-template-columns:1fr}
+    .sales-grid{grid-template-columns:1fr} .hero h1{font-size:44px}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <div class="brand"><span class="logo">🦷</span> DentFlow<span style="color:var(--teal)">AI</span> <small>· Motor FAUCHARD</small></div>
+    <div class="nav-links">
+      <a href="#flujo">Recorrido del caso</a>
+      <a href="#complejidad">Niveles</a>
+      <a href="#motor">El motor</a>
+      <a href="#pantalla">En pantalla</a>
+      <a href="#valor">Por qué importa</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> El cerebro que asigna tus casos</div>
+    <h1>Cada caso que entra, <span class="hl">clasificado y asignado solo</span> — sin que nadie tenga que decidirlo a mano.</h1>
+    <p><b style="color:var(--fg)">FAUCHARD</b> es el motor que vive dentro de DentFlowAI. Recibe el caso del dentista, lo lee, decide su nivel de complejidad y elige a los laboratorios o técnicos indicados para cotizarlo. Todo de forma automática, ordenada y trazable.</p>
+    <div class="hero-badges">
+      <div class="hero-badge"><span class="dot"></span> Clasifica en <b>4 niveles</b> de complejidad</div>
+      <div class="hero-badge"><span class="dot"></span> Invita <b>~5 técnicos</b> por caso</div>
+      <div class="hero-badge"><span class="dot"></span> <b>3 relojes</b> que cuidan los plazos</div>
+      <div class="hero-badge"><span class="dot"></span> Nunca deja un caso <b>sin gestionar</b></div>
+    </div>
+    <p class="source-note">Todo el contenido de esta presentación está construido a partir del comportamiento real del sistema. Donde una regla se deduce de la lógica (y no está escrita de forma literal) se marca como “requiere validación”.</p>
+  </header>
+
+  <!-- 1. FLUJO -->
+  <section id="flujo">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 1 · Recorrido completo</div>
+    <h2 class="section-title">El viaje de un caso, de principio a fin</h2>
+    <p class="lead">Desde que el dentista publica un caso hasta que se cierra, se completa o se descarta. Cada flecha indica <b>qué hace que el caso avance</b>. Léelo de arriba hacia abajo.</p>
+
+    <div class="legend">
+      <span><i class="sw" style="background:#334155"></i> Inicio / borrador</span>
+      <span><i class="sw" style="background:#0d9488"></i> En gestión activa</span>
+      <span><i class="sw" style="background:#b45309"></i> En espera</span>
+      <span><i class="sw" style="background:#15803d"></i> Cierre con éxito</span>
+      <span><i class="sw" style="background:#be123c"></i> Cierre sin trabajo</span>
+    </div>
+
+    <div class="panel diagram-wrap" style="margin-top:8px">
+      <pre class="mermaid">
+flowchart TD
+    A([Borrador del caso]):::start
+    B[En evaluación<br/>Técnicos cotizando]:::active
+    POOL[En espera<br/>Buscando técnicos disponibles]:::wait
+    FAIL([Sin técnicos disponibles]):::bad
+    P[Propuesta lista<br/>Dentista compara ofertas]:::active
+    ACC[Aceptada<br/>Esperando inicio del técnico]:::active
+    EJE[En ejecución<br/>Técnico diseñando]:::active
+    REV[En revisión<br/>Dentista revisa la entrega]:::active
+    FAB[En fabricación]:::active
+    ENV[Enviado<br/>Despachado al dentista]:::active
+    OK([Completado]):::good
+    CLOSE([Cerrado]):::bad
+
+    A -->|"Dentista publica · FAUCHARD clasifica el nivel<br/>e invita a ~5 técnicos"| B
+
+    B -->|"No hay técnicos disponibles ahora"| POOL
+    POOL -->|"Un técnico activa su disponibilidad<br/>(reintento automático)"| B
+    POOL -->|"Vence la espera y aún quedan ciclos<br/>(reintenta · máx. 2)"| POOL
+    POOL -->|"Se agotan los ciclos de espera"| FAIL
+    POOL -->|"El dentista cancela la búsqueda"| CLOSE
+
+    B -->|"Un técnico rechaza la invitación →<br/>FAUCHARD invita un reemplazo automático"| B
+    B -->|"Reloj de 30 min: llegan cotizaciones o vence el plazo<br/>→ se arma el comparativo"| P
+    B -->|"Nadie cotiza y no hay reemplazos"| FAIL
+
+    P -->|"Dentista descarta una oferta<br/>(quedan otras)"| P
+    P -->|"Dentista elige una oferta"| ACC
+    P -->|"Dentista descarta todas las ofertas"| CLOSE
+    P -->|"Reloj de 2 h: vence sin que el dentista elija"| CLOSE
+
+    ACC -->|"Técnico inicia · Solo diseño / Integral"| EJE
+    ACC -->|"Técnico inicia · Solo fabricación<br/>(salta la etapa de diseño)"| FAB
+
+    EJE -->|"Técnico entrega el diseño"| REV
+    REV -->|"Reloj de 48 h · Dentista pide cambios<br/>(vuelve a diseño)"| EJE
+    REV -->|"Dentista aprueba · Solo diseño"| OK
+    REV -->|"Dentista aprueba · Integral<br/>(pasa a fabricar)"| FAB
+
+    FAB -->|"Técnico despacha (courier + seguimiento)"| ENV
+    ENV -->|"Dentista confirma recepción"| OK
+
+    classDef start fill:#1e293b,stroke:#475569,color:#e2e8f0,stroke-width:1px;
+    classDef active fill:#0c3b38,stroke:#2dd4bf,color:#d1fae5,stroke-width:1.3px;
+    classDef wait fill:#3a2606,stroke:#f59e0b,color:#fde68a,stroke-width:1.3px;
+    classDef good fill:#0f3d22,stroke:#22c55e,color:#bbf7d0,stroke-width:1.5px;
+    classDef bad fill:#3f1020,stroke:#f43f5e,color:#fecdd3,stroke-width:1.5px;
+      </pre>
+    </div>
+
+    <div class="flow-note">
+      <div class="nb"><b>Tres relojes independientes.</b> 30 minutos para que los técnicos coticen · 2 horas para que el dentista elija · 48 horas para que el dentista revise cada entrega. Cada entrega del técnico reinicia el reloj de revisión.</div>
+      <div class="nb"><b>Nunca se atasca.</b> Si no hay técnicos disponibles, el caso entra en <b>espera</b> y FAUCHARD lo reactiva solo cuando un técnico vuelve a estar disponible — en vez de fallar de inmediato.</div>
+      <div class="nb"><b>Reemplazo sin intervención.</b> Si un técnico rechaza la invitación, FAUCHARD invita automáticamente al siguiente mejor candidato. El dentista ni se entera del cambio.</div>
+    </div>
+    <p class="source-note">Estados y transiciones tomados de la máquina de estados del caso y de las acciones de servidor (publicar, clasificar, cotizar, comparar, iniciar, entregar, revisar, fabricar, despachar, recepcionar, y los caminos de espera/rechazo/expiración).</p>
+  </section>
+
+  <!-- 2. COMPLEJIDAD -->
+  <section id="complejidad">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 2 · Clasificación</div>
+    <h2 class="section-title">Los 4 niveles de complejidad</h2>
+    <p class="lead">Antes de invitar a nadie, FAUCHARD lee el caso y le pone un nivel. Ese nivel define a qué <b>categoría de técnicos</b> se le ofrece. Estos son los criterios reales.</p>
+
+    <div class="legend">
+      <span><span class="tag tag-explicit">criterio explícito</span> está escrito tal cual en el sistema</span>
+      <span><span class="tag tag-infer">comportamiento inferido</span> se deduce de cómo opera la lógica</span>
+    </div>
+
+    <table class="cx">
+      <thead>
+        <tr>
+          <th style="width:15%">Nivel</th>
+          <th style="width:30%">Criterio que lo activa</th>
+          <th style="width:25%">Lectura operativa</th>
+          <th style="width:13%">Liga asignada</th>
+          <th style="width:17%">Perfil de técnico / laboratorio</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="row-verde">
+          <td><span class="lvl"><span class="bar" style="background:var(--verde)"></span><span>Básico<small style="color:var(--verde)">Verde</small></span></span></td>
+          <td>
+            <span class="tag tag-explicit">explícito</span> Ningún criterio superior se cumple. Trabajos unitarios: <b>corona unitaria, inlay, onlay, carilla simple</b> (1 a 3 piezas).
+          </td>
+          <td><span class="tag tag-infer">inferido</span> Casos de rutina, alto volumen, riesgo clínico bajo.</td>
+          <td><span class="league-pill lg-bronce">Bronce</span></td>
+          <td>Habilidad mínima <b>nivel 1</b> en la categoría del caso.</td>
+        </tr>
+        <tr class="row-amarillo">
+          <td><span class="lvl"><span class="bar" style="background:var(--amarillo)"></span><span>Intermedio<small style="color:var(--amarillo)">Amarillo</small></span></span></td>
+          <td>
+            <span class="tag tag-explicit">explícito</span> <b>4 o más piezas</b>, o trabajos de <b>puente de 4+ unidades</b> o <b>carillas múltiples</b>.
+          </td>
+          <td><span class="tag tag-infer">inferido</span> Mayor coordinación y planificación; exige experiencia comprobada.</td>
+          <td><span class="league-pill lg-plata">Plata</span></td>
+          <td>Habilidad mínima <b>nivel 3</b> en la categoría del caso.</td>
+        </tr>
+        <tr class="row-naranja">
+          <td><span class="lvl"><span class="bar" style="background:var(--naranja)"></span><span>Avanzado<small style="color:var(--naranja)">Naranja</small></span></span></td>
+          <td>
+            <span class="tag tag-explicit">explícito</span> <b>10 o más piezas</b>, o trabajos de <b>arco completo, prótesis parcial removible, prótesis total, sobredentadura o barra sobre implantes</b>.
+          </td>
+          <td><span class="tag tag-infer">inferido</span> Rehabilitaciones extensas; pocos laboratorios calificados.</td>
+          <td><span class="league-pill lg-oro">Oro</span></td>
+          <td>Habilidad mínima <b>nivel 5</b> en la categoría del caso.</td>
+        </tr>
+        <tr class="row-rojo">
+          <td><span class="lvl"><span class="bar" style="background:var(--rojo)"></span><span>Crítico<small style="color:var(--rojo)">Rojo</small></span></span></td>
+          <td>
+            <span class="tag tag-explicit">explícito</span> <b>Guía quirúrgica</b>, o <b>indicaciones estéticas extensas</b> (nota del dentista de más de 100 caracteres).
+          </td>
+          <td><span class="tag tag-infer">inferido</span> Máxima exigencia técnica y estética; reservado a los mejores.</td>
+          <td><span class="league-pill lg-elite">Élite</span></td>
+          <td>Habilidad mínima <b>nivel 7</b> (máximo) en la categoría del caso.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="validate">
+      <h4>⚠ Requiere validación</h4>
+      <ul>
+        <li><b>Orden de lectura del nivel.</b> El sistema revisa primero “Avanzado”, luego “Intermedio” y al final “Crítico”. Por eso, un caso de muchas piezas <i>con</i> nota estética extensa se clasificará como <b>Avanzado</b>, no como Crítico. La guía quirúrgica sí cae en Crítico (es de pocas piezas y no califica antes). Conviene confirmar si este orden es el deseado.</li>
+        <li><b>Depende de los nombres del catálogo.</b> La clasificación usa el nombre del tipo de restauración (editable por el administrador). Si se renombra una opción y deja de coincidir con la lista interna, el caso se trata por defecto como “corona” — lo que puede cambiar su nivel.</li>
+        <li><b>La urgencia no cambia el nivel.</b> El nivel de complejidad <i>no</i> considera la urgencia del caso (sí se usa en otras partes del sistema).</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3. CAJA NEGRA -->
+  <section id="motor">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 3 · El motor por dentro</div>
+    <h2 class="section-title">Qué entra, qué decide, qué entrega</h2>
+    <p class="lead">FAUCHARD funciona como un motor autogestionado: recibe la información del caso, la procesa con reglas fijas y resuelve solo la clasificación y la asignación. Nadie tiene que “entenderlo” para que funcione.</p>
+
+    <div class="panel" style="margin-top:8px; border-radius:18px 18px 0 0; border-bottom:none">
+      <div class="bb">
+        <!-- ENTRADAS -->
+        <div class="bb-col bb-in">
+          <div class="bb-h">→ Entra del caso</div>
+          <div class="io"><b>Tipo de servicio</b><span>Solo diseño · Solo fabricación · Diseño + fabricación</span></div>
+          <div class="io"><b>Tipo de restauración</b><span>Corona, puente, carilla, prótesis, guía quirúrgica…</span></div>
+          <div class="io"><b>Número de piezas</b><span>Cuántos dientes involucra el trabajo</span></div>
+          <div class="io"><b>Indicaciones estéticas</b><span>Las notas del dentista sobre el caso</span></div>
+        </div>
+
+        <!-- CORE -->
+        <div class="bb-col">
+          <div class="core">
+            <div class="core-title">
+              <span class="name">FAUCHARD</span>
+              <small>Motor de clasificación y asignación</small>
+            </div>
+            <div class="decision"><span class="n">1</span><p><b>Clasifica el nivel</b> de complejidad y lo traduce a una liga objetivo (Bronce → Élite).</p></div>
+            <div class="decision"><span class="n">2</span><p><b>Filtra a los técnicos:</b> disponibilidad declarada, habilidad mínima para la categoría, y descansos entre invitaciones.</p></div>
+            <div class="decision"><span class="n">3</span><p><b>Puntúa y sortea:</b> calidad, puntualidad, experiencia, carga de trabajo y respuesta reciente deciden quién entra — con ventaja para los mejores, pero sin excluir al resto.</p></div>
+            <div class="decision"><span class="n">4</span><p><b>Invita y arranca los relojes</b> de cotización y de plazos del caso.</p></div>
+          </div>
+        </div>
+
+        <!-- SALIDAS -->
+        <div class="bb-col bb-out">
+          <div class="bb-h">Entrega →</div>
+          <div class="io"><b>Caso clasificado</b><span>Con su nivel y su liga ya asignados</span></div>
+          <div class="io"><b>~5 técnicos invitados</b><span>Los más adecuados, de forma anónima</span></div>
+          <div class="io"><b>Relojes en marcha</b><span>Plazos claros para cotizar y responder</span></div>
+          <div class="io"><b>Reemplazo automático</b><span>Si alguien rechaza, entra el siguiente</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bb-impact">
+      <h4>Impacto en la operación del laboratorio</h4>
+      <div class="impact-grid">
+        <div class="ic"><b>Entrada ordenada</b>Cada caso llega ya clasificado</div>
+        <div class="ic"><b>Sin criterio manual</b>Nadie decide “a ojo” quién lo hace</div>
+        <div class="ic"><b>Asignación pareja</b>Misma regla para todos los casos</div>
+        <div class="ic"><b>Cero casos perdidos</b>Si no hay quién, espera y reintenta</div>
+      </div>
+    </div>
+    <p class="source-note">El detalle de la fórmula de puntuación (calidad, puntualidad, experiencia, carga, bonificación y respuesta reciente) y de los filtros de disponibilidad está implementado en el motor de selección. Aquí se presenta en lenguaje operativo.</p>
+  </section>
+
+  <!-- 4. PANTALLA -->
+  <section id="pantalla">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 4 · En pantalla</div>
+    <h2 class="section-title">Un caso real, ya procesado por FAUCHARD</h2>
+    <p class="lead">Así se ve un caso después de que el motor hizo su trabajo: nivel detectado, estado actual, laboratorio asignado y plazos a la vista.</p>
+
+    <div class="mock" style="margin-top:8px">
+      <div class="mock-top">
+        <span class="tdot" style="background:#f87171"></span><span class="tdot" style="background:#fbbf24"></span><span class="tdot" style="background:#34d399"></span>
+        <span class="mock-url">dentflowai.app › casos › DF-2048</span>
+      </div>
+      <div class="mock-body">
+        <div class="case-head">
+          <div>
+            <div class="case-id">DF-2048<small>Rehabilitación · arco superior</small></div>
+          </div>
+          <div class="badges">
+            <span class="pill pill-cx">● Avanzado</span>
+            <span class="pill pill-state">En revisión</span>
+            <span class="pill pill-loc">📍 Las Condes · Santiago</span>
+          </div>
+        </div>
+
+        <div class="stepper">
+          <div class="step done"><span class="sc">✓</span><span class="sl">Publicado</span></div><span class="conn"></span>
+          <div class="step done"><span class="sc">✓</span><span class="sl">Cotizado</span></div><span class="conn"></span>
+          <div class="step done"><span class="sc">✓</span><span class="sl">Aceptado</span></div><span class="conn"></span>
+          <div class="step done"><span class="sc">✓</span><span class="sl">En diseño</span></div><span class="conn"></span>
+          <div class="step now"><span class="sc">●</span><span class="sl">En revisión</span></div><span class="conn"></span>
+          <div class="step"><span class="sc">6</span><span class="sl">Fabricación</span></div><span class="conn"></span>
+          <div class="step"><span class="sc">7</span><span class="sl">Completado</span></div>
+        </div>
+
+        <div class="mock-grid">
+          <div class="mcard">
+            <h5>Detalle del caso</h5>
+            <div class="kv"><span class="k">Tipo de servicio</span><span class="v">Diseño + Fabricación</span></div>
+            <div class="kv"><span class="k">Restauración</span><span class="v">Arco completo (12 piezas)</span></div>
+            <div class="kv"><span class="k">Nivel detectado por FAUCHARD</span><span class="v" style="color:#fdba74">Avanzado → Liga Oro</span></div>
+            <div class="kv"><span class="k">Categoría</span><span class="v">Puentes y Arco completo</span></div>
+            <div class="kv"><span class="k">Técnicos invitados</span><span class="v">5 (Liga Oro)</span></div>
+            <div class="kv"><span class="k">Entrega comprometida</span><span class="v">14 jun · 18:00</span></div>
+          </div>
+          <div class="mcard">
+            <h5>Asignación</h5>
+            <div class="assigned">
+              <div class="av">A7</div>
+              <div class="meta"><b>Laboratorio asignado</b><span>Identidad reservada · Liga Oro</span></div>
+            </div>
+            <div class="timer">
+              <div class="t">47:12:30</div>
+              <small>Plazo de revisión del dentista</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="ann">
+          <b>¿Qué hizo FAUCHARD en este caso?</b>
+          <div class="ann-grid">
+            <div class="a"><span class="ai">1</span><span>Leyó las <b>12 piezas</b> y lo clasificó como <b>Avanzado</b> automáticamente.</span></div>
+            <div class="a"><span class="ai">2</span><span>Buscó técnicos de <b>Liga Oro</b> disponibles para esta categoría e invitó a <b>5</b>.</span></div>
+            <div class="a"><span class="ai">3</span><span>Recibió las cotizaciones, armó el <b>comparativo anónimo</b> y el dentista eligió.</span></div>
+            <div class="a"><span class="ai">4</span><span>Mantiene el <b>plazo de revisión</b> corriendo y avisa antes de que venza.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="source-note">Mockup ilustrativo con datos representativos. El anonimato del técnico frente al dentista, el nivel detectado, el comparativo y los plazos reflejan el comportamiento real del sistema.</p>
+  </section>
+
+  <!-- 5. VALOR -->
+  <section id="valor">
+    <div class="eyebrow"><span class="chip">FAUCHARD</span> Entregable 5 · Por qué importa</div>
+    <h2 class="section-title">Lo que FAUCHARD resuelve en tu laboratorio</h2>
+    <p class="lead">No es tecnología por tecnología. Es una herramienta pensada para los problemas reales del día a día de un laboratorio dental.</p>
+
+    <div class="sales-grid">
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg></div>
+        <h3>Orden en la entrada de casos</h3>
+        <p>Cada caso llega clasificado por nivel y categoría. Se acabó el “ver caso por caso” para entender qué es y cuánto pesa.</p>
+        <div class="mech"><b>Detrás:</b> clasificación automática en 4 niveles según restauración y número de piezas.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+        <h3>Menos dependencia del criterio manual</h3>
+        <p>La decisión de “quién hace qué” deja de depender de la memoria o el ánimo de una persona. La regla es la misma siempre.</p>
+        <div class="mech"><b>Detrás:</b> filtro por habilidad y disponibilidad + puntuación objetiva por desempeño.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.5 2.5M16.5 16.5L19 19M19 5l-2.5 2.5M7.5 16.5L5 19"/></svg></div>
+        <h3>Asignación más consistente</h3>
+        <p>El caso correcto al técnico correcto, según su nivel real y su carga actual — premiando calidad y puntualidad.</p>
+        <div class="mech"><b>Detrás:</b> ligas por desempeño (Bronce→Élite) y descansos entre invitaciones.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <h3>Mejor trazabilidad</h3>
+        <p>Sabes en qué etapa está cada caso, quién lo tiene y cuánto plazo queda. Todo el recorrido queda registrado.</p>
+        <div class="mech"><b>Detrás:</b> máquina de estados con historial de eventos y 3 relojes de plazos.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <h3>Menos errores y cuellos de botella</h3>
+        <p>Si un técnico no responde o rechaza, otro entra automáticamente. Ningún caso se queda esperando en un cajón.</p>
+        <div class="mech"><b>Detrás:</b> reemplazo automático, cola de espera y reactivación cuando hay disponibilidad.</div>
+      </div>
+      <div class="scard">
+        <div class="ico"><svg class="ic" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg></div>
+        <h3>Capacidad de escalar</h3>
+        <p>Más casos no significan más caos. El motor reparte y prioriza solo, así puedes crecer sin sumar trabajo administrativo.</p>
+        <div class="mech"><b>Detrás:</b> orquestación automática extremo a extremo, sin gestión manual de asignación.</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="closing">
+    <h2><span style="color:var(--teal)">FAUCHARD</span> trabaja, tú produces.</h2>
+    <p>El motor ordena la entrada, asigna con criterio parejo y cuida los plazos. Tu laboratorio se concentra en lo que sabe hacer: trabajos de calidad.</p>
+  </div>
+
+</main>
+
+<footer>
+  <b>DentFlowAI · Motor FAUCHARD</b> — Material de presentación construido sobre el comportamiento real del sistema.<br/>
+  Las reglas marcadas “requiere validación” se deducen de la lógica y conviene confirmarlas antes de comunicarlas como definitivas.
+</footer>
+
+<script src="assets/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad:true,
+    theme:'base',
+    securityLevel:'loose',
+    flowchart:{ curve:'basis', nodeSpacing:55, rankSpacing:60, useMaxWidth:true },
+    themeVariables:{
+      fontFamily:'Inter, system-ui, sans-serif',
+      fontSize:'14px',
+      lineColor:'#64748b',
+      edgeLabelBackground:'#0b1220',
+      tertiaryColor:'#0b1220'
+    }
+  });
+</script>
+</body>
+</html>

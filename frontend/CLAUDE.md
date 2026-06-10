@@ -75,6 +75,7 @@ Reglas:
 - Punto de aviso ámbar (Nivel 2) / rojo (Nivel 3). Click → popover con `GlobalAvailabilitySwitch` + `ResponseStatusStepper` condensado + link al panel.
 - Panel completo en `/dashboard/profile/availability` (`AvailabilityPanel`): switch global, columnas CAD/CAM con 5 categorías (`WORK_CATEGORIES`), historial de respuesta. Padre OFF deshabilita hijos visualmente pero **preserva** sus valores.
 - Toggle del switch global: OFF con invitaciones pendientes → `BulkRejectDialog` (mantener / rechazar todas); ON desde Nivel 3 → `ReactivationModal` (informativo, no bloqueante). Orquestado por `GlobalAvailabilitySwitch`.
+- **Fuente de verdad única + sincronización legacy**: el switch v5.0 (`technician_availability.level_global`) y el toggle legacy del perfil (`user.is_available`) se **espejan en la capa de escritura** para que nunca diverjan entre superficies (badge del header · panel `/availability` · perfil) ni entre los dos flags independientes (`AVAILABILITY_MODEL_ENABLED` lee `level_global`; con ese flag off el filtro Fauchard legacy lee `user.is_available`). `updateAvailabilityLevelAction` (target `global`) también escribe `user.is_available`; `toggleAvailabilityAction` también escribe `technician_availability.level_global` (best-effort, solo si la fila existe). En el perfil, `components/profile/AvailabilityToggle.tsx` consulta `getMyAvailabilityStatusAction()` y, si la UI v5.0 está habilitada, renderiza el `GlobalAvailabilitySwitch` con estado en vivo (mismo control que el badge) en lugar del toggle legacy; con el flag off cae al toggle legacy (`user.is_available`).
 
 ## Tema (claro/oscuro/sistema)
 - Provider en `components/theme/ThemeProvider.tsx` + contexto en `ThemeContext.ts`. Toggle: `ThemeToggleButton.tsx`.
@@ -98,8 +99,10 @@ Ejecutar con `npx tsx scripts/<archivo>.ts` desde `frontend/` (lee `.env.local`)
 | `migrate-catalogs-opaque-codes.ts` | One-time v3.8→v3.9: codes slug → opacos (`mat_001`, …). **Ya aplicado** |
 | `migrate-recovery-v39.ts` | One-time v3.9→v4.0: dedup catálogos + backfill FK + drop columnas text. **Ya aplicado** |
 | `migrate-tokens.ts` | One-time: migración de tokens auth |
-| `reseed-contact-guard-regex.ts` | Re-poblar reglas regex de ContactGuard (idempotente) |
+| `reseed-contact-guard-regex.ts` | Re-poblar reglas regex de ContactGuard (idempotente). Elimina las reglas legacy `telefono_*`: los teléfonos se detectan por país en código (`lib/contactGuard/phonePatterns.ts`) |
 | `diag-contact-guard.ts` | Diagnóstico — verifica reglas activas + testea inputs |
+| `seed-courier-allowlist.ts` | Seed/upsert idempotente de la allowlist de couriers (`contact_guard_courier_allowlist`, por `domain` en minúsculas). Los dominios permitidos eximen URLs de tracking del bloqueo |
+| `recheck-contact-guard-audit.ts` | Solo lectura: re-evalúa el histórico de `contact_guard_audit` con la lógica actual (teléfonos country-aware + exención URLs/tracking) para distinguir falsos positivos ya corregidos de bloqueos vigentes |
 | `backfill-availability.ts` | One-time v5.0 (Fase 7): puebla `technician_availability` por técnico (infiere CAD/CAM de skills). Idempotente. Correr una vez en la activación |
 | `send-rollout-email.ts proximo\|activado` | One-time v5.0 (Fase 7): comunicación masiva de rollout a técnicos vía EmailJS (best-effort) |
 

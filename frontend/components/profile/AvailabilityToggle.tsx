@@ -1,17 +1,80 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Zap, ZapOff } from 'lucide-react';
+import { Zap, ZapOff, Settings2 } from 'lucide-react';
 import { toggleAvailabilityAction } from '@/lib/db/actions/skills';
+import { getMyAvailabilityStatusAction } from '@/lib/db/actions/availability';
 import { useToast } from '@/context/ToastContext';
+import GlobalAvailabilitySwitch from '@/components/availability/GlobalAvailabilitySwitch';
+import ResponseStatusStepper from '@/components/availability/ResponseStatusStepper';
 
 interface AvailabilityToggleProps {
   initialValue: boolean;
   suspendedUntil?: Date | null;
 }
 
+type Status = Awaited<ReturnType<typeof getMyAvailabilityStatusAction>>;
+
+/**
+ * Disponibilidad en el perfil del técnico.
+ *
+ * Cuando el modelo v5.0 está habilitado (`AVAILABILITY_UI_TECNICO_ENABLED`, surface
+ * vía `getMyAvailabilityStatusAction().enabled`) renderiza el switch global v5.0 con
+ * estado en vivo, de modo que el perfil, el badge del header y el panel de
+ * disponibilidad comparten una única fuente de verdad (`technician_availability`).
+ * Con el flag off cae al toggle legacy (`user.is_available`).
+ */
 export default function AvailabilityToggle({ initialValue, suspendedUntil }: AvailabilityToggleProps) {
+  const [status, setStatus] = useState<Status | null>(null);
+
+  const refresh = useCallback(async () => {
+    setStatus(await getMyAvailabilityStatusAction());
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  if (status && status.success && status.enabled && status.availability) {
+    const { availability, level, pendingCount } = status;
+    const on = availability.levelGlobal;
+    return (
+      <div className="bg-surface/40 border border-divider rounded-2xl p-6 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Disponibilidad</h3>
+            <p className="text-[11px] text-faint leading-relaxed max-w-xs">
+              {on ? 'Recibes invitaciones de trabajo del sistema.' : 'En pausa: no recibirás nuevas invitaciones.'}
+            </p>
+          </div>
+          <GlobalAvailabilitySwitch
+            userId={availability.userId}
+            levelGlobal={on}
+            level={level}
+            pendingCount={pendingCount}
+            onChanged={refresh}
+          />
+        </div>
+
+        <div className="border-t border-divider pt-4">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-faint mb-3">Estado de respuesta</p>
+          <ResponseStatusStepper level={level.level} count={level.count} nextExitDate={level.nextExitDate} compact />
+        </div>
+
+        <Link
+          href="/dashboard/profile/availability"
+          className="inline-flex items-center gap-2 text-[11px] font-bold text-primary hover:underline"
+        >
+          <Settings2 className="w-3.5 h-3.5" /> Ir al panel de disponibilidad
+        </Link>
+      </div>
+    );
+  }
+
+  return <LegacyAvailabilityToggle initialValue={initialValue} suspendedUntil={suspendedUntil} />;
+}
+
+function LegacyAvailabilityToggle({ initialValue, suspendedUntil }: AvailabilityToggleProps) {
   const { showSuccess, showError } = useToast();
   const [isAvailable, setIsAvailable] = useState(initialValue);
   const [loading, setLoading] = useState(false);

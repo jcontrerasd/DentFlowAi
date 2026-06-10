@@ -1,0 +1,28 @@
+{
+  "name": "dentflowai-video",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Video animado punta a punta de DentFlowAi (Motor Fauchard) — Remotion",
+  "scripts": {
+    "dev": "remotion studio --no-open",
+    "render:master": "remotion render Master out/master.mp4",
+    "render:pitch": "remotion render Pitch out/pitch.mp4",
+    "render:social1": "remotion render Social1 out/social-1.mp4",
+    "render:social2": "remotion render Social2 out/social-2.mp4",
+    "render:social3": "remotion render Social3 out/social-3.mp4",
+    "render:all": "npm run render:master && npm run render:pitch && npm run render:social1 && npm run render:social2 && npm run render:social3",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.475",
+    "@remotion/google-fonts": "4.0.475",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.475"
+  },
+  "devDependencies": {
+    "@types/react": "19.0.0",
+    "@types/react-dom": "19.0.0",
+    "typescript": "5.5.4"
+  }
+}

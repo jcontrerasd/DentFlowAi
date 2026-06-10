@@ -39,7 +39,6 @@
     "react-dom": "19.0.0",
     "react-error-boundary": "^6.1.1",
     "recharts": "^3.8.1",
-    "resend": "^6.12.2",
     "three": "^0.183.2"
   },
   "devDependencies": {

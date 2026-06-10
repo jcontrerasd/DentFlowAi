@@ -2,10 +2,31 @@
 
 ## Archivos clave
 - `schema.ts` — Definición de todas las tablas. Fuente de verdad del modelo.
-- `infrastructure.ts` — Conexión DB + runtime migrations (NO usar drizzle-kit push en producción)
+- `infrastructure.ts` — Conexión DB + runtime migrations (NO usar drizzle-kit push en producción). `INFRA_VERSION` actual: **v5.7**.
 - `index.ts` — Exporta instancia `db`
+- `catalogResolver.ts` — resuelve `code`/`label` de catálogos UI → `*_id` antes de persistir.
+
+**Helpers de la capa de datos** (viven en `lib/db/`, **no** en `actions/`; no son server actions):
+- `caseDeadlines.ts` — deadlines wall-clock de los countdowns (`getCaseQuoteDeadlineAt`, `getCaseReviewDeadlineAt`).
+- `archiveCaseFiles.ts` — `archiveCaseFilesBestEffort(caseId)` (marca `customTime` en GCS al cerrar el caso).
+- `caseListVisibility.ts` — predicados de visibilidad: `buildActiveCaseVisibilityWhere`, `userCanAccessClinicalCase` y `canViewerSeeDoctorAddress` (gate de dirección del dentista, v5.7).
+- `caseListQueryBuilder.ts` — armado de queries del listado de casos.
+- `caseUserArchiveHelpers.ts` — helpers de archivado por usuario (`case_user_archive`).
 
 ## Tablas principales
+
+### `user`
+Perfil del usuario. Campos de ubicación (v5.7, todos `TEXT` nullable):
+- `country` — código de país (`CL`, `AR`, `CO`, `BR`, `PE`, `BO`, `UY`, `EC`, `MX`)
+- `region` — código de región (ej. `CL-RM`)
+- `comuna` — código de comuna (ej. `CL-RM-SAN`)
+- `address` — nombre de calle
+- `address_number` — número de calle
+- `address_office` — número de oficina / depto
+
+Otros campos relevantes: `role`, `is_available`, `consecutive_no_response`, `onboarding_step`, `league_level`, `league_transition_started_at`, `league_demotion_watch_since`.
+
+`getUserProfileDirect` (`actions/user.ts`) selecciona todos los campos de dirección para el perfil del usuario autenticado. `getCaseDetails` (`actions/cases.ts`) incluye los 6 campos del doctor en el join `doctor` para el badge de dirección en la ficha del caso, pero **los anula en el servidor** salvo que el viewer pase `canViewerSeeDoctorAddress` (`caseListVisibility.ts`): solo el técnico ganador (asignado), el admin y el dentista dueño los reciben; cualquier otro técnico invitado obtiene `null` (gate de privacidad autoritativo; el cliente solo refuerza el render).
 
 ### `clinicalCase`
 Estado del caso: `borrador → enEvaluacion → propuestaLista → aceptadaPendienteInicio → enEjecucion → enRevision [→ cambiosEnProceso] → disenoAprobado [→ enFabricacion → enviado] → completado`
@@ -106,9 +127,8 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 | `cases.ts` | CRUD casos, publicar, archivar, clonar, fabricación/despacho/recepción, `logCaseEvent()`, `getCaseEventsAction` |
 | `proposal.ts` | acceptProposal, rejectInvitationOffer, startWork, withdrawQuote, expireDentistComparativeWindow |
 | `invitations.ts` | Listado de invitaciones; archivos visibles solo si `invitation.status === confirmed` |
-| `skills.ts` | Matriz habilidades; lee rol desde DB (no JWT) |
+| `skills.ts` | Matriz habilidades; lee rol desde DB (no JWT). `toggleAvailabilityAction` (toggle legacy del perfil) escribe `user.is_available` y **espeja** a `technician_availability.level_global` (best-effort, solo si la fila existe) para mantener sincronizado el switch v5.0 |
 | `files.ts` | Upload/download vía GCS signed URLs |
-| `archiveCaseFiles.ts` | `archiveCaseFilesBestEffort(caseId)` — marca `customTime` en archivos GCS al cerrar el caso (alimenta la lifecycle policy del bucket). Opera sobre el bucket configurado en runtime (`GCP_BUCKET_NAME`): staging y prod tienen buckets distintos (`-dev` / `-prod`), así que la transición en uno no afecta al otro |
 | `impersonation.ts` | `getServerIdentity()` — resolver canónico de identidad |
 | `hubRead.ts` | Cursores de lectura del UCH (`markCaseAsReadAction`) + contadores no leídos. Actualiza `clinical_case_hub_read` (`lastReadTechHubAt` / `lastReadNegHubAt`); consumido por `lib/uchUnread.ts` |
 | `dashboard.ts` | Métricas y agregados del dashboard |
@@ -118,13 +138,18 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 | `catalogs.ts` | Listas administrables del wizard (vita_shade, restoration_type, dental_material, urgency_level): list públicas + CRUD admin |
 | `fauchardHolidays.ts` | CRUD de feriados globales (tabla `fauchard_holiday`, v4.6). Admin UI en `/dashboard/admin/fauchard` → FauchardCalendarPanel |
 | `contactGuard.ts` | CRUD de reglas (regex/keyword) para moderar campos libres. Admin UI en `/dashboard/admin/contactguard`. Las reglas las consume `lib/contactGuard/guardOrFail.ts` en server actions de cotización, despacho y notas |
-| `availability.ts` (v5.0) | Disponibilidad declarada del técnico. `computeEligibleAction` = regla **AND triple** (`levelGlobal ∧ level<cap> ∧ cat<cat><cap>`), en tiempo real. `getAvailabilityForUserAction` crea fila default (infiere CAD/CAM de skills). `updateAvailabilityLevelAction`, `getAllEligibleForCategoryCapacityAction`. Gated por `AVAILABILITY_MODEL_ENABLED` (lo consulta Fauchard) |
+| `availability.ts` (v5.0) | Disponibilidad declarada del técnico. `computeEligibleAction` = regla **AND triple** (`levelGlobal ∧ level<cap> ∧ cat<cat><cap>`), en tiempo real. `getAvailabilityForUserAction` crea fila default (infiere CAD/CAM de skills). `updateAvailabilityLevelAction` (al cambiar el nivel `global` **espeja** a `user.is_available` para no divergir del toggle legacy), `getAllEligibleForCategoryCapacityAction`. Gated por `AVAILABILITY_MODEL_ENABLED` (lo consulta Fauchard) |
 | `noResponseEvents.ts` (v5.0) | Sanción rolling: `recordNoResponseEventAction`, `getActiveEventsInWindowAction`, `expireEventsOutsideWindowAction` (cron), `pardonEventsAction` (admin), `computeLevelForTechnicianAction` (nivel 0–3 + nextExitDate). Reemplaza `user.consecutiveNoResponse` cuando el flag está on |
 | `rejection.ts` (v5.0) | Rechazo explícito: `rejectInvitationIndividualAction` (§3.2), `rejectInvitationsBulkAction` (§3.1), `autoRejectOnAutoOffAction` (§3.2.bis). No cuenta como no-respuesta; dispara reemplazo si el flag está on |
 | `replacement.ts` (v5.0) | `tryReplaceAfterRejectAction` — invita al siguiente elegible del pool scoreado tras un rechazo, respetando cutoff temporal (`replacementCutoffMinutes`) y truncando `expiresAt` al deadline del caso. NO se dispara por no-respuesta |
 | `poolQueue.ts` (v5.0) | Cola `pendiente_pool`: `enterPendingPoolAction`, `processPendingPoolCheckInAction` (50% TTL, cron), `processPendingPoolExpirationAction` (re-encola o falla a `sin_cotizaciones_fallo`, cron), `cancelPendingPoolAction` (dentista/admin cierra el caso durante la espera), `triggerPoolReevaluationOnTechnicianOnAction` (event-driven). Importa Fauchard dinámicamente (evita ciclo) |
 | `availabilityCron.ts` (v5.0/v5.1) | `processAvailabilityMaintenanceAction` — invocado por `/api/cron/process-availability` (cada hora). Expira no-respuestas fuera de ventana, auto-OFF preventivo (inactivo > `inactivityAutoOffDays`) y recordatorio (> `inactivityReminderDays`, idempotente vía `inactivity_reminder_sent_at`). Inerte con el flag off |
 | `dentistReviewCron.ts` (v5.0/v5.2) | `processDentistReviewDeadlinesAction` — invocado por el mismo cron horario. Escala el countdown de revisión del dentista: recordatorio cuando queda ≤25% del plazo + aviso al vencer, **sin auto-acción**. Idempotente por entrega (`review_reminder_sent_at`/`review_overdue_notified_at`). Inerte con el flag off |
+| `league.ts` (v5.5) | Motor de ligas (Fase 2): ascenso (triple criterio + ventana de transición penalizada), descenso (rating bajo sostenido), consolidación. Escribe estado en `user` + auditoría en `league_change_event`. `getLeagueEngineEnabledAction` expone el flag. Gated por `LEAGUE_ENGINE_ENABLED` |
+| `leagueCron.ts` (v5.5) | `processLeagueMaintenanceAction` — invocado por `/api/cron/process-league` (diario) y por el scheduler in-process local (`lib/localCron.ts`). Recorre técnicos y aplica ascenso/descenso/consolidación. Inerte con el flag off |
+| `observability.ts` (v5.0) | Métricas del dashboard de observabilidad admin (`/dashboard/admin/observability`, `ObservabilityPanel`, 13 métricas con Recharts). Solo lectura |
+| `userPreferences.ts` | Preferencias del usuario (p. ej. tema persistido) |
+| `test-identity.ts` | Stub de identidad para tests de server actions (guard que falla fuera de modo test) |
 
 ## getCaseEventsAction — pipeline de entrega al cliente
 1. Filtra eventos por visibilidad de rol (via `filterCaseEventsForUchViewer`).

@@ -23,7 +23,7 @@ frontend/              Aplicación Next.js (único deploy)
   app/                 Rutas App Router
   components/          Componentes React (cases/, cases/uch/, admin/, theme/, ui/)
   lib/db/              Drizzle: schema, infrastructure (migraciones runtime), actions/
-  lib/services/        GCP Storage, notificaciones (Resend)
+  lib/services/        GCP Storage, notificaciones (EmailJS)
   lib/contactGuard/    Moderación de campos libres
   lib/businessTime.ts  Calendario laboral (horario + feriados)
   test/                Vitest + Testing Library
@@ -107,6 +107,8 @@ Clonar prod → staging (incluye usuarios y `passwordHash`): `bash scripts/clone
 - **Motor Fauchard**: clasifica casos, selecciona técnicos por habilidades + categoría, ancla `fauchard_config_id` al caso al publicar (copy-on-write). Idempotente — las lecturas no resetean deadlines.
 - **UCH (Unified Case Hub)**: pantalla de flujo guiado (NO chat libre). Acciones embebidas en el hilo, anonimato dentista ⇄ técnico, countdowns independientes (cotizar / elegir oferta / revisión del dentista).
 - **Disponibilidad declarada del técnico (v5.0, detrás de feature flags)**: el técnico declara disponibilidad en 3 niveles (global · CAD/CAM · 5 categorías); Fauchard filtra por regla AND triple. La exclusión binaria por no-respuesta se reemplaza por una **sanción gradual rolling de 14 días** (niveles 1/2/3 → aviso · penalización al score · auto-OFF). Incluye rechazo explícito + reemplazo automático, cola `pendiente_pool` cuando no hay elegibles, y panel de observabilidad admin. Todo inerte hasta encender `AVAILABILITY_MODEL_ENABLED`.
+- **Motor de ligas (Fase 2, v5.5, detrás de `LEAGUE_ENGINE_ENABLED`)**: mueve a los técnicos entre 4 categorías (Bronce/Plata/Oro/Élite) según desempeño (ascenso con ventana de transición penalizada + descenso por rating bajo sostenido). El gating de selección por liga ya operaba; el movimiento automático es la Fase 2.
+- **Dirección geográfica del usuario (v5.7)**: 6 columnas de dirección en `user` (país/región/comuna/calle/número/oficina), selects en cascada en registro y perfil. En la ficha del caso, la dirección del dentista se entrega **solo** al técnico ganador y al admin (gate de privacidad server-side).
 - **Calendario laboral (v4.6)**: `workDeadline` y deadlines Fauchard respetan horario y feriados configurables (`fauchard_config` + tabla `fauchard_holiday`).
 - **Catálogos UI** (v4.0): `vita_shade`, `restoration_type`, `dental_material`, `urgency_level` — administrables desde `/dashboard/admin/catalogos`. Admin solo edita `label`; `code` es opaco system-generated.
 - **GCS lifecycle**: archivos comprimidos con gzip al subir; al cerrar el caso se marca `customTime` y el lifecycle policy transiciona Standard → Nearline (30d) → Coldline (120d) → Archive (365d).

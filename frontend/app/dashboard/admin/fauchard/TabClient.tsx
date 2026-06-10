@@ -45,8 +45,8 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
 
   const spaces = [
     { id: 'parametros', label: 'Parámetros', icon: SlidersHorizontal },
-    { id: 'calendario', label: 'Calendario', icon: CalendarDays },
     { id: 'categorias', label: 'Categorías', icon: Trophy },
+    { id: 'calendario', label: 'Calendario', icon: CalendarDays },
     { id: 'historial', label: 'Historial', icon: History },
   ];
 

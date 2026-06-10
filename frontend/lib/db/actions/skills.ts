@@ -1,7 +1,7 @@
 'use server';
 import { canActAsTecnico } from "@/lib/auth-helpers";
 import { db } from '@/lib/db';
-import { technicianSkill, user, caseInvitation } from '@/lib/db/schema';
+import { technicianSkill, user, caseInvitation, technicianAvailability } from '@/lib/db/schema';
 import { eq, and, or, gt } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { WORK_TYPES } from '@/lib/constants/dental';
@@ -167,6 +167,13 @@ export async function toggleAvailabilityAction() {
     await db.update(user)
       .set(updateData)
       .where(eq(user.id, identity.id));
+
+    // Espejar al switch global v5.0 (`technician_availability.level_global`) para que el
+    // badge del header y el panel de disponibilidad reflejen el mismo estado que este
+    // toggle legacy. Best-effort: solo actualiza si la fila existe (la crea el modelo v5.0).
+    await db.update(technicianAvailability)
+      .set({ levelGlobal: newAvailability, updatedAt: new Date() })
+      .where(eq(technicianAvailability.userId, identity.id));
 
     return { success: true, isAvailable: newAvailability };
   } catch (error) {

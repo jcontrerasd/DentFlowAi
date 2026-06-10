@@ -36,6 +36,7 @@ import type { CaseListQueryFilters } from '@/lib/cases/caseListFilters';
 import {
   buildActiveCaseVisibilityWhere,
   userCanAccessClinicalCase,
+  canViewerSeeDoctorAddress,
 } from '@/lib/db/caseListVisibility';
 import {
   buildCaseListFilterWhere,
@@ -688,6 +689,16 @@ export async function getCaseDetails(caseId: string) {
         technician: {
           with: { organization: true }
         },
+        doctor: {
+          columns: {
+            country: true,
+            region: true,
+            comuna: true,
+            address: true,
+            addressNumber: true,
+            addressOffice: true,
+          }
+        },
         // events: se obtienen via getCaseEventsAction (con paginación y enmascarado Fauchard).
         // Cargarlos aquí duplicaba trabajo y crecía con el historial del caso.
       }
@@ -739,6 +750,29 @@ export async function getCaseDetails(caseId: string) {
         _error: "AccessDenied",
         _debug: { caseId, userId, isSimulating, role: userRole, msg: "No tienes permisos para ver este caso" }
       } as any;
+    }
+
+    // 4.bis Gate de la dirección del dentista (v5.7): se entrega SOLO al técnico ganador
+    // (el asignado al caso, para despachar la fabricación), al admin (supervisión) y al
+    // dentista dueño (es su propia dirección). Cualquier otro técnico invitado —durante la
+    // cotización o ya perdedor— accede al caso pero NO debe recibir la dirección (privacidad
+    // + evitar saltarse el marketplace). Se anulan los 6 campos conservando el objeto `doctor`.
+    if (cCase.doctor) {
+      const canSeeDoctorAddress = canViewerSeeDoctorAddress({
+        isSystemAdmin,
+        role: userRole as string,
+        userId: (userId as string) ?? null,
+        assignedTechnicianId: cCase.assignedTechnicianId,
+        doctorId: cCase.doctorId,
+      });
+      if (!canSeeDoctorAddress) {
+        cCase.doctor.country = null;
+        cCase.doctor.region = null;
+        cCase.doctor.comuna = null;
+        cCase.doctor.address = null;
+        cCase.doctor.addressNumber = null;
+        cCase.doctor.addressOffice = null;
+      }
     }
 
     // 5. Firmar URLs de las entregas (Deliveries)

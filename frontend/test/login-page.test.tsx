@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { pushMock, replaceMock, signInMock, searchParamsGetMock, checkUserStatusActionMock, useSessionMock } =
+const { pushMock, replaceMock, signInMock, searchParamsGetMock, checkUserStatusActionMock, useSessionMock, useAuthMock } =
   vi.hoisted(() => ({
     pushMock: vi.fn(),
     replaceMock: vi.fn(),
@@ -9,6 +9,7 @@ const { pushMock, replaceMock, signInMock, searchParamsGetMock, checkUserStatusA
     searchParamsGetMock: vi.fn(),
     checkUserStatusActionMock: vi.fn(),
     useSessionMock: vi.fn(),
+    useAuthMock: vi.fn(),
   }));
 
 vi.mock('next/navigation', () => ({
@@ -25,12 +26,17 @@ vi.mock('@/lib/db/actions/user', () => ({
   checkUserStatusAction: (...args: unknown[]) => checkUserStatusActionMock(...args),
 }));
 
+vi.mock('@/context/AuthContext', () => ({
+  useAuth: () => useAuthMock(),
+}));
+
 import LoginPage from '@/app/auth/login/page';
 
 describe('LoginPage', () => {
   beforeEach(() => {
     searchParamsGetMock.mockImplementation((key: string) => (key === 'email' ? 'demo%40dentflow.ai' : null));
     useSessionMock.mockReturnValue({ data: null, status: 'unauthenticated' });
+    useAuthMock.mockReturnValue({ userProfile: null, loading: false });
     checkUserStatusActionMock.mockReset();
     signInMock.mockReset();
     replaceMock.mockReset();
@@ -62,10 +68,14 @@ describe('LoginPage', () => {
     });
   });
 
-  it('redirige al dashboard si la sesion ya esta autenticada', async () => {
+  it('redirige al dashboard si la sesion ya esta autenticada y el onboarding esta completo', async () => {
     useSessionMock.mockReturnValue({
       data: { user: { email: 'demo@dentflow.ai' } },
       status: 'authenticated',
+    });
+    useAuthMock.mockReturnValue({
+      userProfile: { onboardingStep: 100 },
+      loading: false,
     });
 
     render(<LoginPage />);
@@ -73,6 +83,25 @@ describe('LoginPage', () => {
     await waitFor(() => {
       expect(replaceMock).toHaveBeenCalledWith('/dashboard');
     });
+  });
+
+  it('NO redirige al dashboard si el onboarding esta incompleto', async () => {
+    useSessionMock.mockReturnValue({
+      data: { user: { email: 'demo@dentflow.ai' } },
+      status: 'authenticated',
+    });
+    useAuthMock.mockReturnValue({
+      userProfile: { onboardingStep: 50 },
+      loading: false,
+    });
+
+    render(<LoginPage />);
+
+    // Da tiempo a que corran los efectos; el login debe permanecer accesible.
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Iniciar Sesión' })).toBeInTheDocument();
+    });
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
   it('muestra mensaje de credenciales invalidas', async () => {

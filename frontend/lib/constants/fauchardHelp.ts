@@ -411,6 +411,88 @@ export const HISTORY_HELP: FauchardHelpSection = {
   ],
 };
 
+export const LEAGUE_HELP: FauchardHelpSection = {
+  title: 'Sistema de Categorías',
+  intro:
+    'Las categorías (Bronce, Plata, Oro, Élite) definen a qué nivel de complejidad puede optar cada técnico. Estos umbrales gobiernan el ascenso, el período de transición tras subir y el descenso. El motor automático que mueve a los técnicos entre categorías se activa con la Fase 2 (LEAGUE_ENGINE_ENABLED); mientras esté apagado, los valores se guardan pero no mueven a nadie, aunque la selección por liga sí usa la categoría actual de cada técnico.',
+  params: [
+    {
+      label: 'Calificación Mínima',
+      symbol: 'lMinRating',
+      description:
+        'Calificación promedio mínima (en la ventana de evaluación) requerida para ascender de categoría.',
+      example:
+        'El Lab. Andes está en Plata y aspira a Oro. Con la Calificación Mínima en 4.2 ⭐, debe sostener un promedio de al menos 4.2 en sus últimos casos para que el motor lo considere apto para subir. Si bajas el umbral a 4.0, más laboratorios alcanzan el ascenso; si lo subes a 4.6, el salto a la categoría superior se vuelve mucho más exigente.',
+      links: [{ key: 'lCasesEvaluated' }, { key: 'lDescentRating' }],
+    },
+    {
+      label: 'Ventana de Evaluación (Casos)',
+      symbol: 'lCasesEvaluated',
+      description:
+        'Número de casos recientes que se analizan para verificar requisitos de ascenso.',
+      example:
+        'Con la ventana en 10, el motor mira los últimos 10 casos del Lab. Andes para promediar su calificación y puntualidad. Bajándola a 5 reacciona más rápido a una buena racha (pero también a una mala); subiéndola a 20 exige un desempeño sostenido en más casos antes de ascender.',
+      links: [{ key: 'lMinRating' }],
+    },
+    {
+      label: 'Puntualidad Mínima (%)',
+      symbol: 'lMinPunctuality',
+      description: 'Porcentaje mínimo de entregas a tiempo exigido para ascender.',
+      example:
+        'Con la Puntualidad Mínima en 85%, el Lab. Andes solo asciende si entregó a tiempo al menos el 85% de los casos de la ventana, por buena que sea su calificación. Subirla a 95% reserva el ascenso para los más cumplidores; bajarla a 75% da más peso a la calidad por sobre el cumplimiento de plazos.',
+    },
+    {
+      label: 'Casos Completados Totales',
+      symbol: 'lCasesCompleted',
+      description:
+        'Casos finalizados exitosamente requeridos como condición absoluta para ascender.',
+      example:
+        'Con el umbral en 15, un Lab. Sur nuevo y con excelentes notas todavía no puede saltar a Oro si lleva solo 9 casos terminados: necesita acumular al menos 15. Es un piso de experiencia mínima que no se compensa con buena calificación. Subirlo frena ascensos prematuros; bajarlo agiliza la progresión de laboratorios nuevos.',
+    },
+    {
+      label: 'Casos en Transición',
+      symbol: 'lCasesTransition',
+      description:
+        'Casos a completar en la nueva categoría antes de consolidar el ascenso (período de prueba).',
+      example:
+        'El Lab. Andes acaba de subir a Oro. Con Casos en Transición en 3, queda "a prueba" sus próximos 3 casos en Oro antes de consolidar la categoría. Subirlo alarga el período de prueba (más casos para confirmar que rinde en la categoría superior); bajarlo lo consolida antes.',
+      links: [{ key: 'lPenaltyTransition' }],
+    },
+    {
+      label: 'Penalización Transición (%)',
+      symbol: 'lPenaltyTransition',
+      description:
+        'Reducción temporal del score durante el período de transición tras ascender.',
+      example:
+        'Con la penalización en 20%, mientras el Lab. Andes está a prueba en Oro su score se multiplica por 0.80 al competir por casos: entra al ruedo, pero con una pequeña desventaja frente a los Oro ya consolidados. Subirla protege más a los consolidados; bajarla hace que el recién ascendido compita casi de igual a igual.',
+      links: [{ key: 'lCasesTransition' }],
+    },
+    {
+      label: 'Calificación para Descenso',
+      symbol: 'lDescentRating',
+      description:
+        'Si el promedio cae bajo este valor durante el período, el técnico desciende de categoría.',
+      example:
+        'Con la Calificación para Descenso en 3.0 ⭐, si el promedio del Lab. Roble cae por debajo de 3.0 y se mantiene así el tiempo definido, el motor lo baja una categoría. Debe ser estrictamente menor que la Calificación Mínima de ascenso, para evitar que un técnico suba y baje en el acto.',
+      links: [{ key: 'lDescentDays' }, { key: 'lMinRating' }],
+    },
+    {
+      label: 'Días en Baja Calificación',
+      symbol: 'lDescentDays',
+      description:
+        'Días consecutivos bajo el umbral de descenso para que la bajada se haga efectiva.',
+      example:
+        'Con 60 días, el Lab. Roble no baja de categoría por una semana mala: su promedio debe permanecer bajo el umbral de descenso durante 60 días seguidos antes de que la bajada se aplique. Subirlo da más margen de recuperación; bajarlo hace el descenso más sensible a las malas rachas.',
+      links: [{ key: 'lDescentRating' }],
+    },
+  ],
+  notes: [
+    'La Calificación para Descenso debe ser estrictamente menor que la Calificación Mínima de ascenso (el panel bloquea el guardado si no se cumple).',
+    'El ascenso exige cumplir las tres condiciones a la vez: calificación, puntualidad y casos completados totales.',
+    'Estos umbrales solo mueven técnicos cuando el motor de categorías está activo (LEAGUE_ENGINE_ENABLED); con el motor apagado se guardan pero no tienen efecto.',
+  ],
+};
+
 // ─── Mapa: clave de parámetro de config → descripción ────────────────────────
 // Fuente única: los tooltips de los paneles reutilizan EXACTAMENTE la misma
 // descripción que la ayuda (sin el ejemplo), sin duplicar el texto.
@@ -454,6 +536,15 @@ export const FAUCHARD_PARAM_TOOLTIP: Record<string, string> = {
   businessHoursStart: descByLabel(CALENDAR_HELP, 'Hora apertura / cierre'),
   businessHoursEnd: descByLabel(CALENDAR_HELP, 'Hora apertura / cierre'),
   businessDaysMask: descByLabel(CALENDAR_HELP, 'Días laborables'),
+  // Sistema de Categorías (Liga)
+  lMinRating: descByLabel(LEAGUE_HELP, 'Calificación Mínima'),
+  lCasesEvaluated: descByLabel(LEAGUE_HELP, 'Ventana de Evaluación (Casos)'),
+  lMinPunctuality: descByLabel(LEAGUE_HELP, 'Puntualidad Mínima (%)'),
+  lCasesCompleted: descByLabel(LEAGUE_HELP, 'Casos Completados Totales'),
+  lCasesTransition: descByLabel(LEAGUE_HELP, 'Casos en Transición'),
+  lPenaltyTransition: descByLabel(LEAGUE_HELP, 'Penalización Transición (%)'),
+  lDescentRating: descByLabel(LEAGUE_HELP, 'Calificación para Descenso'),
+  lDescentDays: descByLabel(LEAGUE_HELP, 'Días en Baja Calificación'),
 };
 
 /** Descripción (sin ejemplo) para el tooltip de un parámetro. Vacío si no existe. */
@@ -465,7 +556,7 @@ export function fauchardParamTooltip(key: string): string {
 // Para que un link de ayuda muestre el parámetro con el MISMO nombre que tiene
 // en su panel de edición y pueda navegar al espacio que lo contiene.
 
-export type FauchardParamPanel = 'weights' | 'filters' | 'plazos' | 'calendar';
+export type FauchardParamPanel = 'weights' | 'filters' | 'plazos' | 'calendar' | 'league';
 
 /** Label exacto del control en su panel (ej. alphaNoResponse → "Penalización por No-respuesta (N)"). */
 export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
@@ -505,6 +596,15 @@ export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
   businessHoursEnd: 'Hora cierre',
   businessDaysMask: 'Días laborables',
   holidays: 'Feriados',
+  // Sistema de Categorías (Liga)
+  lMinRating: 'Calificación Mínima',
+  lCasesEvaluated: 'Ventana de Evaluación (Casos)',
+  lMinPunctuality: 'Puntualidad Mínima (%)',
+  lCasesCompleted: 'Casos Completados Totales',
+  lCasesTransition: 'Casos en Transición',
+  lPenaltyTransition: 'Penalización Transición (%)',
+  lDescentRating: 'Calificación para Descenso',
+  lDescentDays: 'Días en Baja Calificación',
 };
 
 /** Panel (y por ende espacio de TabClient) que contiene cada parámetro. */
@@ -519,6 +619,8 @@ export const FAUCHARD_PARAM_PANEL: Record<string, FauchardParamPanel> = {
   noResponseWindowDays: 'plazos', noResponseRehabilitationDays: 'plazos',
   level1Threshold: 'plazos', level2Threshold: 'plazos', level3Threshold: 'plazos',
   businessHoursStart: 'calendar', businessHoursEnd: 'calendar', businessDaysMask: 'calendar',
+  lMinRating: 'league', lCasesEvaluated: 'league', lMinPunctuality: 'league', lCasesCompleted: 'league',
+  lCasesTransition: 'league', lPenaltyTransition: 'league', lDescentRating: 'league', lDescentDays: 'league',
 };
 
 /** Label de origen del parámetro (fallback a la clave si no está mapeado). */
@@ -532,8 +634,11 @@ export function fauchardParamPanel(key: string): FauchardParamPanel | undefined 
 }
 
 /** Espacio de TabClient (`/dashboard/admin/fauchard`) que contiene el parámetro. */
-export function fauchardParamSpace(key: string): 'parametros' | 'calendario' {
-  return FAUCHARD_PARAM_PANEL[key] === 'calendar' ? 'calendario' : 'parametros';
+export function fauchardParamSpace(key: string): 'parametros' | 'calendario' | 'categorias' {
+  const panel = FAUCHARD_PARAM_PANEL[key];
+  if (panel === 'calendar') return 'calendario';
+  if (panel === 'league') return 'categorias';
+  return 'parametros';
 }
 
 // ─── Numeración estable de parámetros (cruza el help ⇄ las referencias) ───────
@@ -541,7 +646,13 @@ export function fauchardParamSpace(key: string): 'parametros' | 'calendario' {
 // ayuda y en las referencias desde Observabilidad, para poder localizarlo sin
 // ambigüedad (el label puede repetir palabras; el número es único).
 
-/** Orden canónico → número N°. NO reordenar (el número es un identificador estable). */
+/**
+ * Orden canónico → número N° (índice + 1). Sigue el orden de las pestañas del
+ * configurador: Parámetros (Pesos · Selección · Disponibilidad) → Categorías → Calendario.
+ * El número es de PRESENTACIÓN (badge en los paneles y la ventana de ayuda): no se
+ * persiste, no va en URLs (los deep-link usan `?focus=<key>`) ni en analítica. Si cambia
+ * el orden de las pestañas, reordenar aquí para que la numeración siga siendo correlativa.
+ */
 const FAUCHARD_PARAM_ORDER: string[] = [
   // Pesos del Score
   'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaBonus', 'alphaNoResponse',
@@ -552,7 +663,10 @@ const FAUCHARD_PARAM_ORDER: string[] = [
   'tDentistReviewHours', 'tNoEligiblePoolHours', 'maxPoolCycles', 'replacementCutoffMinutes',
   'inactivityReminderDays', 'inactivityAutoOffDays', 'noResponseWindowDays',
   'noResponseRehabilitationDays', 'level1Threshold', 'level2Threshold', 'level3Threshold',
-  // Calendario laboral
+  // Sistema de Categorías (Liga) — N°29–36
+  'lMinRating', 'lCasesEvaluated', 'lMinPunctuality', 'lCasesCompleted',
+  'lCasesTransition', 'lPenaltyTransition', 'lDescentRating', 'lDescentDays',
+  // Calendario laboral — N°37–40
   'businessHoursStart', 'businessHoursEnd', 'businessDaysMask', 'holidays',
 ];
 

@@ -25,8 +25,8 @@ frontend/              Aplicación Next.js (único deploy, output: standalone)
     actions/           Server Actions (única capa de mutación/lectura DB)
     actions/catalogs.ts  Catálogos UI: vita_shade, restoration_type, dental_material, urgency_level
   app/dashboard/admin/catalogos/  CRUD admin de catálogos UI
-  lib/services/        GCP Storage, notificaciones (Resend)
-  lib/constants/       dental.ts, caseEvents.ts, uchAuditMatrix.ts, …
+  lib/services/        GCP Storage, notificaciones (EmailJS, API REST server-side; reemplazó a Resend)
+  lib/constants/       dental.ts, caseEvents.ts, uchAuditMatrix.ts, addressData.ts, …
   lib/cases/           Presentación ficha, filtros listado, acciones ficha
   lib/dashboard/       KPIs, métricas, clasificación dashboard
   lib/                 uchThreadLane, uchPresentation, uchCasoPublicadoSplit,
@@ -93,7 +93,14 @@ Entorno aislado para desarrollo sin tocar staging/prod ([docker-compose.yml](doc
 
 ## ContactGuard
 
-Moderación de campos libres (notas, trackingId) — bloquea intentos de saltarse el marketplace (URLs, teléfonos, dominios). Reglas administrables en `/dashboard/admin/contactguard`. Código: [frontend/lib/contactGuard/](frontend/lib/contactGuard/) (`guardOrFail`, `normalize`, `cache`). Allowlist de dominios de courier disponible para `trackingId`.
+Moderación de campos libres (notas, trackingId) — bloquea intentos de saltarse el marketplace (URLs, teléfonos, dominios). Reglas administrables en `/dashboard/admin/contactguard`. Código: [frontend/lib/contactGuard/](frontend/lib/contactGuard/) (`guardOrFail`, `normalize`, `cache`, `phonePatterns`). Allowlist de dominios de courier disponible para `trackingId`.
+
+**Detección de teléfonos por país (country-aware).** Los teléfonos **no** se detectan con la regla DB genérica "8+ dígitos" (causaba falsos positivos: tracking, fechas, precios); se detectan en código con los formatos móviles de los **países involucrados** en el caso (`lib/contactGuard/phonePatterns.ts` → `PHONE_PATTERNS_BY_COUNTRY` para los 9 de `SUPPORTED_COUNTRIES` + patrón internacional `+CC`). `guardOrFail.ts → resolveInvolvedCountryCodes` resuelve la unión de países de dentista + técnico + actor (desde `user.country`); si ninguno tiene país declarado, usa **todos los soportados** (máxima protección). Las reglas DB `telefono_*` quedan inertes (el motor las ignora) y el reseed las elimina.
+
+**Reglas de números/URL adicionales:**
+- Los números que viven **dentro de una URL/dominio** (incluyendo dominios sin esquema con su path, p. ej. `correos.cl/track/123`, y acortadores como `bit.ly/…` / `t.co/…`) no se marcan como teléfono — exención de spans aplicada a **todos** los campos (`findProtectedSpans` en `index.ts`).
+- El campo `dispatchTracking` está **exento** de la detección numérica/telefónica (`NUMERIC_EXEMPT_FIELDS`): su contenido legítimo es un código largo. URL externa / email / handle siguen aplicando ahí.
+- Las violaciones de `dominio_explicito` contenidas en una `url_http` se deduplican (se reporta la URL una sola vez).
 
 ## Calendario laboral (v4.6) — businessTime + feriados
 
@@ -155,6 +162,29 @@ Diseño de lookup tables uniforme:
   - [scripts/migrate-recovery-v39.ts](frontend/scripts/migrate-recovery-v39.ts): dedup catálogos + backfill FK + drop columnas text.
 - `SERVICE_TYPES` y `WORK_TYPES` **se mantienen como constantes** (state machine y sistema de tipos).
 
+## Dirección geográfica del usuario (`INFRA_VERSION=v5.7`)
+
+Columnas en tabla `user` (todas `TEXT`, nullable, agregadas vía `ALTER TABLE … ADD COLUMN IF NOT EXISTS`):
+
+| Columna DB | Campo Drizzle | Descripción |
+|---|---|---|
+| `country` | `country` | Código de país (`CL`, `AR`, `CO`, …) |
+| `region` | `region` | Código de región (`CL-RM`, `CL-AT`, …) |
+| `comuna` | `comuna` | Código de comuna (`CL-RM-SAN`, …) |
+| `address` | `address` | Nombre de calle |
+| `address_number` | `addressNumber` | Número de calle |
+| `address_office` | `addressOffice` | Número de oficina / depto |
+
+**Datos geográficos**: `frontend/lib/constants/addressData.ts` exporta:
+- `REGIONS_BY_COUNTRY` — regiones y comunas para 9 países: Chile (completo, 16 regiones y 346 comunas), Argentina, Colombia, Brasil, Perú, Bolivia, Uruguay, Ecuador y México (principales ciudades como comunas).
+- `SUPPORTED_COUNTRIES` — array de los 9 países soportados `{ code, name }` para filtrar los selects de país en UI.
+
+**UI**: registración (`auth/register`) y perfil (`dashboard/profile`) muestran el bloque de dirección para ambos roles (dentista y técnico). Los selects son en cascada: País → Región → Comuna; los campos de calle son text inputs.
+
+**Ficha del caso — badge de ubicación**: en `dashboard/cases/[id]/page.tsx`, **solo el técnico ganador** (el asignado al caso) y los admins ven un badge en el header del caso (junto al ID `DF-XXXX`) con la dirección completa del dentista (`País · Región · Comuna · Calle Número · Of. X`) cuando el caso incluye fabricación (`needsFabrication=true`). Los demás técnicos invitados (cotizando o perdedores) acceden al caso pero NO reciben la dirección. Si el dentista no tiene dirección registrada, el badge no aparece.
+
+**getCaseDetails**: el join de `doctor` en `getCaseDetails` (`cases.ts`) incluye los 6 campos de dirección para alimentar el badge, pero **los anula salvo que el viewer sea el técnico asignado, admin o el dentista dueño** (gate de privacidad autoritativo en servidor; el cliente solo refuerza el render).
+
 ## Restricciones críticas
 <important>NUNCA acceder a la DB desde componentes — solo Server Actions en frontend/lib/db/actions/</important>
 <important>getServerIdentity() es el único resolver de identidad — soporta impersonación admin</important>
@@ -186,7 +216,7 @@ Reemplaza la exclusión binaria `consecutiveNoResponse >= 3` por un sistema grad
 Mueve a los técnicos entre 4 categorías fijas (Bronce/Plata/Oro/Élite) según desempeño. El **gating** de selección por liga ya operaba (expansión en 3 intentos en `runFauchardAction`); Fase 2 agrega el **movimiento automático**. Diseño: [Doc/DentFlowAI_Diseño_Funcional_Liga.md](Doc/DentFlowAI_Diseño_Funcional_Liga.md).
 - **Ascenso**: triple criterio (`avgRating ≥ lMinRating` ∧ `puntualidad ≥ lMinPunctuality` ∧ `completados ≥ lCasesCompleted`) sobre los últimos `lCasesEvaluated` casos de la liga actual → sube un nivel + abre **transición** (`lCasesTransition` casos con penalización `score·(1−lPenaltyTransition)`). Consolida al completar la ventana.
 - **Descenso**: rating `< lDescentRating` sostenido `lDescentDays` (watch `league_demotion_watch_since`); tope en bronce.
-- **Estado** en `user`: `league_level`, `league_transition_started_at`, `league_demotion_watch_since`, `league_last_evaluated_at`; auditoría en `league_change_event`. Esquema `INFRA_VERSION=v5.5`.
+- **Estado** en `user`: `league_level`, `league_transition_started_at`, `league_demotion_watch_since`, `league_last_evaluated_at`; auditoría en `league_change_event`. Esquema `INFRA_VERSION=v5.5`. Ver también v5.7 (dirección del usuario) más abajo.
 - **Código**: motor en `lib/db/actions/league.ts`; helpers puros en `lib/league.ts`; penalización al score en `lib/leagueScore.ts` (aplicada en `calculateTechnicianScore`/`calculateScoreFromBulkData`). Surface del flag: `getLeagueEngineEnabledAction`.
 - **Cron**: `processLeagueMaintenanceAction` (`lib/db/actions/leagueCron.ts`) → endpoint `/api/cron/process-league` (diario, Cloud Scheduler en dev/prod) **y** scheduler in-process en **local** (`frontend/instrumentation.ts` → `lib/localCron.ts`, solo fuera de `NODE_ENV=production`; controles `LOCAL_CRONS_ENABLED` / `LOCAL_LEAGUE_CRON_INTERVAL_MS`).
 - **UI admin**: badge de categoría + chip "Transición" en `TechnicianRankingTable`; `LeagueConfigPanel` con banner según flag e invariante `lDescentRating < lMinRating`.

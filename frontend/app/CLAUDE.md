@@ -43,6 +43,7 @@ Esta es la página más compleja del sistema. Puntos clave:
 - **Animación**: `framer-motion` anima la entrada/salida del panel; el desmontaje real solo ocurre al cambiar de caso.
 - **Countdown propuesta**: `proposalDeadlineMs` + `serverClockAnchor` se pasan al UCH. El countdown solo aparece en el header del UCH (no en el header de la página).
 - **Ficha**: botones de gestión vía `CaseDetailManagementBar` + reglas en `lib/cases/caseDetailActions.ts`.
+- **Badge de dirección del dentista** (v5.7): visible **solo para el técnico ganador** (el asignado, `assignedTechnicianId === viewer`) y para admin, en casos con `needsFabrication=true`. Aparece en el header junto al ID (`DF-XXXX`) y muestra: `País · Región · Comuna · Calle Número · Of. X`. Usa datos de `getCaseDetails.doctor` (join con 6 columnas de dirección) y resuelve códigos a nombres legibles con `SUPPORTED_COUNTRIES` / `REGIONS_BY_COUNTRY` de `lib/constants/addressData.ts`. **Gate en dos capas**: el servidor (`getCaseDetails`) anula los 6 campos de dirección para cualquier técnico no-ganador (privacidad / evitar saltarse el marketplace), y el cliente solo renderiza el badge para ganador/admin. Si no hay dirección registrada (o el viewer no es ganador/admin), no se renderiza.
 
 ## Convenciones
 - Área dashboard: guard de sesión/onboarding en `dashboard/layout.tsx` (Client Component con `useAuth()`).

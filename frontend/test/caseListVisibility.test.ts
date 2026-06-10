@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { userCanAccessClinicalCase } from '@/lib/db/caseListVisibility';
+import {
+  userCanAccessClinicalCase,
+  canViewerSeeDoctorAddress,
+} from '@/lib/db/caseListVisibility';
 
 const ORG = 'org-1';
 const DENTIST_A = 'dentist-a';
 const DENTIST_B = 'dentist-b';
 const TECH = 'tech-1';
+const TECH_LOSER = 'tech-2';
 
 describe('userCanAccessClinicalCase', () => {
   it('dentista: accede a su propio caso', async () => {
@@ -110,5 +114,51 @@ describe('userCanAccessClinicalCase', () => {
         },
       ),
     ).toBe(true);
+  });
+});
+
+describe('canViewerSeeDoctorAddress (v5.7 — dirección solo al ganador)', () => {
+  const base = { assignedTechnicianId: TECH, doctorId: DENTIST_A };
+
+  it('técnico asignado (ganador): ve la dirección', () => {
+    expect(
+      canViewerSeeDoctorAddress({ role: 'tecnico', userId: TECH, ...base }),
+    ).toBe(true);
+  });
+
+  it('técnico invitado no asignado (perdedor/cotizando): NO ve la dirección', () => {
+    expect(
+      canViewerSeeDoctorAddress({ role: 'tecnico', userId: TECH_LOSER, ...base }),
+    ).toBe(false);
+  });
+
+  it('admin: ve la dirección', () => {
+    expect(
+      canViewerSeeDoctorAddress({ role: 'admin', userId: 'admin-1', ...base }),
+    ).toBe(true);
+  });
+
+  it('isSystemAdmin (impersonando o no): ve la dirección', () => {
+    expect(
+      canViewerSeeDoctorAddress({ isSystemAdmin: true, role: 'tecnico', userId: TECH_LOSER, ...base }),
+    ).toBe(true);
+  });
+
+  it('dentista dueño: ve su propia dirección', () => {
+    expect(
+      canViewerSeeDoctorAddress({ role: 'dentista', userId: DENTIST_A, ...base }),
+    ).toBe(true);
+  });
+
+  it('userId nulo: no ve la dirección', () => {
+    expect(
+      canViewerSeeDoctorAddress({ role: 'tecnico', userId: null, ...base }),
+    ).toBe(false);
+  });
+
+  it('caso sin técnico asignado todavía: técnico invitado NO ve la dirección', () => {
+    expect(
+      canViewerSeeDoctorAddress({ role: 'tecnico', userId: TECH, assignedTechnicianId: null, doctorId: DENTIST_A }),
+    ).toBe(false);
   });
 });
