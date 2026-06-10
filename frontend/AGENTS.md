@@ -56,6 +56,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `transitionToManufacturingAction`, `registerDispatchAction`, `confirmReceptionAction` viven en `cases.ts` (no en `proposal.ts`).
 - `solo_diseno` cierra en `approveWorkAction` → `completado`; flujos con despacho cierran con `confirmReceptionAction`.
 
+### Dirección geográfica del usuario (v5.7)
+- Columnas en tabla `user`: `country`, `region`, `comuna`, `address`, `address_number` (`addressNumber`), `address_office` (`addressOffice`). Todas TEXT nullable.
+- Datos geográficos en `lib/constants/addressData.ts`: `REGIONS_BY_COUNTRY` (9 países; Chile completo) y `SUPPORTED_COUNTRIES`. Importar desde `@/lib/constants/addressData`.
+- Selects en cascada País → Región → Comuna en registro (`auth/register`) y perfil (`dashboard/profile`) para ambos roles.
+- Badge de dirección en `dashboard/cases/[id]` para técnico/admin en casos con fabricación. Los códigos se resuelven a nombres legibles en cliente.
+
 ### Disponibilidad del técnico (v5.0, flag `AVAILABILITY_MODEL_ENABLED`)
 - 3 niveles jerárquicos (global · CAD/CAM · 5 categorías) → regla AND triple en `availability.ts`. Rechazo individual ≠ rechazo masivo (catálogos `invitation_rejection_reason` / `bulk_rejection_reason`).
 - **Rechazo individual en UCH** (flag `REJECTION_INDIVIDUAL_ENABLED`): botón "Rechazar invitación" en `UchFauchardActionsPanel` → `UchRejectInvitationDialog` → `rejectInvitationIndividualAction`. Solo el técnico invitado, mientras la invitación esté `pending`. **No** cuenta como no-respuesta y dispara reemplazo automático (`tryReplaceAfterRejectAction`). El **rechazo masivo** es distinto: lo hace el técnico al pausar el switch global (`rejectInvitationsBulkAction`). El flag server-only se expone al cliente con `getRejectionUiEnabledAction`.

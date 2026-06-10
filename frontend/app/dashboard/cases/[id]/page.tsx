@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { creationInstructionsText } from '@/lib/cases/instructions';
+import { SUPPORTED_COUNTRIES, REGIONS_BY_COUNTRY } from '@/lib/constants/addressData';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
 import {
   getCaseDetails,
@@ -1921,6 +1922,30 @@ function CaseDetailPageContent() {
                   <span>{clinicalCase?.patientIdAnon ?? '—'}</span>
                 )}
               </div>
+              {/* Ubicación del dentista — visible SOLO para el técnico ganador (asignado) y admin
+                  en casos con fabricación. El servidor (getCaseDetails) también anula la dirección
+                  para no-ganadores; este gate evita además renderizarla en cliente. */}
+              {(viewingAsAdmin || (actingAsTecnico && viewerIdStr != null && assignedTechnicianIdStr === viewerIdStr)) && clinicalCase?.needsFabrication && (() => {
+                const doc = (clinicalCase as any)?.doctor;
+                if (!doc?.country && !doc?.region && !doc?.comuna) return null;
+                const countryName = SUPPORTED_COUNTRIES.find(c => c.code === doc.country)?.name ?? doc.country;
+                const regionName = doc.region
+                  ? (REGIONS_BY_COUNTRY[doc.country]?.find((r: any) => r.code === doc.region)?.name ?? doc.region)
+                  : null;
+                const comunaName = doc.region && doc.comuna
+                  ? (REGIONS_BY_COUNTRY[doc.country]?.find((r: any) => r.code === doc.region)?.communes.find((c: any) => c.code === doc.comuna)?.name ?? doc.comuna)
+                  : null;
+                const streetLine = [doc.address, doc.addressNumber].filter(Boolean).join(' ');
+                const officeLine = doc.addressOffice ? `Of. ${doc.addressOffice}` : null;
+                const parts = [countryName, regionName, comunaName, streetLine, officeLine].filter(Boolean);
+                if (!parts.length) return null;
+                return (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-2 border border-divider text-muted">
+                    <Globe className="w-3 h-3 text-faint shrink-0" />
+                    {parts.join(' · ')}
+                  </span>
+                );
+              })()}
               {clinicalCase?.internalStatus && authUserProfile?.role === 'admin' && (
                 <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-surface-2 text-muted border border-divider tracking-wider">
                   ⚙ {clinicalCase.internalStatus}

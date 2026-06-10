@@ -74,8 +74,9 @@ Lógica interna:
 | `UchRejectInvitationDialog.tsx` | Rechazo individual de una invitación pending por el técnico (v5.0). Selector poblado de `invitation_rejection_reason`; "Otro" exige comentario. Lanzado desde `UchFauchardActionsPanel` solo si `getRejectionUiEnabledAction().enabled` (flag `REJECTION_INDIVIDUAL_ENABLED`, server-only surfaced al cliente). No cuenta como no-respuesta; dispara reemplazo si el modelo está on |
 | `UchDeliveryPanel.tsx` | Entrega de diseño/revisión (técnico) |
 | `UchDentistReviewPanel.tsx` | Revisión/aprobación del dentista |
-| `UchDealSummary.tsx` | Resumen del acuerdo aceptado |
+| `UchDealSummary.tsx` | Resumen del acuerdo aceptado (precio, desglose, plazo, entrega). La dirección de envío del dentista se muestra en el header de la ficha del caso (badge junto al ID), no aquí. |
 | `UchQuoteBreakdown.tsx` | Desglose diseño/fabricación en UI de cotización |
+| `UchRatingPanel.tsx` | Calificación anónima del dentista al laboratorio (`dimension: 'design' \| 'fabrication'`, escala `RatingScale`) vía `submitUserRatingAction`. Alimenta el componente Q del score Fauchard. Renderizado desde `UnifiedCaseHub` al cierre del caso |
 | `buildUchTimelineRows.ts` | Combina eventos y filas de acción ordenadas por timestamp |
 | `uchTimelineTypes.ts` | Tipos: `UchTimelineRow`, `UchCaseEventLite`, `UchActionRowId` |
 | `uchHubActionVisibility.ts` | Mostrar/ocultar acciones según estado del caso y rol |
@@ -91,3 +92,10 @@ Lógica interna:
 - Props: `initialCad`, `initialCam` (precargan toggles desde DB)
 - `onSaveSuccess` callback para avanzar paso en onboarding
 - Agrupa tipos de trabajo en `WORK_TYPE_GROUPS` definidos en el propio archivo
+
+## Dirección geográfica en registro y perfil (v5.7)
+- **`auth/register/page.tsx`** — Step 2 "Tu Perfil" incluye un bloque de dirección completo para ambos roles (dentista y técnico): selects en cascada País → Región → Comuna, más inputs de texto Calle, Número y Oficina.
+- **`dashboard/profile/page.tsx`** — mismo bloque editable para ambos roles.
+- Los selects de País se limitan a `SUPPORTED_COUNTRIES` (9 países); las opciones de Región y Comuna se filtran dinámicamente por `REGIONS_BY_COUNTRY[countryCode]`, ambos de `lib/constants/addressData.ts`.
+- Los valores se persisten vía `updateUserAction` (`actions/user.ts`) como códigos (`CL`, `CL-RM`, `CL-RM-SAN`) y texto libre para la calle.
+- El badge de dirección en la ficha del caso (`dashboard/cases/[id]`) resuelve los códigos a nombres legibles en el cliente.

@@ -67,10 +67,49 @@ describe('checkContactExposure', () => {
     if (!r.ok) expect(r.violations.some((v) => v.ruleName === 'email')).toBe(true);
   });
 
-  it('detecta teléfono CL aunque venga con espacios', async () => {
-    const r = await checkContactExposure('llámame +56 9 1234 5678', { field: 'techNotes' });
+  it('detecta teléfono CL aunque venga con espacios (country-aware)', async () => {
+    const r = await checkContactExposure('llámame +56 9 1234 5678', { field: 'techNotes', countries: ['CL'] });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.violations.some((v) => v.ruleName === 'telefono_8plus_digitos')).toBe(true);
+    if (!r.ok) expect(r.violations.some((v) => v.ruleName === 'telefono')).toBe(true);
+  });
+
+  it('detecta móvil CL local (sin +código) cuando CL está involucrado', async () => {
+    const r = await checkContactExposure('mi número es 9 8765 4321', { field: 'techNotes', countries: ['CL'] });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.violations.some((v) => v.ruleName === 'telefono')).toBe(true);
+  });
+
+  it('NO marca como teléfono una fecha colapsada (12-05-2024)', async () => {
+    const r = await checkContactExposure('Entregar el 12-05-2024 por la tarde', { field: 'doctorNotes', countries: ['CL'] });
+    expect(r.ok).toBe(true);
+  });
+
+  it('NO marca como teléfono un número de seguimiento en dispatchTracking (exento)', async () => {
+    const r = await checkContactExposure('123456789012', {
+      field: 'dispatchTracking',
+      allowCourierUrls: true,
+      countries: ['CL'],
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it('URL con números: una sola violación de URL, no además teléfono (P1)', async () => {
+    // 912345678 calza el patrón móvil CL; al vivir dentro de la URL NO debe marcarse como teléfono.
+    const r = await checkContactExposure('mira https://ejemplo.com/orden/912345678', { field: 'techNotes', countries: ['CL'] });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.violations.some((v) => v.ruleName === 'url_http')).toBe(true);
+      expect(r.violations.some((v) => v.ruleName === 'telefono')).toBe(false);
+    }
+  });
+
+  it('dominio courier sin esquema + número en dispatchTracking pasa (allowlist + exención)', async () => {
+    const r = await checkContactExposure('chilexpress.cl/track/1234567890', {
+      field: 'dispatchTracking',
+      allowCourierUrls: true,
+      countries: ['CL'],
+    });
+    expect(r.ok).toBe(true);
   });
 
   it('detecta keyword whatsapp', async () => {

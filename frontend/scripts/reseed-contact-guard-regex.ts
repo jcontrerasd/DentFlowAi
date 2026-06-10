@@ -1,6 +1,10 @@
 /**
- * Recovery: re-inserta las 7 reglas regex de ContactGuard.
+ * Recovery: re-inserta las reglas regex de ContactGuard.
  * Idempotente: borra por nombre antes de insertar.
+ *
+ * Los teléfonos ya NO viven aquí: se detectan por país en código
+ * (`lib/contactGuard/phonePatterns.ts`). Este script además elimina las reglas legacy
+ * `telefono_*` para dejar limpio el listado admin.
  *
  * Uso: npx tsx scripts/reseed-contact-guard-regex.ts
  */
@@ -19,16 +23,6 @@ const REGEX_RULES: Array<{
     name: 'email',
     pattern: String.raw`[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}`,
     description: 'Direcciones de correo electrónico',
-  },
-  {
-    name: 'telefono_cl_intl',
-    pattern: String.raw`(?:\+?56)[\s\-\.]?9[\s\-\.]?\d{4}[\s\-\.]?\d{4}`,
-    description: 'Teléfono móvil chileno con prefijo internacional',
-  },
-  {
-    name: 'telefono_8plus_digitos',
-    pattern: String.raw`(?<!\d)(?:\+?\d{1,3}[\s\-\.]?)?\d{8,}(?!\d)`,
-    description: 'Secuencias de 8 o más dígitos (teléfonos)',
   },
   {
     name: 'url_http',
@@ -56,6 +50,10 @@ async function main() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL no configurada');
   const sql = postgres(url, { prepare: false });
+
+  // Eliminar reglas legacy de teléfono (la detección es country-aware en código).
+  const removed = await sql`DELETE FROM contact_guard_rule WHERE name IN ('telefono_cl_intl', 'telefono_8plus_digitos')`;
+  if (removed.count) console.log(`✗ eliminadas ${removed.count} regla(s) legacy telefono_*`);
 
   for (const r of REGEX_RULES) {
     // Borra cualquier residuo del mismo nombre y re-inserta.

@@ -99,8 +99,10 @@ Ejecutar con `npx tsx scripts/<archivo>.ts` desde `frontend/` (lee `.env.local`)
 | `migrate-catalogs-opaque-codes.ts` | One-time v3.8→v3.9: codes slug → opacos (`mat_001`, …). **Ya aplicado** |
 | `migrate-recovery-v39.ts` | One-time v3.9→v4.0: dedup catálogos + backfill FK + drop columnas text. **Ya aplicado** |
 | `migrate-tokens.ts` | One-time: migración de tokens auth |
-| `reseed-contact-guard-regex.ts` | Re-poblar reglas regex de ContactGuard (idempotente) |
+| `reseed-contact-guard-regex.ts` | Re-poblar reglas regex de ContactGuard (idempotente). Elimina las reglas legacy `telefono_*`: los teléfonos se detectan por país en código (`lib/contactGuard/phonePatterns.ts`) |
 | `diag-contact-guard.ts` | Diagnóstico — verifica reglas activas + testea inputs |
+| `seed-courier-allowlist.ts` | Seed/upsert idempotente de la allowlist de couriers (`contact_guard_courier_allowlist`, por `domain` en minúsculas). Los dominios permitidos eximen URLs de tracking del bloqueo |
+| `recheck-contact-guard-audit.ts` | Solo lectura: re-evalúa el histórico de `contact_guard_audit` con la lógica actual (teléfonos country-aware + exención URLs/tracking) para distinguir falsos positivos ya corregidos de bloqueos vigentes |
 | `backfill-availability.ts` | One-time v5.0 (Fase 7): puebla `technician_availability` por técnico (infiere CAD/CAM de skills). Idempotente. Correr una vez en la activación |
 | `send-rollout-email.ts proximo\|activado` | One-time v5.0 (Fase 7): comunicación masiva de rollout a técnicos vía EmailJS (best-effort) |
 

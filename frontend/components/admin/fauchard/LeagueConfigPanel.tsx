@@ -8,6 +8,9 @@ import { getLeagueEngineEnabledAction } from '@/lib/db/actions/league';
 import { Save, Trophy, TrendingUp, TrendingDown, Construction, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ConfirmSaveModal from './ConfirmSaveModal';
+import FauchardHelpButton from './FauchardHelpButton';
+import FauchardHelpWindow from './FauchardHelpWindow';
+import { LEAGUE_HELP, fauchardParamTooltip, fauchardParamNumber } from '@/lib/constants/fauchardHelp';
 
 interface LeagueConfigPanelProps {
   initialConfig: any;
@@ -33,6 +36,9 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
   const [showConfirm, setShowConfirm] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [engineEnabled, setEngineEnabled] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const [helpFocus, setHelpFocus] = useState<string | null>(null);
+  const openHelp = (key?: string) => { setHelpFocus(key ?? null); setShowHelp(true); };
 
   useEffect(() => {
     getLeagueEngineEnabledAction().then((r) => setEngineEnabled(r.enabled)).catch(() => {});
@@ -102,6 +108,15 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         </div>
       )}
 
+      {/* Header con botón de ayuda (mismo patrón que los demás paneles) */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-bold text-foreground">Sistema de Categorías</h3>
+          <p className="text-xs text-faint">Umbrales de ascenso, transición y descenso entre Bronce, Plata, Oro y Élite.</p>
+        </div>
+        <FauchardHelpButton onClick={() => openHelp()} label="Sistema de Categorías" />
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
         {/* Requisitos de Ascenso */}
         <div className="space-y-8">
@@ -110,10 +125,10 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
             <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Requisitos de Ascenso</h3>
           </div>
           <div className="space-y-8 pl-1">
-            <Slider label="Calificación Mínima" value={v.lMinRating} min={3.5} max={5.0} step={0.1} onChange={(e) => set('lMinRating', parseFloat(e.target.value))} valueSuffix=" ⭐" tooltip="Calificación promedio mínima (en la ventana de evaluación) requerida para ascender de categoría." />
-            <Slider label="Ventana de Evaluación (Casos)" value={v.lCasesEvaluated} min={5} max={20} step={1} onChange={(e) => set('lCasesEvaluated', parseInt(e.target.value))} valueSuffix=" casos" tooltip="Número de casos recientes que se analizan para verificar requisitos de ascenso." />
-            <Slider label="Puntualidad Mínima (%)" value={v.lMinPunctuality * 100} min={70} max={100} step={1} onChange={(e) => set('lMinPunctuality', parseFloat(e.target.value) / 100)} valueSuffix=" %" tooltip="Porcentaje mínimo de entregas a tiempo exigido para ascender." />
-            <Slider label="Casos Completados Totales" value={v.lCasesCompleted} min={5} max={50} step={1} onChange={(e) => set('lCasesCompleted', parseInt(e.target.value))} valueSuffix=" casos" tooltip="Casos finalizados exitosamente requeridos como condición absoluta para ascender." />
+            <Slider label="Calificación Mínima" value={v.lMinRating} min={3.5} max={5.0} step={0.1} onChange={(e) => set('lMinRating', parseFloat(e.target.value))} valueSuffix=" ⭐" tooltip={fauchardParamTooltip('lMinRating')} onHelp={() => openHelp('lMinRating')} paramNumber={fauchardParamNumber('lMinRating')} />
+            <Slider label="Ventana de Evaluación (Casos)" value={v.lCasesEvaluated} min={5} max={20} step={1} onChange={(e) => set('lCasesEvaluated', parseInt(e.target.value))} valueSuffix=" casos" tooltip={fauchardParamTooltip('lCasesEvaluated')} onHelp={() => openHelp('lCasesEvaluated')} paramNumber={fauchardParamNumber('lCasesEvaluated')} />
+            <Slider label="Puntualidad Mínima (%)" value={v.lMinPunctuality * 100} min={70} max={100} step={1} onChange={(e) => set('lMinPunctuality', parseFloat(e.target.value) / 100)} valueSuffix=" %" tooltip={fauchardParamTooltip('lMinPunctuality')} onHelp={() => openHelp('lMinPunctuality')} paramNumber={fauchardParamNumber('lMinPunctuality')} />
+            <Slider label="Casos Completados Totales" value={v.lCasesCompleted} min={5} max={50} step={1} onChange={(e) => set('lCasesCompleted', parseInt(e.target.value))} valueSuffix=" casos" tooltip={fauchardParamTooltip('lCasesCompleted')} onHelp={() => openHelp('lCasesCompleted')} paramNumber={fauchardParamNumber('lCasesCompleted')} />
           </div>
         </div>
 
@@ -124,10 +139,10 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
             <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Transición y Descenso</h3>
           </div>
           <div className="space-y-8 pl-1">
-            <Slider label="Casos en Transición" value={v.lCasesTransition} min={1} max={10} step={1} onChange={(e) => set('lCasesTransition', parseInt(e.target.value))} valueSuffix=" casos" tooltip="Casos a completar en la nueva categoría antes de consolidar el ascenso (período de prueba)." />
-            <Slider label="Penalización Transición (%)" value={v.lPenaltyTransition * 100} min={5} max={50} step={1} onChange={(e) => set('lPenaltyTransition', parseFloat(e.target.value) / 100)} valueSuffix=" %" tooltip="Reducción temporal del score durante el período de transición tras ascender." />
-            <Slider label="Calificación para Descenso" value={v.lDescentRating} min={2.0} max={3.5} step={0.1} onChange={(e) => set('lDescentRating', parseFloat(e.target.value))} valueSuffix=" ⭐" tooltip="Si el promedio cae bajo este valor durante el período, el técnico desciende de categoría." />
-            <Slider label="Días en Baja Calificación" value={v.lDescentDays} min={15} max={120} step={1} onChange={(e) => set('lDescentDays', parseInt(e.target.value))} valueSuffix=" d" tooltip="Días consecutivos bajo el umbral de descenso para que la bajada se haga efectiva." />
+            <Slider label="Casos en Transición" value={v.lCasesTransition} min={1} max={10} step={1} onChange={(e) => set('lCasesTransition', parseInt(e.target.value))} valueSuffix=" casos" tooltip={fauchardParamTooltip('lCasesTransition')} onHelp={() => openHelp('lCasesTransition')} paramNumber={fauchardParamNumber('lCasesTransition')} />
+            <Slider label="Penalización Transición (%)" value={v.lPenaltyTransition * 100} min={5} max={50} step={1} onChange={(e) => set('lPenaltyTransition', parseFloat(e.target.value) / 100)} valueSuffix=" %" tooltip={fauchardParamTooltip('lPenaltyTransition')} onHelp={() => openHelp('lPenaltyTransition')} paramNumber={fauchardParamNumber('lPenaltyTransition')} />
+            <Slider label="Calificación para Descenso" value={v.lDescentRating} min={2.0} max={3.5} step={0.1} onChange={(e) => set('lDescentRating', parseFloat(e.target.value))} valueSuffix=" ⭐" tooltip={fauchardParamTooltip('lDescentRating')} onHelp={() => openHelp('lDescentRating')} paramNumber={fauchardParamNumber('lDescentRating')} />
+            <Slider label="Días en Baja Calificación" value={v.lDescentDays} min={15} max={120} step={1} onChange={(e) => set('lDescentDays', parseInt(e.target.value))} valueSuffix=" d" tooltip={fauchardParamTooltip('lDescentDays')} onHelp={() => openHelp('lDescentDays')} paramNumber={fauchardParamNumber('lDescentDays')} />
           </div>
         </div>
       </div>
@@ -182,6 +197,8 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
           </motion.div>
         )}
       </AnimatePresence>
+
+      <FauchardHelpWindow isOpen={showHelp} onClose={() => setShowHelp(false)} section={LEAGUE_HELP} focusKey={helpFocus} />
     </div>
   );
 }

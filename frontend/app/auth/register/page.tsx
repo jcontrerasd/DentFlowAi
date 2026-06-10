@@ -22,7 +22,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import FocusTrap from '@/components/ui/FocusTrap';
-import { countriesByContinent } from './constants/countries';
+import { REGIONS_BY_COUNTRY, SUPPORTED_COUNTRIES } from '@/lib/constants/addressData';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -132,6 +132,11 @@ export default function RegisterPage() {
     orgName: '',
     phone: '',
     country: 'CL',
+    region: '',
+    comuna: '',
+    address: '',
+    addressNumber: '',
+    addressOffice: '',
     specialty: 'Odontología General',
     registrationNumber: '',
     experienceYears: '',
@@ -333,10 +338,15 @@ export default function RegisterPage() {
       const result = await updateUserAction(userId, {
         fullName,
         phone: formData.phone,
+        country: formData.country,
+        region: formData.region || null,
+        comuna: formData.comuna || null,
+        address: formData.address || null,
+        addressNumber: formData.addressNumber || null,
+        addressOffice: formData.addressOffice || null,
         ...(role === 'dentista' ? {
           specialty: formData.specialty,
           registrationNumber: formData.registrationNumber,
-          country: formData.country,
         } : {
           experienceYears: formData.experienceYears ? parseInt(formData.experienceYears) : undefined,
         }),
@@ -703,51 +713,35 @@ export default function RegisterPage() {
 
                 {/* Campos exclusivos DENTISTA */}
                 {role === 'dentista' && (
-                  <>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
-                          Especialidad <HelperTooltip text="Tu área principal de ejercicio." />
-                        </label>
-                        <select value={formData.specialty} onChange={e => updateField('specialty', e.target.value)} className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all">
-                          <option>Odontología General</option>
-                          <option>Rehabilitación Oral</option>
-                          <option>Implantología</option>
-                          <option>Ortodoncia</option>
-                          <option>Endodoncia</option>
-                          <option>Periodoncia</option>
-                          <option>Cirugía Maxilofacial</option>
-                          <option>Odontopediatría</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
-                          N° Registro <HelperTooltip text="Número de registro ante la Autoridad Sanitaria." />
-                        </label>
-                        <input
-                          required
-                          value={formData.registrationNumber}
-                          onChange={e => updateField('registrationNumber', e.target.value)}
-                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none transition-all placeholder:text-faint"
-                          placeholder="123456"
-                        />
-                      </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
+                        Especialidad <HelperTooltip text="Tu área principal de ejercicio." />
+                      </label>
+                      <select value={formData.specialty} onChange={e => updateField('specialty', e.target.value)} className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all">
+                        <option>Odontología General</option>
+                        <option>Rehabilitación Oral</option>
+                        <option>Implantología</option>
+                        <option>Ortodoncia</option>
+                        <option>Endodoncia</option>
+                        <option>Periodoncia</option>
+                        <option>Cirugía Maxilofacial</option>
+                        <option>Odontopediatría</option>
+                      </select>
                     </div>
                     <div className="space-y-1.5">
                       <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
-                        País <HelperTooltip text="País donde ejerces tu profesión." />
+                        N° Registro <HelperTooltip text="Número de registro ante la Autoridad Sanitaria." />
                       </label>
-                      <select value={formData.country} onChange={e => updateField('country', e.target.value)} className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all">
-                        {countriesByContinent.map(g => (
-                          <optgroup key={g.continent} label={g.continent}>
-                            {g.countries.map(c => (
-                              <option key={c.code} value={c.code}>{c.name}</option>
-                            ))}
-                          </optgroup>
-                        ))}
-                      </select>
+                      <input
+                        required
+                        value={formData.registrationNumber}
+                        onChange={e => updateField('registrationNumber', e.target.value)}
+                        className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none transition-all placeholder:text-faint"
+                        placeholder="123456"
+                      />
                     </div>
-                  </>
+                  </div>
                 )}
 
                 {/* Campos exclusivos TÉCNICO */}
@@ -767,6 +761,104 @@ export default function RegisterPage() {
                     />
                   </div>
                 )}
+
+                {/* Dirección — ambos roles */}
+                <div className="space-y-4 pt-2 border-t border-divider">
+                  <p className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 mt-2">Ubicación</p>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
+                      País <HelperTooltip text="País donde ejerces tu profesión." />
+                    </label>
+                    <select
+                      value={formData.country}
+                      onChange={e => { updateField('country', e.target.value); updateField('region', ''); updateField('comuna', ''); }}
+                      className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all"
+                    >
+                      {SUPPORTED_COUNTRIES.map(c => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Región</label>
+                      {REGIONS_BY_COUNTRY[formData.country] ? (
+                        <select
+                          value={formData.region}
+                          onChange={e => { updateField('region', e.target.value); updateField('comuna', ''); }}
+                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all"
+                        >
+                          <option value="">Selecciona región</option>
+                          {REGIONS_BY_COUNTRY[formData.country].map(r => (
+                            <option key={r.code} value={r.code}>{r.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={formData.region}
+                          onChange={e => updateField('region', e.target.value)}
+                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                          placeholder="Región / Estado / Provincia"
+                        />
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Comuna</label>
+                      {REGIONS_BY_COUNTRY[formData.country] && formData.region ? (
+                        <select
+                          value={formData.comuna}
+                          onChange={e => updateField('comuna', e.target.value)}
+                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all"
+                        >
+                          <option value="">Selecciona comuna</option>
+                          {(REGIONS_BY_COUNTRY[formData.country].find(r => r.code === formData.region)?.communes ?? []).map(c => (
+                            <option key={c.code} value={c.code}>{c.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={formData.comuna}
+                          onChange={e => updateField('comuna', e.target.value)}
+                          className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                          placeholder="Comuna / Ciudad"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Dirección</label>
+                    <input
+                      value={formData.address}
+                      onChange={e => updateField('address', e.target.value)}
+                      className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                      placeholder="Av. Providencia"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Número</label>
+                      <input
+                        value={formData.addressNumber}
+                        onChange={e => updateField('addressNumber', e.target.value)}
+                        className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                        placeholder="1234"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1">Oficina / Dpto.</label>
+                      <input
+                        value={formData.addressOffice}
+                        onChange={e => updateField('addressOffice', e.target.value)}
+                        className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+                        placeholder="Opcional"
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 <div className="flex gap-3 pt-2">
                   <button type="button" onClick={() => setStep(1)} className="flex-1 h-16 bg-surface rounded-2xl font-bold uppercase tracking-wider text-faint border border-divider hover:text-muted transition-all">Atrás</button>

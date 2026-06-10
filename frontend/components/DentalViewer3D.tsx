@@ -16,6 +16,8 @@ import {
   Eye,
   EyeOff,
   Maximize2,
+  MessageSquare,
+  MessageSquareOff,
   MessageSquarePlus,
   Navigation,
   RefreshCcw,
@@ -240,6 +242,7 @@ export default function DentalViewer3D({
   const controlsRef = useRef<any>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAnnotateMode, setIsAnnotateMode] = useState(false);
+  const [showAnnotations, setShowAnnotations] = useState(true);
   const [mountKey, setMountKey] = useState(0);
   const [panelOpen, setPanelOpen] = useState(true);
   const [bgMode, setBgMode] = useState<ViewerBg>('brand');
@@ -366,7 +369,7 @@ export default function DentalViewer3D({
                   />
                 ))}
 
-                {annotations.map(anno => (
+                {showAnnotations && annotations.map(anno => (
                   <Pin
                     key={anno.id}
                     position={[anno.coordinates.x, anno.coordinates.y, anno.coordinates.z]}
@@ -437,6 +440,27 @@ export default function DentalViewer3D({
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Comentarios — toggle mostrar/ocultar pins de anotación */}
+            {annotations.length > 0 && (
+              <div className="p-2 border-b border-divider">
+                <button
+                  onClick={() => setShowAnnotations((v) => !v)}
+                  aria-pressed={showAnnotations}
+                  title={showAnnotations ? 'Ocultar comentarios' : 'Mostrar comentarios'}
+                  className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+                    showAnnotations ? 'bg-primary-hl text-foreground' : 'hover:bg-surface-off text-faint'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-tight">
+                    {showAnnotations ? <MessageSquare className="w-3 h-3 shrink-0" /> : <MessageSquareOff className="w-3 h-3 shrink-0 opacity-50" />}
+                    Comentarios
+                    <span className="text-faint font-semibold normal-case">({annotations.length})</span>
+                  </span>
+                  {showAnnotations ? <Eye className="w-3 h-3 shrink-0" /> : <EyeOff className="w-3 h-3 shrink-0 opacity-50" />}
+                </button>
               </div>
             )}
 

@@ -13,6 +13,11 @@ export interface UserProfile {
   specialty: string | null;
   registrationNumber: string | null;
   country?: string | null;
+  region?: string | null;
+  comuna?: string | null;
+  address?: string | null;
+  addressNumber?: string | null;
+  addressOffice?: string | null;
   suspendedUntil?: string | null;
   organization?: {
     id: string;
