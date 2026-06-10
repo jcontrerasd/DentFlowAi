@@ -57,6 +57,16 @@ vi.mock('@/lib/db/actions/proposal', () => ({
   expireDentistComparativeWindowAction: vi.fn(),
 }));
 
+// La página carga los catálogos UI en un efecto. Sin este mock, las list actions
+// pegan a la DB real y en CI (sin Postgres) lanzan ECONNREFUSED, tumbando el test
+// run aunque las assertions pasen.
+vi.mock('@/lib/db/actions/catalogs', () => ({
+  listVitaShadesAction: vi.fn().mockResolvedValue([]),
+  listRestorationTypesAction: vi.fn().mockResolvedValue([]),
+  listDentalMaterialsAction: vi.fn().mockResolvedValue([]),
+  listUrgencyLevelsAction: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('@/components/DentalViewer3D', () => ({
   default: (props: { models: Array<{ subType: string }>; annotations: Array<{ id: string }> }) => {
     viewerMock(props);
