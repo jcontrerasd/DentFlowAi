@@ -40,3 +40,4 @@ Backup/
 *.log
 frontend/*.log
 
+.claude/settings.local.json
