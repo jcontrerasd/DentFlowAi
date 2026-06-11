@@ -18,7 +18,8 @@
     "test:integration": "RUN_DB_INTEGRATION_TESTS=true vitest run",
     "test:smoke": "vitest run test/login-page.test.tsx test/register-page.test.tsx test/case-detail-page.test.tsx",
     "audit:unused": "knip --config knip.json --reporter compact --exclude exports,types,nsExports,nsTypes,classMembers,enumMembers",
-    "validate:full": "npm run lint && npm run type-check && npm run build"
+    "validate:full": "npm run lint && npm run type-check && npm run build",
+    "deploy:gui": "python3 deploy_gui.py"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.2",
