@@ -73,6 +73,7 @@ echo "📦 Comprimiendo código fuente, activos y estructura..."
 zip -r "$DIRECTORIO_RESPALDO/$NOMBRE_ARCHIVO" . \
     -x "node_modules/*" \
     -x "frontend/node_modules/*" \
+     -x "video/node_modules/*" \
     -x "frontend/.next/*" \
     -x "**/__pycache__/*" \
     -x "Backup/*.zip" \

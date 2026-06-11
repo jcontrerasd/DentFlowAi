@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 680" font-family="Georgia, 'Times New Roman', serif">
+  <style><![CDATA[@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif&display=swap');]]></style>
+  <rect x="0" y="0" width="1160" height="680" fill="#0a0d16"/>
+
+  <!-- Título -->
+  <text x="580" y="52" fill="#34d399" font-size="38" letter-spacing="3" text-anchor="middle" font-family="'Instrument Serif', Georgia, serif">STACK TECNOLÓGICO</text>
+
+  <!-- ===== Riel izquierdo: Calidad & Tests ===== -->
+  <rect x="50" y="90" width="72" height="535" rx="10" fill="#e8c9a8" stroke="#00000022"/>
+  <text x="86" y="357" fill="#3a2a18" font-size="17" font-weight="700" text-anchor="middle" transform="rotate(-90 86 357)">Vitest · Testing Library · ESLint</text>
+
+  <!-- ===== Riel derecho: Autenticación ===== -->
+  <rect x="1038" y="90" width="72" height="535" rx="10" fill="#e0822e" stroke="#00000022"/>
+  <text x="1074" y="357" fill="#2a1606" font-size="17" font-weight="700" text-anchor="middle" transform="rotate(-90 1074 357)">NextAuth 5 · Autenticación</text>
+
+  <!-- ===== Bloques superiores ===== -->
+  <!-- FrontEnd -->
+  <rect x="150" y="90" width="172" height="92" rx="10" fill="#5aa544" stroke="#00000022"/>
+  <text x="236" y="128" fill="#0f1a0a" font-size="19" font-weight="700" text-anchor="middle">FrontEnd</text>
+  <text x="236" y="154" fill="#10260c" font-size="14" text-anchor="middle">Next.js 15 · React 19</text>
+
+  <!-- BackEnd -->
+  <rect x="150" y="192" width="172" height="92" rx="10" fill="#9ccb6e" stroke="#00000022"/>
+  <text x="236" y="230" fill="#16240c" font-size="19" font-weight="700" text-anchor="middle">BackEnd</text>
+  <text x="236" y="256" fill="#16240c" font-size="14" text-anchor="middle">Server Actions</text>
+
+  <!-- Plataforma (alto) -->
+  <rect x="334" y="90" width="160" height="194" rx="10" fill="#b15a28" stroke="#00000022"/>
+  <text x="414" y="130" fill="#fff4ea" font-size="19" font-weight="700" text-anchor="middle">Plataforma</text>
+  <text x="414" y="166" fill="#fbe6d6" font-size="15" text-anchor="middle">Node 20</text>
+  <text x="414" y="194" fill="#fbe6d6" font-size="15" text-anchor="middle">TypeScript</text>
+  <text x="414" y="222" fill="#fbe6d6" font-size="15" text-anchor="middle">Turbopack</text>
+  <text x="414" y="250" fill="#fbe6d6" font-size="15" text-anchor="middle">Tailwind CSS 4</text>
+
+  <!-- Three.js (ancho, amarillo) -->
+  <rect x="506" y="90" width="514" height="92" rx="10" fill="#f1e23f" stroke="#00000022"/>
+  <text x="763" y="144" fill="#2a2606" font-size="22" font-weight="700" text-anchor="middle">Three.js — Visor 3D</text>
+
+  <!-- Librerías UI (ancho, morado) -->
+  <rect x="506" y="192" width="514" height="92" rx="10" fill="#6c3fa0" stroke="#00000022"/>
+  <text x="763" y="246" fill="#f4ecfb" font-size="19" font-weight="700" text-anchor="middle">UI · framer-motion · recharts · lucide-react</text>
+
+  <!-- ===== Riel vertical inferior: Drizzle ORM ===== -->
+  <rect x="150" y="306" width="72" height="319" rx="10" fill="#e8c6e0" stroke="#00000022"/>
+  <text x="186" y="465" fill="#3a1d34" font-size="18" font-weight="700" text-anchor="middle" transform="rotate(-90 186 465)">Drizzle ORM</text>
+
+  <!-- ===== Barras apiladas: datos + infraestructura ===== -->
+  <!-- 1 PostgreSQL -->
+  <rect x="234" y="306" width="786" height="59" rx="8" fill="#cfe6f7" stroke="#00000018"/>
+  <text x="627" y="342" fill="#0c2740" font-size="19" font-weight="700" text-anchor="middle">PostgreSQL · Cloud SQL</text>
+  <!-- 2 Cloud Storage -->
+  <rect x="234" y="371" width="786" height="59" rx="8" fill="#a9d3f0" stroke="#00000018"/>
+  <text x="627" y="407" fill="#0c2740" font-size="19" font-weight="700" text-anchor="middle">Google Cloud Storage — modelos 3D / archivos</text>
+  <!-- 3 Cloud Run -->
+  <rect x="234" y="436" width="786" height="59" rx="8" fill="#5aa9e0" stroke="#00000018"/>
+  <text x="627" y="472" fill="#08243a" font-size="19" font-weight="700" text-anchor="middle">Cloud Run — hosting (output standalone)</text>
+  <!-- 4 Cloud Scheduler -->
+  <rect x="234" y="501" width="786" height="59" rx="8" fill="#6fae3e" stroke="#00000018"/>
+  <text x="627" y="537" fill="#0f2208" font-size="19" font-weight="700" text-anchor="middle">Cloud Scheduler — crons</text>
+  <!-- 5 EmailJS -->
+  <rect x="234" y="566" width="786" height="59" rx="8" fill="#2c5f7c" stroke="#00000018"/>
+  <text x="627" y="602" fill="#eaf4fb" font-size="19" font-weight="700" text-anchor="middle">EmailJS — notificaciones (REST server-side)</text>
+
+  <!-- Etiqueta al pie -->
+  <text x="627" y="655" fill="#5b6b80" font-size="13" text-anchor="middle" letter-spacing="2">ENTORNO LOCAL · Docker · fake-gcs-server</text>
+</svg>
