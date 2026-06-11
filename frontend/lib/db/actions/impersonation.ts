@@ -5,7 +5,6 @@ import { auth } from '@/auth';
 import { db, infraPromise } from '@/lib/db';
 import { user } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import * as fs from 'fs';
 
 import { getForcedIdentity } from './test-identity';
 
@@ -25,19 +24,14 @@ export async function getServerIdentity() {
 
   try {
     const session = await auth();
-    const logFile = '/Users/jaimecontreras/Documents/Projects/DentFlowAi/frontend/uat_debug.log';
-    
+
     if (!session?.user) {
-      fs.appendFileSync(logFile, `[${new Date().toISOString()}] No session found\n`);
       return null;
     }
 
-    fs.appendFileSync(logFile, `[${new Date().toISOString()}] Session User: ${JSON.stringify(session.user)}\n`);
-
     const cookieStore = await cookies();
     const impersonateId = cookieStore.get('dentflow_impersonate_id')?.value;
-    fs.appendFileSync(logFile, `[${new Date().toISOString()}] Impersonate ID: ${impersonateId || 'none'}\n`);
-    
+
     const userRole = (session.user as any).role;
     const isSystemAdmin = userRole === 'admin' || 
                           session.user.email === 'jaime.contreras.d@gmail.com' ||
@@ -85,7 +79,6 @@ export async function getServerIdentity() {
       }
     }
 
-    fs.appendFileSync(logFile, `[${new Date().toISOString()}] Final Identity Role: ${finalIdentity.role} (Type: ${typeof finalIdentity.role})\n`);
     return finalIdentity;
   } catch (error) {
      console.error("[getServerIdentity] Critical Error:", error);
