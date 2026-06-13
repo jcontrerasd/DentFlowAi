@@ -18,10 +18,10 @@ import ComparativeOffersPanel from '@/components/cases/ComparativeOffersPanel';
 const futureDeadline = Date.now() + 5 * 60 * 1000;
 
 describe('ComparativeOffersPanel (Fase 4.4)', () => {
-  it('muestra desglose diseño + fabricación cuando la oferta lo trae', () => {
+  it('muestra precio total y plazo (cotización flat, sin desglose)', () => {
     render(
       <ComparativeOffersPanel
-        caseId="c-int-1"
+        caseId="c-flat-2"
         offers={[
           {
             invitationId: 'inv-1',
@@ -30,10 +30,6 @@ describe('ComparativeOffersPanel (Fase 4.4)', () => {
             quotedDays: 6,
             techNotes: null,
             respondedAt: new Date('2026-05-14T10:00:00Z'),
-            designPriceCLP: 80000,
-            designDays: 2,
-            fabricationPriceCLP: 150000,
-            fabricationDays: 4,
           },
         ]}
         proposalDeadlineMs={futureDeadline}
@@ -41,10 +37,10 @@ describe('ComparativeOffersPanel (Fase 4.4)', () => {
       />,
     );
 
-    expect(screen.getByText(/Diseño/i)).toBeInTheDocument();
-    expect(screen.getByText(/Fabricación/i)).toBeInTheDocument();
-    expect(screen.getByText(/2 días/i)).toBeInTheDocument();
-    expect(screen.getByText(/4 días/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Diseño$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Fabricación$/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/230/)).toBeInTheDocument();
+    expect(screen.getByText(/6 días hábiles/i)).toBeInTheDocument();
   });
 
   it('omite desglose cuando la oferta es flat (sin campos integrales)', () => {
@@ -70,10 +66,10 @@ describe('ComparativeOffersPanel (Fase 4.4)', () => {
     expect(screen.queryByText(/^Fabricación$/i)).not.toBeInTheDocument();
   });
 
-  it('modal Contratar oferta: desglose integral (CAD+CAM) con costos, plazos y total', () => {
+  it('modal Contratar oferta: cotización flat con costo total y plazo', () => {
     render(
       <ComparativeOffersPanel
-        caseId="c-int-modal"
+        caseId="c-flat-modal"
         offers={[
           {
             invitationId: 'inv-1',
@@ -82,10 +78,6 @@ describe('ComparativeOffersPanel (Fase 4.4)', () => {
             quotedDays: 6,
             techNotes: null,
             respondedAt: new Date('2026-05-14T10:00:00Z'),
-            designPriceCLP: 80_000,
-            designDays: 2,
-            fabricationPriceCLP: 150_000,
-            fabricationDays: 4,
           },
         ]}
         proposalDeadlineMs={futureDeadline}
@@ -95,9 +87,8 @@ describe('ComparativeOffersPanel (Fase 4.4)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /elegir oferta/i }));
     const modalQuote = screen.getByTestId('uch-accept-offer-quote');
-    expect(within(modalQuote).getByText(/Detalle de costos y plazos/i)).toBeInTheDocument();
-    expect(within(modalQuote).getByText(/^Diseño$/i)).toBeInTheDocument();
-    expect(within(modalQuote).getByText(/^Fabricación$/i)).toBeInTheDocument();
+    expect(within(modalQuote).queryByText(/^Diseño$/i)).not.toBeInTheDocument();
+    expect(within(modalQuote).queryByText(/^Fabricación$/i)).not.toBeInTheDocument();
     expect(within(modalQuote).getByText(/\$230\.000/)).toBeInTheDocument();
     expect(within(modalQuote).getByText(/6 días hábiles/i)).toBeInTheDocument();
   });

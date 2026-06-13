@@ -117,13 +117,12 @@ describe('userCanAccessClinicalCase', () => {
   });
 });
 
-describe('getDoctorAddressDisclosure (v5.8 — divulgación en tres niveles)', () => {
-  // Por defecto: caso con fabricación, viewer invitado al caso.
+describe('getDoctorAddressDisclosure (v2 — solo diseño, sin nivel coarse)', () => {
   const base = {
     assignedTechnicianId: TECH,
     doctorId: DENTIST_A,
     isInvitedTechnician: true,
-    needsFabrication: true,
+    needsFabrication: false,
   };
 
   it('técnico asignado (ganador): dirección completa (full)', () => {
@@ -132,17 +131,16 @@ describe('getDoctorAddressDisclosure (v5.8 — divulgación en tres niveles)', (
     ).toBe('full');
   });
 
-  it('técnico invitado cotizando (no asignado): solo ubicación gruesa (coarse)', () => {
+  it('técnico invitado no asignado: ninguna dirección (none) — coarse eliminado en v2', () => {
     expect(
       getDoctorAddressDisclosure({ role: 'tecnico', userId: TECH_LOSER, ...base }),
-    ).toBe('coarse');
+    ).toBe('none');
   });
 
-  it('técnico perdedor (invitación cerrada): conserva coarse, NUNCA fina', () => {
-    // Caso ya con ganador (TECH); el perdedor sigue invitado al caso → coarse.
+  it('técnico perdedor: ninguna dirección (none)', () => {
     expect(
       getDoctorAddressDisclosure({ role: 'tecnico', userId: TECH_LOSER, ...base }),
-    ).toBe('coarse');
+    ).toBe('none');
   });
 
   it('técnico sin invitación al caso: nada (none)', () => {
@@ -156,7 +154,7 @@ describe('getDoctorAddressDisclosure (v5.8 — divulgación en tres niveles)', (
     ).toBe('none');
   });
 
-  it('caso sin fabricación: técnico invitado no ve ni coarse (none)', () => {
+  it('caso sin fabricación (siempre en v2): técnico invitado no ve ninguna dirección (none)', () => {
     expect(
       getDoctorAddressDisclosure({
         role: 'tecnico',
@@ -191,7 +189,7 @@ describe('getDoctorAddressDisclosure (v5.8 — divulgación en tres niveles)', (
     ).toBe('none');
   });
 
-  it('caso sin técnico asignado todavía: invitado cotizando ve coarse', () => {
+  it('caso sin técnico asignado todavía: técnico invitado no ve dirección (none)', () => {
     expect(
       getDoctorAddressDisclosure({
         role: 'tecnico',
@@ -199,6 +197,6 @@ describe('getDoctorAddressDisclosure (v5.8 — divulgación en tres niveles)', (
         ...base,
         assignedTechnicianId: null,
       }),
-    ).toBe('coarse');
+    ).toBe('none');
   });
 });
