@@ -97,7 +97,7 @@ describe.runIf(runIntegration)('caseListSearch integration', () => {
     const filters = prepareCaseListFiltersForQuery('tecnico', {
       ...DEFAULT_CASE_LIST_FILTERS,
       techPreset: null,
-      techKpiStatuses: ['enEjecucion', 'enRevision', 'disenoAprobado', 'enFabricacion', 'enviado'],
+      techKpiStatuses: ['enEjecucion', 'enRevision'],
       q: CASE_NUMBER,
     });
     expect(filters.techKpiStatuses).toEqual([]);

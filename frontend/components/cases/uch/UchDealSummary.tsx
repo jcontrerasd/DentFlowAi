@@ -16,17 +16,6 @@ export interface UchDealSummaryProps {
     proposedPrice?: number | null;
     proposedDeliveryDays?: number | null;
     proposedDeliveryHours?: number | null;
-    /** Flete pactado (v4.4) — sin fee. */
-    proposedShippingPrice?: number | null;
-    proposedShippingDays?: number | null;
-    proposedShippingHours?: number | null;
-    /** Desglose diseño/fabricación pactado (v4.5, con fee aplicado). */
-    proposedDesignPrice?: number | null;
-    proposedDesignDays?: number | null;
-    proposedDesignHours?: number | null;
-    proposedFabricationPrice?: number | null;
-    proposedFabricationDays?: number | null;
-    proposedFabricationHours?: number | null;
     serviceType?: string | null;
     workDeadline?: string | Date | null;
     assignedTechnicianId?: string | null;
@@ -35,15 +24,6 @@ export interface UchDealSummaryProps {
     quotedPrice?: number | null;
     quotedDays?: number | null;
     quotedHours?: number | null;
-    quotedDesignPrice?: number | null;
-    quotedDesignDays?: number | null;
-    quotedDesignHours?: number | null;
-    quotedFabricationPrice?: number | null;
-    quotedFabricationDays?: number | null;
-    quotedFabricationHours?: number | null;
-    quotedShippingPrice?: number | null;
-    quotedShippingDays?: number | null;
-    quotedShippingHours?: number | null;
     respondedAt?: string | Date | null;
     techNotes?: string | null;
     status?: InvitationStatus | null;
@@ -99,7 +79,7 @@ export default function UchDealSummary({
   const showWorkDeadline =
     !techRejectedSummary &&
     clinicalCase.workDeadline != null &&
-    ['enEjecucion', 'enRevision', 'cambiosEnProceso', 'disenoAprobado', 'enFabricacion', 'enviado', 'completado'].includes(caseStatus) &&
+    ['enEjecucion', 'enRevision', 'cambiosEnProceso', 'completado'].includes(caseStatus) &&
     (actingAsDentista || viewingAsAdmin || (actingAsTecnico && assigned));
 
   if (!showPactada && !showTechQuote && !showWorkDeadline && !techRejectedSummary) {
@@ -133,7 +113,6 @@ export default function UchDealSummary({
       data-testid="uch-deal-summary"
     >
       {showPactada && clinicalCase.proposedPrice != null && (() => {
-        // El técnico ganador ve su propia oferta (sin fee); el dentista/admin ve la pactada (con fee aplicado a diseño/fabricación).
         const useTechValues = actingAsTecnico && assigned && invitation != null;
         const totalPrice = useTechValues
           ? (invitation?.quotedPrice ?? clinicalCase.proposedPrice)
@@ -144,74 +123,23 @@ export default function UchDealSummary({
         const totalHours = useTechValues
           ? (invitation?.quotedHours ?? clinicalCase.proposedDeliveryHours ?? null)
           : (clinicalCase.proposedDeliveryHours ?? null);
-        const shipping = useTechValues
-          ? (invitation?.quotedShippingPrice ?? 0)
-          : (clinicalCase.proposedShippingPrice ?? 0);
-        const shippingDays = useTechValues
-          ? (invitation?.quotedShippingDays ?? null)
-          : (clinicalCase.proposedShippingDays ?? null);
-        const shippingHours = useTechValues
-          ? (invitation?.quotedShippingHours ?? null)
-          : (clinicalCase.proposedShippingHours ?? null);
-        const hasShipping = shipping > 0;
-        const designPrice = useTechValues
-          ? (invitation?.quotedDesignPrice ?? null)
-          : (clinicalCase.proposedDesignPrice ?? null);
-        const designDays = useTechValues
-          ? (invitation?.quotedDesignDays ?? null)
-          : (clinicalCase.proposedDesignDays ?? null);
-        const designHours = useTechValues
-          ? (invitation?.quotedDesignHours ?? null)
-          : (clinicalCase.proposedDesignHours ?? null);
-        const fabPrice = useTechValues
-          ? (invitation?.quotedFabricationPrice ?? null)
-          : (clinicalCase.proposedFabricationPrice ?? null);
-        const fabDays = useTechValues
-          ? (invitation?.quotedFabricationDays ?? null)
-          : (clinicalCase.proposedFabricationDays ?? null);
-        const fabHours = useTechValues
-          ? (invitation?.quotedFabricationHours ?? null)
-          : (clinicalCase.proposedFabricationHours ?? null);
-        const hasSplit = designPrice != null || fabPrice != null;
 
-        type Cell = { label: string; price: number; days: number | null; hours: number | null };
-        const cells: Cell[] = [];
-        if (hasSplit) {
-          if (designPrice != null) cells.push({ label: 'Diseño', price: designPrice, days: designDays, hours: designHours });
-          if (fabPrice != null) cells.push({ label: 'Fabricación', price: fabPrice, days: fabDays, hours: fabHours });
-        } else {
-          const workPrice = hasShipping ? totalPrice - shipping : totalPrice;
-          cells.push({ label: 'Trabajo', price: workPrice, days: totalDays, hours: totalHours });
-        }
-        if (hasShipping) cells.push({ label: 'Flete', price: shipping, days: shippingDays, hours: shippingHours });
-
-        const totalTurnaround = formatTurnaround({
-          days: totalDays,
-          hours: totalHours,
-        });
+        const totalTurnaround = formatTurnaround({ days: totalDays, hours: totalHours });
 
         return (
           <div className="space-y-1.5">
-            {/* Fila 1 — desglose */}
+            {/* Fila 1 — trabajo */}
             <div className="flex items-stretch">
-              {cells.map((c, idx) => {
-                const turnaround = formatTurnaround({ days: c.days, hours: c.hours });
-                return (
-                  <div
-                    key={c.label}
-                    className={`flex-1 min-w-0 px-2 ${idx > 0 ? 'border-l border-divider' : ''}`}
-                  >
-                    <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">{c.label}</p>
-                    <p className="text-[12px] font-bold tabular-nums text-foreground truncate">{formatUchQuoteClp(c.price)}</p>
-                    {turnaround !== '—' && (
-                      <p className="text-[9px] text-muted truncate">{turnaround}</p>
-                    )}
-                  </div>
-                );
-              })}
+              <div className="flex-1 min-w-0 px-2">
+                <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">Trabajo</p>
+                <p className="text-[12px] font-bold tabular-nums text-foreground truncate">{formatUchQuoteClp(totalPrice)}</p>
+                {totalTurnaround !== '—' && (
+                  <p className="text-[9px] text-muted truncate">{totalTurnaround}</p>
+                )}
+              </div>
             </div>
 
-            {/* Fila 2 — total + entrega, agrupados visualmente */}
+            {/* Fila 2 — total + entrega */}
             <div className="flex items-stretch border-t border-divider pt-1.5">
               <div className="flex-1 min-w-0 px-2">
                 <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">Total</p>

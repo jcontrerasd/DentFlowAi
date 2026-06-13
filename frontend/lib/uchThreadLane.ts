@@ -213,8 +213,6 @@ function resolveTecnicoTableB(
     CASE_EVENTS.OFERTA_RETIRADA,
     CASE_EVENTS.REVISION_ENVIADA,
     CASE_EVENTS.COMENTARIO_TECNICO,
-    CASE_EVENTS.FABRICACION_INICIADA,
-    CASE_EVENTS.CASO_DESPACHADO,
   ]);
   if (tecnicoSelfEmitActions.has(action) && samePersistedAuthor) {
     return { lane: 'self', showAsFauchard: false };

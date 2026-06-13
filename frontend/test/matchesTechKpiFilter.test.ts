@@ -143,7 +143,6 @@ const MUTUALLY_EXCLUSIVE_KPIS: TechKpiId[] = [
   'aceptadaPendienteInicio',
   'enEjecucion',
   'enRevision',
-  'enFabricacion',
   'completado',
 ];
 

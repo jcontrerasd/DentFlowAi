@@ -86,7 +86,7 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
   const [params, setParams] = useState<AlgorithmParams>({
     restorationType: 'corona_posterior',
     caseComplexity: 'INTERMEDIO',
-    serviceType: SERVICE_TYPES.INTEGRAL,
+    serviceType: SERVICE_TYPES.SOLO_DISENO,
   });
 
   const [useOverride, setUseOverride] = useState(false);
@@ -166,9 +166,7 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
                 value={params.serviceType}
                 onChange={(e) => setParams(prev => ({ ...prev, serviceType: e.target.value as AlgorithmParams['serviceType'] }))}
               >
-                <option value={SERVICE_TYPES.INTEGRAL}>Integral (Diseño + Fabricación)</option>
                 <option value={SERVICE_TYPES.SOLO_DISENO}>Solo Diseño (STL)</option>
-                <option value={SERVICE_TYPES.SOLO_FABRICACION}>Solo Fabricación</option>
               </select>
             </div>
           </div>

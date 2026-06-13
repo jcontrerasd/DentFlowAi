@@ -10,7 +10,7 @@ interface UchRatingPanelProps {
   caseId: string;
   /** Técnico/laboratorio calificado (reviewee). */
   revieweeId: string;
-  dimension: 'design' | 'fabrication';
+  dimension: 'design';
   /** Refresca el caso tras calificar (oculta el panel). */
   onRated: () => void | Promise<void>;
 }
@@ -18,10 +18,6 @@ interface UchRatingPanelProps {
 const COPY = {
   design: {
     title: 'Califica el diseño recibido (CAD)',
-    subtitle: 'Tu valoración ayuda a Fauchard a seleccionar mejores laboratorios. Es anónima.',
-  },
-  fabrication: {
-    title: 'Califica la fabricación recibida (CAM)',
     subtitle: 'Tu valoración ayuda a Fauchard a seleccionar mejores laboratorios. Es anónima.',
   },
 } as const;

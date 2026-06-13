@@ -87,8 +87,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
         if (saved) return { ...JSON.parse(saved), ...initialData };
       } catch {}
     }
-    const initialServiceType: ServiceType = (initialData?.serviceType as ServiceType | undefined)
-      ?? (initialData?.needsFabrication ? SERVICE_TYPES.INTEGRAL : SERVICE_TYPES.SOLO_DISENO);
+    const initialServiceType: ServiceType = SERVICE_TYPES.SOLO_DISENO;
     return {
       internalName: initialData?.internalName || '',
       patientIdAnon: initialData?.patientIdAnon || '',
@@ -202,9 +201,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
     if (step === 2) return formData.teeth.length > 0;
     if (step === 3) return formData.material.length > 0;
     if (step === 4) {
-      return formData.serviceType === SERVICE_TYPES.SOLO_FABRICACION
-        ? files.designFile !== null
-        : files.superior !== null;
+      return files.superior !== null;
     }
     return true;
   };
@@ -333,42 +330,6 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                   {restorationTypes.map(t => <option key={t.code} value={t.code}>{t.label}</option>)}
                 </select>
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Tipo de Servicio</label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {[
-                    { id: SERVICE_TYPES.SOLO_DISENO, title: 'Solo diseño', desc: 'Recibo un archivo digital' },
-                    { id: SERVICE_TYPES.SOLO_FABRICACION, title: 'Solo fabricación', desc: 'Yo aporto el diseño' },
-                    { id: SERVICE_TYPES.INTEGRAL, title: 'Diseño + Fabricación', desc: 'El laboratorio hace todo' },
-                  ].map((opt) => {
-                    const selected = formData.serviceType === opt.id;
-                    return (
-                      <button
-                        type="button"
-                        key={opt.id}
-                        onClick={() => setFormData({ ...formData, serviceType: opt.id })}
-                        className={`text-left rounded-lg border px-3 py-2 transition-all ${
-                          selected
-                            ? 'bg-primary/10 border-primary'
-                            : 'bg-surface dark:bg-surface border-slate-200 dark:border-divider hover:border-primary/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                            selected ? 'bg-primary border-primary' : 'bg-white dark:bg-surface-2 border-slate-300'
-                          }`}>
-                            {selected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                          </div>
-                          <span className={`text-sm font-semibold ${selected ? 'text-primary' : 'text-faint dark:text-muted'}`}>
-                            {opt.title}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-faint mt-1 leading-snug">{opt.desc}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
 
             <div className="pt-3 flex justify-between">
@@ -491,61 +452,12 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                 <Upload size={24} />
               </div>
               <div>
-                <h2 className="text-xl font-bold dark:text-foreground">
-                  {formData.serviceType === SERVICE_TYPES.SOLO_FABRICACION ? 'Archivo de Diseño' : 'Archivos de Escaneo (CAD)'}
-                </h2>
-                <p className="text-sm text-faint">
-                  {formData.serviceType === SERVICE_TYPES.SOLO_FABRICACION
-                    ? 'Cargue el archivo de diseño que el laboratorio fabricará'
-                    : 'Cargue los archivos STL o PLY del paciente'}
-                </p>
+                <h2 className="text-xl font-bold dark:text-foreground">Archivos de Escaneo (CAD)</h2>
+                <p className="text-sm text-faint">Cargue los archivos STL o PLY del paciente</p>
               </div>
             </div>
 
-            {formData.serviceType === SERVICE_TYPES.SOLO_FABRICACION ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:max-w-md md:mx-auto">
-                <div className="relative md:col-span-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted mb-2 block text-center">
-                    Diseño (STL / PLY / OBJ)
-                  </label>
-                  <div className={`
-                    h-40 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-4 transition-all
-                    ${files.designFile ? 'border-primary bg-primary/5' : 'border-slate-200 dark:border-divider hover:border-primary/50'}
-                  `}>
-                    <input
-                      type="file"
-                      className="hidden"
-                      id="file-designFile"
-                      accept=".stl,.ply,.obj"
-                      onChange={e => handleFileChange('designFile', e)}
-                    />
-                    <label htmlFor="file-designFile" className="cursor-pointer flex flex-col items-center">
-                      {files.designFile ? (
-                        <>
-                          <CheckCircle2 size={32} className="text-primary mb-2" />
-                          <span className="text-[10px] font-medium dark:text-foreground truncate max-w-full italic px-2">
-                            {files.designFile.name}
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={32} className="text-muted dark:text-faint mb-2" />
-                          <span className="text-xs font-semibold text-muted">Subir .STL / .PLY / .OBJ</span>
-                        </>
-                      )}
-                    </label>
-                    {files.designFile && (
-                      <button
-                        onClick={() => removeFile('designFile')}
-                        className="absolute top-8 right-2 inline-flex items-center justify-center w-9 h-9 rounded-xl bg-error-hl border border-error/20 text-error hover:bg-error hover:text-inverse transition-colors"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
+            {(
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {(['superior', 'inferior', 'bite'] as const).map(key => (
                   <div key={key} className="relative">
@@ -594,10 +506,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
 
             {/* Generadores de Miniaturas Silenciosos */}
             <div className="hidden pointer-events-none absolute" style={{ width: 1, height: 1, overflow: 'hidden' }}>
-              {(formData.serviceType === SERVICE_TYPES.SOLO_FABRICACION
-                ? (['designFile'] as const)
-                : (['superior', 'inferior', 'bite'] as const)
-              ).map(key => {
+              {(['superior', 'inferior', 'bite'] as const).map(key => {
                 const file = files[key];
                 if (file && isThreeDFile(file.name) && !thumbnails[key]) {
                   const tempUrl = URL.createObjectURL(file);

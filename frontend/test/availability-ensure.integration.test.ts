@@ -80,7 +80,7 @@ describe.runIf(runIntegration)('ensure technician_availability (capas 1 + 2)', (
 
     forceIdentity({ id: TECH_SEED, role: 'tecnico', orgId: ORG });
     const res = await updateSkillsAction([
-      { workType: 'corona_anterior', designLevel: 4, fabricationLevel: 0 },
+      { workType: 'corona_anterior', designLevel: 4 },
     ]);
     clearForcedIdentity();
     expect(res.success).toBe(true);

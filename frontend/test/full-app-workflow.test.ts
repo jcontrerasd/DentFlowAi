@@ -593,24 +593,10 @@ describe('SUITE G — Oferta integral desglosada (Fase 4.2)', () => {
     invitationId = pending!.id;
   });
 
-  it('G1: Rechaza kind:flat para integral cuando se usa la firma nueva (objeto)', async () => {
+  it('G1: Acepta kind:flat y persiste totales', async () => {
     mockAs(tech1Id, 'tecnico');
     const res = await submitQuoteAction(invitationId, {
-      kind: 'flat', price: 200000, deliveryDays: 6, notes: 'No debería pasar',
-    });
-    expect(res.success).toBe(false);
-    if (!res.success) expect(res.error).toMatch(/desglose/i);
-  });
-
-  it('G2: Acepta kind:split y persiste total = suma del desglose', async () => {
-    mockAs(tech1Id, 'tecnico');
-    const res = await submitQuoteAction(invitationId, {
-      kind: 'split',
-      designPrice: 80000,
-      designDays: 2,
-      fabricationPrice: 120000,
-      fabricationDays: 4, shippingPrice: 0, shippingDays: 0,
-      notes: 'Cotización integral con desglose',
+      kind: 'flat', price: 200000, deliveryDays: 6, notes: 'Cotización diseño',
     });
     expect(res.success, (res as any).error ?? '').toBe(true);
 
@@ -618,10 +604,6 @@ describe('SUITE G — Oferta integral desglosada (Fase 4.2)', () => {
     expect(inv.status).toBe('quoted');
     expect(inv.quotedPrice).toBe(200000);
     expect(inv.quotedDays).toBe(6);
-    expect(inv.quotedDesignPrice).toBe(80000);
-    expect(inv.quotedDesignDays).toBe(2);
-    expect(inv.quotedFabricationPrice).toBe(120000);
-    expect(inv.quotedFabricationDays).toBe(4);
   });
 
   it('G3: Firma legacy (flat para integral) sigue funcionando por retrocompat', async () => {
@@ -694,11 +676,9 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
 
     mockAs(tech1Id, 'tecnico');
     const quoteRes = await submitQuoteAction(invitationId, {
-      kind: 'split',
-      designPrice: 70_000,
-      designDays: 2,
-      fabricationPrice: 110_000,
-      fabricationDays: 5, shippingPrice: 0, shippingDays: 0,
+      kind: 'flat',
+      price: 180_000,
+      deliveryDays: 7,
       notes: 'Primera cotización',
     });
     expect(quoteRes.success, (quoteRes as { error?: string }).error ?? '').toBe(true);
@@ -732,8 +712,6 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
     expect(payload.invitationId).toBe(invitationId);
     expect(payload.visibleTo).toBe('tecnico');
     expect(payload.quotedPrice).toBe(180_000);
-    expect(payload.quotedDesignPrice).toBe(70_000);
-    expect(payload.quotedFabricationPrice).toBe(110_000);
     expect(payload.techNotes).toBe('Primera cotización');
   });
 
@@ -744,14 +722,12 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
     if (!res.success) expect(res.error).toMatch(/ya enviaste/i);
   });
 
-  it('H3: Recotiza tras retiro con nuevo desglose', async () => {
+  it('H3: Recotiza tras retiro', async () => {
     mockAs(tech1Id, 'tecnico');
     const res = await submitQuoteAction(invitationId, {
-      kind: 'split',
-      designPrice: 90_000,
-      designDays: 3,
-      fabricationPrice: 100_000,
-      fabricationDays: 4, shippingPrice: 0, shippingDays: 0,
+      kind: 'flat',
+      price: 190_000,
+      deliveryDays: 7,
       notes: 'Segunda cotización',
     });
     expect(res.success, (res as { error?: string }).error ?? '').toBe(true);
@@ -763,8 +739,6 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
       .limit(1);
     expect(inv.status).toBe('quoted');
     expect(inv.quotedPrice).toBe(190_000);
-    expect(inv.quotedDesignPrice).toBe(90_000);
-    expect(inv.quotedFabricationPrice).toBe(100_000);
     expect(inv.techNotes).toBe('Segunda cotización');
   });
 

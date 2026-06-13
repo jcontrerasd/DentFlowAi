@@ -8,9 +8,6 @@ export type DentistKpiId =
   | 'aceptadaPendienteInicio'
   | 'enEjecucion'
   | 'enRevision'
-  | 'disenoAprobado'
-  | 'enFabricacion'
-  | 'enviado'
   | 'completado'
   | 'cerrado'
   | 'pausado'
@@ -24,9 +21,6 @@ export type TechKpiId =
   | 'aceptadaPendienteInicio'
   | 'enEjecucion'
   | 'enRevision'
-  | 'disenoAprobado'
-  | 'enFabricacion'
-  | 'enviado'
   | 'completado'
   | 'otros';
 
@@ -59,9 +53,6 @@ export const WINNER_CASE_STATUSES_BY_TECH_KPI: Record<string, string[]> = {
   aceptadaPendienteInicio: [CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO],
   enEjecucion: [CASE_STATUSES.EN_EJECUCION],
   enRevision: [CASE_STATUSES.EN_REVISION, CASE_STATUSES.CAMBIOS_EN_PROCESO],
-  disenoAprobado: [CASE_STATUSES.DISENO_APROBADO],
-  enFabricacion: [CASE_STATUSES.EN_FABRICACION],
-  enviado: [CASE_STATUSES.ENVIADO],
   completado: [CASE_STATUSES.COMPLETADO],
 };
 
@@ -74,12 +65,6 @@ export function mapWinnerCaseStatusToTechKpi(status: string): TechKpiId {
     case CASE_STATUSES.EN_REVISION:
     case CASE_STATUSES.CAMBIOS_EN_PROCESO:
       return 'enRevision';
-    case CASE_STATUSES.DISENO_APROBADO:
-      return 'disenoAprobado';
-    case CASE_STATUSES.EN_FABRICACION:
-      return 'enFabricacion';
-    case CASE_STATUSES.ENVIADO:
-      return 'enviado';
     case CASE_STATUSES.COMPLETADO:
       return 'completado';
     default:
@@ -104,12 +89,6 @@ export function classifyDentistCaseKpi(status: string): DentistKpiId {
     case CASE_STATUSES.EN_REVISION:
     case CASE_STATUSES.CAMBIOS_EN_PROCESO:
       return 'enRevision';
-    case CASE_STATUSES.DISENO_APROBADO:
-      return 'disenoAprobado';
-    case CASE_STATUSES.EN_FABRICACION:
-      return 'enFabricacion';
-    case CASE_STATUSES.ENVIADO:
-      return 'enviado';
     case CASE_STATUSES.COMPLETADO:
       return 'completado';
     case CASE_STATUSES.CERRADO:

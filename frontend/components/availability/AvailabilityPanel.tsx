@@ -12,11 +12,11 @@ import ResponseHistoryView from './ResponseHistoryView';
 type Status = Extract<Awaited<ReturnType<typeof getMyAvailabilityStatusAction>>, { success: true }>;
 
 const CAT_KEY: Record<WorkCategory, Record<Capacity, keyof AvailabilityRow>> = {
-  coronas: { cad: 'catCoronasCad', cam: 'catCoronasCam' },
-  inlays: { cad: 'catInlaysCad', cam: 'catInlaysCam' },
-  puentes: { cad: 'catPuentesCad', cam: 'catPuentesCam' },
-  protesis: { cad: 'catProtesisCad', cam: 'catProtesisCam' },
-  guias: { cad: 'catGuiasCad', cam: 'catGuiasCam' },
+  coronas: { cad: 'catCoronasCad' },
+  inlays: { cad: 'catInlaysCad' },
+  puentes: { cad: 'catPuentesCad' },
+  protesis: { cad: 'catProtesisCad' },
+  guias: { cad: 'catGuiasCad' },
 };
 
 function Toggle({ checked, disabled, onChange }: { checked: boolean; disabled?: boolean; onChange: () => void }) {
@@ -54,7 +54,7 @@ export default function AvailabilityPanel() {
     const prev = avail;
     // Optimista
     const patch: Partial<AvailabilityRow> = {};
-    if (target.kind === 'capacity') (patch as any)[target.capacidad === 'cad' ? 'levelCad' : 'levelCam'] = value;
+    if (target.kind === 'capacity') (patch as any)['levelCad'] = value;
     else if (target.kind === 'category') (patch as any)[CAT_KEY[target.categoria][target.capacidad]] = value;
     setAvail({ ...avail, ...patch });
 
@@ -75,13 +75,13 @@ export default function AvailabilityPanel() {
   const { level, pendingCount } = status;
 
   const CapacityColumn = ({ cap, label }: { cap: Capacity; label: string }) => {
-    const parentOn = cap === 'cad' ? avail.levelCad : avail.levelCam;
+    const parentOn = avail.levelCad;
     return (
       <div className="flex-1 space-y-4">
         <div className="flex items-center justify-between p-4 rounded-2xl bg-surface-2/40 border border-divider">
           <div>
             <p className="text-sm font-black text-foreground">{label}</p>
-            <p className="text-[10px] text-faint uppercase tracking-wider">{cap === 'cad' ? 'Diseño' : 'Fabricación'}</p>
+            <p className="text-[10px] text-faint uppercase tracking-wider">Diseño</p>
           </div>
           <Toggle checked={parentOn} onChange={() => updateLevel({ kind: 'capacity', capacidad: cap }, !parentOn)} />
         </div>
@@ -124,11 +124,10 @@ export default function AvailabilityPanel() {
       <div className="p-6 rounded-3xl bg-surface/40 border border-divider space-y-4">
         <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Capacidades y categorías</h3>
         <p className="text-[11px] text-faint">
-          Recibes invitaciones solo cuando el switch global, la capacidad (CAD/CAM) y la categoría están activos. Los valores se preservan aunque pauses la capacidad.
+          Recibes invitaciones solo cuando el switch global, la capacidad (CAD) y la categoría están activos. Los valores se preservan aunque pauses la capacidad.
         </p>
         <div className={`flex flex-col md:flex-row gap-6 ${avail.levelGlobal ? '' : 'opacity-60'}`}>
           <CapacityColumn cap="cad" label="CAD" />
-          <CapacityColumn cap="cam" label="CAM" />
         </div>
       </div>
 

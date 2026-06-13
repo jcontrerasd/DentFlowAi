@@ -21,7 +21,7 @@ const KPI_PARAMS = {
 const DEFAULT_SCENARIO = {
   restorationType: 'corona_posterior',
   caseComplexity: 'INTERMEDIO',
-  serviceType: SERVICE_TYPES.INTEGRAL as string,
+  serviceType: SERVICE_TYPES.SOLO_DISENO as string,
 };
 
 /**

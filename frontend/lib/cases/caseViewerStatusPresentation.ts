@@ -189,9 +189,6 @@ export const TECH_KANBAN_WINNER_KPIS: TechKpiId[] = [
   'aceptadaPendienteInicio',
   'enEjecucion',
   'enRevision',
-  'disenoAprobado',
-  'enFabricacion',
-  'enviado',
   'completado',
 ];
 

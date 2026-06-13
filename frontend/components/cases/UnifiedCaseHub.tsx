@@ -217,7 +217,7 @@ export default function UnifiedCaseHub({
   };
 
   // Estados del formulario de cotización (técnico invitado)
-  type PhaseTab = 'todos' | 'propuesta' | 'diseno' | 'produccion';
+  type PhaseTab = 'todos' | 'propuesta' | 'diseno';
   const [phaseTab, setPhaseTab] = useState<PhaseTab>('todos');
 
   useEffect(() => {
@@ -236,18 +236,6 @@ export default function UnifiedCaseHub({
   const [quoteDays, setQuoteDays] = useState(0);
   const [quoteFlatUnit, setQuoteFlatUnit] = useState<'dias' | 'horas'>('dias');
   const [quoteNotes, setQuoteNotes] = useState('');
-  // Desglose integral (Fase 4): solo se usan cuando serviceType === 'integral'.
-  // Para todos los demás tipos se ignoran y se envía la firma flat tradicional.
-  const [quoteDesignPrice, setQuoteDesignPrice] = useState('');
-  const [quoteDesignDays, setQuoteDesignDays] = useState(0);
-  const [quoteDesignUnit, setQuoteDesignUnit] = useState<'dias' | 'horas'>('dias');
-  const [quoteFabricationPrice, setQuoteFabricationPrice] = useState('');
-  const [quoteFabricationDays, setQuoteFabricationDays] = useState(0);
-  const [quoteFabricationUnit, setQuoteFabricationUnit] = useState<'dias' | 'horas'>('dias');
-  // Flete (v4.4): aplica a casos con fabricación. Acepta 0.
-  const [quoteShippingPrice, setQuoteShippingPrice] = useState('');
-  const [quoteShippingDays, setQuoteShippingDays] = useState(0);
-  const [quoteShippingUnit, setQuoteShippingUnit] = useState<'dias' | 'horas'>('dias');
   const [isSubmittingQuote, setIsSubmittingQuote] = useState(false);
   const [showQuoteConfirm, setShowQuoteConfirm] = useState(false);
   const [quoteConfirmChecked, setQuoteConfirmChecked] = useState(false);
@@ -315,7 +303,6 @@ export default function UnifiedCaseHub({
       'REANUDADO',
       // CALIFICACION_ENVIADA se enruta por dimensión en filteredEvents (CAD aquí, CAM en producción).
     ],
-    produccion: ['FABRICACION_INICIADA', 'CASO_DESPACHADO', 'RECEPCION_CONFIRMADA'],
   };
 
   const uchAssignedId = normalizedAssignedTechnicianId(clinicalCase);
@@ -349,7 +336,7 @@ export default function UnifiedCaseHub({
     actingAsDentista || viewingAsAdmin || uchViewerIsAssignedTechnician;
   const uchHeaderShowsWorkDeadline =
     !!clinicalCase?.workDeadline &&
-    ['enEjecucion', 'enRevision', 'cambiosEnProceso', 'disenoAprobado', 'enFabricacion', 'enviado', 'completado'].includes(
+    ['enEjecucion', 'enRevision', 'cambiosEnProceso', 'completado'].includes(
       caseStatus,
     ) &&
     (actingAsDentista || uchViewerIsAssignedTechnician);
@@ -360,25 +347,15 @@ export default function UnifiedCaseHub({
     !!clinicalCase?.workDeadline &&
     !uchHeaderShowsWorkDeadline;
 
-  // v5.3 — Calificación del trabajo (caras emotivas), separada CAD/CAM.
-  // CAD aparece cuando el dentista aprobó el diseño; CAM al confirmar la recepción.
   const reviewedDims: string[] = Array.isArray(clinicalCase?.myReviewedDimensions)
     ? clinicalCase.myReviewedDimensions
     : [];
-  const svcType: string = clinicalCase?.serviceType ?? '';
   const canRate = actingAsDentista && !!uchAssignedId;
-  const designApprovedStatuses = ['disenoAprobado', 'enFabricacion', 'enviado', 'completado'];
   const showRateDesignPanel =
     canRate &&
-    (svcType === 'solo_diseno' || svcType === 'integral') &&
-    (svcType === 'solo_diseno' ? caseStatus === 'completado' : designApprovedStatuses.includes(caseStatus)) &&
-    !reviewedDims.includes('design');
-  const showRateFabricationPanel =
-    canRate &&
-    (svcType === 'solo_fabricacion' || svcType === 'integral') &&
     caseStatus === 'completado' &&
-    !reviewedDims.includes('fabrication');
-  const showAnyRatingPanel = showRateDesignPanel || showRateFabricationPanel;
+    !reviewedDims.includes('design');
+  const showAnyRatingPanel = showRateDesignPanel;
 
   const roleScopedEvents = useMemo(
     () =>
@@ -524,7 +501,6 @@ export default function UnifiedCaseHub({
             if (e.action === 'CALIFICACION_ENVIADA') {
               const dim = (e.payload as Record<string, unknown> | null | undefined)?.dimension;
               if (phaseTab === 'diseno') return dim !== 'fabrication';
-              if (phaseTab === 'produccion') return dim === 'fabrication';
               return false;
             }
             return allowed.includes(e.action);
@@ -573,62 +549,9 @@ export default function UnifiedCaseHub({
     clinicalCase?.assignedTechnicianId === currentUser?.id &&
     !!(clinicalCase?.workStartedAt || clinicalCase?.workDeadline);
 
-  const isIntegralCase = clinicalCase?.serviceType === 'integral';
-
   const handleQuoteSubmit = async () => {
     if (!myInvitation) return;
     setIsSubmittingQuote(true);
-
-    // Flete (v4.4): aplica si el caso tiene fabricación. Acepta 0.
-    const serviceType = (clinicalCase as any)?.serviceType as string | undefined;
-    const hasFabrication = serviceType === 'integral' || serviceType === 'solo_fabricacion';
-    const shippingPrice = hasFabrication ? Number((quoteShippingPrice || '').replace(/\D/g, '')) || 0 : 0;
-    // v4.6 — La unidad determina si el numérico se envía como days u hours.
-    const shippingValue = hasFabrication ? (quoteShippingDays ?? 0) : 0;
-    const shippingDaysPayload = quoteShippingUnit === 'dias' ? shippingValue : 0;
-    const shippingHoursPayload = quoteShippingUnit === 'horas' ? shippingValue : 0;
-
-    if (isIntegralCase) {
-      // Caso integral: desglose obligatorio diseño + fabricación.
-      const designPrice = Number(quoteDesignPrice.replace(/\D/g, ''));
-      const fabricationPrice = Number(quoteFabricationPrice.replace(/\D/g, ''));
-      if (!designPrice || designPrice <= 0 || !fabricationPrice || fabricationPrice <= 0) {
-        setIsSubmittingQuote(false);
-        showError('Ingresa precios válidos para diseño y fabricación');
-        return;
-      }
-      if (!quoteDesignDays || !quoteFabricationDays) {
-        setIsSubmittingQuote(false);
-        showError('Selecciona los plazos de diseño y fabricación');
-        return;
-      }
-      const res = await submitQuoteAction(myInvitation.id, {
-        kind: 'split',
-        designPrice,
-        ...(quoteDesignUnit === 'horas'
-          ? { designHours: quoteDesignDays }
-          : { designDays: quoteDesignDays }),
-        fabricationPrice,
-        ...(quoteFabricationUnit === 'horas'
-          ? { fabricationHours: quoteFabricationDays }
-          : { fabricationDays: quoteFabricationDays }),
-        shippingPrice,
-        shippingDays: shippingDaysPayload,
-        shippingHours: shippingHoursPayload,
-        notes: quoteNotes || undefined,
-      });
-      setIsSubmittingQuote(false);
-      if (res.success) {
-        showSuccess('Cotización enviada. Te avisaremos si eres seleccionado.');
-        dispatchDashboardMetricsRefresh();
-        await onInvitationUpdate?.();
-      } else {
-        showError(res.error || 'Error al enviar la cotización');
-      }
-      return;
-    }
-
-    // solo_diseno / solo_fabricacion: firma flat tradicional.
     const numericPrice = Number(quotePrice.replace(/\D/g, ''));
     if (!numericPrice || numericPrice <= 0) {
       setIsSubmittingQuote(false);
@@ -641,9 +564,6 @@ export default function UnifiedCaseHub({
       ...(quoteFlatUnit === 'horas'
         ? { deliveryHours: quoteDays }
         : { deliveryDays: quoteDays }),
-      ...(hasFabrication
-        ? { shippingPrice, shippingDays: shippingDaysPayload, shippingHours: shippingHoursPayload }
-        : {}),
       notes: quoteNotes || undefined,
     });
     setIsSubmittingQuote(false);
@@ -734,9 +654,7 @@ export default function UnifiedCaseHub({
     caseStatus === 'propuestaLista' ||
     caseStatus === 'publicado'
       ? 'propuesta'
-      : caseStatus === 'enFabricacion' || caseStatus === 'enviado' || caseStatus === 'completado'
-        ? 'produccion'
-        : 'diseno';
+      : 'diseno';
 
   const phaseAllowsAction = (actionPhase: PhaseTab) =>
     phaseTab === 'todos' || phaseTab === actionPhase;
@@ -904,16 +822,7 @@ export default function UnifiedCaseHub({
               ? {
                   quotedPrice: myInvitation.quotedPrice,
                   quotedDays: myInvitation.quotedDays,
-                  quotedDesignPrice: myInvitation.quotedDesignPrice,
-                  quotedDesignDays: myInvitation.quotedDesignDays,
-                  quotedFabricationPrice: myInvitation.quotedFabricationPrice,
-                  quotedFabricationDays: myInvitation.quotedFabricationDays,
-                  quotedFabricationHours: myInvitation.quotedFabricationHours,
-                  quotedDesignHours: myInvitation.quotedDesignHours,
                   quotedHours: myInvitation.quotedHours,
-                  quotedShippingPrice: myInvitation.quotedShippingPrice,
-                  quotedShippingDays: myInvitation.quotedShippingDays,
-                  quotedShippingHours: myInvitation.quotedShippingHours,
                   respondedAt: myInvitation.respondedAt ?? null,
                   techNotes: myInvitation.techNotes ?? null,
                   status: myInvitation.status,
@@ -935,12 +844,11 @@ export default function UnifiedCaseHub({
               <div className="flex items-center gap-2">
                 <span className="text-[9px] uppercase tracking-wide text-faint flex-shrink-0">Fase</span>
                 <div className="flex flex-1 gap-0.5 bg-surface-2 rounded-md p-0.5">
-                  {(['todos', 'propuesta', 'diseno', 'produccion'] as PhaseTab[]).map((tab) => {
+                  {(['todos', 'propuesta', 'diseno'] as PhaseTab[]).map((tab) => {
                     const labels: Record<PhaseTab, string> = {
                       todos: 'Todos',
                       propuesta: 'Propuesta',
                       diseno: 'Diseño',
-                      produccion: 'Produc.',
                     };
                     return (
                       <button
@@ -1050,14 +958,6 @@ export default function UnifiedCaseHub({
                     onRated={async () => { await onInvitationUpdate?.(); }}
                   />
                 )}
-                {showRateFabricationPanel && (
-                  <UchRatingPanel
-                    caseId={caseId}
-                    revieweeId={uchAssignedId}
-                    dimension="fabrication"
-                    onRated={async () => { await onInvitationUpdate?.(); }}
-                  />
-                )}
               </div>
             )}
 
@@ -1163,24 +1063,6 @@ export default function UnifiedCaseHub({
                         setQuoteFlatUnit={setQuoteFlatUnit}
                         quoteNotes={quoteNotes}
                         setQuoteNotes={setQuoteNotes}
-                        quoteDesignPrice={quoteDesignPrice}
-                        setQuoteDesignPrice={setQuoteDesignPrice}
-                        quoteDesignDays={quoteDesignDays}
-                        setQuoteDesignDays={setQuoteDesignDays}
-                        quoteDesignUnit={quoteDesignUnit}
-                        setQuoteDesignUnit={setQuoteDesignUnit}
-                        quoteFabricationPrice={quoteFabricationPrice}
-                        setQuoteFabricationPrice={setQuoteFabricationPrice}
-                        quoteFabricationDays={quoteFabricationDays}
-                        setQuoteFabricationDays={setQuoteFabricationDays}
-                        quoteFabricationUnit={quoteFabricationUnit}
-                        setQuoteFabricationUnit={setQuoteFabricationUnit}
-                        quoteShippingPrice={quoteShippingPrice}
-                        setQuoteShippingPrice={setQuoteShippingPrice}
-                        quoteShippingDays={quoteShippingDays}
-                        setQuoteShippingDays={setQuoteShippingDays}
-                        quoteShippingUnit={quoteShippingUnit}
-                        setQuoteShippingUnit={setQuoteShippingUnit}
                         isSubmittingQuote={isSubmittingQuote}
                         isStartingWork={isStartingWork}
                         setIsStartingWork={setIsStartingWork}
@@ -1284,49 +1166,13 @@ export default function UnifiedCaseHub({
 
               <div className="bg-surface-2 rounded-2xl p-4 space-y-2">
                 {(() => {
-                  // v4.4 — Flete (aplica a integral y solo_fabricacion). v4.6 — soporte horas por slot.
-                  const serviceType = (clinicalCase as any)?.serviceType as string | undefined;
-                  const hasFabrication = serviceType === 'integral' || serviceType === 'solo_fabricacion';
-                  const sp = hasFabrication ? Number((quoteShippingPrice || '').replace(/\D/g, '')) || 0 : 0;
-                  const sd = hasFabrication ? (quoteShippingDays ?? 0) : 0;
                   const fmt = (n: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n);
                   const slot = (value: number, unit: 'dias' | 'horas') => {
                     if (!value || value <= 0) return '—';
                     if (unit === 'horas') return `${value} ${value === 1 ? 'hora' : 'horas'}`;
                     return `${value} ${value === 1 ? 'día hábil' : 'días hábiles'}`;
                   };
-
-                  if (isIntegralCase) {
-                    const dp = Number(quoteDesignPrice.replace(/\D/g, '')) || 0;
-                    const fp = Number(quoteFabricationPrice.replace(/\D/g, '')) || 0;
-                    const total = dp + fp + sp;
-                    return (
-                      <>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-faint">Diseño</span>
-                          <span className="text-foreground font-bold">{fmt(dp)} · {slot(quoteDesignDays, quoteDesignUnit)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                          <span className="text-faint">Fabricación</span>
-                          <span className="text-foreground font-bold">{fmt(fp)} · {slot(quoteFabricationDays, quoteFabricationUnit)}</span>
-                        </div>
-                        {hasFabrication && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-faint">Flete <span className="text-[10px]">(sin comisión)</span></span>
-                            <span className="text-foreground font-bold">{fmt(sp)} · {slot(sd, quoteShippingUnit)}</span>
-                          </div>
-                        )}
-                        <div className="flex justify-between text-sm pt-2 border-t border-divider mt-2">
-                          <span className="text-primary font-bold">Total</span>
-                          <span className="text-primary font-bold">{fmt(total)}</span>
-                        </div>
-                      </>
-                    );
-                  }
-
-                  // flat (solo_diseno / solo_fabricacion)
                   const flat = Number((quotePrice || '').replace(/\D/g, '')) || 0;
-                  const total = flat + sp;
                   return (
                     <>
                       <div className="flex justify-between text-sm">
@@ -1337,18 +1183,6 @@ export default function UnifiedCaseHub({
                         <span className="text-faint">Plazo</span>
                         <span className="text-foreground font-bold">{slot(quoteDays, quoteFlatUnit)}</span>
                       </div>
-                      {hasFabrication && (
-                        <>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-faint">Flete <span className="text-[10px]">(sin comisión)</span></span>
-                            <span className="text-foreground font-bold">{fmt(sp)} · {slot(sd, quoteShippingUnit)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm pt-2 border-t border-divider mt-2">
-                            <span className="text-primary font-bold">Total</span>
-                            <span className="text-primary font-bold">{fmt(total)}</span>
-                          </div>
-                        </>
-                      )}
                     </>
                   );
                 })()}

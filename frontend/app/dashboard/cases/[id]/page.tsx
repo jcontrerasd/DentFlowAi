@@ -44,9 +44,6 @@ import {
   requestFlowChangeAction,
   resolveFlowRequestAction,
   resumeWorkAction,
-  transitionToManufacturingAction,
-  registerDispatchAction,
-  confirmReceptionAction,
   submitUserRatingAction,
   getCaseEventsAction,
   archiveCaseForUserAction,
@@ -513,42 +510,6 @@ function CaseDetailPageContent() {
           showErrorToast((res as any)?.error || 'Error al solicitar revisión');
           return false;
         }
-      } else if (action === 'start_manufacturing') {
-        const res = await transitionToManufacturingAction(id as string);
-        if (!res.success) {
-          const msg = (res as { error?: string }).error || 'No se pudo iniciar fabricación';
-          showErrorToast(msg);
-          return false;
-        }
-        showSuccessToastMessage('Fabricación iniciada');
-      } else if (action === 'register_dispatch') {
-        const courier =
-          typeof data?.courier === 'string' && data.courier.trim()
-            ? data.courier.trim()
-            : 'Interno';
-        const trackingId =
-          typeof data?.trackingId === 'string' ? data.trackingId.trim() : '';
-        if (!trackingId || trackingId.toUpperCase() === 'N/A') {
-          showErrorToast(
-            'Indica un número de seguimiento, enlace o referencia de despacho.',
-          );
-          return false;
-        }
-        const dispatchMode = data?.dispatchMode === 'externo' ? 'externo' : data?.dispatchMode === 'interno' ? 'interno' : undefined;
-        const res = await registerDispatchAction(id as string, { courier, trackingId, dispatchMode });
-        if (!res.success) {
-          const msg = (res as { error?: string }).error || 'Error al registrar despacho';
-          showErrorToast(msg);
-          return false;
-        }
-        showSuccessToastMessage('Información de despacho registrada');
-      } else if (action === 'confirm_reception') {
-        const res = await confirmReceptionAction(id as string);
-        if (!res?.success) {
-          showErrorToast((res as any)?.error || 'No se pudo confirmar la recepción');
-          return false;
-        }
-        showSuccessToastMessage("Recepción confirmada");
       } else if (action === 'rate_work') {
         showSuccessToastMessage("Funcionalidad de valoración en desarrollo.");
       } else if (action === 'resolve_flow') {
@@ -1314,66 +1275,6 @@ function CaseDetailPageContent() {
         showSuccessToastMessage('Trabajo reanudado');
       } else {
         showErrorToast('Error al reanudar el trabajo');
-      }
-    } catch (error) {
-      showErrorToast('Error de conexión');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleStartManufacturing = async () => {
-    setActionLoading(true);
-    try {
-      const res = await transitionToManufacturingAction(id as string);
-      if (res.success) {
-        setClinicalCase((prev: any) => ({
-          ...prev,
-          status: 'enFabricacion',
-          completedAt: null,
-          currentResponsibility: 'tecnico',
-        }));
-        showSuccessToastMessage('Iniciado proceso de fabricación física');
-      } else {
-        showErrorToast(res.error || 'Error al iniciar fabricación');
-      }
-    } catch (error) {
-      showErrorToast('Error de conexión');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleRegisterDispatch = async (courier: string, trackingId: string) => {
-    setActionLoading(true);
-    try {
-      const res = await registerDispatchAction(id as string, { courier, trackingId });
-      if (res.success) {
-        setClinicalCase((prev: any) => ({ 
-          ...prev, 
-          status: 'enviado',
-          dispatchInfo: { courier, trackingId, dispatchedAt: new Date().toISOString() }
-        }));
-        showSuccessToastMessage('Información de despacho registrada');
-      } else {
-        showErrorToast(res.error || 'Error al registrar despacho');
-      }
-    } catch (error) {
-      showErrorToast('Error de conexión');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleConfirmReception = async () => {
-    setActionLoading(true);
-    try {
-      const res = await confirmReceptionAction(id as string);
-      if (res.success) {
-        setClinicalCase((prev: any) => ({ ...prev, status: 'recibido' }));
-        showSuccessToastMessage('Recepción confirmada. ¡Trabajo entregado!');
-      } else {
-        showErrorToast(res.error || 'Error al confirmar recepción');
       }
     } catch (error) {
       showErrorToast('Error de conexión');

@@ -86,7 +86,7 @@ describe('UchDealSummary', () => {
     expect(screen.queryByText(/Enviada:/i)).not.toBeInTheDocument();
   });
 
-  it('técnico integral en propuesta lista: cabecera con desglose diseño y fabricación', () => {
+  it('técnico en propuesta lista: cabecera con total de la oferta', () => {
     render(
       <UchDealSummary
         caseStatus="propuestaLista"
@@ -97,19 +97,11 @@ describe('UchDealSummary', () => {
         invitation={{
           quotedPrice: 130_000,
           quotedDays: 9,
-          quotedDesignPrice: 50_000,
-          quotedDesignDays: 3,
-          quotedFabricationPrice: 80_000,
-          quotedFabricationDays: 6,
           status: 'quoted',
           respondedAt: '2026-05-12T12:00:00.000Z',
         }}
       />,
     );
-    expect(screen.getByText(/Diseño/i)).toBeInTheDocument();
-    expect(screen.getByText(/Fabricación/i)).toBeInTheDocument();
-    expect(screen.getByText(/\$50\.000/)).toBeInTheDocument();
-    expect(screen.getByText(/\$80\.000/)).toBeInTheDocument();
     expect(screen.getByText(/\$130\.000/)).toBeInTheDocument();
   });
 

@@ -49,7 +49,7 @@ export function computeIncludeCaseActionTimeline(p: ComputeIncludeCaseActionTime
     if (p.clinicalCase?.pendingActionRequest && p.clinicalCase.pendingActionActor !== p.currentUserId) {
       return true;
     }
-    if (p.caseStatus === 'enviado' || p.caseStatus === 'completado') return true;
+    if (p.caseStatus === 'completado') return true;
     return false;
   }
 
@@ -69,8 +69,6 @@ export function computeIncludeCaseActionTimeline(p: ComputeIncludeCaseActionTime
   }
 
   if (p.caseStatus === 'enRevision') return false;
-
-  if (p.caseStatus === 'disenoAprobado' || p.caseStatus === 'enFabricacion') return true;
 
   return false;
 }

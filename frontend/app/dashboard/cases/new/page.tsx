@@ -56,10 +56,6 @@ export default function NewCasePage() {
       });
 
       // 2. Subir archivos a GCS vía Signed URLs.
-      //    - solo_fabricacion: el dentista sube un único archivo de diseño (designFile).
-      //    - solo_diseno / integral: se suben los scans (superior/inferior/bite).
-      const isSoloFabrication = formData.serviceType === 'solo_fabricacion';
-
       type UploadEntry = {
         key: 'superior' | 'inferior' | 'bite' | 'designFile';
         file: File;
@@ -68,13 +64,9 @@ export default function NewCasePage() {
         folder: 'scans' | 'design';
       };
 
-      const uploads: UploadEntry[] = isSoloFabrication
-        ? files.designFile
-          ? [{ key: 'designFile', file: files.designFile, category: 'design_upload', subType: 'dentist_design', folder: 'design' }]
-          : []
-        : (['superior', 'inferior', 'bite'] as const)
-            .filter((k) => !!files[k])
-            .map((k) => ({ key: k, file: files[k] as File, category: 'scan' as const, subType: k, folder: 'scans' as const }));
+      const uploads: UploadEntry[] = (['superior', 'inferior', 'bite'] as const)
+        .filter((k) => !!files[k])
+        .map((k) => ({ key: k, file: files[k] as File, category: 'scan' as const, subType: k, folder: 'scans' as const }));
 
       for (const entry of uploads) {
         const { key, file, category, subType, folder } = entry;

@@ -42,18 +42,6 @@ const DENTIST_COLUMNS: KanbanColumn[] = [
       s === CASE_STATUSES.EN_REVISION || s === CASE_STATUSES.CAMBIOS_EN_PROCESO,
   },
   {
-    id: CASE_STATUSES.EN_FABRICACION,
-    title: 'En fabricación',
-    color: 'bg-primary-hl text-primary border-primary/20',
-    match: (s) => s === CASE_STATUSES.EN_FABRICACION,
-  },
-  {
-    id: CASE_STATUSES.ENVIADO,
-    title: 'Enviado',
-    color: 'bg-primary-hl text-primary border-primary/30',
-    match: (s) => s === CASE_STATUSES.ENVIADO,
-  },
-  {
     id: CASE_STATUSES.COMPLETADO,
     title: 'Completado',
     color: 'bg-surface-off text-muted border-divider/20',

@@ -193,9 +193,6 @@ describe('urlCaseListFilters', () => {
         techKpiStatuses: [
           'enEjecucion',
           'enRevision',
-          'disenoAprobado',
-          'enFabricacion',
-          'enviado',
         ],
         q: 'DF-1259',
       });

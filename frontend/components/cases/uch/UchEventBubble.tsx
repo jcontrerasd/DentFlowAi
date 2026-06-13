@@ -490,7 +490,7 @@ export default function UchEventBubble({
             const payload = (event.payload ?? {}) as Record<string, unknown>;
             const ratingNum = Number(payload.rating);
             const rating = Number.isFinite(ratingNum) ? Math.max(0, Math.min(5, Math.round(ratingNum))) : 0;
-            const dim = payload.dimension === 'fabrication' ? 'Fabricación (CAM)' : 'Diseño (CAD)';
+            const dim = 'Diseño (CAD)';
             // ratingComment se elimina del payload para el técnico (anonimato);
             // dentista y admin sí lo reciben.
             const comment = typeof payload.ratingComment === 'string' ? payload.ratingComment.trim() : '';

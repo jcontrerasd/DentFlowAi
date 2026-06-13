@@ -33,17 +33,11 @@ export const TECH_ACTIVE_CASE_STATUSES = [
   CASE_STATUSES.EN_EJECUCION,
   CASE_STATUSES.EN_REVISION,
   CASE_STATUSES.CAMBIOS_EN_PROCESO,
-  CASE_STATUSES.DISENO_APROBADO,
-  CASE_STATUSES.EN_FABRICACION,
-  CASE_STATUSES.ENVIADO,
 ] as const;
 
 const TECH_PROGRESS_KPI_STATUSES: TechKpiId[] = [
   'enEjecucion',
   'enRevision',
-  'disenoAprobado',
-  'enFabricacion',
-  'enviado',
 ];
 
 /** KPIs listables en modal técnico (sin `otros` por defecto). */
@@ -54,9 +48,6 @@ export const TECH_FILTERABLE_KPI_IDS: TechKpiId[] = [
   'aceptadaPendienteInicio',
   'enEjecucion',
   'enRevision',
-  'disenoAprobado',
-  'enFabricacion',
-  'enviado',
   'completado',
 ];
 
@@ -130,9 +121,6 @@ export const DENTIST_FILTERABLE_CASE_STATUSES: string[] = [
   CASE_STATUSES.EN_EJECUCION,
   CASE_STATUSES.EN_REVISION,
   CASE_STATUSES.CAMBIOS_EN_PROCESO,
-  CASE_STATUSES.DISENO_APROBADO,
-  CASE_STATUSES.EN_FABRICACION,
-  CASE_STATUSES.ENVIADO,
   CASE_STATUSES.COMPLETADO,
   CASE_STATUSES.CERRADO,
   CASE_STATUSES.PAUSADO,
@@ -153,9 +141,6 @@ export const TECH_KPI_FILTER_MAIN_TIMELINE: TechKpiId[] = [
   'aceptadaPendienteInicio',
   'enEjecucion',
   'enRevision',
-  'disenoAprobado',
-  'enFabricacion',
-  'enviado',
   'completado',
 ];
 
@@ -171,9 +156,6 @@ export const DENTIST_STATUS_FILTER_MAIN_TIMELINE: string[] = [
   CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO,
   CASE_STATUSES.EN_EJECUCION,
   CASE_STATUSES.EN_REVISION,
-  CASE_STATUSES.DISENO_APROBADO,
-  CASE_STATUSES.EN_FABRICACION,
-  CASE_STATUSES.ENVIADO,
   CASE_STATUSES.COMPLETADO,
 ];
 
@@ -384,9 +366,6 @@ export function filtersFromDashboardMetricId(
     aceptadaPendienteInicio: [CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO],
     enEjecucion: [CASE_STATUSES.EN_EJECUCION],
     enRevision: [CASE_STATUSES.EN_REVISION, CASE_STATUSES.CAMBIOS_EN_PROCESO],
-    disenoAprobado: [CASE_STATUSES.DISENO_APROBADO],
-    enFabricacion: [CASE_STATUSES.EN_FABRICACION],
-    enviado: [CASE_STATUSES.ENVIADO],
     completado: [CASE_STATUSES.COMPLETADO],
     cerrado: [CASE_STATUSES.CERRADO],
     pausado: [CASE_STATUSES.PAUSADO],

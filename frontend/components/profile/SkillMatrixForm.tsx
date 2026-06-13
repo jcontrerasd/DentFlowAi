@@ -134,14 +134,12 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
         rows.forEach(r => {
           map[r.workType] = {
             design: r.designLevel,
-            fab: r.fabricationLevel,
+            fab: 0,
           };
         });
         setSkills(map);
-        // Detectar si tiene CAD (alguna design > 0) o si initialCad es true
         setHasCad(rows.some(r => r.designLevel > 0) || initialCad);
-        // Detectar si tiene CAM (alguna fab > 0) o si initialCam es true
-        setHasCam(rows.some(r => r.fabricationLevel > 0) || initialCam);
+        setHasCam(false);
       } catch (e) {
         console.error(e);
       } finally {
@@ -181,25 +179,17 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
     const skillsArray = Object.entries(skills).map(([workType, v]) => ({
       workType,
       designLevel: hasCad ? v.design : 0,
-      fabricationLevel: hasCam ? v.fab : 0,
     }));
 
-    if (hasCad && !hasCam) {
+    if (hasCad) {
       const hasDesign = skillsArray.some(s => s.designLevel > 0);
       if (!hasDesign) {
         const msg = 'Declara al menos un tipo de trabajo con nivel de diseño mayor a 0.';
         showError(msg);
         return { success: false, error: msg };
       }
-    } else if (!hasCad && hasCam) {
-      const hasFab = skillsArray.some(s => s.fabricationLevel > 0);
-      if (!hasFab) {
-        const msg = 'Declara al menos un tipo de trabajo con nivel de fabricación mayor a 0.';
-        showError(msg);
-        return { success: false, error: msg };
-      }
     } else {
-      const hasAny = skillsArray.some(s => s.designLevel > 0 || s.fabricationLevel > 0);
+      const hasAny = skillsArray.some(s => s.designLevel > 0);
       if (!hasAny) {
         const msg = 'Declara al menos un tipo de trabajo con nivel mayor a 0.';
         showError(msg);

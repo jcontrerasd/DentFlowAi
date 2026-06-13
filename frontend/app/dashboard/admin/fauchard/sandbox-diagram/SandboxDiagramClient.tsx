@@ -139,7 +139,7 @@ export default function SandboxDiagramClient({ initialConfig }: SandboxDiagramCl
   const [scenario, setScenario] = useState({
     restorationType: 'corona_posterior',
     caseComplexity: 'INTERMEDIO',
-    serviceType: SERVICE_TYPES.INTEGRAL,
+    serviceType: SERVICE_TYPES.SOLO_DISENO,
   });
 
   const [autoBalance, setAutoBalance] = useState(true);
