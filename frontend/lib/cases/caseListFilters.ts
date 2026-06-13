@@ -90,9 +90,6 @@ const LEGACY_CASE_STATUS_TO_TECH_KPI = new Set<string>([
   'enEjecucion',
   'enRevision',
   'cambiosEnProceso',
-  'disenoAprobado',
-  'enFabricacion',
-  'enviado',
   'completado',
 ]);
 

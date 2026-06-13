@@ -496,11 +496,8 @@ export default function UnifiedCaseHub({
       allowed === null
         ? [...roleScopedEvents]
         : roleScopedEvents.filter((e) => {
-            // La calificación se enruta por dimensión, no por acción: CAD → Diseño,
-            // CAM → Producción (el filtro de fase es por acción y no las distingue).
             if (e.action === 'CALIFICACION_ENVIADA') {
-              const dim = (e.payload as Record<string, unknown> | null | undefined)?.dimension;
-              if (phaseTab === 'diseno') return dim !== 'fabrication';
+              if (phaseTab === 'diseno') return true;
               return false;
             }
             return allowed.includes(e.action);
@@ -588,12 +585,6 @@ export default function UnifiedCaseHub({
         designPriceCLP?: number | null;
         designDays?: number | null;
         designHours?: number | null;
-        fabricationPriceCLP?: number | null;
-        fabricationDays?: number | null;
-        fabricationHours?: number | null;
-        shippingPriceCLP?: number | null;
-        shippingDays?: number | null;
-        shippingHours?: number | null;
       }[]
     | undefined;
 

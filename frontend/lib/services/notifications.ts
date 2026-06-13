@@ -88,7 +88,6 @@ export type NotificationType =
   | 'SUSPENSION_TEMPORAL'
   | 'FALLO_SELECCION_DENTISTA'
   | 'SIN_COTIZACIONES_FALLO'
-  | 'FABRICACION_INICIADA'
   | 'CASO_ASIGNADO_OTRO'
   // ─── v5.0 — Disponibilidad, sanción rolling y cola pool (tono informativo, no punitivo) ───
   | 'NIVEL_2_ALCANZADO'
@@ -194,10 +193,6 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   FALLO_SELECCION_DENTISTA: {
     subject: 'Fauchard: sin cotizaciones en esta ronda',
     body: (data) => `Hola,\n\nFauchard te informa que no se recibieron ofertas válidas para avanzar el caso ${data.caseId} en este momento. Un administrador revisará el caso para ayudarte.\n\nTe notificaremos pronto con una solución.`,
-  },
-  FABRICACION_INICIADA: {
-    subject: 'Fauchard: fase de fabricación iniciada',
-    body: (data) => `Hola ${data.name},\n\nFauchard te informa que la fase de fabricación de tu caso ${data.caseId} ya comenzó. Revisa el progreso en tu panel.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
   CASO_ASIGNADO_OTRO: {
     subject: 'Fauchard: caso asignado a otra oferta',

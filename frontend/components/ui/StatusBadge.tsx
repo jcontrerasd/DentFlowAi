@@ -5,9 +5,7 @@ import {
   CheckCircle2,
   Eye,
   FileText,
-  Package,
   Pause,
-  Truck,
   X,
 } from 'lucide-react';
 
@@ -35,9 +33,6 @@ export const STATUS_MAP: Record<string, StatusConfig> = {
   enEjecucion: { label: 'En Ejecución', icon: Activity, className: IN_PROGRESS },
   enRevision: { label: 'En Revisión', icon: Eye, className: ATTENTION },
   cambiosEnProceso: { label: 'Cambios', icon: AlertCircle, className: ATTENTION },
-  disenoAprobado: { label: 'Diseño Aprobado', icon: CheckCircle2, className: SUCCESS },
-  enFabricacion: { label: 'En Fabricación', icon: Package, className: IN_PROGRESS },
-  enviado: { label: 'Enviado', icon: Truck, className: IN_PROGRESS },
   completado: { label: 'Completado', icon: CheckCircle2, className: SUCCESS },
   cerrado: { label: 'Cerrado', icon: X, className: NEUTRAL },
   pausado: { label: 'Pausado', icon: Pause, className: ATTENTION },

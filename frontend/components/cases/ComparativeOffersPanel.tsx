@@ -21,17 +21,10 @@ export type ComparativeOfferRow = {
   quotedHours?: number | null;
   techNotes: string | null;
   respondedAt: Date | string | null;
-  /** Desglose integral (Fase 4.4); nullable cuando no aplica. */
+  /** Desglose (diseño); nullable cuando no aplica. */
   designPriceCLP?: number | null;
   designDays?: number | null;
   designHours?: number | null;
-  fabricationPriceCLP?: number | null;
-  fabricationDays?: number | null;
-  fabricationHours?: number | null;
-  /** Flete (v4.4): expuesto SIN fee de plataforma. Nullable para casos legacy / solo_diseno. */
-  shippingPriceCLP?: number | null;
-  shippingDays?: number | null;
-  shippingHours?: number | null;
 };
 
 interface ComparativeOffersPanelProps {

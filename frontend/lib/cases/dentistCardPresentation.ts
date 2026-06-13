@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { Activity, AlertCircle, CheckCircle2, Circle, Clock, Package, Truck, XCircle } from 'lucide-react';
+import { Activity, AlertCircle, CheckCircle2, Circle, Clock, XCircle } from 'lucide-react';
 import { statusLabel } from '@/components/ui/StatusBadge';
 
 export type DentistCardZone = {
@@ -87,28 +87,9 @@ export function getDentistCardZone(input: DentistCardInput): DentistCardZone {
     case 'enEjecucion':
     case 'enRevision':
     case 'cambiosEnProceso':
-    case 'disenoAprobado':
       return {
         icon: status === 'enRevision' || status === 'cambiosEnProceso' ? AlertCircle : Activity,
         iconClass: status === 'enRevision' || status === 'cambiosEnProceso' ? 'text-warning' : 'text-primary',
-        primary: statusLabel(status),
-        secondary: joinSecondary([material, formatShortDate(input.workDeadline) && `entrega est. ${formatShortDate(input.workDeadline)}`]),
-        ctaLabel: 'Ver progreso',
-        ctaVariant: 'neutral',
-      };
-    case 'enFabricacion':
-      return {
-        icon: Package,
-        iconClass: 'text-primary',
-        primary: statusLabel(status),
-        secondary: joinSecondary([material, formatShortDate(input.workDeadline) && `entrega est. ${formatShortDate(input.workDeadline)}`]),
-        ctaLabel: 'Ver progreso',
-        ctaVariant: 'neutral',
-      };
-    case 'enviado':
-      return {
-        icon: Truck,
-        iconClass: 'text-primary',
         primary: statusLabel(status),
         secondary: joinSecondary([material, formatShortDate(input.workDeadline) && `entrega est. ${formatShortDate(input.workDeadline)}`]),
         ctaLabel: 'Ver progreso',

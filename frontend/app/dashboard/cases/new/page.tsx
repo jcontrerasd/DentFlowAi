@@ -47,7 +47,7 @@ export default function NewCasePage() {
         material: formData.material,
         shade: formData.shade,
         teeth: formData.teeth,
-        needsFabrication: formData.needsFabrication,
+        needsFabrication: false,
         serviceType: formData.serviceType,
         doctorNotes: formData.doctorNotes,
         specialInstructions: formData.doctorNotes || null,

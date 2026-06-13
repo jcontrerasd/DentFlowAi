@@ -188,7 +188,7 @@ function dimensionsForServiceType(_serviceType: string): string[] {
 type BulkScoringData = {
   reviews: { revieweeId: string; rating: number; dimension: string }[];
   completedInvs: { technicianId: string; completedAt: Date | null; assignedAt: Date | null; quotedDays: number | null; quotedHours: number | null }[];
-  skills: { userId: string; workType: string; designLevel: number; fabricationLevel: number }[];
+  skills: { userId: string; workType: string; designLevel: number }[];
   recentInvs: { technicianId: string }[];
   techUsers: { id: string; lastInvitedAt: Date | null; leagueTransitionStartedAt: Date | null }[];
 };
@@ -229,7 +229,6 @@ async function bulkLoadTechnicianData(
       userId: technicianSkill.userId,
       workType: technicianSkill.workType,
       designLevel: technicianSkill.designLevel,
-      fabricationLevel: technicianSkill.fabricationLevel,
     })
     .from(technicianSkill)
     .where(and(inArray(technicianSkill.userId, techIds), eq(technicianSkill.workType, workType))),
@@ -661,8 +660,7 @@ export async function runFauchardAction(caseId: string): Promise<{
         if (!skill) { exclusionReasons.lowSkill++; continue; }
 
         // Regla de elegibilidad AND triple (v5.0) — solo con el modelo habilitado.
-        // Se evalúa en tiempo real (sin caché del estado efectivo). Integral exige
-        // CAD y CAM; solo_diseno exige CAD; solo_fabricacion exige CAM.
+        // Solo_diseno exige CAD.
         if (availabilityOn) {
           // Capa 2 (red de seguridad): garantizar la fila de disponibilidad antes de
           // evaluar elegibilidad. computeEligibleAction excluye a quien no tiene fila;

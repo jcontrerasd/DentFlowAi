@@ -1,6 +1,6 @@
 'use client';
 
-import { Factory, Layers, MessageSquare, PenTool } from 'lucide-react';
+import { MessageSquare, PenTool } from 'lucide-react';
 import { SERVICE_TYPE_LABELS } from '@/lib/constants/dental';
 
 /**
@@ -45,18 +45,6 @@ const SERVICE_META: Record<
     label: 'CAD',
     chipClass: 'border-sky-500/35 bg-sky-500/10 text-primary',
     iconClass: 'text-sky-400',
-  },
-  solo_fabricacion: {
-    Icon: Factory,
-    label: 'CAM',
-    chipClass: 'border-warning/20 bg-warning-hl text-warning',
-    iconClass: 'text-warning',
-  },
-  integral: {
-    Icon: Layers,
-    label: 'CAD+CAM',
-    chipClass: 'border-primary/30 bg-primary/12 text-primary',
-    iconClass: 'text-primary',
   },
 };
 

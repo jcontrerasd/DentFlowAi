@@ -104,7 +104,7 @@ export default function DashboardHome() {
 
         const invitationsArr = (invitations as any[]) || [];
         const hasSkills = (skillsCheck as any[]).some(
-          (s: any) => (s.designLevel ?? 0) > 0 || (s.fabricationLevel ?? 0) > 0,
+          (s: any) => (s.designLevel ?? 0) > 0,
         );
         setTechHasSkills(hasSkills);
 

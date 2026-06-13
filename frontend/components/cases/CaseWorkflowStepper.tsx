@@ -14,12 +14,6 @@ const BASE_STEPS: Step[] = [
   { status: 'aceptadaPendienteInicio', label: 'Esperando inicio' },
   { status: 'enEjecucion', label: 'En ejecución' },
   { status: 'enRevision', label: 'En revisión' },
-  { status: 'disenoAprobado', label: 'Diseño aprobado' },
-];
-
-const FABRICATION_STEPS: Step[] = [
-  { status: 'enFabricacion', label: 'En fabricación' },
-  { status: 'enviado', label: 'Enviado' },
 ];
 
 const FINAL_STEP: Step = { status: 'completado', label: 'Completado' };
@@ -53,7 +47,6 @@ export type CaseWorkflowStepperVariant = 'case' | 'techRejected';
 
 interface CaseWorkflowStepperProps {
   currentStatus: string;
-  serviceType?: string | null;
   workDeadline?: Date | null;
   /** Técnico no ganador / oferta no seleccionada: narrativa de cierre en rosa, sin fecha de entrega del caso. */
   variant?: CaseWorkflowStepperVariant;
@@ -61,36 +54,19 @@ interface CaseWorkflowStepperProps {
 
 export default function CaseWorkflowStepper({
   currentStatus,
-  serviceType,
   workDeadline,
   variant = 'case',
 }: CaseWorkflowStepperProps) {
   const rawStatus = String(currentStatus || 'borrador').trim() || 'borrador';
-  const isIntegral = serviceType === 'integral';
-  const isSoloFab = serviceType === 'solo_fabricacion';
   const techRejected = variant === 'techRejected';
   const isTerminal =
     rawStatus === 'rechazado' ||
     rawStatus === 'cerrado' ||
     rawStatus.toLowerCase() === 'rechazado' ||
     rawStatus.toLowerCase() === 'cerrado';
-  /**
-   * Caso integral o solo_fabricacion que terminó en rechazado/cerrado: además
-   * de la banda base (propuestaLista → completado), también deben pintarse en
-   * rosa los pasos posteriores no cumplidos (fabricación, envío) para que no
-   * aparezcan como "pendientes en gris" al cierre.
-   */
-  const integralTerminalReject = !techRejected && (isIntegral || isSoloFab) && isTerminal;
-
-  // Para solo_fabricacion el flujo omite diseño (enEjecucion, enRevision, disenoAprobado),
-  // también en variante techRejected: el técnico CAM no "pierde" fases de diseño que no aplican.
-  const baseStepsForCase: Step[] = isSoloFab
-    ? BASE_STEPS.filter((s) => !['enEjecucion', 'enRevision', 'disenoAprobado'].includes(s.status))
-    : BASE_STEPS;
 
   const steps: Step[] = [
-    ...baseStepsForCase,
-    ...((isIntegral || isSoloFab) ? FABRICATION_STEPS : []),
+    ...BASE_STEPS,
     techRejected ? { ...FINAL_STEP, label: 'Rechazado' } : FINAL_STEP,
     ...(!techRejected && isTerminal
       ? (() => {
@@ -125,15 +101,9 @@ export default function CaseWorkflowStepper({
 
   const inRoseDoneBand = (idx: number) => {
     if (techRejected) {
-      // Desde comparativa hasta fabricación/envío (si existen): banda de pérdida en rosa;
+      // Desde comparativa hasta completado: banda de pérdida en rosa;
       // el terminal "Rechazado" queda en rojo sólido.
       return idxPropuesta >= 0 && idx >= idxPropuesta && idx < lastIdx;
-    }
-    if (integralTerminalReject) {
-      // Cubre todo el rango desde propuestaLista hasta el penúltimo step (Completado),
-      // que tampoco se cumplió. El último (Rechazado/Cerrado) se pinta como terminal rojo.
-      const fromIdx = idxPropuesta >= 0 ? idxPropuesta : 0;
-      return idx >= fromIdx && idx < lastIdx;
     }
     return false;
   };
@@ -142,10 +112,6 @@ export default function CaseWorkflowStepper({
     if (techRejected) {
       if (idxPropuesta < 0) return false;
       return leftIdx >= idxPropuesta && leftIdx < lastIdx;
-    }
-    if (integralTerminalReject) {
-      const fromIdx = idxPropuesta >= 0 ? idxPropuesta : 0;
-      return leftIdx >= fromIdx && leftIdx < lastIdx - 1;
     }
     return false;
   };
@@ -169,20 +135,16 @@ export default function CaseWorkflowStepper({
 
         const showTerminalRejected = techRejected && isTerminalStep;
 
-        // Para integralTerminalReject usamos el mismo set de clases que `techRejected`
-        // (rosa para la banda done, terminal en rosa con XCircle), pero sin tocar el
-        // tramo "Borrador/En evaluación" previo a propuestaLista, que mantiene su look base.
-        const useRoseScheme = techRejected || integralTerminalReject;
-        const integralEarlyDone = integralTerminalReject && idxPropuesta >= 0 && idx < idxPropuesta;
+        const useRoseScheme = techRejected;
 
         const circleClass = useRoseScheme
           ? [
               'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all',
               isTerminalStep ? 'bg-error text-inverse shadow-sm' : '',
               roseDone ? 'bg-error-hl text-error ring-1 ring-error/30' : '',
-              tealEarlyDone || integralEarlyDone ? 'bg-primary text-inverse' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isCurrent ? 'bg-primary-hl text-primary ring-2 ring-primary/30' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isPending ? 'bg-surface-2 text-faint' : '',
+              tealEarlyDone ? 'bg-primary text-inverse' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && isCurrent ? 'bg-primary-hl text-primary ring-2 ring-primary/30' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && isPending ? 'bg-surface-2 text-faint' : '',
             ]
               .filter(Boolean)
               .join(' ')
@@ -201,9 +163,9 @@ export default function CaseWorkflowStepper({
               'text-[8px] font-bold uppercase tracking-wider text-center leading-tight whitespace-nowrap',
               isTerminalStep ? 'text-error' : '',
               roseDone ? 'text-error/90' : '',
-              tealEarlyDone || integralEarlyDone ? 'text-primary' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isCurrent ? 'text-primary' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && !integralEarlyDone && isPending ? 'text-faint' : '',
+              tealEarlyDone ? 'text-primary' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && isCurrent ? 'text-primary' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && isPending ? 'text-faint' : '',
             ]
               .filter(Boolean)
               .join(' ')
@@ -218,22 +180,22 @@ export default function CaseWorkflowStepper({
               .join(' ');
 
         const showCheck = useRoseScheme
-          ? (roseDone || tealEarlyDone || integralEarlyDone) && !showTerminalRejected && !isTerminalStep
+          ? (roseDone || tealEarlyDone) && !showTerminalRejected && !isTerminalStep
           : isDone && !isTerminalStep;
         const showClock = useRoseScheme ? false : isCurrent && !isTerminalStep;
         const showCircleOutline = useRoseScheme
           ? !showTerminalRejected && !isTerminalStep &&
-              (!roseDone && !tealEarlyDone && !integralEarlyDone && (isPending || isCurrent))
+              (!roseDone && !tealEarlyDone && (isPending || isCurrent))
           : (isPending || isTerminalStep) || (isCurrent && !isTerminalStep);
 
         return (
           <div key={`${step.status}-${idx}`} className="flex items-center min-w-0 flex-1">
             <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
               <div className={circleClass}>
-                {(showTerminalRejected || (integralTerminalReject && isTerminalStep)) && <XCircle className="w-4 h-4" aria-hidden />}
+                {(showTerminalRejected) && <XCircle className="w-4 h-4" aria-hidden />}
                 {showCheck && <CheckCircle className="w-4 h-4" />}
                 {showClock && <Clock className="w-3.5 h-3.5" />}
-                {showCircleOutline && !showCheck && !showClock && !showTerminalRejected && !(integralTerminalReject && isTerminalStep) && (
+                {showCircleOutline && !showCheck && !showClock && !showTerminalRejected && (
                   <Circle className="w-3.5 h-3.5" />
                 )}
               </div>
@@ -256,17 +218,9 @@ export default function CaseWorkflowStepper({
                         : idx < idxPropuesta
                           ? 'bg-primary'
                           : 'bg-surface-off'
-                    : integralTerminalReject
-                      ? idx === lastIdx - 1
-                        ? 'bg-error'
-                        : connectorRose(idx)
-                          ? 'bg-error'
-                          : idx < idxPropuesta
-                            ? 'bg-primary'
-                            : 'bg-surface-off'
-                      : idx < currentIdx
-                        ? 'bg-primary'
-                        : 'bg-surface-off',
+                    : idx < currentIdx
+                      ? 'bg-primary'
+                      : 'bg-surface-off',
                 ].join(' ')}
               />
             )}

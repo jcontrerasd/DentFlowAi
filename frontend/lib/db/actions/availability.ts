@@ -54,7 +54,7 @@ function categorySetKey(categoria: WorkCategory, capacidad: Capacity): keyof Ava
  */
 async function createDefaultAvailability(userId: string): Promise<AvailabilityRow | null> {
   const skills = await db
-    .select({ designLevel: technicianSkill.designLevel, fabricationLevel: technicianSkill.fabricationLevel })
+    .select({ designLevel: technicianSkill.designLevel })
     .from(technicianSkill)
     .where(eq(technicianSkill.userId, userId));
   const hasCad = skills.some((s) => (s.designLevel ?? 0) > 0);

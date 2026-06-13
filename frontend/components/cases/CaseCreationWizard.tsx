@@ -39,9 +39,7 @@ export interface CaseFormData {
   notesOclusal: string;
   notesEsthetic: string;
   doctorNotes: string;
-  /** Derivado de serviceType para retrocompatibilidad con el backend. */
-  needsFabrication: boolean;
-  /** Tipo de servicio: solo diseño, solo fabricación o integral. */
+  /** Tipo de servicio del caso (siempre solo_diseno). */
   serviceType: ServiceType;
 }
 
@@ -49,8 +47,6 @@ export interface CaseFiles {
   superior: File | null;
   inferior: File | null;
   bite: File | null;
-  /** Archivo de diseño que sube el dentista cuando el servicio es solo_fabricacion. */
-  designFile: File | null;
 }
 
 const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
@@ -99,21 +95,16 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
       notesOclusal: initialData?.notesOclusal || '',
       notesEsthetic: initialData?.notesEsthetic || '',
       doctorNotes: initialData?.doctorNotes || '',
-      needsFabrication: initialServiceType !== SERVICE_TYPES.SOLO_DISENO,
       serviceType: initialServiceType,
     };
   };
 
   const [formData, setFormDataRaw] = useState<CaseFormData>(getInitialFormData);
 
-  /** Garantiza coherencia needsFabrication ⇄ serviceType al cambiar el tipo. */
   const setFormData = (updater: CaseFormData | ((prev: CaseFormData) => CaseFormData)) => {
     setFormDataRaw((prev) => {
       const next = typeof updater === 'function' ? (updater as (p: CaseFormData) => CaseFormData)(prev) : updater;
-      return {
-        ...next,
-        needsFabrication: next.serviceType !== SERVICE_TYPES.SOLO_DISENO,
-      };
+      return { ...next };
     });
   };
 
@@ -126,7 +117,6 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
     superior: null,
     inferior: null,
     bite: null,
-    designFile: null,
   });
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [fileError, setFileError] = useState<string | null>(null);

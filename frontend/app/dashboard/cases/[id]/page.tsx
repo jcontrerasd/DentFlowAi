@@ -29,7 +29,6 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import { creationInstructionsText } from '@/lib/cases/instructions';
-import { SUPPORTED_COUNTRIES, REGIONS_BY_COUNTRY } from '@/lib/constants/addressData';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
 import {
   getCaseDetails,
@@ -1393,8 +1392,7 @@ function CaseDetailPageContent() {
       return;
     }
 
-    const isSoloFab = clinicalCase.serviceType === 'solo_fabricacion';
-    const category: 'scan' | 'design_upload' = isSoloFab ? 'design_upload' : 'scan';
+    const category = 'scan' as const;
 
     // Asignar el próximo slot canónico libre (igual que el wizard de creación).
     const usedSubTypes = new Set<string>([
@@ -1403,21 +1401,12 @@ function CaseDetailPageContent() {
         .map((f: any) => f.subType),
       ...stagedFileAdds.map(s => s.subType),
     ]);
-    let subType: string;
-    if (isSoloFab) {
-      subType = 'dentist_design';
-      if (usedSubTypes.has(subType)) {
-        showErrorToast('Ya existe un archivo de diseño para este caso.');
-        return;
-      }
-    } else {
-      const slot = (['superior', 'inferior', 'bite'] as const).find(s => !usedSubTypes.has(s));
-      if (!slot) {
-        showErrorToast('No hay slots disponibles (superior/inferior/bite ocupados).');
-        return;
-      }
-      subType = slot;
+    const slot = (['superior', 'inferior', 'bite'] as const).find(s => !usedSubTypes.has(s));
+    if (!slot) {
+      showErrorToast('No hay slots disponibles (superior/inferior/bite ocupados).');
+      return;
     }
+    const subType: string = slot;
 
     const staged: StagedFileAdd = {
       tempId: `staged-file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1823,33 +1812,6 @@ function CaseDetailPageContent() {
                   <span>{clinicalCase?.patientIdAnon ?? '—'}</span>
                 )}
               </div>
-              {/* Ubicación del dentista (v5.8, tres niveles) — en casos con fabricación:
-                  el admin y el técnico GANADOR ven la dirección completa; cualquier otro técnico
-                  invitado (cotizando o perdedor) ve SOLO país·región·comuna para cotizar el
-                  traslado. El gate autoritativo vive en getCaseDetails (anula los campos según el
-                  nivel); aquí solo decidimos renderizar el badge y el armado de partes filtra los
-                  campos vacíos, así que un técnico no-ganador nunca verá calle/número/oficina. */}
-              {(viewingAsAdmin || actingAsTecnico) && clinicalCase?.needsFabrication && (() => {
-                const doc = (clinicalCase as any)?.doctor;
-                if (!doc?.country && !doc?.region && !doc?.comuna) return null;
-                const countryName = SUPPORTED_COUNTRIES.find(c => c.code === doc.country)?.name ?? doc.country;
-                const regionName = doc.region
-                  ? (REGIONS_BY_COUNTRY[doc.country]?.find((r: any) => r.code === doc.region)?.name ?? doc.region)
-                  : null;
-                const comunaName = doc.region && doc.comuna
-                  ? (REGIONS_BY_COUNTRY[doc.country]?.find((r: any) => r.code === doc.region)?.communes.find((c: any) => c.code === doc.comuna)?.name ?? doc.comuna)
-                  : null;
-                const streetLine = [doc.address, doc.addressNumber].filter(Boolean).join(' ');
-                const officeLine = doc.addressOffice ? `Of. ${doc.addressOffice}` : null;
-                const parts = [countryName, regionName, comunaName, streetLine, officeLine].filter(Boolean);
-                if (!parts.length) return null;
-                return (
-                  <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-surface-2 border border-divider text-muted">
-                    <Globe className="w-3 h-3 text-faint shrink-0" />
-                    {parts.join(' · ')}
-                  </span>
-                );
-              })()}
               {clinicalCase?.internalStatus && authUserProfile?.role === 'admin' && (
                 <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-surface-2 text-muted border border-divider tracking-wider">
                   ⚙ {clinicalCase.internalStatus}
@@ -2180,7 +2142,6 @@ function CaseDetailPageContent() {
       <div className="bg-surface/60 border border-divider rounded-2xl px-6 py-4">
         <CaseWorkflowStepper
           currentStatus={isEditingStatus ?? clinicalCase?.status ?? 'borrador'}
-          serviceType={clinicalCase?.serviceType}
           workDeadline={techOfferRejectedView ? undefined : clinicalCase?.workDeadline}
           variant={techOfferRejectedView ? 'techRejected' : 'case'}
         />
