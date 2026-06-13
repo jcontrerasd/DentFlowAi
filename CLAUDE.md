@@ -121,12 +121,24 @@ cd frontend && npm run test:smoke         # smoke tests páginas clave
 cd frontend && npm run lint               # eslint
 cd frontend && npm run validate:full      # lint + type-check + build
 npx tsx frontend/scripts/seed-uat.ts      # seed UAT local (.env.local)
+cd frontend && python3 deploy_gui.py      # GUI gráfica de deploy (Tkinter, sin dependencias externas)
 ```
+
+## GUI de Deploy (`frontend/deploy_gui.py`)
+
+Interfaz gráfica Python/Tkinter que reimplementa `deploy.sh` sin dependencias externas. Permite desplegar a local/dev/prod con control visual de variables por entorno (incluido `NOTIFICATIONS_LIVE`). Uso: `cd frontend && python3 deploy_gui.py`. **GOTCHA:** `deploy.sh` no recorta comentarios inline de `.env.local`; la GUI sí los recorta al leer, y escribe sin comentario inline al guardar (evita romper comparaciones `=== 'true'`).
+
+## Sistema de preview de emails (DEMO local)
+
+Para facilitar demos del flujo sin enviar correos reales. Gated por `NEXT_PUBLIC_DEMO_EMAIL_PREVIEW=true` (default off):
+- **`lib/services/emailPreviewBuffer.ts`** — ring buffer en memoria (hasta 50 entradas, proceso único). `pushEmailPreview()` es llamado por `notifyUser` cuando el flag está activo y `NOTIFICATIONS_LIVE` no lo es.
+- **`app/api/demo/email-preview/route.ts`** — `GET` con `?since=<timestamp>`; devuelve lista vacía si el flag está off.
+- **`components/demo/DemoEmailPreviewListener.tsx`** — polling cada 2s desde `dashboard/layout.tsx`. Muestra un modal "este correo se enviaría" con el asunto, cuerpo y tipo del correo. Solo se monta si el flag está on.
 
 ## Flujo Git y Deploy
 
 - Ramas: **develop** (trabajo diario, staging) → **main** (producción). Nunca commitear directo a `main`.
-- Deploy: `cd frontend && bash deploy.sh [develop|production]`.
+- Deploy: `cd frontend && bash deploy.sh [develop|production]` — o usar la GUI (`deploy_gui.py`).
 - **Staging**: Cloud Run `dentflowai-frontend-dev` + Cloud SQL `dentflowai-psql-dev` (BD aislada de prod).
 - **Producción**: Cloud Run `dentflowai-frontend` + Cloud SQL `dentflowai-cbcf2-instance`.
 - Variables por entorno (`DATABASE_URL_DEV`/`_PROD`, `AUTH_URL_DEV`/`_PROD`, `NEXT_PUBLIC_APP_URL_DEV`/`_PROD`) viven en `frontend/.env.local` y se inyectan en Cloud Run por `deploy.sh`.
@@ -148,7 +160,7 @@ Diseño de lookup tables uniforme:
   - `id` (uuid PK) — referenciado por FK desde `clinical_case`.
   - `code` (text UNIQUE) — **opaco, system-generated** (`mat_001`, `vita_001`, `rest_001`, `urg_001`). Identificador estable sin relación semántica con el label.
   - `label` (text) — **único campo editable** por admin.
-  - `sort_order`, `is_active`. DDL + seed en [frontend/lib/db/infrastructure.ts](frontend/lib/db/infrastructure.ts) (`INFRA_VERSION='v5.0'` — agrega el modelo de disponibilidad del técnico: tablas `technician_availability`, `technician_no_response_event` y los catálogos de rechazo `invitation_rejection_reason` (`rej_NNN`) + `bulk_rejection_reason` (`brej_NNN`), más columnas nuevas en `case_invitation`, `clinical_case` y `fauchard_config`. Todo detrás del flag `AVAILABILITY_MODEL_ENABLED`. Ver [Doc Servicio Orquestado/plan_flujo_tiempos.md](Doc%20Servicio%20Orquestado/plan_flujo_tiempos.md)).
+  - `sort_order`, `is_active`. DDL + seed en [frontend/lib/db/infrastructure.ts](frontend/lib/db/infrastructure.ts) (`INFRA_VERSION` actual: **v5.7** — historial de versiones: v5.0 modelo de disponibilidad + tablas `technician_availability`/`technician_no_response_event` + catálogos de rechazo + columnas nuevas en `case_invitation`/`clinical_case`/`fauchard_config`; v5.1 `inactivity_reminder_sent_at`; v5.2 `review_reminder_sent_at`/`review_overdue_notified_at`; v5.3 columna `dimension` en `review` + índice único `case+reviewer+dimension`; v5.4 normalización de pesos del score a Σ6=1.0 con αN; v5.5 motor de ligas + `league_change_event`; v5.7 campos de dirección en `user`. Todo detrás de sus respectivos flags. Ver [Doc Servicio Orquestado/plan_flujo_tiempos.md](Doc%20Servicio%20Orquestado/plan_flujo_tiempos.md)).
 - **FKs en clinical_case**: `material_id`, `restoration_type_id`, `shade_id`, `urgency_id` (todos con `ON DELETE RESTRICT`).
 - **Reglas de uso desde código**:
   - Form envía `code` opaco para material/restoration/shade y `label` para urgency. El resolver ([catalogResolver.ts](frontend/lib/db/catalogResolver.ts)) lo convierte a `*_id` antes de persistir.
@@ -181,9 +193,12 @@ Columnas en tabla `user` (todas `TEXT`, nullable, agregadas vía `ALTER TABLE �
 
 **UI**: registración (`auth/register`) y perfil (`dashboard/profile`) muestran el bloque de dirección para ambos roles (dentista y técnico). Los selects son en cascada: País → Región → Comuna; los campos de calle son text inputs.
 
-**Ficha del caso — badge de ubicación**: en `dashboard/cases/[id]/page.tsx`, **solo el técnico ganador** (el asignado al caso) y los admins ven un badge en el header del caso (junto al ID `DF-XXXX`) con la dirección completa del dentista (`País · Región · Comuna · Calle Número · Of. X`) cuando el caso incluye fabricación (`needsFabrication=true`). Los demás técnicos invitados (cotizando o perdedores) acceden al caso pero NO reciben la dirección. Si el dentista no tiene dirección registrada, el badge no aparece.
+**Ficha del caso — badge de ubicación (v5.8, divulgación en tres niveles)**: en `dashboard/cases/[id]/page.tsx`, en casos con fabricación (`needsFabrication=true`) el badge del header (junto al ID `DF-XXXX`) muestra la ubicación del dentista con distinto detalle según el viewer:
+- **Dirección completa** (`País · Región · Comuna · Calle Número · Of. X`): admin, dentista dueño y el técnico **ganador** (asignado, para despachar la fabricación).
+- **Solo ubicación gruesa** (`País · Región · Comuna`): cualquier otro técnico **invitado** al caso (cotizando o perdedor), para que pueda **cotizar el traslado**. Nunca ve calle/número/oficina.
+- **Sin badge**: técnico sin invitación al caso, casos sin fabricación, o dentista sin dirección registrada.
 
-**getCaseDetails**: el join de `doctor` en `getCaseDetails` (`cases.ts`) incluye los 6 campos de dirección para alimentar el badge, pero **los anula salvo que el viewer sea el técnico asignado, admin o el dentista dueño** (gate de privacidad autoritativo en servidor; el cliente solo refuerza el render).
+**getCaseDetails**: el join de `doctor` en `getCaseDetails` (`cases.ts`) incluye los 6 campos de dirección y aplica el gate autoritativo en servidor vía `getDoctorAddressDisclosure` (`caseListVisibility.ts`), que devuelve `full | coarse | none`: `coarse` anula solo calle/número/oficina; `none` anula los 6. Para `coarse` se consulta si el viewer tiene invitación al caso. El cliente solo refuerza el render (el armado de partes filtra los campos vacíos).
 
 ## Restricciones críticas
 <important>NUNCA acceder a la DB desde componentes — solo Server Actions en frontend/lib/db/actions/</important>
@@ -265,6 +280,7 @@ Fauchard prioriza **una acción primaria** visible expandida en el hilo (revisi�
 | FABRICACION_INICIADA / CASO_DESPACHADO | Ambos | `transitionToManufacturingAction`, `registerDispatchAction` en `cases.ts` |
 | RECEPCION_CONFIRMADA | Ambos | `confirmReceptionAction` en `cases.ts` |
 | CASO_PUBLICADO | Dentista (split) | Dos burbujas: "Yo" (derecha) + Fauchard (izquierda) — ver split logic |
+| CALIFICACION_ENVIADA | Dentista (autor) + técnico ganador | `UchRatingPanel.tsx` + `submitUserRatingAction` en `cases.ts`. **Solo** el técnico calificado (`revieweeId`) ve su calificación — otros técnicos invitados/perdedores no la ven (regla en `caseEventsUchFilter.ts`). Payload lleva `dimension: 'design' \| 'fabrication'`, `rating`, `revieweeId`; el comentario se oculta al técnico vía `sanitizeUchPayloadForViewer` |
 
 ### Split de CASO_PUBLICADO
 El evento `CASO_PUBLICADO` llega del servidor enmascarado como Fauchard. El cliente lo divide en dos burbujas para el dentista mediante `splitCasoPublicadoForDentista()` en `lib/uchCasoPublicadoSplit.ts`:
@@ -313,6 +329,7 @@ components/cases/
     UchDentistReviewPanel.tsx    Panel de revisión (dentista)
     UchDealSummary.tsx           Resumen del acuerdo aceptado
     UchQuoteBreakdown.tsx        Desglose diseño/fabricación en cotizaciones integral
+    UchRatingPanel.tsx           Calificación del dentista al técnico (v5.3, dimension: design|fabrication)
     buildUchTimelineRows.ts      Construye filas del timeline (eventos + acciones)
     uchTimelineTypes.ts          Tipos del timeline
     uchHubActionVisibility.ts    Lógica de visibilidad de acciones
@@ -323,7 +340,10 @@ lib/
   uchCasoPublicadoSplit.ts       Split client-side de CASO_PUBLICADO para dentista
   uchEventVisibility.ts          Regla de visibilidad para eventos visibleTo:tecnico
   uchUnread.ts                   Contadores de mensajes no leídos
+  uchQuoteDisplay.ts             Helpers de presentación de cotizaciones (formato CLP, desglose)
   caseEventsUchFilter.ts         Filtro de eventos por rol (espeja getCaseEventsAction)
+                                   — incluye regla CALIFICACION_ENVIADA: solo el técnico con
+                                     revieweeId === identity.id la ve (fallback a assignedTechnicianId)
   deadlineMs.ts                  Utilidades de deadline (toDeadlineMs, effectiveNowMs)
   hooks/useRemainingUntil.ts     Hook para countdown sincronizado con servidor
 ```

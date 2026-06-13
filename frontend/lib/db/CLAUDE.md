@@ -9,7 +9,7 @@
 **Helpers de la capa de datos** (viven en `lib/db/`, **no** en `actions/`; no son server actions):
 - `caseDeadlines.ts` — deadlines wall-clock de los countdowns (`getCaseQuoteDeadlineAt`, `getCaseReviewDeadlineAt`).
 - `archiveCaseFiles.ts` — `archiveCaseFilesBestEffort(caseId)` (marca `customTime` en GCS al cerrar el caso).
-- `caseListVisibility.ts` — predicados de visibilidad: `buildActiveCaseVisibilityWhere`, `userCanAccessClinicalCase` y `canViewerSeeDoctorAddress` (gate de dirección del dentista, v5.7).
+- `caseListVisibility.ts` — predicados de visibilidad: `buildActiveCaseVisibilityWhere`, `userCanAccessClinicalCase` y `getDoctorAddressDisclosure` (gate de dirección del dentista en tres niveles `full | coarse | none`, v5.8).
 - `caseListQueryBuilder.ts` — armado de queries del listado de casos.
 - `caseUserArchiveHelpers.ts` — helpers de archivado por usuario (`case_user_archive`).
 
@@ -26,7 +26,7 @@ Perfil del usuario. Campos de ubicación (v5.7, todos `TEXT` nullable):
 
 Otros campos relevantes: `role`, `is_available`, `consecutive_no_response`, `onboarding_step`, `league_level`, `league_transition_started_at`, `league_demotion_watch_since`.
 
-`getUserProfileDirect` (`actions/user.ts`) selecciona todos los campos de dirección para el perfil del usuario autenticado. `getCaseDetails` (`actions/cases.ts`) incluye los 6 campos del doctor en el join `doctor` para el badge de dirección en la ficha del caso, pero **los anula en el servidor** salvo que el viewer pase `canViewerSeeDoctorAddress` (`caseListVisibility.ts`): solo el técnico ganador (asignado), el admin y el dentista dueño los reciben; cualquier otro técnico invitado obtiene `null` (gate de privacidad autoritativo; el cliente solo refuerza el render).
+`getUserProfileDirect` (`actions/user.ts`) selecciona todos los campos de dirección para el perfil del usuario autenticado. `getCaseDetails` (`actions/cases.ts`) incluye los 6 campos del doctor en el join `doctor` para el badge de dirección y aplica el gate `getDoctorAddressDisclosure` (`caseListVisibility.ts`, v5.8), que devuelve `full | coarse | none`: **full** (técnico ganador asignado, admin, dentista dueño) recibe los 6 campos; **coarse** (cualquier otro técnico invitado al caso cuando `needsFabrication`) recibe solo país/región/comuna para cotizar el traslado y se anulan calle/número/oficina; **none** (resto) recibe los 6 en `null`. Para `coarse` el server consulta si el viewer tiene invitación al caso. Gate autoritativo en servidor; el cliente solo refuerza el render.
 
 ### `clinicalCase`
 Estado del caso: `borrador → enEvaluacion → propuestaLista → aceptadaPendienteInicio → enEjecucion → enRevision [→ cambiosEnProceso] → disenoAprobado [→ enFabricacion → enviado] → completado`
@@ -87,6 +87,9 @@ Convención de `payload`:
 - `presentationAuthor: 'fauchard'` — el receptor ve a Fauchard como emisor
 - `invitationId` — acota el evento al hilo de esa invitación (aislamiento técnico)
 
+### `review` (v5.3)
+Calificaciones del dentista al técnico por caso y fase. Columnas clave: `clinicalCaseId`, `reviewerId`, `revieweeId`, `rating` (1–5), `dimension` (`'design'` | `'fabrication'`), `comment` (nullable). Índice único `(clinical_case_id, reviewer_id, dimension)` — una sola reseña por caso por fase. Las calificaciones alimentan el componente Q del score Fauchard y la lógica de ascenso/descenso de ligas (motor usa `avgRating`). Acción: `submitUserRatingAction` en `cases.ts`.
+
 ### `clinicalCaseDelivery`
 Entregas de diseño/revisión. Campos: `technicianId`, `version`, `files` (jsonb), `status`, `reviewComment`.
 
@@ -124,7 +127,7 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 | Archivo | Responsabilidad |
 |---------|----------------|
 | `fauchard.ts` | Motor Fauchard: classifyCase, runFauchard, sendInvitations, submitQuote, evaluateQuotes, buildProposal |
-| `cases.ts` | CRUD casos, publicar, archivar, clonar, fabricación/despacho/recepción, `logCaseEvent()`, `getCaseEventsAction` |
+| `cases.ts` | CRUD casos, publicar, archivar, clonar, fabricación/despacho/recepción, `logCaseEvent()`, `getCaseEventsAction`, `submitUserRatingAction` (calificación del dentista al técnico: `dimension: 'design' \| 'fabrication'`, escala 1–5, una reseña por caso+reviewer+dimension; actualiza `avgRating` del técnico; emite `CALIFICACION_ENVIADA`) |
 | `proposal.ts` | acceptProposal, rejectInvitationOffer, startWork, withdrawQuote, expireDentistComparativeWindow |
 | `invitations.ts` | Listado de invitaciones; archivos visibles solo si `invitation.status === confirmed` |
 | `skills.ts` | Matriz habilidades; lee rol desde DB (no JWT). `toggleAvailabilityAction` (toggle legacy del perfil) escribe `user.is_available` y **espeja** a `technician_availability.level_global` (best-effort, solo si la fila existe) para mantener sincronizado el switch v5.0 |
@@ -157,6 +160,14 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 3. Firma URLs de avatares (GCS).
 4. Para cada evento: `shouldPresentUchEventAsFauchard` → si true, sustituye `user` por `UCH_FAUCHARD_PUBLIC_USER` y limpia `presentationAuthor` del payload con `sanitizeUchPayloadForViewer`.
 5. Admin recibe identidades reales sin enmascarado.
+
+### Regla de visibilidad `CALIFICACION_ENVIADA` en `caseEventsUchFilter.ts`
+Los eventos de calificación (`action === 'CALIFICACION_ENVIADA'`) tienen visibilidad especial **dentro del carril técnico**:
+- El **técnico calificado** (`payload.revieweeId === identity.id`) sí lo ve.
+- Cualquier otro técnico invitado/perdedor **no** lo ve aunque tenga `visibleTo:'ambos'`.
+- Fallback para eventos sin `revieweeId` (legacy): usa `targetCase.assignedTechnicianId`.
+- El dentista autor y admin siempre lo ven (ramas anteriores en el filtro).
+- El campo `ratingComment` se oculta al técnico vía `sanitizeUchPayloadForViewer`.
 
 ## Idempotencia crítica en Fauchard
 - `evaluateQuotesAction` / `buildProposalAction`: guard `status === EN_EVALUACION`; `buildProposal` usa `UPDATE … WHERE status = enEvaluacion` (sin re-fijar `proposalExpiresAt`).

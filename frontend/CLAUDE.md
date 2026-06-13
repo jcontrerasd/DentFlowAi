@@ -105,8 +105,18 @@ Ejecutar con `npx tsx scripts/<archivo>.ts` desde `frontend/` (lee `.env.local`)
 | `recheck-contact-guard-audit.ts` | Solo lectura: re-evalúa el histórico de `contact_guard_audit` con la lógica actual (teléfonos country-aware + exención URLs/tracking) para distinguir falsos positivos ya corregidos de bloqueos vigentes |
 | `backfill-availability.ts` | One-time v5.0 (Fase 7): puebla `technician_availability` por técnico (infiere CAD/CAM de skills). Idempotente. Correr una vez en la activación |
 | `send-rollout-email.ts proximo\|activado` | One-time v5.0 (Fase 7): comunicación masiva de rollout a técnicos vía EmailJS (best-effort) |
+| `backfill-tech-rejection-events.ts` | Migración de eventos `OFERTA_RECHAZADA_POR_TECNICO` anteriores al fix de visibilidad: cambia `visibleTo:'sistema'` → `visibleTo:'tecnico'`, quita enmascarado Fauchard y reconstruye contenido + payload con el motivo/comentario. Idempotente (solo toca eventos con `visibleTo='sistema'`). Correr apuntando `.env.local` a la BD destino |
+| `seed-demo-tecnicos.ts` | Seed dedicado para demo del flujo completo + funnel Fauchard. Crea idempotente: 1 org demo, 1 dentista (con dirección), 10 técnicos `tecnico_prueba1..10@test1.cl` (password `dent2026`), liga bronce, habilidades `corona_posterior` con design/fab variados, disponibilidad CAD∧CAM en categoría coronas. Ajusta la config Fauchard activa: `nInvited=5`, `tQuoteMinutes=240` |
+| `test-emailjs.ts` | Diagnóstico: envía un correo de prueba via EmailJS para verificar que las credenciales y el template funcionan correctamente |
 
 Scripts marcados "ya aplicado" se conservan como referencia histórica; no volver a ejecutar.
+
+## Sistema de preview de emails (DEMO local)
+
+Flag `NEXT_PUBLIC_DEMO_EMAIL_PREVIEW=true` (default off). Cuando está activo, `notifyUser` en `lib/services/notifications.ts` registra el correo en el buffer de memoria **sin enviarlo** (compatible con `NOTIFICATIONS_LIVE=false`). El cliente lee los previews vía polling y los muestra en un modal informativo.
+- `lib/services/emailPreviewBuffer.ts` — ring buffer proceso-único, máx 50 entradas. `pushEmailPreview()` es llamado desde `notifyUser`.
+- `app/api/demo/email-preview/route.ts` — `GET ?since=<timestamp>`; responde con la lista de emails registrados. Devuelve lista vacía si el flag está off.
+- `components/demo/DemoEmailPreviewListener.tsx` — polling cada 2s, montado en `dashboard/layout.tsx`. Modal con asunto, cuerpo y tipo del correo. Se auto-oculta si el flag está off.
 
 ## Feature flags de autenticación (planificadas, no activas)
 
