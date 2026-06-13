@@ -408,6 +408,17 @@ export default function UnifiedCaseHub({
           if (selectedTechnicianId) {
             if (visibleTo === 'dentista') return false;
 
+            // Calificaciones del dentista: solo el técnico calificado (ganador) las ve.
+            // Defensa en profundidad (el servidor ya filtra); fallback al técnico asignado
+            // para eventos antiguos sin revieweeId.
+            if (e.action === 'CALIFICACION_ENVIADA') {
+              const revieweeId =
+                ((e.payload as any)?.revieweeId as string | undefined) ??
+                clinicalCase?.assignedTechnicianId ??
+                null;
+              return revieweeId != null && String(revieweeId) === String(selectedTechnicianId);
+            }
+
             if (visibleTo === 'tecnico' && selectedTechnicianId) {
               const evtInvId = (e.payload as any)?.invitationId;
               if (evtInvId && myInvitation?.id && evtInvId !== myInvitation.id) return false;
@@ -486,7 +497,8 @@ export default function UnifiedCaseHub({
       roleScopedEvents.some(
         (e) =>
           e.action === 'OFERTA_NO_SELECCIONADA' ||
-          (actingAsTecnico && e.action === 'OFERTA_RECHAZADA'),
+          (actingAsTecnico &&
+            (e.action === 'OFERTA_RECHAZADA' || e.action === 'OFERTA_RECHAZADA_POR_TECNICO')),
       ),
     [roleScopedEvents, actingAsTecnico],
   );

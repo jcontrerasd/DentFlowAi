@@ -30,6 +30,7 @@ import ImpersonationSelector from '@/components/admin/ImpersonationSelector';
 import ThemeToggleButton from '@/components/theme/ThemeToggleButton';
 import AvailabilityBadge from '@/components/availability/AvailabilityBadge';
 import RolloutBanner from '@/components/availability/RolloutBanner';
+import DemoEmailPreviewListener from '@/components/demo/DemoEmailPreviewListener';
 import Image from 'next/image';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -301,6 +302,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </section>
       </main>
+      <DemoEmailPreviewListener />
     </div>
   );
 }

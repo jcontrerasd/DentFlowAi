@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getUsersByRoleAction } from '@/lib/db/actions/user';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus } from 'lucide-react';
+import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus, Inbox } from 'lucide-react';
 
 export default function ImpersonationSelector() {
   const { user, userProfile, isSimulating, startSimulation, stopSimulation, simulatedProfile } = useAuth();
@@ -132,6 +132,16 @@ export default function ImpersonationSelector() {
                            <p className="text-[11px] font-bold text-foreground truncate group-hover:text-primary transition-colors">{u.fullName}</p>
                            <p className="text-[9px] text-faint truncate">{u.organizationName || 'Sin Organización'}</p>
                          </div>
+                         {roleMode === 'tecnico' && u.pendingInvitations > 0 && (
+                           <span
+                             title={`${u.pendingInvitations} invitación(es) por cotizar`}
+                             aria-label={`${u.pendingInvitations} invitaciones por cotizar`}
+                             className="flex items-center gap-1 min-w-[20px] h-5 px-1.5 rounded-full bg-orange-500/15 text-orange-400 text-[10px] font-black shrink-0"
+                           >
+                             <Inbox className="w-3 h-3" />
+                             {u.pendingInvitations}
+                           </span>
+                         )}
                          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
                             <UserPlus className="w-4 h-4 text-muted" />
                          </div>

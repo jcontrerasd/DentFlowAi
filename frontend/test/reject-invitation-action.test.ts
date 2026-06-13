@@ -65,6 +65,20 @@ describe('rejectInvitationIndividualAction (Fase 5)', () => {
     expect(logCaseEventMock).toHaveBeenCalled();
   });
 
+  it('el evento UCH es visible al técnico que rechazó y lleva el motivo', async () => {
+    queueSelects([INV], [{ id: 'r1', code: 'rej_001', label: 'Sin disponibilidad', isActive: true }]);
+    await rejectInvitationIndividualAction('inv-1', 'r1', 'No alcanzo el plazo');
+    const evt = logCaseEventMock.mock.calls[0][0];
+    // Visible al técnico (su propio carril), NO oculto como 'sistema', y sin voz Fauchard.
+    expect(evt.payload.visibleTo).toBe('tecnico');
+    expect(evt.payload.presentationAuthor).toBeUndefined();
+    expect(evt.payload.rejectionReasonLabel).toBe('Sin disponibilidad');
+    expect(evt.payload.rejectionComment).toBe('No alcanzo el plazo');
+    // El contenido que ve el técnico incluye el motivo y su comentario.
+    expect(evt.content).toContain('Sin disponibilidad');
+    expect(evt.content).toContain('No alcanzo el plazo');
+  });
+
   it('rechaza invitación de otro técnico → error de pertenencia', async () => {
     identityMock.mockResolvedValue({ id: 'otro-tech', role: 'tecnico', isSystemAdmin: false });
     queueSelects([INV]);

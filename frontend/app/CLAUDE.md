@@ -14,6 +14,7 @@
 - `dashboard/invitations/[invitationId]/` — Detalle invitación
 - `dashboard/profile/` — Perfil y matriz de habilidades
 - `dashboard/finance/` — Finanzas (dentista)
+- `dashboard/bids/` — Ofertas/pujas (ruta existente, pendiente de documentación detallada)
 - `dashboard/admin/` — **Hub admin**: landing puramente navegacional (tarjetas agrupadas por dominio). Ya **no** está en el menú lateral (queda accesible por URL); la navegación admin vive ahora como ítems directos del sidebar. No contiene la tabla de usuarios ni la purga.
 - `dashboard/admin/danger/` — **Zona de Alta Peligrosidad** (purga total de datos de negocio + `PurgeScopeTable`). Se movió fuera del hub a su propia ruta; es el destino del ítem **al pie del sidebar admin** (rojo, encima de "Cerrar Sesión").
 - `dashboard/admin/users/` — Control de usuarios (tabla, buscar, crear co-admin, bloquear/eliminar/cambiar password, reset de no-respuestas vía `ResetNoResponseModal`).
@@ -31,6 +32,7 @@
 - `api/cron/process-pool-queue/` — `POST` (y `GET`). v5.0. Cada 10 min: `processPendingPoolCheckInAction` (check-in al dentista al 50% del TTL) + `processPendingPoolExpirationAction` (re-encola o falla a `sin_cotizaciones_fallo`). Mismo header `CRON_SECRET`.
 - `api/telemetry/` — `POST`. Endpoint interno de logs cliente (errores / warns / info). Aplica: validación de Origin/Referer + `Sec-Fetch-Site` contra `TELEMETRY_ALLOWED_ORIGINS`, rate limit por IP (`TELEMETRY_RATE_LIMIT_PER_MINUTE`), schema strict (`TelemetryPayload`), límite de tamaño (`MAX_BODY_CHARS=16000`), redacción server-side de emails / bearer tokens / claves. Firma HMAC opcional para integraciones S2S (`TELEMETRY_INGEST_TOKEN` + `X-Telemetry-Timestamp` + `X-Telemetry-Signature`). Cliente publica vía `NEXT_PUBLIC_LOG_ENDPOINT` (default `/api/telemetry`).
 - `api/local-gcs-proxy/` — `PUT` y `GET`. Solo activo cuando `GCS_API_ENDPOINT` está definido (entorno local con fake-gcs). Intermedia uploads (descomprime gzip antes de persistir porque fake-gcs no hace decompressive transcoding) y firma URLs de descarga apuntando al proxy. En staging/prod no se monta (las URLs firmadas van directo a GCS).
+- `api/demo/email-preview/` — `GET ?since=<timestamp>`. Devuelve los emails registrados en `emailPreviewBuffer` con `ts > since` (orden cronológico). Gated por `NEXT_PUBLIC_DEMO_EMAIL_PREVIEW`; si el flag está off responde lista vacía con `{ enabled: false }`. Solo para entorno de demo local — no montar en producción.
 
 ## Página del caso (`dashboard/cases/[id]/page.tsx`)
 Esta es la página más compleja del sistema. Puntos clave:
@@ -43,7 +45,7 @@ Esta es la página más compleja del sistema. Puntos clave:
 - **Animación**: `framer-motion` anima la entrada/salida del panel; el desmontaje real solo ocurre al cambiar de caso.
 - **Countdown propuesta**: `proposalDeadlineMs` + `serverClockAnchor` se pasan al UCH. El countdown solo aparece en el header del UCH (no en el header de la página).
 - **Ficha**: botones de gestión vía `CaseDetailManagementBar` + reglas en `lib/cases/caseDetailActions.ts`.
-- **Badge de dirección del dentista** (v5.7): visible **solo para el técnico ganador** (el asignado, `assignedTechnicianId === viewer`) y para admin, en casos con `needsFabrication=true`. Aparece en el header junto al ID (`DF-XXXX`) y muestra: `País · Región · Comuna · Calle Número · Of. X`. Usa datos de `getCaseDetails.doctor` (join con 6 columnas de dirección) y resuelve códigos a nombres legibles con `SUPPORTED_COUNTRIES` / `REGIONS_BY_COUNTRY` de `lib/constants/addressData.ts`. **Gate en dos capas**: el servidor (`getCaseDetails`) anula los 6 campos de dirección para cualquier técnico no-ganador (privacidad / evitar saltarse el marketplace), y el cliente solo renderiza el badge para ganador/admin. Si no hay dirección registrada (o el viewer no es ganador/admin), no se renderiza.
+- **Badge de dirección del dentista** (v5.8, tres niveles): en casos con `needsFabrication=true`, en el header junto al ID (`DF-XXXX`). Niveles: **dirección completa** (`País · Región · Comuna · Calle Número · Of. X`) para admin, dentista dueño y técnico **ganador** (`assignedTechnicianId === viewer`); **solo ubicación gruesa** (`País · Región · Comuna`) para cualquier otro técnico **invitado** al caso (cotizando/perdedor), para cotizar el traslado sin filtrar la dirección fina. Usa `getCaseDetails.doctor` (join con 6 columnas) y resuelve códigos con `SUPPORTED_COUNTRIES` / `REGIONS_BY_COUNTRY` de `lib/constants/addressData.ts`. **Gate en dos capas**: el servidor (`getCaseDetails` → `getDoctorAddressDisclosure` en `caseListVisibility.ts`) anula calle/número/oficina en `coarse` y los 6 campos en `none`; el cliente solo refuerza el render (el armado filtra campos vacíos, así un no-ganador nunca ve calle/número/oficina). Sin invitación, sin fabricación o sin dirección registrada → no se renderiza.
 
 ## Convenciones
 - Área dashboard: guard de sesión/onboarding en `dashboard/layout.tsx` (Client Component con `useAuth()`).

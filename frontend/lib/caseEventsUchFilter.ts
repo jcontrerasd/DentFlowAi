@@ -51,6 +51,17 @@ export function filterCaseEventsForUchViewer<T extends UchFilterableEvent>(
 
     if (payload?.dentistOnly) return false;
     if (visibleTo === 'dentista') return false;
+
+    // Calificaciones del dentista: visibles SOLO al técnico calificado (ganador), nunca a
+    // otros técnicos invitados/perdedores. El dentista autor las ve por su rama de arriba;
+    // admin por el early-return. Funciona con eventos antiguos sin revieweeId (fallback al
+    // técnico asignado del caso).
+    if (event.action === 'CALIFICACION_ENVIADA') {
+      const revieweeId =
+        (payload?.revieweeId as string | undefined) ?? targetCase?.assignedTechnicianId ?? null;
+      return revieweeId != null && String(revieweeId) === String(identity.id);
+    }
+
     if (visibleTo === 'ambos') return true;
 
     if (visibleTo === 'tecnico') {

@@ -177,7 +177,7 @@ export default function UchEventBubble({
       <div className={`relative max-w-[78%] transition-all ${bubbleShell}`}>
         <div className="space-y-2">
           <>
-            {!['TRABAJO_INICIADO', 'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO', 'COMENTARIO_TECNICO', CASE_EVENTS.CALIFICACION_ENVIADA, CASE_EVENTS.OFERTA_ENVIADA, CASE_EVENTS.OFERTA_RETIRADA].includes(event.action) &&
+            {!['TRABAJO_INICIADO', 'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO', 'COMENTARIO_TECNICO', CASE_EVENTS.CALIFICACION_ENVIADA, CASE_EVENTS.OFERTA_ENVIADA, CASE_EVENTS.OFERTA_RETIRADA, CASE_EVENTS.OFERTA_RECHAZADA_POR_TECNICO].includes(event.action) &&
               !isOutcomeNotice &&
               event.content && (
               <p className="text-xs leading-relaxed whitespace-pre-wrap">{event.content}</p>
@@ -315,6 +315,24 @@ export default function UchEventBubble({
                 commentLabel="Comentario que tenía la oferta"
                 emptyComment="Sin comentario en la oferta."
               />
+            </div>
+          )}
+
+          {event.action === CASE_EVENTS.OFERTA_RECHAZADA_POR_TECNICO && (
+            <div className={`space-y-1.5 ${isSelfLane ? 'text-foreground' : 'text-error'}`}>
+              <div className="flex items-center gap-2">
+                <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="text-[11px] font-bold">Invitación rechazada</span>
+              </div>
+              {event.content?.trim() ? (
+                <p
+                  className={`text-[11px] leading-relaxed whitespace-pre-wrap ${
+                    isSelfLane ? 'text-foreground' : 'text-foreground/95'
+                  }`}
+                >
+                  {event.content}
+                </p>
+              ) : null}
             </div>
           )}
 
