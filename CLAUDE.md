@@ -146,6 +146,14 @@ Para facilitar demos del flujo sin enviar correos reales. Gated por `NEXT_PUBLIC
 - Clon inicial prod→staging (**one-time**, ya ejecutado al montar staging — no es rutina recurrente): `bash scripts/clone-prod-to-staging.sh` (clone completo, incluye usuarios y passwordHash).
 - Flujo paso a paso completo: [Doc/Ciclo_Desarrollo.md](Doc/Ciclo_Desarrollo.md).
 
+### Versionado mayor (cambios estructurales >50%)
+
+- Rama `v1` + tag `v1.0-produccion` → snapshot inmutable del sistema actual (commit `d9a9f5a`). **No eliminar nunca.**
+- Rama `v2` → desarrollo del nuevo sistema. **Nunca** hacer merge `v2 → main` sin validación completa en staging.
+- Para volver a la versión anterior: `git checkout v1` o `git checkout v1.0-produccion`.
+- Deploy desde v1: `git checkout v1` → `python3 frontend/deploy_gui.py` (funciona igual que hoy).
+- Guía completa: [Doc/Estrategia_Versionado.md](Doc/Estrategia_Versionado.md).
+
 ## Almacenamiento GCS — compresión y lifecycle
 
 - **Gzip transparente en uploads**: los modelos 3D (`.stl/.ply/.obj`) se comprimen en el cliente con `CompressionStream('gzip')` antes del PUT. La URL firmada se genera con `extensionHeaders['content-encoding']='gzip'` (`frontend/lib/gcs.ts` → `getUploadUrl`). GCS persiste `Content-Encoding: gzip` y aplica decompressive transcoding al servir, por lo que el visor 3D no requiere cambios. Helper: `frontend/lib/uploadCompression.ts` (`maybeGzipForUpload`, `isGzipCompressible`). Imágenes/PDF/WebP pasan intactos.

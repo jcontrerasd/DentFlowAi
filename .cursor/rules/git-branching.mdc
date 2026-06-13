@@ -1,0 +1,54 @@
+---
+description: Reglas de branching para versionado mayor — protección de v1 y control de merge v2→main
+globs: []
+alwaysApply: true
+---
+
+# Branching — Versionado Mayor DentFlowAi
+
+## Estructura de ramas activa
+
+- `main` — producción estable, commit `d9a9f5a`. Congelado hasta que `v2` esté validado.
+- `v1` — snapshot permanente de la versión actual. **Nunca borrar.**
+- `v1.0-produccion` (tag) — marcador inmutable sobre `d9a9f5a`. **Nunca eliminar.**
+- `develop` — rama de trabajo diario de v1 (hotfixes menores si los hay).
+- `v2` — todo el trabajo del nuevo sistema va aquí.
+
+## Restricciones para el agente
+
+<important>
+NUNCA ejecutar `git merge v2`, `git rebase v2` ni ningún comando que integre v2 en main o v1 sin confirmación explícita del usuario. Preguntar siempre antes de cualquier merge entre ramas de versiones distintas.
+</important>
+
+<important>
+NUNCA borrar la rama `v1`, el tag `v1.0-produccion`, ni hacer `git push --force` sobre `main` o `v1`.
+</important>
+
+## Comandos de restore (si el usuario quiere volver a v1)
+
+```bash
+# Volver a la versión anterior (v1)
+git checkout v1
+
+# Desde el tag inmutable (garantía absoluta)
+git checkout v1.0-produccion
+
+# Retomar trabajo nuevo
+git checkout v2
+```
+
+## Deploy por versión
+
+```bash
+# Deploy de v1 (versión anterior)
+git checkout v1
+cd frontend && python3 deploy_gui.py
+
+# Deploy de v2 (nueva versión)
+git checkout v2
+cd frontend && python3 deploy_gui.py
+```
+
+## Referencia completa
+
+Ver [Doc/Estrategia_Versionado.md](../../Doc/Estrategia_Versionado.md) para la guía completa incluyendo el flujo de merge final cuando v2 esté listo.
