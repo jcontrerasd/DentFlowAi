@@ -551,7 +551,6 @@ export default function ProfilePage() {
               ref={skillFormRef}
               hideButton
               initialCad={(userProfile as any)?.organization?.technicalCapabilities?.includes?.('CAD')}
-              initialCam={(userProfile as any)?.organization?.technicalCapabilities?.includes?.('CAM')}
             />
           </div>
         </div>

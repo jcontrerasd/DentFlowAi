@@ -99,7 +99,6 @@ interface SkillMatrixFormProps {
   compact?: boolean;
   onSaveSuccess?: () => void;
   initialCad?: boolean;
-  initialCam?: boolean;
   /** Oculta el botón interno "Guardar habilidades" para guardado externo */
   hideButton?: boolean;
 }
@@ -108,38 +107,32 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
   compact = false,
   onSaveSuccess,
   initialCad = false,
-  initialCam = false,
   hideButton = false,
 }, ref) {
   const { showSuccess, showError } = useToast();
-  const blankSkills = WORK_TYPES.reduce<Record<string, { design: number; fab: number }>>((acc, wt) => {
-    acc[wt] = { design: 0, fab: 0 };
+  const blankSkills = WORK_TYPES.reduce<Record<string, number>>((acc, wt) => {
+    acc[wt] = 0;
     return acc;
   }, {});
 
-  const [skills, setSkills] = useState<Record<string, { design: number; fab: number }>>(blankSkills);
+  const [skills, setSkills] = useState<Record<string, number>>(blankSkills);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasCad, setHasCad] = useState(initialCad);
-  const [hasCam, setHasCam] = useState(initialCam);
 
   useEffect(() => {
     const load = async () => {
       try {
         const rows: SkillRow[] = await getMySkillsAction();
-        const map = WORK_TYPES.reduce<Record<string, { design: number; fab: number }>>((acc, wt) => {
-          acc[wt] = { design: 0, fab: 0 };
+        const map = WORK_TYPES.reduce<Record<string, number>>((acc, wt) => {
+          acc[wt] = 0;
           return acc;
         }, {});
         rows.forEach(r => {
-          map[r.workType] = {
-            design: r.designLevel,
-            fab: 0,
-          };
+          map[r.workType] = r.designLevel;
         });
         setSkills(map);
         setHasCad(rows.some(r => r.designLevel > 0) || initialCad);
-        setHasCam(false);
       } catch (e) {
         console.error(e);
       } finally {
@@ -147,54 +140,40 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
       }
     };
     load();
-  }, [initialCad, initialCam]);
+  }, [initialCad]);
 
-  const setSkill = (workType: string, field: 'design' | 'fab', value: number) => {
-    setSkills(prev => ({
-      ...prev,
-      [workType]: { ...(prev[workType] || { design: 0, fab: 0 }), [field]: value },
-    }));
+  const setSkill = (workType: string, value: number) => {
+    setSkills(prev => ({ ...prev, [workType]: value }));
   };
 
-  const getGroupLevel = (types: string[], field: 'design' | 'fab'): number =>
-    Math.min(...types.map(wt => skills[wt]?.[field] ?? 0));
+  const getGroupLevel = (types: string[]): number =>
+    Math.min(...types.map(wt => skills[wt] ?? 0));
 
-  const setGroupLevel = (types: string[], field: 'design' | 'fab', value: number) => {
+  const setGroupLevel = (types: string[], value: number) => {
     setSkills(prev => {
       const next = { ...prev };
-      types.forEach(wt => {
-        next[wt] = { ...(next[wt] || { design: 0, fab: 0 }), [field]: value };
-      });
+      types.forEach(wt => { next[wt] = value; });
       return next;
     });
   };
 
   const saveSkills = async (): Promise<{ success: boolean; error?: string }> => {
-    if (!hasCad && !hasCam) {
-      const msg = 'Debes habilitar al menos Diseño o Fabricación.';
+    if (!hasCad) {
+      const msg = 'Debes habilitar Diseño (CAD) para declarar habilidades.';
       showError(msg);
       return { success: false, error: msg };
     }
 
-    const skillsArray = Object.entries(skills).map(([workType, v]) => ({
+    const skillsArray = Object.entries(skills).map(([workType, designLevel]) => ({
       workType,
-      designLevel: hasCad ? v.design : 0,
+      designLevel: hasCad ? designLevel : 0,
     }));
 
-    if (hasCad) {
-      const hasDesign = skillsArray.some(s => s.designLevel > 0);
-      if (!hasDesign) {
-        const msg = 'Declara al menos un tipo de trabajo con nivel de diseño mayor a 0.';
-        showError(msg);
-        return { success: false, error: msg };
-      }
-    } else {
-      const hasAny = skillsArray.some(s => s.designLevel > 0);
-      if (!hasAny) {
-        const msg = 'Declara al menos un tipo de trabajo con nivel mayor a 0.';
-        showError(msg);
-        return { success: false, error: msg };
-      }
+    const hasDesign = skillsArray.some(s => s.designLevel > 0);
+    if (!hasDesign) {
+      const msg = 'Declara al menos un tipo de trabajo con nivel de diseño mayor a 0.';
+      showError(msg);
+      return { success: false, error: msg };
     }
 
     const res = await updateSkillsAction(skillsArray);
@@ -222,9 +201,8 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
     }
   };
 
-  // Calcula la categoría aproximada basada en el promedio de niveles declarados
   const avgLevel = (() => {
-    const levels = Object.values(skills).map(s => s.design).filter(v => v > 0);
+    const levels = Object.values(skills).filter(v => v > 0);
     if (levels.length === 0) return 0;
     return levels.reduce((a, b) => a + b, 0) / levels.length;
   })();
@@ -252,92 +230,51 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
               <Star className="w-3 h-3" /> {leagueBadge.label}
             </span>
           </div>
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <div
-                onClick={() => {
-                  if (!hasCad) {
-                    setHasCad(true);
-                  } else if (hasCam) {
-                    setHasCad(false);
-                  } else {
-                    showError('Debe haber al menos un servicio habilitado');
-                  }
-                }}
-                className={`w-10 h-5 rounded-full transition-colors relative ${hasCad ? 'bg-primary' : 'bg-surface-off'}`}
-              >
-                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${hasCad ? 'translate-x-5' : 'translate-x-0.5'}`} />
-              </div>
-              <span className="text-xs text-muted">Diseña (CAD)</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <div
-                onClick={() => {
-                  if (!hasCam) {
-                    setHasCam(true);
-                  } else if (hasCad) {
-                    setHasCam(false);
-                  } else {
-                    showError('Debe haber al menos un servicio habilitado');
-                  }
-                }}
-                className={`w-10 h-5 rounded-full transition-colors relative ${hasCam ? 'bg-primary' : 'bg-surface-off'}`}
-              >
-                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${hasCam ? 'translate-x-5' : 'translate-x-0.5'}`} />
-              </div>
-              <span className="text-xs text-muted">Fabrica (CAM)</span>
-            </label>
-          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <div
+              onClick={() => {
+                if (!hasCad) {
+                  setHasCad(true);
+                } else {
+                  showError('Debe tener Diseño habilitado para declarar habilidades');
+                }
+              }}
+              className={`w-10 h-5 rounded-full transition-colors relative ${hasCad ? 'bg-primary' : 'bg-surface-off'}`}
+            >
+              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${hasCad ? 'translate-x-5' : 'translate-x-0.5'}`} />
+            </div>
+            <span className="text-xs text-muted">Diseña (CAD)</span>
+          </label>
         </div>
       )}
 
-
-
       {WORK_TYPE_GROUPS.map(group => {
-        const groupDesign = getGroupLevel(group.types, 'design');
-        const groupFab = getGroupLevel(group.types, 'fab');
+        const groupDesign = getGroupLevel(group.types);
         return (
           <div key={group.label} className="bg-surface/40 border border-divider rounded-2xl overflow-hidden">
-            {/* Header del grupo con selectores de nivel masivo */}
-            <div className="px-4 py-3 border-b border-divider bg-surface-off/40 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
+            <div className="px-4 py-3 border-b border-divider bg-surface-off/40 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
               <p className="text-[10px] font-black text-muted uppercase tracking-widest">{group.label}</p>
               <LevelSelector
                 label="Diseño (grupo)"
                 value={hasCad ? groupDesign : 0}
-                onChange={v => setGroupLevel(group.types, 'design', v)}
+                onChange={v => setGroupLevel(group.types, v)}
                 disabled={!hasCad}
               />
-              <LevelSelector
-                label="Fabricación (grupo)"
-                value={hasCam ? groupFab : 0}
-                onChange={v => setGroupLevel(group.types, 'fab', v)}
-                disabled={!hasCam}
-              />
             </div>
-            {/* Filas individuales */}
             <div className="divide-y divide-white/5">
-              {group.types.map(wt => {
-                const current = skills[wt] || { design: 0, fab: 0 };
-                return (
-                  <div key={wt} className="px-4 py-3 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center pl-6">
-                    <span className="text-xs text-muted">
-                      {WORK_TYPE_LABELS[wt] || wt}
-                    </span>
-                    <LevelSelector
-                      label="Diseño"
-                      value={hasCad ? current.design : 0}
-                      onChange={v => setSkill(wt, 'design', v)}
-                      disabled={!hasCad}
-                    />
-                    <LevelSelector
-                      label="Fabricación"
-                      value={hasCam ? current.fab : 0}
-                      onChange={v => setSkill(wt, 'fab', v)}
-                      disabled={!hasCam}
-                    />
-                  </div>
-                );
-              })}
+              {group.types.map(wt => (
+                <div key={wt} className="px-4 py-3 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pl-6">
+                  <span className="text-xs text-muted">
+                    {WORK_TYPE_LABELS[wt] || wt}
+                  </span>
+                  <LevelSelector
+                    label="Diseño"
+                    value={hasCad ? (skills[wt] ?? 0) : 0}
+                    onChange={v => setSkill(wt, v)}
+                    disabled={!hasCad}
+                  />
+                </div>
+              ))}
             </div>
           </div>
         );

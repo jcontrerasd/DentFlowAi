@@ -147,7 +147,6 @@ export default function RegisterPage() {
 
   const [consent, setConsent] = useState(false);
   const [isDesigner, setIsDesigner] = useState(false);
-  const [isManufacturer, setIsManufacturer] = useState(false);
 
   // Cancelar / descartar inscripción a medio terminar
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -391,11 +390,10 @@ export default function RegisterPage() {
         legalAddress: formData.legalAddress,
       });
       if (!orgResult.success) throw new Error(orgResult.error || 'Error al actualizar organización.');
-      // Para técnico: también guardar capacidades CAD/CAM en este paso
+      // Para técnico: guardar capacidad CAD en este paso
       if (role === 'tecnico') {
         const caps = [];
         if (isDesigner) caps.push('CAD');
-        if (isManufacturer) caps.push('CAM');
         if (targetOrgId) {
           await updateOrganizationDetailsAction(targetOrgId, { technicalCapabilities: caps });
         }
@@ -933,7 +931,6 @@ export default function RegisterPage() {
                 <SkillMatrixForm
                   compact={false}
                   initialCad={isDesigner}
-                  initialCam={isManufacturer}
                   onSaveSuccess={() => {
                     const userId = formData.userId || window.localStorage.getItem('onboardingUserId') || (session?.user as any)?.id;
                     if (userId) {
