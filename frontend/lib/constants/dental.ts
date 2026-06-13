@@ -16,9 +16,6 @@ export const CASE_STATUSES = {
   EN_EJECUCION: 'enEjecucion',
   EN_REVISION: 'enRevision',
   CAMBIOS_EN_PROCESO: 'cambiosEnProceso',
-  DISENO_APROBADO: 'disenoAprobado',
-  EN_FABRICACION: 'enFabricacion',
-  ENVIADO: 'enviado',
   COMPLETADO: 'completado',
   CERRADO: 'cerrado',
   PAUSADO: 'pausado',
@@ -39,7 +36,6 @@ export const INTERNAL_CASE_STATUSES = {
   EN_EJECUCION_DISENO: 'enEjecucionDiseno',
   EN_REVISION_DISENO: 'enRevisionDiseno',
   CAMBIOS_SOLICITADOS: 'cambiosSolicitados',
-  DISENO_APROBADO: 'disenoAprobado',
   SIN_COTIZACIONES_FALLO: 'sin_cotizaciones_fallo',
   PROPUESTA_EXPIRADA: 'propuestaExpirada',
   RECHAZADA_POR_DENTISTA: 'rechazadaPorDentista',
@@ -149,18 +145,14 @@ export const CASE_COMPLEXITY = {
   CRITICO: 'critico',
 } as const;
 
-/** Tipo de servicio requerido */
+/** Tipo de servicio requerido — solo diseño */
 export const SERVICE_TYPES = {
   SOLO_DISENO: 'solo_diseno',
-  SOLO_FABRICACION: 'solo_fabricacion',
-  INTEGRAL: 'integral',
 } as const;
 
 /** Labels legibles para los tipos de servicio */
 export const SERVICE_TYPE_LABELS: Record<string, string> = {
   solo_diseno: 'Solo diseño',
-  solo_fabricacion: 'Solo fabricación',
-  integral: 'Diseño + Fabricación',
 };
 
 /** Niveles de urgencia de un caso (incluye valores legacy en BD). */

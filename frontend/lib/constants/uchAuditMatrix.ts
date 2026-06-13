@@ -6,7 +6,7 @@
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 
 /** Fases de pestaña UCH (subset de acciones en UnifiedCaseHub PHASE_ACTIONS). */
-export const UCH_AUDIT_PHASE_KEYS = ['propuesta', 'diseno', 'produccion'] as const;
+export const UCH_AUDIT_PHASE_KEYS = ['propuesta', 'diseno'] as const;
 
 export type UchAuditPhaseKey = (typeof UCH_AUDIT_PHASE_KEYS)[number];
 
@@ -45,10 +45,6 @@ export const UCH_AUDIT_MATRIX: readonly UchAuditMatrixRow[] = [
   { id: 'revision_enviada', action: CASE_EVENTS.REVISION_ENVIADA, actorRole: 'tecnico', visibleTo: 'ambos', phase: 'diseno', copyHint: 'Entrega para revisión' },
   { id: 'revision_solicitada', action: CASE_EVENTS.REVISION_SOLICITADA, actorRole: 'dentista', visibleTo: 'ambos', phase: 'diseno', copyHint: 'Solicitud de ajustes' },
   { id: 'trabajo_aprobado', action: CASE_EVENTS.TRABAJO_APROBADO, actorRole: 'dentista', visibleTo: 'ambos', phase: 'diseno', copyHint: 'Diseño aprobado' },
-  { id: 'fabricacion', action: CASE_EVENTS.FABRICACION_INICIADA, actorRole: 'tecnico', visibleTo: 'ambos', phase: 'produccion', copyHint: 'Fabricación iniciada' },
-  { id: 'despacho', action: CASE_EVENTS.CASO_DESPACHADO, actorRole: 'tecnico', visibleTo: 'ambos', phase: 'produccion', copyHint: 'Despacho registrado' },
-  { id: 'recepcion_d', action: CASE_EVENTS.RECEPCION_CONFIRMADA, actorRole: 'dentista', visibleTo: 'dentista', phase: 'produccion', copyHint: 'He confirmado la recepción…' },
-  { id: 'recepcion_t', action: CASE_EVENTS.RECEPCION_CONFIRMADA, actorRole: 'dentista', visibleTo: 'tecnico', phase: 'produccion', copyHint: 'Solicitante confirmó recepción' },
   { id: 'solicitud_flujo', action: CASE_EVENTS.SOLICITUD_CAMBIO_FLUJO, actorRole: 'cualquiera', visibleTo: 'ambos', phase: 'todos', copyHint: 'Solicitud pausa/cancelación' },
   { id: 'solicitud_flujo_rechazo', action: CASE_EVENTS.SOLICITUD_CAMBIO_FLUJO_RECHAZADA, actorRole: 'cualquiera', visibleTo: 'ambos', phase: 'todos', copyHint: 'Solicitud no aceptada' },
   { id: 'caso_pausado', action: CASE_EVENTS.CASO_PAUSADO, actorRole: 'cualquiera', visibleTo: 'ambos', phase: 'todos', copyHint: 'Caso pausado por acuerdo' },
