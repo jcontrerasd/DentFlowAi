@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   userCanAccessClinicalCase,
-  canViewerSeeDoctorAddress,
+  getDoctorAddressDisclosure,
 } from '@/lib/db/caseListVisibility';
 
 const ORG = 'org-1';
@@ -117,48 +117,88 @@ describe('userCanAccessClinicalCase', () => {
   });
 });
 
-describe('canViewerSeeDoctorAddress (v5.7 — dirección solo al ganador)', () => {
-  const base = { assignedTechnicianId: TECH, doctorId: DENTIST_A };
+describe('getDoctorAddressDisclosure (v5.8 — divulgación en tres niveles)', () => {
+  // Por defecto: caso con fabricación, viewer invitado al caso.
+  const base = {
+    assignedTechnicianId: TECH,
+    doctorId: DENTIST_A,
+    isInvitedTechnician: true,
+    needsFabrication: true,
+  };
 
-  it('técnico asignado (ganador): ve la dirección', () => {
+  it('técnico asignado (ganador): dirección completa (full)', () => {
     expect(
-      canViewerSeeDoctorAddress({ role: 'tecnico', userId: TECH, ...base }),
-    ).toBe(true);
+      getDoctorAddressDisclosure({ role: 'tecnico', userId: TECH, ...base }),
+    ).toBe('full');
   });
 
-  it('técnico invitado no asignado (perdedor/cotizando): NO ve la dirección', () => {
+  it('técnico invitado cotizando (no asignado): solo ubicación gruesa (coarse)', () => {
     expect(
-      canViewerSeeDoctorAddress({ role: 'tecnico', userId: TECH_LOSER, ...base }),
-    ).toBe(false);
+      getDoctorAddressDisclosure({ role: 'tecnico', userId: TECH_LOSER, ...base }),
+    ).toBe('coarse');
   });
 
-  it('admin: ve la dirección', () => {
+  it('técnico perdedor (invitación cerrada): conserva coarse, NUNCA fina', () => {
+    // Caso ya con ganador (TECH); el perdedor sigue invitado al caso → coarse.
     expect(
-      canViewerSeeDoctorAddress({ role: 'admin', userId: 'admin-1', ...base }),
-    ).toBe(true);
+      getDoctorAddressDisclosure({ role: 'tecnico', userId: TECH_LOSER, ...base }),
+    ).toBe('coarse');
   });
 
-  it('isSystemAdmin (impersonando o no): ve la dirección', () => {
+  it('técnico sin invitación al caso: nada (none)', () => {
     expect(
-      canViewerSeeDoctorAddress({ isSystemAdmin: true, role: 'tecnico', userId: TECH_LOSER, ...base }),
-    ).toBe(true);
+      getDoctorAddressDisclosure({
+        role: 'tecnico',
+        userId: 'tech-extraño',
+        ...base,
+        isInvitedTechnician: false,
+      }),
+    ).toBe('none');
   });
 
-  it('dentista dueño: ve su propia dirección', () => {
+  it('caso sin fabricación: técnico invitado no ve ni coarse (none)', () => {
     expect(
-      canViewerSeeDoctorAddress({ role: 'dentista', userId: DENTIST_A, ...base }),
-    ).toBe(true);
+      getDoctorAddressDisclosure({
+        role: 'tecnico',
+        userId: TECH_LOSER,
+        ...base,
+        needsFabrication: false,
+      }),
+    ).toBe('none');
   });
 
-  it('userId nulo: no ve la dirección', () => {
+  it('admin: dirección completa (full)', () => {
     expect(
-      canViewerSeeDoctorAddress({ role: 'tecnico', userId: null, ...base }),
-    ).toBe(false);
+      getDoctorAddressDisclosure({ role: 'admin', userId: 'admin-1', ...base, isInvitedTechnician: false }),
+    ).toBe('full');
   });
 
-  it('caso sin técnico asignado todavía: técnico invitado NO ve la dirección', () => {
+  it('isSystemAdmin (impersonando o no): dirección completa (full)', () => {
     expect(
-      canViewerSeeDoctorAddress({ role: 'tecnico', userId: TECH, assignedTechnicianId: null, doctorId: DENTIST_A }),
-    ).toBe(false);
+      getDoctorAddressDisclosure({ isSystemAdmin: true, role: 'tecnico', userId: TECH_LOSER, ...base, isInvitedTechnician: false }),
+    ).toBe('full');
+  });
+
+  it('dentista dueño: su propia dirección completa (full)', () => {
+    expect(
+      getDoctorAddressDisclosure({ role: 'dentista', userId: DENTIST_A, ...base, isInvitedTechnician: false }),
+    ).toBe('full');
+  });
+
+  it('userId nulo: nada (none)', () => {
+    expect(
+      getDoctorAddressDisclosure({ role: 'tecnico', userId: null, ...base }),
+    ).toBe('none');
+  });
+
+  it('caso sin técnico asignado todavía: invitado cotizando ve coarse', () => {
+    expect(
+      getDoctorAddressDisclosure({
+        role: 'tecnico',
+        userId: TECH,
+        ...base,
+        assignedTechnicianId: null,
+      }),
+    ).toBe('coarse');
   });
 });

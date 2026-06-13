@@ -62,26 +62,51 @@ export async function userCanAccessClinicalCase(
 }
 
 /**
- * ¿Puede el viewer ver la dirección completa del dentista del caso? (v5.7)
+ * Nivel de divulgación de la dirección del dentista hacia el viewer (v5.8).
  *
- * La dirección se entrega SOLO al técnico ganador (el asignado, para despachar la
- * fabricación), al admin (supervisión) y al dentista dueño (es su propia dirección).
- * Cualquier otro técnico invitado —cotizando o ya perdedor— tiene acceso al caso pero
- * NO debe recibir la dirección (privacidad / evitar saltarse el marketplace).
- *
- * Predicado puro (sin DB) para poder reutilizarlo en `getCaseDetails` y testearlo aislado.
+ * - `full`   → ubicación gruesa (país/región/comuna) **y** dirección fina (calle/número/oficina).
+ * - `coarse` → SOLO ubicación gruesa; la dirección fina se anula.
+ * - `none`   → no se entrega ningún campo de dirección.
  */
-export function canViewerSeeDoctorAddress(input: {
+export type DoctorAddressDisclosure = 'full' | 'coarse' | 'none';
+
+/**
+ * ¿Qué nivel de dirección del dentista puede ver el viewer? (v5.8)
+ *
+ * Tres niveles para soportar la cotización del traslado sin filtrar la dirección exacta:
+ * - `full`   → admin (supervisión), dentista dueño (es su propia dirección) y el técnico
+ *   GANADOR (el asignado, que debe despachar la fabricación).
+ * - `coarse` → cualquier OTRO técnico invitado al caso (cotizando o ya perdedor) cuando el
+ *   caso incluye fabricación: ve país/región/comuna para estimar el traslado, pero NUNCA
+ *   la dirección fina (privacidad / evitar saltarse el marketplace).
+ * - `none`   → el resto (sin invitación al caso, viewer anónimo, o caso sin fabricación).
+ *
+ * Predicado puro (sin DB) para reutilizarlo en `getCaseDetails` y testearlo aislado.
+ */
+export function getDoctorAddressDisclosure(input: {
   isSystemAdmin?: boolean;
   role: string;
   userId: string | null;
   assignedTechnicianId: string | null;
   doctorId: string | null;
-}): boolean {
-  const { isSystemAdmin, role, userId, assignedTechnicianId, doctorId } = input;
-  if (isSystemAdmin || role === 'admin') return true;
-  if (userId == null) return false;
-  return assignedTechnicianId === userId || doctorId === userId;
+  isInvitedTechnician: boolean;
+  needsFabrication: boolean;
+}): DoctorAddressDisclosure {
+  const {
+    isSystemAdmin,
+    role,
+    userId,
+    assignedTechnicianId,
+    doctorId,
+    isInvitedTechnician,
+    needsFabrication,
+  } = input;
+  if (isSystemAdmin || role === 'admin') return 'full';
+  if (userId == null) return 'none';
+  if (doctorId === userId) return 'full';
+  if (assignedTechnicianId === userId) return 'full';
+  if (isInvitedTechnician && needsFabrication) return 'coarse';
+  return 'none';
 }
 
 /**

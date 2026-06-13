@@ -55,7 +55,7 @@ import {
   publishCaseAction,
 } from '@/lib/db/actions/cases';
 import { getCaseDetailActionState } from '@/lib/cases/caseDetailActions';
-import { isActiveCaseStatus } from '@/lib/constants/dental';
+import { isActiveCaseStatus, isTerminalCaseStatus } from '@/lib/constants/dental';
 import CaseDetailManagementBar from '@/components/cases/CaseDetailManagementBar';
 import RepublicarModal from '@/components/cases/RepublicarModal';
 import PendingPoolBanner from '@/components/cases/PendingPoolBanner';
@@ -1922,10 +1922,13 @@ function CaseDetailPageContent() {
                   <span>{clinicalCase?.patientIdAnon ?? '—'}</span>
                 )}
               </div>
-              {/* Ubicación del dentista — visible SOLO para el técnico ganador (asignado) y admin
-                  en casos con fabricación. El servidor (getCaseDetails) también anula la dirección
-                  para no-ganadores; este gate evita además renderizarla en cliente. */}
-              {(viewingAsAdmin || (actingAsTecnico && viewerIdStr != null && assignedTechnicianIdStr === viewerIdStr)) && clinicalCase?.needsFabrication && (() => {
+              {/* Ubicación del dentista (v5.8, tres niveles) — en casos con fabricación:
+                  el admin y el técnico GANADOR ven la dirección completa; cualquier otro técnico
+                  invitado (cotizando o perdedor) ve SOLO país·región·comuna para cotizar el
+                  traslado. El gate autoritativo vive en getCaseDetails (anula los campos según el
+                  nivel); aquí solo decidimos renderizar el badge y el armado de partes filtra los
+                  campos vacíos, así que un técnico no-ganador nunca verá calle/número/oficina. */}
+              {(viewingAsAdmin || actingAsTecnico) && clinicalCase?.needsFabrication && (() => {
                 const doc = (clinicalCase as any)?.doctor;
                 if (!doc?.country && !doc?.region && !doc?.comuna) return null;
                 const countryName = SUPPORTED_COUNTRIES.find(c => c.code === doc.country)?.name ?? doc.country;
@@ -2081,9 +2084,15 @@ function CaseDetailPageContent() {
             const invPending = myInvitation?.status === 'pending';
             const invQuoted = myInvitation?.status === 'quoted';
             const invRejected = myInvitation?.status === 'rejected';
+            // Un técnico que participó en el caso (tiene invitación → tiene acceso a esta
+            // página) debe poder abrir el Centro de Control en solo lectura para revisar el
+            // historial: tanto si su invitación fue rechazada mientras el caso sigue comparando
+            // (propuestaLista) como en CUALQUIER estado terminal (completado/rechazado/cerrado),
+            // donde puede no haber ganador (rechazado/cerrado) y antes ningún branch aplicaba.
+            // Es también donde ve su propio mensaje "Invitación rechazada" + motivo.
             const rejectedCanOpenHub =
-              invRejected &&
-              (clinicalCase?.status === 'propuestaLista' || clinicalCase?.status === 'cerrado');
+              (invRejected && clinicalCase?.status === 'propuestaLista') ||
+              isTerminalCaseStatus(clinicalCase?.status);
 
             let buttonStyles = '';
             let label = '';

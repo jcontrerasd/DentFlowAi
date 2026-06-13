@@ -36,7 +36,7 @@ import type { CaseListQueryFilters } from '@/lib/cases/caseListFilters';
 import {
   buildActiveCaseVisibilityWhere,
   userCanAccessClinicalCase,
-  canViewerSeeDoctorAddress,
+  getDoctorAddressDisclosure,
 } from '@/lib/db/caseListVisibility';
 import {
   buildCaseListFilterWhere,
@@ -752,26 +752,63 @@ export async function getCaseDetails(caseId: string) {
       } as any;
     }
 
-    // 4.bis Gate de la dirección del dentista (v5.7): se entrega SOLO al técnico ganador
-    // (el asignado al caso, para despachar la fabricación), al admin (supervisión) y al
-    // dentista dueño (es su propia dirección). Cualquier otro técnico invitado —durante la
-    // cotización o ya perdedor— accede al caso pero NO debe recibir la dirección (privacidad
-    // + evitar saltarse el marketplace). Se anulan los 6 campos conservando el objeto `doctor`.
+    // 4.bis Gate de la dirección del dentista en tres niveles (v5.8):
+    //   - `full`   → admin, dentista dueño y técnico GANADOR (asignado): país/región/comuna
+    //                + calle/número/oficina (para despachar la fabricación).
+    //   - `coarse` → cualquier OTRO técnico invitado (cotizando o perdedor) en casos con
+    //                fabricación: SOLO país/región/comuna (para cotizar el traslado), NUNCA la
+    //                dirección fina (privacidad / evitar saltarse el marketplace).
+    //   - `none`   → el resto: se anulan los 6 campos.
+    // El objeto `doctor` se conserva siempre; solo se anulan los campos según el nivel.
     if (cCase.doctor) {
-      const canSeeDoctorAddress = canViewerSeeDoctorAddress({
-        isSystemAdmin,
+      // Durante la impersonación el admin ve la app COMO el usuario simulado: el bypass de
+      // supervisión (isSystemAdmin) NO debe aplicar, o un admin impersonando a un técnico que
+      // cotiza vería la dirección fina que ese técnico no debería ver. El nivel se evalúa con
+      // el rol/identidad efectivos del usuario simulado.
+      const effectiveSystemAdmin = Boolean(isSystemAdmin) && !isSimulating;
+      // Solo necesitamos saber si es invitado cuando el viewer es técnico y no es el ganador/
+      // dueño/admin (los otros niveles no dependen de la invitación).
+      let isInvitedTechnician = false;
+      const viewerIsTech = userRole === 'tecnico' || userRole === 'admin';
+      const alreadyFull =
+        effectiveSystemAdmin ||
+        userRole === 'admin' ||
+        cCase.doctorId === userId ||
+        cCase.assignedTechnicianId === userId;
+      if (viewerIsTech && !alreadyFull && userId) {
+        const [inv] = await db
+          .select({ id: caseInvitation.id })
+          .from(caseInvitation)
+          .where(
+            and(
+              eq(caseInvitation.clinicalCaseId, caseId),
+              eq(caseInvitation.technicianId, userId as string),
+            ),
+          )
+          .limit(1);
+        isInvitedTechnician = !!inv;
+      }
+
+      const disclosure = getDoctorAddressDisclosure({
+        isSystemAdmin: effectiveSystemAdmin,
         role: userRole as string,
         userId: (userId as string) ?? null,
         assignedTechnicianId: cCase.assignedTechnicianId,
         doctorId: cCase.doctorId,
+        isInvitedTechnician,
+        needsFabrication: Boolean(cCase.needsFabrication),
       });
-      if (!canSeeDoctorAddress) {
-        cCase.doctor.country = null;
-        cCase.doctor.region = null;
-        cCase.doctor.comuna = null;
+
+      if (disclosure !== 'full') {
+        // `coarse` y `none` ocultan siempre la dirección fina.
         cCase.doctor.address = null;
         cCase.doctor.addressNumber = null;
         cCase.doctor.addressOffice = null;
+      }
+      if (disclosure === 'none') {
+        cCase.doctor.country = null;
+        cCase.doctor.region = null;
+        cCase.doctor.comuna = null;
       }
     }
 
@@ -1531,6 +1568,9 @@ export async function submitUserRatingAction(data: { caseId: string, revieweeId:
         dimension,
         rating,
         ratingComment: data.comment?.trim() || null,
+        // Reviewee = técnico calificado (ganador). Acota la visibilidad: solo ese técnico
+        // (y el dentista autor + admin) ve la calificación; nunca otros técnicos del caso.
+        revieweeId: data.revieweeId,
         visibleTo: 'ambos' as const,
       };
       // Upsert del evento: re-calificar actualiza el mismo evento en vez de duplicarlo.

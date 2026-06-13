@@ -2,17 +2,20 @@
 
 import { useState } from 'react';
 import { simulateFauchardAction } from '@/lib/db/actions/fauchard';
-import { 
-  Play, 
-  Settings2, 
-  Users, 
-  ChevronRight, 
+import {
+  Play,
+  Settings2,
+  Users,
+  ChevronRight,
   AlertCircle,
   FlaskConical,
   XCircle,
   CheckCircle2,
   Trophy,
-  Info
+  Info,
+  Filter,
+  SlidersHorizontal,
+  Send
 } from 'lucide-react';
 import Slider from '@/components/ui/Slider';
 import Button from '@/components/ui/Button';
@@ -29,6 +32,56 @@ type AlgorithmParams = {
   serviceType: typeof SERVICE_TYPES[keyof typeof SERVICE_TYPES];
 };
 
+// Parámetros que influyen en la selección, agrupados para la presentación del funnel.
+// Los valores se leen de la config activa (currentConfig).
+const PARAM_GROUPS: { group: string; items: { key: string; label: string; suffix?: string }[] }[] = [
+  {
+    group: 'Pesos del score (α)',
+    items: [
+      { key: 'alphaQuality', label: 'Q · Calidad' },
+      { key: 'alphaPunctuality', label: 'P · Puntualidad' },
+      { key: 'alphaExperience', label: 'E · Experiencia' },
+      { key: 'alphaLoad', label: 'C · Carga (resta)' },
+      { key: 'alphaBonus', label: 'B · Infrautilización' },
+      { key: 'alphaNoResponse', label: 'N · No-respuesta (resta)' },
+    ],
+  },
+  {
+    group: 'Ventanas de medición',
+    items: [
+      { key: 'wQualityDays', label: 'Calidad', suffix: 'd' },
+      { key: 'wLoadDays', label: 'Carga reciente', suffix: 'd' },
+      { key: 'cMax', label: 'Tope de carga (cMax)' },
+      { key: 'dBonusMaxDays', label: 'Bono máximo', suffix: 'd' },
+    ],
+  },
+  {
+    group: 'Filtros de exclusión',
+    items: [
+      { key: 'tCooldownMinutes', label: 'Cooldown', suffix: 'min' },
+      { key: 'dInactivityDays', label: 'Inactividad', suffix: 'd' },
+    ],
+  },
+  {
+    group: 'Selección y ronda',
+    items: [
+      { key: 'nInvited', label: 'N invitados' },
+      { key: 'tQuoteMinutes', label: 'Plazo cotizar', suffix: 'min' },
+      { key: 'tProposalHours', label: 'Plazo elegir', suffix: 'h' },
+      { key: 'platformFee', label: 'Comisión' },
+    ],
+  },
+  {
+    group: 'Disponibilidad v5.0',
+    items: [
+      { key: 'noResponseWindowDays', label: 'Ventana no-resp.', suffix: 'd' },
+      { key: 'level1Threshold', label: 'Umbral Nivel 1' },
+      { key: 'level2Threshold', label: 'Umbral Nivel 2' },
+      { key: 'level3Threshold', label: 'Umbral Nivel 3' },
+    ],
+  },
+];
+
 export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
   const [params, setParams] = useState<AlgorithmParams>({
     restorationType: 'corona_posterior',
@@ -43,6 +96,7 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
     alphaExperience: Number(currentConfig.alphaExperience),
     alphaLoad: Number(currentConfig.alphaLoad),
     alphaBonus: Number(currentConfig.alphaBonus),
+    alphaNoResponse: Number(currentConfig.alphaNoResponse ?? 0.25),
   });
 
   const [result, setResult] = useState<any>(null);
@@ -137,7 +191,8 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
                 <Slider label="E: Experiencia" value={configOverride.alphaExperience} onChange={(e) => handleOverrideChange('alphaExperience', parseFloat(e.target.value))} min={0} max={0.5} />
                 <Slider label="C: Carga" value={configOverride.alphaLoad} onChange={(e) => handleOverrideChange('alphaLoad', parseFloat(e.target.value))} min={0} max={0.5} />
                 <Slider label="B: Bono" value={configOverride.alphaBonus} onChange={(e) => handleOverrideChange('alphaBonus', parseFloat(e.target.value))} min={0} max={0.5} />
-                
+                <Slider label="N: No-respuesta" value={configOverride.alphaNoResponse} onChange={(e) => handleOverrideChange('alphaNoResponse', parseFloat(e.target.value))} min={0} max={0.5} />
+
                 <div className={`text-[10px] font-bold p-3 rounded-xl border ${isSumValid ? 'bg-primary/5 border-primary/20 text-primary' : 'bg-error-hl border-error/30 text-error'}`}>
                   Suma α: {sumOverride.toFixed(3)} {isSumValid ? '✓' : ' (Debe ser 1.0)'}
                 </div>
@@ -145,7 +200,7 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
             )}
           </div>
 
-          <Button 
+          <Button
             onClick={handleSimulate}
             disabled={loading || (useOverride && !isSumValid)}
             loading={loading}
@@ -154,6 +209,33 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
           >
             Ejecutar Simulación
           </Button>
+        </div>
+
+        {/* Parámetros activos que influyen en la selección */}
+        <div className="p-8 rounded-[2.5rem] bg-surface/40 border border-divider shadow-xl space-y-6">
+          <div className="flex items-center gap-3">
+            <SlidersHorizontal className="w-5 h-5 text-primary" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Parámetros que afectan la selección</h3>
+          </div>
+          <div className="space-y-5">
+            {PARAM_GROUPS.map((g) => (
+              <div key={g.group} className="space-y-2">
+                <span className="text-[9px] font-black uppercase tracking-wider text-faint px-1">{g.group}</span>
+                <div className="grid grid-cols-1 gap-1">
+                  {g.items.map((it) => {
+                    const raw = currentConfig?.[it.key];
+                    const val = raw === undefined || raw === null ? '—' : `${raw}${it.suffix ? ` ${it.suffix}` : ''}`;
+                    return (
+                      <div key={it.key} className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-white/[0.04] transition-colors">
+                        <span className="text-muted">{it.label}</span>
+                        <span className="font-mono font-bold text-foreground">{val}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -187,6 +269,63 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
                 </div>
               </div>
             </div>
+
+            {/* Funnel de selección por etapas */}
+            {result.funnel && (() => {
+              const f = result.funnel;
+              const universe = Math.max(1, f.universe);
+              const stages = [
+                { label: 'Universo de técnicos', count: f.universe, icon: Users, color: 'bg-muted' },
+                { label: 'Elegibles (tras filtros)', count: f.eligible, icon: Filter, color: 'bg-primary/70' },
+                { label: 'Invitados (top N)', count: f.invited, icon: Send, color: 'bg-primary' },
+              ];
+              const filtered = Object.entries(f.byFilter || {}) as [string, number][];
+              return (
+                <div className="rounded-[2.5rem] border border-divider bg-surface/20 p-8 space-y-6">
+                  <div className="flex items-center gap-3">
+                    <Filter className="w-5 h-5 text-primary" />
+                    <h4 className="text-sm font-bold uppercase tracking-wider text-foreground">Funnel de selección</h4>
+                  </div>
+                  <div className="space-y-3">
+                    {stages.map((s) => {
+                      const pct = Math.round((s.count / universe) * 100);
+                      const Icon = s.icon;
+                      return (
+                        <div key={s.label} className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <span className="flex items-center gap-2 text-muted font-bold uppercase tracking-wider">
+                              <Icon className="w-3.5 h-3.5" /> {s.label}
+                            </span>
+                            <span className="font-mono font-black text-foreground">{s.count}</span>
+                          </div>
+                          <div className="h-7 bg-surface-2 rounded-xl overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${Math.max(pct, 4)}%` }}
+                              transition={{ duration: 0.6 }}
+                              className={`h-full ${s.color} rounded-xl`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {filtered.length > 0 && (
+                    <div className="pt-4 border-t border-divider space-y-2">
+                      <span className="text-[9px] font-black uppercase tracking-wider text-faint">Excluidos por filtro</span>
+                      <div className="flex flex-wrap gap-2">
+                        {filtered.map(([reason, count]) => (
+                          <span key={reason} className="text-[10px] font-bold px-3 py-1 rounded-full bg-error-hl border border-error/30 text-error flex items-center gap-1.5">
+                            <XCircle className="w-3 h-3" /> {reason}: {count}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             <div className="rounded-[2.5rem] border border-divider bg-surface/20 overflow-hidden">
               <table className="w-full text-left">
@@ -225,10 +364,10 @@ export default function SimulatorPanel({ currentConfig }: SimulatorPanelProps) {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex gap-1.5">
-                          {['Q', 'P', 'E', 'C', 'B'].map((k) => (
+                          {['Q', 'P', 'E', 'C', 'B', 'N'].map((k) => (
                             <div key={k} className="flex flex-col items-center">
                               <span className="text-[7px] font-black text-faint">{k}</span>
-                              <span className="text-[9px] font-mono text-muted">{d.components[k].toFixed(2)}</span>
+                              <span className="text-[9px] font-mono text-muted">{(d.components[k] ?? 0).toFixed(2)}</span>
                             </div>
                           ))}
                         </div>

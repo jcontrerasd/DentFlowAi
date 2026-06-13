@@ -3,7 +3,7 @@
 import * as bcrypt from "bcryptjs";
 import { auth } from "@/auth";
 import { db, infraPromise } from "@/lib/db";
-import { user, organization, file } from "@/lib/db/schema";
+import { user, organization, file, caseInvitation } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import GCPStorageService from "@/lib/services/gcp-storage";
 
@@ -180,6 +180,12 @@ export async function getUsersByRoleAction(role: 'dentista' | 'tecnico') {
         role: user.role,
         image: user.image,
         organizationName: organization.name,
+        // Invitaciones que el técnico tiene por cotizar (status 'pending').
+        // Subconsulta correlacionada: resuelve todos los usuarios en una sola query.
+        pendingInvitations: sql<number>`(
+          SELECT count(*)::int FROM ${caseInvitation} ci
+          WHERE ci.technician_id = ${user.id} AND ci.status = 'pending'
+        )`,
       })
       .from(user)
       .leftJoin(organization, eq(user.organizationId, organization.id))

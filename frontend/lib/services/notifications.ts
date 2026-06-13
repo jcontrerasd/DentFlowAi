@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { pushEmailPreview } from "@/lib/services/emailPreviewBuffer";
 
 // ─── Transport: EmailJS (API REST server-side) ───────────────────────────────
 // Reemplaza Resend (v5.0 / Fase 2). Las 3+1 credenciales son server-only (sin
@@ -272,12 +273,15 @@ export async function notifyUser(userId: string, type: NotificationType, data: a
       return { success: true };
     }
 
+    const subject = `Fauchard · DentFlowAi: ${template.subject}`;
+    const body = template.body({ ...data, name: userData.fullName });
+
+    // 1.c DEMO (temporal): registra el correo que se enviaría para mostrarlo en pantalla.
+    //      Gated por NEXT_PUBLIC_DEMO_EMAIL_PREVIEW; independiente de NOTIFICATIONS_LIVE.
+    pushEmailPreview({ to: userData.email, subject, body, type });
+
     // 2. Enviar vía EmailJS (modo stub interno loguea sin enviar en dev local).
-    const result = await sendViaEmailJS({
-      subject: `Fauchard · DentFlowAi: ${template.subject}`,
-      toEmail: userData.email,
-      body: template.body({ ...data, name: userData.fullName }),
-    });
+    const result = await sendViaEmailJS({ subject, toEmail: userData.email, body });
 
     if (!result.ok) return { success: false, error: result.error };
     return { success: true };

@@ -337,12 +337,13 @@ async function calculateTechnicianScore(
   serviceType: string,
   config: FauchardConfigRow,
   avgPoolLoad: number = 5
-): Promise<{ score: number; components: { Q: number; P: number; E: number; C: number; B: number } }> {
+): Promise<{ score: number; components: { Q: number; P: number; E: number; C: number; B: number; N: number } }> {
   const α1 = parseFloat(config.alphaQuality);
   const α2 = parseFloat(config.alphaPunctuality);
   const α3 = parseFloat(config.alphaExperience);
   const α4 = parseFloat(config.alphaLoad);
   const α5 = parseFloat(config.alphaBonus);
+  const αN = parseFloat(config.alphaNoResponse ?? '0.250');
   const cMax = parseFloat(config.cMax);
 
   const now = new Date();
@@ -445,13 +446,21 @@ async function calculateTechnicianScore(
     : config.dBonusMaxDays; // Si nunca fue invitado, bono máximo
   const B = Math.min(daysSince / config.dBonusMaxDays, 1.0);
 
-  const baseScore = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B;
+  // N — Sanción por no-respuesta (término −αN·N). Solo penaliza con el modelo de
+  // disponibilidad on y cuando el técnico tiene sanción acumulada (N>0); si no, N=0.
+  let N = 0;
+  if (isAvailabilityEnabled()) {
+    const lvl = await computeLevelForTechnicianAction(technicianId);
+    N = levelToScoreN(lvl.level);
+  }
+
+  const baseScore = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B - αN * N;
 
   // Penalización de transición de liga (Fase 2) — ver calculateScoreFromBulkData.
   const inTransition = isLeagueEngineEnabled() && !!techRow?.leagueTransitionStartedAt;
   const score = applyLeagueTransitionPenalty(baseScore, inTransition, parseFloat(config.lPenaltyTransition));
 
-  return { score: Math.max(0, score), components: { Q, P, E, C, B } };
+  return { score: Math.max(0, score), components: { Q, P, E, C, B, N } };
 }
 
 // ─── S2-01: Clasificar un caso ────────────────────────────────────────────────
@@ -2273,11 +2282,29 @@ export async function simulateFauchardAction(params: {
       }
     }
 
+    // Funnel por etapas (para la presentación del embudo de selección).
+    // `byFilter` agrupa los excluidos por razón; `invited` = min(nInvited, elegibles).
+    const byFilter = distribution
+      .filter(d => d.excluded)
+      .reduce<Record<string, number>>((acc, d) => {
+        const key = d.exclusionReason || 'Excluido';
+        acc[key] = (acc[key] ?? 0) + 1;
+        return acc;
+      }, {});
+
+    const funnel = {
+      universe: candidates.length,
+      byFilter,
+      eligible: eligibleCount,
+      invited: Math.min(finalConfig.nInvited, eligibleCount),
+    };
+
     return {
       success: true,
       simulation: {
         eligiblePool: eligibleCount,
         invitedCount: finalConfig.nInvited,
+        funnel,
         distribution: distribution.sort((a, b) => b.score - a.score),
       }
     };
