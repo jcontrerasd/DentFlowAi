@@ -89,11 +89,9 @@ export interface FauchardConfigRow {
   changeReason: string | null;
 }
 
-/** Capacidades (CAD/CAM) requeridas según el tipo de servicio del caso. */
-function capacitiesForServiceType(serviceType: string): Capacity[] {
-  if (serviceType === SERVICE_TYPES.SOLO_FABRICACION) return ['cam'];
-  if (serviceType === SERVICE_TYPES.INTEGRAL) return ['cad', 'cam'];
-  return ['cad']; // solo_diseno
+/** Capacidades (CAD) requeridas — la app solo opera en modo solo_diseno. */
+function capacitiesForServiceType(_serviceType: string): Capacity[] {
+  return ['cad'];
 }
 
 /** Categoría de disponibilidad (5) del caso a partir de su work_type (15). */
@@ -180,10 +178,8 @@ export async function batchExpireInvitationsForCases(caseIds: string[]): Promise
     );
 }
 
-// Dimensiones de calidad (CAD/CAM) relevantes según el tipo de servicio del caso.
-function dimensionsForServiceType(serviceType: string): string[] {
-  if (serviceType === SERVICE_TYPES.INTEGRAL) return ['design', 'fabrication'];
-  if (serviceType === SERVICE_TYPES.SOLO_FABRICACION) return ['fabrication'];
+// Dimensiones de calidad relevantes — solo diseño.
+function dimensionsForServiceType(_serviceType: string): string[] {
   return ['design'];
 }
 
@@ -295,15 +291,7 @@ function calculateScoreFromBulkData(
   const skillRow = data.skills.find(s => s.userId === technicianId);
   let skillLevel = 0;
   if (skillRow) {
-    const designLevel = skillRow.designLevel ?? 0;
-    const fabLevel = skillRow.fabricationLevel ?? 0;
-    if (serviceType === SERVICE_TYPES.INTEGRAL) {
-      skillLevel = Math.min(designLevel, fabLevel);
-    } else if (serviceType === SERVICE_TYPES.SOLO_FABRICACION) {
-      skillLevel = fabLevel;
-    } else {
-      skillLevel = designLevel;
-    }
+    skillLevel = skillRow.designLevel ?? 0;
   }
   const E = skillLevel / 7;
 
@@ -409,18 +397,7 @@ async function calculateTechnicianScore(
 
   let skillLevel = 0;
   if (skillRow) {
-    const designLevel = skillRow.designLevel ?? 0;
-    const fabLevel = skillRow.fabricationLevel ?? 0;
-    if (serviceType === SERVICE_TYPES.INTEGRAL) {
-      // Integral: ambos niveles cuentan; el más débil define al técnico.
-      skillLevel = Math.min(designLevel, fabLevel);
-    } else if (serviceType === SERVICE_TYPES.SOLO_FABRICACION) {
-      // Solo fabricación: solo fabrication_level cuenta para la experiencia.
-      skillLevel = fabLevel;
-    } else {
-      // Solo diseño (default): design_level.
-      skillLevel = designLevel;
-    }
+    skillLevel = skillRow.designLevel ?? 0;
   }
   const E = skillLevel / 7;
 
@@ -506,16 +483,8 @@ export async function classifyCaseAction(caseId: string) {
       complexity = CASE_COMPLEXITY.CRITICO;
     }
 
-    // Determinar tipo de servicio.
-    // - Si el wizard ya pobló `serviceType` (caso v3), lo respetamos como fuente de verdad.
-    // - Si no (caso legacy creado antes del wizard nuevo), lo derivamos de needsFabrication.
-    const explicitServiceType = cCase.cc.serviceType as string | null | undefined;
-    const isValidServiceType = explicitServiceType
-      ? (Object.values(SERVICE_TYPES) as string[]).includes(explicitServiceType)
-      : false;
-    const serviceType: string = isValidServiceType
-      ? (explicitServiceType as string)
-      : (cCase.cc.needsFabrication ? SERVICE_TYPES.INTEGRAL : SERVICE_TYPES.SOLO_DISENO);
+    // Siempre solo_diseno — la app ya no admite fabricación.
+    const serviceType: string = SERVICE_TYPES.SOLO_DISENO;
 
     // Determinar work_type para el algoritmo
     const workType = getWorkTypeForCase(restorationType, teeth);
@@ -682,23 +651,14 @@ export async function runFauchardAction(caseId: string): Promise<{
 
         console.log(`[DEBUG] Checking tech ${tech.id} skills`);
         const minSkillLevel = MIN_SKILL_FOR_CATEGORY[caseLeague] ?? 1;
-        // El filtro principal depende del serviceType:
-        // - solo_diseno / integral: design_level >= min
-        // - solo_fabricacion: fabrication_level >= min (design ignorado)
-        const isSoloFabrication = serviceType === SERVICE_TYPES.SOLO_FABRICACION;
-        const skillFilter = isSoloFabrication
-          ? gte(technicianSkill.fabricationLevel, minSkillLevel)
-          : gte(technicianSkill.designLevel, minSkillLevel);
         const [skill] = await db.select().from(technicianSkill)
           .where(and(
             eq(technicianSkill.userId, tech.id),
             eq(technicianSkill.workType, workType),
-            skillFilter
+            gte(technicianSkill.designLevel, minSkillLevel)
           ))
           .limit(1);
         if (!skill) { exclusionReasons.lowSkill++; continue; }
-        // Para servicios integrales: fabricación también debe cumplir el nivel mínimo
-        if (serviceType === SERVICE_TYPES.INTEGRAL && (skill.fabricationLevel ?? 0) < minSkillLevel) { exclusionReasons.lowSkill++; continue; }
 
         // Regla de elegibilidad AND triple (v5.0) — solo con el modelo habilitado.
         // Se evalúa en tiempo real (sin caché del estado efectivo). Integral exige
@@ -865,7 +825,6 @@ export async function selectReplacementCandidateAction(
     const category = categoryForWorkType(workType);
     const requiredCaps = capacitiesForServiceType(serviceType);
     const availabilityOn = isAvailabilityEnabled();
-    const isSoloFab = serviceType === SERVICE_TYPES.SOLO_FABRICACION;
     const exclude = new Set(excludeTechIds);
     const now = new Date();
 
@@ -880,14 +839,10 @@ export async function selectReplacementCandidateAction(
       if (tech.suspendedUntil && new Date(tech.suspendedUntil) > now) continue;
       if (!availabilityOn && (tech.consecutiveNoResponse ?? 0) >= 3) continue;
 
-      const skillFilter = isSoloFab
-        ? gte(technicianSkill.fabricationLevel, minSkillLevel)
-        : gte(technicianSkill.designLevel, minSkillLevel);
       const [skill] = await db.select().from(technicianSkill)
-        .where(and(eq(technicianSkill.userId, tech.id), eq(technicianSkill.workType, workType), skillFilter))
+        .where(and(eq(technicianSkill.userId, tech.id), eq(technicianSkill.workType, workType), gte(technicianSkill.designLevel, minSkillLevel)))
         .limit(1);
       if (!skill) continue;
-      if (serviceType === SERVICE_TYPES.INTEGRAL && (skill.fabricationLevel ?? 0) < minSkillLevel) continue;
 
       if (availabilityOn) {
         // Self-heal: garantizar la fila antes de evaluar (excluye sin fila).
@@ -1059,41 +1014,16 @@ export async function sendInvitationsAction(
 // ─── S2-05: Técnico responde a invitación ────────────────────────────────────
 
 /**
- * Payload de cotización.
- * - `flat`: un único precio y plazo (solo_diseno, solo_fabricacion).
- * - `split`: desglose obligatorio diseño + fabricación (solo casos `integral`).
- * El total (`quotedPrice`, `quotedDays`) se calcula como suma cuando es split.
+ * Payload de cotización — solo modo flat (solo_diseno).
+ * Acepta `deliveryDays` (1–365) o `deliveryHours` (1–24), mutuamente excluyentes.
  */
-/**
- * Cada slot acepta `deliveryDays` (1–365) o `deliveryHours` (1–24), mutuamente
- * excluyentes. v4.6 — soporte de plazos en horas para trabajos express.
- */
-export type QuoteInput =
-  | {
-      kind: 'flat';
-      price: number;
-      deliveryDays?: number;
-      deliveryHours?: number;
-      /** Flete (v4.4): obligatorio para solo_fabricacion (≥ 0). Ignorado para solo_diseno. */
-      shippingPrice?: number;
-      shippingDays?: number;
-      shippingHours?: number;
-      notes?: string;
-    }
-  | {
-      kind: 'split';
-      designPrice: number;
-      designDays?: number;
-      designHours?: number;
-      fabricationPrice: number;
-      fabricationDays?: number;
-      fabricationHours?: number;
-      /** Flete (v4.4): obligatorio para integral (≥ 0). */
-      shippingPrice: number;
-      shippingDays?: number;
-      shippingHours?: number;
-      notes?: string;
-    };
+export type QuoteInput = {
+  kind: 'flat';
+  price: number;
+  deliveryDays?: number;
+  deliveryHours?: number;
+  notes?: string;
+};
 
 /**
  * Valida y normaliza un slot de plazo. Retorna `{ days, hours }` con exactamente
@@ -1173,106 +1103,24 @@ export async function submitQuoteAction(
     });
     if (!guarded.ok) return { success: false, error: guarded.error };
 
-    // Cargar el serviceType del caso para validar coherencia entre input y tipo.
-    const [cCase] = await db
-      .select({ serviceType: clinicalCase.serviceType, needsFabrication: clinicalCase.needsFabrication })
-      .from(clinicalCase)
-      .where(eq(clinicalCase.id, invitation.clinicalCaseId))
-      .limit(1);
-
-    const effectiveServiceType: string = (cCase?.serviceType as string | null)
-      ?? (cCase?.needsFabrication ? SERVICE_TYPES.INTEGRAL : SERVICE_TYPES.SOLO_DISENO);
-    const isIntegral = effectiveServiceType === SERVICE_TYPES.INTEGRAL;
-    const hasFabrication =
-      isIntegral || effectiveServiceType === SERVICE_TYPES.SOLO_FABRICACION;
-
-    // Validación serviceType ⇄ input.kind.
-    // - Si el caller usa la firma nueva (objeto QuoteInput), exigimos coherencia estricta.
-    // - Si el caller usa la firma legacy (number, number), aceptamos flat para todos los
-    //   tipos por retrocompatibilidad: la UI nueva siempre pasa el QuoteInput correcto y
-    //   esa es la fuente de verdad del frontend.
-    if (!isLegacyFlat) {
-      if (isIntegral && input.kind !== 'split') {
-        return { success: false, error: 'Para casos integrales se debe enviar el desglose diseño + fabricación' };
-      }
-      if (!isIntegral && input.kind !== 'flat') {
-        return { success: false, error: 'Este caso solo acepta un precio y plazo únicos' };
-      }
-    }
-
     // Calcular totales y campos a persistir.
     let totalPrice: number;
-    let designPrice: number | null = null;
-    let designDays: number | null = null;
-    let designHours: number | null = null;
-    let fabricationPrice: number | null = null;
-    let fabricationDays: number | null = null;
-    let fabricationHours: number | null = null;
-    let shippingPrice: number | null = null;
-    let shippingDays: number | null = null;
-    let shippingHours: number | null = null;
     let flatDays: number | null = null;
     let flatHours: number | null = null;
     let notesText: string | undefined;
 
-    // Flete (v4.4 + v4.6 horas): solo aplica si el caso tiene fabricación.
-    if (hasFabrication) {
-      const sp = input.shippingPrice;
-      if (sp == null) {
-        return { success: false, error: 'Debes indicar el costo del flete' };
-      }
-      if (!Number.isFinite(sp) || sp < 0) {
-        return { success: false, error: 'El costo del flete no puede ser negativo' };
-      }
-      shippingPrice = sp;
-      const ship = normalizeTurnaroundSlot(input.shippingDays, input.shippingHours, {
-        slotName: 'Flete', allowZeroDays: true, required: true,
-      });
-      if (!ship.ok) return { success: false, error: ship.error };
-      shippingDays = ship.days;
-      shippingHours = ship.hours;
-    }
+    if (input.price <= 0) return { success: false, error: 'El precio debe ser mayor a 0' };
+    const slot = normalizeTurnaroundSlot(input.deliveryDays, input.deliveryHours, {
+      slotName: 'Plazo', required: true,
+    });
+    if (!slot.ok) return { success: false, error: slot.error };
+    flatDays = slot.days;
+    flatHours = slot.hours;
+    totalPrice = input.price;
+    notesText = input.notes;
 
-    if (input.kind === 'flat') {
-      if (input.price <= 0) return { success: false, error: 'El precio debe ser mayor a 0' };
-      const slot = normalizeTurnaroundSlot(input.deliveryDays, input.deliveryHours, {
-        slotName: 'Plazo', required: true,
-      });
-      if (!slot.ok) return { success: false, error: slot.error };
-      flatDays = slot.days;
-      flatHours = slot.hours;
-      totalPrice = input.price + (shippingPrice ?? 0);
-      notesText = input.notes;
-    } else {
-      if (input.designPrice <= 0 || input.fabricationPrice <= 0) {
-        return { success: false, error: 'Los precios de diseño y fabricación deben ser mayores a 0' };
-      }
-      const dSlot = normalizeTurnaroundSlot(input.designDays, input.designHours, {
-        slotName: 'Diseño', required: true,
-      });
-      if (!dSlot.ok) return { success: false, error: dSlot.error };
-      const fSlot = normalizeTurnaroundSlot(input.fabricationDays, input.fabricationHours, {
-        slotName: 'Fabricación', required: true,
-      });
-      if (!fSlot.ok) return { success: false, error: fSlot.error };
-      designPrice = input.designPrice;
-      designDays = dSlot.days;
-      designHours = dSlot.hours;
-      fabricationPrice = input.fabricationPrice;
-      fabricationDays = fSlot.days;
-      fabricationHours = fSlot.hours;
-      totalPrice = designPrice + fabricationPrice + (shippingPrice ?? 0);
-      notesText = input.notes;
-    }
-
-    // Totales canónicos: suma de días y horas por separado (compatibilidad legacy +
-    // soporte de mezcla). Al menos uno de los dos será > 0.
-    const sumDays =
-      (flatDays ?? 0) + (designDays ?? 0) + (fabricationDays ?? 0) + (shippingDays ?? 0);
-    const sumHours =
-      (flatHours ?? 0) + (designHours ?? 0) + (fabricationHours ?? 0) + (shippingHours ?? 0);
-    const totalDaysCanonical = sumDays > 0 ? sumDays : null;
-    const totalHoursCanonical = sumHours > 0 ? sumHours : null;
+    const totalDaysCanonical = flatDays;
+    const totalHoursCanonical = flatHours;
 
     await db.update(caseInvitation)
       .set({
@@ -1280,15 +1128,15 @@ export async function submitQuoteAction(
         quotedPrice: totalPrice,
         quotedDays: totalDaysCanonical,
         quotedHours: totalHoursCanonical,
-        quotedDesignPrice: designPrice,
-        quotedDesignDays: designDays,
-        quotedDesignHours: designHours,
-        quotedFabricationPrice: fabricationPrice,
-        quotedFabricationDays: fabricationDays,
-        quotedFabricationHours: fabricationHours,
-        quotedShippingPrice: shippingPrice,
-        quotedShippingDays: shippingDays,
-        quotedShippingHours: shippingHours,
+        quotedDesignPrice: null,
+        quotedDesignDays: null,
+        quotedDesignHours: null,
+        quotedFabricationPrice: null,
+        quotedFabricationDays: null,
+        quotedFabricationHours: null,
+        quotedShippingPrice: null,
+        quotedShippingDays: null,
+        quotedShippingHours: null,
         techNotes: notesText?.slice(0, 200), // máx 200 chars
         respondedAt: new Date(),
         updatedAt: new Date(),
@@ -1314,23 +1162,6 @@ export async function submitQuoteAction(
         quotedPrice: totalPrice,
         quotedDays: totalDaysCanonical,
         quotedHours: totalHoursCanonical,
-        ...(designPrice !== null
-          ? {
-              quotedDesignPrice: designPrice,
-              quotedDesignDays: designDays,
-              quotedDesignHours: designHours,
-              quotedFabricationPrice: fabricationPrice,
-              quotedFabricationDays: fabricationDays,
-              quotedFabricationHours: fabricationHours,
-            }
-          : {}),
-        ...(shippingPrice !== null
-          ? {
-              quotedShippingPrice: shippingPrice,
-              quotedShippingDays: shippingDays,
-              quotedShippingHours: shippingHours,
-            }
-          : {}),
         techNotes: notesTrim,
       },
     });

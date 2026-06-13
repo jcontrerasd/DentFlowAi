@@ -346,7 +346,7 @@ export function buildTechFacetCondition(
       return buildSingleTechKpiClause('cotizacionEnviada', userId);
     case 'progreso':
       return buildTechKpiFilterWhere(
-        ['enEjecucion', 'enRevision', 'disenoAprobado', 'enFabricacion', 'enviado'],
+        ['enEjecucion', 'enRevision'],
         userId,
       );
     default:

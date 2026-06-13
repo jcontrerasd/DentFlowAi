@@ -18,30 +18,30 @@ import { isAvailabilityUiTecnicoEnabled } from '@/lib/constants/availabilityFlag
 import { computeLevelForTechnicianAction, type TechnicianLevel } from './noResponseEvents';
 import type { ActionResult } from '@/lib/types/actions';
 
-export type Capacity = 'cad' | 'cam';
+export type Capacity = 'cad';
 
 export type AvailabilityRow = typeof technicianAvailability.$inferSelect;
 
 /** Columnas de categoría por (categoría, capacidad) para lectura. */
 const CATEGORY_COL = {
-  coronas: { cad: technicianAvailability.catCoronasCad, cam: technicianAvailability.catCoronasCam },
-  inlays: { cad: technicianAvailability.catInlaysCad, cam: technicianAvailability.catInlaysCam },
-  puentes: { cad: technicianAvailability.catPuentesCad, cam: technicianAvailability.catPuentesCam },
-  protesis: { cad: technicianAvailability.catProtesisCad, cam: technicianAvailability.catProtesisCam },
-  guias: { cad: technicianAvailability.catGuiasCad, cam: technicianAvailability.catGuiasCam },
+  coronas: { cad: technicianAvailability.catCoronasCad },
+  inlays: { cad: technicianAvailability.catInlaysCad },
+  puentes: { cad: technicianAvailability.catPuentesCad },
+  protesis: { cad: technicianAvailability.catProtesisCad },
+  guias: { cad: technicianAvailability.catGuiasCad },
 } as const satisfies Record<WorkCategory, Record<Capacity, unknown>>;
 
 /** Clave del modelo (set key drizzle) por (categoría, capacidad) para escritura. */
 const CATEGORY_SET_KEY: Record<WorkCategory, Record<Capacity, keyof AvailabilityRow>> = {
-  coronas: { cad: 'catCoronasCad', cam: 'catCoronasCam' },
-  inlays: { cad: 'catInlaysCad', cam: 'catInlaysCam' },
-  puentes: { cad: 'catPuentesCad', cam: 'catPuentesCam' },
-  protesis: { cad: 'catProtesisCad', cam: 'catProtesisCam' },
-  guias: { cad: 'catGuiasCad', cam: 'catGuiasCam' },
+  coronas: { cad: 'catCoronasCad' },
+  inlays: { cad: 'catInlaysCad' },
+  puentes: { cad: 'catPuentesCad' },
+  protesis: { cad: 'catProtesisCad' },
+  guias: { cad: 'catGuiasCad' },
 };
 
-function capacityColumn(capacidad: Capacity) {
-  return capacidad === 'cad' ? technicianAvailability.levelCad : technicianAvailability.levelCam;
+function capacityColumn(_capacidad: Capacity) {
+  return technicianAvailability.levelCad;
 }
 
 function categorySetKey(categoria: WorkCategory, capacidad: Capacity): keyof AvailabilityRow {
@@ -58,11 +58,10 @@ async function createDefaultAvailability(userId: string): Promise<AvailabilityRo
     .from(technicianSkill)
     .where(eq(technicianSkill.userId, userId));
   const hasCad = skills.some((s) => (s.designLevel ?? 0) > 0);
-  const hasCam = skills.some((s) => (s.fabricationLevel ?? 0) > 0);
 
   const [row] = await db
     .insert(technicianAvailability)
-    .values({ userId, levelGlobal: true, levelCad: hasCad, levelCam: hasCam })
+    .values({ userId, levelGlobal: true, levelCad: hasCad, levelCam: false })
     .onConflictDoNothing({ target: technicianAvailability.userId })
     .returning();
 
@@ -132,7 +131,7 @@ export async function updateAvailabilityLevelAction(
     const patch: Partial<Record<keyof AvailabilityRow, boolean | Date>> = { updatedAt: new Date() };
     const { target, value } = input;
     if (target.kind === 'global') patch.levelGlobal = value;
-    else if (target.kind === 'capacity') patch[target.capacidad === 'cad' ? 'levelCad' : 'levelCam'] = value;
+    else if (target.kind === 'capacity') patch.levelCad = value;
     else patch[categorySetKey(target.categoria, target.capacidad)] = value;
 
     const [row] = await db
@@ -220,8 +219,7 @@ export async function computeEligibleAction(
   const [row] = await db.select().from(technicianAvailability).where(eq(technicianAvailability.userId, userId)).limit(1);
   if (!row) return false;
   const catKey = categorySetKey(categoria, capacidad);
-  const capOk = capacidad === 'cad' ? row.levelCad : row.levelCam;
-  return Boolean(row.levelGlobal && capOk && row[catKey]);
+  return Boolean(row.levelGlobal && row.levelCad && row[catKey]);
 }
 
 /**

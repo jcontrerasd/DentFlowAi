@@ -51,12 +51,9 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
     const cfg = await getConfigForCase(caseId);
     const fee = parseFloat(String(cfg.platformFee));
 
-    // v4.4 — Flete: el fee de plataforma NO aplica al flete. Se traslada 1:1.
-    // Fórmula: proposedPrice = (quotedPrice − shipping) × (1 + fee) + shipping
+    // proposedPrice aplica el fee de plataforma al total cotizado.
     const quotedTotal = inv.quotedPrice ?? 0;
-    const shipping = inv.quotedShippingPrice ?? 0;
-    const shippingDays = inv.quotedShippingDays ?? 0;
-    const proposedPrice = (quotedTotal - shipping) * (1 + fee) + shipping;
+    const proposedPrice = quotedTotal * (1 + fee);
 
     return await db.transaction(async (tx) => {
       // Solo losers aún activos (pending/quoted). Los ya 'rejected' —rechazo manual del
@@ -93,27 +90,12 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
         .set({ status: 'confirmed', updatedAt: new Date() })
         .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.id, invitationId)));
 
-      // v4.5 — Desglose diseño/fabricación con fee aplicado (flete sin fee).
-      const proposedDesignPrice =
-        inv.quotedDesignPrice != null ? inv.quotedDesignPrice * (1 + fee) : null;
-      const proposedFabricationPrice =
-        inv.quotedFabricationPrice != null ? inv.quotedFabricationPrice * (1 + fee) : null;
-
       await tx.update(clinicalCase).set({
         assignedTechnicianId: inv.technicianId,
         assignedAt: new Date(),
         proposedPrice,
         proposedDeliveryDays: inv.quotedDays ?? null,
         proposedDeliveryHours: inv.quotedHours ?? null,
-        proposedShippingPrice: shipping,
-        proposedShippingDays: inv.quotedShippingDays ?? null,
-        proposedShippingHours: inv.quotedShippingHours ?? null,
-        proposedDesignPrice,
-        proposedDesignDays: inv.quotedDesignDays ?? null,
-        proposedDesignHours: inv.quotedDesignHours ?? null,
-        proposedFabricationPrice,
-        proposedFabricationDays: inv.quotedFabricationDays ?? null,
-        proposedFabricationHours: inv.quotedFabricationHours ?? null,
         platformFee: String(fee),
         status: CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO,
         internalStatus: INTERNAL_CASE_STATUSES.ACEPTADA_CONFIGURANDO,
@@ -284,10 +266,6 @@ export async function rejectInvitationOfferAction(
             inv.quotedDays != null && Number.isFinite(Number(inv.quotedDays))
               ? Math.trunc(Number(inv.quotedDays))
               : null,
-          quotedDesignPrice: inv.quotedDesignPrice,
-          quotedDesignDays: inv.quotedDesignDays,
-          quotedFabricationPrice: inv.quotedFabricationPrice,
-          quotedFabricationDays: inv.quotedFabricationDays,
           techNotes: inv.techNotes?.trim() ? inv.techNotes.trim() : null,
         },
       }, tx);
@@ -392,10 +370,6 @@ export async function withdrawQuoteAction(invitationId: string): Promise<ActionR
     const snapshot = {
       quotedPrice: inv.quotedPrice,
       quotedDays: inv.quotedDays,
-      quotedDesignPrice: inv.quotedDesignPrice,
-      quotedDesignDays: inv.quotedDesignDays,
-      quotedFabricationPrice: inv.quotedFabricationPrice,
-      quotedFabricationDays: inv.quotedFabricationDays,
       techNotes: inv.techNotes?.trim() ? inv.techNotes.trim().slice(0, 200) : null,
     };
 
@@ -557,18 +531,10 @@ export async function startWorkAction(caseId: string): Promise<ActionResult> {
       .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'confirmed')))
       .limit(1);
 
-    // Solo fabricación: el flujo salta diseño/revisión y va directo a `enFabricacion`.
-    // Para los otros tipos (solo_diseno / integral) se mantiene la transición a `enEjecucion`.
-    const isSoloFabrication = cCase.serviceType === 'solo_fabricacion';
-    const nextStatus = isSoloFabrication ? CASE_STATUSES.EN_FABRICACION : CASE_STATUSES.EN_EJECUCION;
-    const nextInternal = isSoloFabrication
-      ? INTERNAL_CASE_STATUSES.EN_EJECUCION_DISENO // reutilizamos el estado interno como "ejecución en curso"
-      : INTERNAL_CASE_STATUSES.EN_EJECUCION_DISENO;
-
     await db.update(clinicalCase)
       .set({
-        status: nextStatus,
-        internalStatus: nextInternal,
+        status: CASE_STATUSES.EN_EJECUCION,
+        internalStatus: INTERNAL_CASE_STATUSES.EN_EJECUCION_DISENO,
         currentResponsibility: 'tecnico',
         workStartedAt: now,
         workDeadline,
@@ -581,43 +547,34 @@ export async function startWorkAction(caseId: string): Promise<ActionResult> {
     });
     const deadlineTime = workDeadline.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
 
-    const techAction = isSoloFabrication ? CASE_EVENTS.FABRICACION_INICIADA : CASE_EVENTS.TRABAJO_INICIADO;
-    const techContent = isSoloFabrication
-      ? 'He iniciado la fabricación del caso.'
-      : 'He confirmado el inicio del trabajo.';
-
     await logCaseEvent({
       caseId,
       userId: identity.id as string,
       type: 'sistema',
-      action: techAction,
-      content: techContent,
+      action: CASE_EVENTS.TRABAJO_INICIADO,
+      content: 'He confirmado el inicio del trabajo.',
       payload: {
         visibleTo: 'tecnico',
         invitationId: winnerInv?.id,
         workDeadline: workDeadline.toISOString(),
         workStartedAt: now.toISOString(),
       },
-      stateChange: { from: CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO, to: nextStatus },
+      stateChange: { from: CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO, to: CASE_STATUSES.EN_EJECUCION },
     });
 
     if (cCase.doctorId) {
-      const dentistContent = isSoloFabrication
-        ? `El laboratorio asignado inició la fabricación. Entrega máxima: ${deadlineLabel} a las ${deadlineTime}.`
-        : `El laboratorio asignado confirmó el inicio. Entrega máxima: ${deadlineLabel} a las ${deadlineTime}.`;
-
       await logCaseEvent({
         caseId,
         userId: cCase.doctorId,
         type: 'sistema',
-        action: techAction,
-        content: dentistContent,
+        action: CASE_EVENTS.TRABAJO_INICIADO,
+        content: `El laboratorio asignado confirmó el inicio. Entrega máxima: ${deadlineLabel} a las ${deadlineTime}.`,
         payload: {
           visibleTo: 'dentista',
           workDeadline: workDeadline.toISOString(),
           ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
         },
-        stateChange: { from: CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO, to: nextStatus },
+        stateChange: { from: CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO, to: CASE_STATUSES.EN_EJECUCION },
       });
 
       await notifyUser(cCase.doctorId, 'FAUCHARD_INICIO_PLAZO_DENTISTA', {

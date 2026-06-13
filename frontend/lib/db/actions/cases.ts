@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { notifyUser } from "../../services/notifications";
 import GCPStorageService from '@/lib/services/gcp-storage';
 import { db } from "@/lib/db";
-import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseInvitation, caseUserArchive, contactGuardCourierAllowlist } from "@/lib/db/schema";
+import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseInvitation, caseUserArchive } from "@/lib/db/schema";
 import { eq, desc, and, or, ne, not, sql, inArray, avg, exists, gt } from "drizzle-orm";
 import {
   archiveVisibilityForUser,
@@ -766,37 +766,14 @@ export async function getCaseDetails(caseId: string) {
       // cotiza vería la dirección fina que ese técnico no debería ver. El nivel se evalúa con
       // el rol/identidad efectivos del usuario simulado.
       const effectiveSystemAdmin = Boolean(isSystemAdmin) && !isSimulating;
-      // Solo necesitamos saber si es invitado cuando el viewer es técnico y no es el ganador/
-      // dueño/admin (los otros niveles no dependen de la invitación).
-      let isInvitedTechnician = false;
-      const viewerIsTech = userRole === 'tecnico' || userRole === 'admin';
-      const alreadyFull =
-        effectiveSystemAdmin ||
-        userRole === 'admin' ||
-        cCase.doctorId === userId ||
-        cCase.assignedTechnicianId === userId;
-      if (viewerIsTech && !alreadyFull && userId) {
-        const [inv] = await db
-          .select({ id: caseInvitation.id })
-          .from(caseInvitation)
-          .where(
-            and(
-              eq(caseInvitation.clinicalCaseId, caseId),
-              eq(caseInvitation.technicianId, userId as string),
-            ),
-          )
-          .limit(1);
-        isInvitedTechnician = !!inv;
-      }
-
       const disclosure = getDoctorAddressDisclosure({
         isSystemAdmin: effectiveSystemAdmin,
         role: userRole as string,
         userId: (userId as string) ?? null,
         assignedTechnicianId: cCase.assignedTechnicianId,
         doctorId: cCase.doctorId,
-        isInvitedTechnician,
-        needsFabrication: Boolean(cCase.needsFabrication),
+        isInvitedTechnician: false,
+        needsFabrication: false,
       });
 
       if (disclosure !== 'full') {
@@ -1279,216 +1256,7 @@ export async function getDeliveryFilesAction(deliveryId: string) {
   }
 }
 
-export async function transitionToManufacturingAction(caseId: string): Promise<ActionResult> {
-  const identity = await getServerIdentity();
-  if (!identity?.id) return { success: false, error: "No autorizado" };
-
-  try {
-    const [existing] = await db
-      .select({
-        status: clinicalCase.status,
-        assignedTechnicianId: clinicalCase.assignedTechnicianId,
-        needsFabrication: clinicalCase.needsFabrication,
-        serviceType: clinicalCase.serviceType,
-        doctorId: clinicalCase.doctorId,
-      })
-      .from(clinicalCase)
-      .where(eq(clinicalCase.id, caseId))
-      .limit(1);
-
-    if (!existing) return { success: false, error: "Caso no encontrado" };
-    if (existing.status !== CASE_STATUSES.DISENO_APROBADO) {
-      return { success: false, error: "El caso no está en diseño aprobado" };
-    }
-    if (existing.assignedTechnicianId !== identity.id) {
-      return { success: false, error: "Solo el técnico asignado puede iniciar fabricación" };
-    }
-    const mayManufacture =
-      existing.serviceType === 'integral' || Boolean(existing.needsFabrication);
-    if (!mayManufacture) {
-      return { success: false, error: "Este caso no tiene fase de fabricación en plataforma" };
-    }
-
-    const [updated] = await db
-      .update(clinicalCase)
-      .set({
-        status: CASE_STATUSES.EN_FABRICACION,
-        completedAt: null,
-        currentResponsibility: 'tecnico',
-        lastActivityAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(clinicalCase.id, caseId),
-          eq(clinicalCase.status, CASE_STATUSES.DISENO_APROBADO),
-          eq(clinicalCase.assignedTechnicianId, identity.id as string),
-        ),
-      )
-      .returning();
-
-    if (!updated) {
-      return { success: false, error: "No se pudo actualizar el caso (estado ya cambió)" };
-    }
-
-    await logCaseEvent({
-      caseId,
-      userId: identity.id as string,
-      type: 'tecnico',
-      action: CASE_EVENTS.FABRICACION_INICIADA,
-      content: 'He iniciado la fase de fabricación física.',
-      payload: { visibleTo: 'ambos' },
-      stateChange: { from: CASE_STATUSES.DISENO_APROBADO, to: CASE_STATUSES.EN_FABRICACION },
-    });
-    await notifyUser(updated.doctorId as string, 'FABRICACION_INICIADA', { caseId });
-
-    return { success: true };
-  } catch (error) {
-    console.error("[transitionToManufacturingAction] Error:", error);
-    return { success: false, error: "Fallo al iniciar fabricación" };
-  }
-}
-
-/**
- * El dentista aprueba el trabajo y cierra el caso.
- */
-export async function registerDispatchAction(caseId: string, dispatchData: { courier: string, trackingId: string, photos?: string[], dispatchMode?: 'interno' | 'externo' }) {
-  const identity = await getServerIdentity();
-  if (!identity?.id) return { success: false, error: "No autorizado" };
-
-  const trackingId = String(dispatchData.trackingId ?? '').trim();
-  const courier = String(dispatchData.courier ?? '').trim() || 'Interno';
-  if (!trackingId || trackingId.toUpperCase() === 'N/A') {
-    return {
-      success: false,
-      error: 'Indica un número de seguimiento, enlace o referencia de despacho.',
-    };
-  }
-
-  // Despacho externo: el transportista debe ser uno del allowlist de ContactGuard
-  // (no texto libre), para cerrar una vía de desintermediación. Validación
-  // server-side aunque el cliente ya muestre un desplegable.
-  if (dispatchData.dispatchMode === 'externo') {
-    const couriers = await db
-      .select({ domain: contactGuardCourierAllowlist.domain, label: contactGuardCourierAllowlist.label })
-      .from(contactGuardCourierAllowlist)
-      .where(eq(contactGuardCourierAllowlist.isActive, true));
-    const norm = (s: string) => s.trim().toLowerCase();
-    const allowed = new Set<string>();
-    for (const c of couriers) {
-      allowed.add(norm(c.domain));
-      if (c.label?.trim()) allowed.add(norm(c.label));
-    }
-    if (!allowed.has(norm(courier))) {
-      return { success: false, error: 'Selecciona un transportista válido de la lista.' };
-    }
-  }
-
-  const guarded = await guardTextOrFail({
-    actionName: 'registerDispatchAction',
-    caseId,
-    identity: { id: identity.id, orgId: identity.orgId, role: identity.role },
-    fields: [
-      { text: trackingId, field: 'dispatchTracking' },
-      { text: courier, field: 'dispatchCourier' },
-    ],
-  });
-  if (!guarded.ok) return { success: false, error: guarded.error };
-
-  try {
-    const [updated] = await db.update(clinicalCase)
-      .set({
-        status: 'enviado',
-        dispatchInfo: {
-          ...dispatchData,
-          courier,
-          trackingId,
-          status: 'shipped',
-          shippedAt: new Date().toISOString(),
-        },
-        lastActivityAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(and(
-        eq(clinicalCase.id, caseId),
-        eq(clinicalCase.assignedTechnicianId, identity.id as string)
-      ))
-      .returning();
-
-    if (updated) {
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'tecnico',
-        action: CASE_EVENTS.CASO_DESPACHADO,
-        content: `He registrado el despacho vía ${courier}. Tracking: ${trackingId}`,
-        payload: { courier, trackingId, photos: dispatchData.photos, visibleTo: 'ambos' },
-        stateChange: { from: 'fabricacion', to: 'despachado' }
-      });
-      await notifyUser(updated.doctorId as string, 'CASO_DESPACHADO', {
-        caseId,
-        trackingId: dispatchData.trackingId,
-      });
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error("[registerDispatchAction] Error:", error);
-    return { success: false, error: "Fallo al registrar despacho" };
-  }
-}
-
-export async function confirmReceptionAction(caseId: string): Promise<ActionResult> {
-  const identity = await getServerIdentity();
-  if (!identity?.id) return { success: false, error: "No autorizado" };
-
-  try {
-    const [updated] = await db.update(clinicalCase)
-      .set({
-        status: 'completado',
-        dispatchInfo: sql`dispatch_info || '{"status": "delivered"}'::jsonb`,
-        currentResponsibility: null,
-        lastActivityAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(and(
-        eq(clinicalCase.id, caseId),
-        eq(clinicalCase.doctorId, identity.id as string)
-      ))
-      .returning();
-
-    if (updated && updated.assignedTechnicianId) {
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'sistema',
-        action: CASE_EVENTS.RECEPCION_CONFIRMADA,
-        content: 'He confirmado la recepción física de la pieza.',
-        payload: { visibleTo: 'dentista' },
-        stateChange: { from: 'despachado', to: 'completado' }
-      });
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'sistema',
-        action: CASE_EVENTS.RECEPCION_CONFIRMADA,
-        content: 'El solicitante confirmó la recepción del trabajo.',
-        payload: { visibleTo: 'tecnico' },
-      });
-      await notifyUser(updated.assignedTechnicianId, 'RECEPCION_CONFIRMADA', { caseId });
-    }
-
-    // Caso cerrado en estado terminal: marca archivos para lifecycle policy.
-    await archiveCaseFilesBestEffort(caseId);
-
-    return { success: true };
-  } catch (error) {
-    console.error("[confirmReceptionAction] Error:", error);
-    return { success: false, error: "Fallo al confirmar recepción" };
-  }
-}
-
-export async function submitUserRatingAction(data: { caseId: string, revieweeId: string, rating: number, dimension?: 'design' | 'fabrication', comment?: string }) {
+export async function submitUserRatingAction(data: { caseId: string, revieweeId: string, rating: number, dimension?: 'design', comment?: string }) {
   const identity = await getServerIdentity();
   if (!identity?.id) return { success: false, error: "No autorizado" };
 
@@ -1497,8 +1265,7 @@ export async function submitUserRatingAction(data: { caseId: string, revieweeId:
   if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
     return { success: false, error: "La calificación debe estar entre 1 y 5" };
   }
-  // CAD = 'design', CAM = 'fabrication'. Default 'design' por retrocompatibilidad.
-  const dimension: 'design' | 'fabrication' = data.dimension === 'fabrication' ? 'fabrication' : 'design';
+  const dimension: 'design' = 'design';
 
   // El comentario queda visible para el técnico (de forma anónima): debe pasar por
   // ContactGuard como cualquier campo libre para impedir desintermediación.
@@ -1546,10 +1313,7 @@ export async function submitUserRatingAction(data: { caseId: string, revieweeId:
 
       const skills = await db.select().from(technicianSkill).where(eq(technicianSkill.userId, data.revieweeId));
       for (const skill of skills) {
-        const set =
-          dimension === 'design'
-            ? { effectiveDesignLevel: Math.max(1, (skill.designLevel ?? 1) - penalty) }
-            : { effectiveFabricationLevel: skill.fabricationLevel ? Math.max(0, skill.fabricationLevel - penalty) : 0 };
+        const set = { effectiveDesignLevel: Math.max(1, (skill.designLevel ?? 1) - penalty) };
         await db.update(technicianSkill)
           .set(set)
           .where(and(eq(technicianSkill.userId, data.revieweeId), eq(technicianSkill.workType, skill.workType)));
@@ -1562,7 +1326,7 @@ export async function submitUserRatingAction(data: { caseId: string, revieweeId:
     // (árbitro) y la presenta como propia ("Yo") al dentista que la emitió.
     // `ratingComment` se oculta al técnico vía sanitizeUchPayloadForViewer.
     try {
-      const dimensionLabel = dimension === 'fabrication' ? 'fabricación (CAM)' : 'diseño (CAD)';
+      const dimensionLabel = 'diseño (CAD)';
       const content = `Calificación de ${dimensionLabel}: ${rating}/5`;
       const payload = {
         dimension,
@@ -1646,34 +1410,10 @@ export async function approveWorkAction(
         WHERE clinical_case_id = ${caseId} AND status = 'pending'
       `);
 
-      // 2. Datos del caso para decidir el siguiente estado (fabricación sigue al diseño si el caso la incluye).
-      const [caseData] = await tx
-        .select({
-          needsFabrication: clinicalCase.needsFabrication,
-          serviceType: clinicalCase.serviceType,
-        })
-        .from(clinicalCase)
-        .where(eq(clinicalCase.id, caseId))
-        .limit(1);
+      const nextStatus = 'completado';
+      const isTerminalDesign = true;
 
-      const isSoloDiseno = caseData?.serviceType
-        ? caseData.serviceType === 'solo_diseno'
-        : !caseData?.needsFabrication;
-      const shouldGoToFabrication = !isSoloDiseno && Boolean(caseData?.needsFabrication);
-      // Modelo v3: solo_diseno → completado. Casos con fabricación (integral / legacy needsFabrication) → enFabricacion.
-      const nextStatus = shouldGoToFabrication
-        ? 'enFabricacion'
-        : isSoloDiseno
-          ? 'completado'
-          : 'disenoAprobado';
-      const isTerminalDesign = nextStatus === 'completado' || nextStatus === 'disenoAprobado';
-
-      const baseUchMessage =
-        nextStatus === 'completado'
-          ? 'He aprobado el diseño. El caso ha sido completado.'
-          : nextStatus === 'disenoAprobado'
-            ? 'He aprobado el diseño. El flujo de diseño ha finalizado.'
-            : 'He aprobado el diseño. El caso pasa a fase de fabricación física.';
+      const baseUchMessage = 'He aprobado el diseño. El caso ha sido completado.';
       const uchContent = approvalNote
         ? `${baseUchMessage}\n\nComentario:\n${approvalNote}`
         : baseUchMessage;
@@ -1715,8 +1455,7 @@ export async function approveWorkAction(
       return { success: true as const, terminal: isTerminalDesign };
     });
 
-    // Si el caso quedó en estado terminal de diseño (completado / disenoAprobado),
-    // marca los archivos para que la lifecycle policy los migre a clases más baratas.
+    // Caso completado: marca archivos para que la lifecycle policy los migre a clases más baratas.
     if (txResult.success && txResult.terminal) {
       await archiveCaseFilesBestEffort(caseId);
     }
@@ -2580,7 +2319,7 @@ export async function cloneCaseFromTerminalAction(
         doctorId: userId,
         internalName: source.internalName,
         materialId: source.materialId,
-        needsFabrication: source.needsFabrication,
+        needsFabrication: false,
         notesEsthetic: source.notesEsthetic,
         notesOclusal: source.notesOclusal,
         patientIdAnon: source.patientIdAnon,
@@ -2588,7 +2327,7 @@ export async function cloneCaseFromTerminalAction(
         shadeId: source.shadeId,
         teeth: source.teeth,
         urgencyId: source.urgencyId,
-        serviceType: source.serviceType,
+        serviceType: 'solo_diseno',
         caseComplexity: source.caseComplexity,
         specialInstructions: source.specialInstructions,
         doctorNotes: null,

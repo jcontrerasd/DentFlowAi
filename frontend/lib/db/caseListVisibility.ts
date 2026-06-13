@@ -71,15 +71,11 @@ export async function userCanAccessClinicalCase(
 export type DoctorAddressDisclosure = 'full' | 'coarse' | 'none';
 
 /**
- * ¿Qué nivel de dirección del dentista puede ver el viewer? (v5.8)
+ * ¿Qué nivel de dirección del dentista puede ver el viewer? (v5.8, simplificado solo_diseno)
  *
- * Tres niveles para soportar la cotización del traslado sin filtrar la dirección exacta:
- * - `full`   → admin (supervisión), dentista dueño (es su propia dirección) y el técnico
- *   GANADOR (el asignado, que debe despachar la fabricación).
- * - `coarse` → cualquier OTRO técnico invitado al caso (cotizando o ya perdedor) cuando el
- *   caso incluye fabricación: ve país/región/comuna para estimar el traslado, pero NUNCA
- *   la dirección fina (privacidad / evitar saltarse el marketplace).
- * - `none`   → el resto (sin invitación al caso, viewer anónimo, o caso sin fabricación).
+ * Sin fabricación no hay traslado físico, por lo que el nivel `coarse` ya no aplica.
+ * - `full`  → admin, dentista dueño y técnico asignado.
+ * - `none`  → el resto.
  *
  * Predicado puro (sin DB) para reutilizarlo en `getCaseDetails` y testearlo aislado.
  */
@@ -92,20 +88,11 @@ export function getDoctorAddressDisclosure(input: {
   isInvitedTechnician: boolean;
   needsFabrication: boolean;
 }): DoctorAddressDisclosure {
-  const {
-    isSystemAdmin,
-    role,
-    userId,
-    assignedTechnicianId,
-    doctorId,
-    isInvitedTechnician,
-    needsFabrication,
-  } = input;
+  const { isSystemAdmin, role, userId, assignedTechnicianId, doctorId } = input;
   if (isSystemAdmin || role === 'admin') return 'full';
   if (userId == null) return 'none';
   if (doctorId === userId) return 'full';
   if (assignedTechnicianId === userId) return 'full';
-  if (isInvitedTechnician && needsFabrication) return 'coarse';
   return 'none';
 }
 

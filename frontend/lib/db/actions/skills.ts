@@ -2,7 +2,7 @@
 import { canActAsTecnico } from "@/lib/auth-helpers";
 import { db } from '@/lib/db';
 import { technicianSkill, user, caseInvitation, technicianAvailability } from '@/lib/db/schema';
-import { eq, and, or, gt } from 'drizzle-orm';
+import { eq, and, gt } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { WORK_TYPES } from '@/lib/constants/dental';
 import { ensureTechnicianAvailabilityAction } from './availability';
@@ -10,15 +10,12 @@ import { ensureTechnicianAvailabilityAction } from './availability';
 export type SkillRow = {
   workType: string;
   designLevel: number;
-  fabricationLevel: number;
   effectiveDesignLevel: number | null;
-  effectiveFabricationLevel: number | null;
 };
 
 export type SkillInput = {
   workType: string;
   designLevel: number;
-  fabricationLevel: number;
 };
 
 // S1-01 — Retorna las skills del técnico autenticado
@@ -42,9 +39,7 @@ export async function getMySkillsAction(): Promise<SkillRow[]> {
     return {
       workType: wt,
       designLevel: existing?.designLevel ?? 0,
-      fabricationLevel: existing?.fabricationLevel ?? 0,
       effectiveDesignLevel: existing?.effectiveDesignLevel ?? null,
-      effectiveFabricationLevel: existing?.effectiveFabricationLevel ?? null,
     };
   });
 }
@@ -64,27 +59,21 @@ export async function updateSkillsAction(skills: SkillInput[]) {
     if (s.designLevel < 0 || s.designLevel > 7) {
       return { success: false, error: `Nivel de diseño inválido para ${s.workType}` };
     }
-    if (s.fabricationLevel < 0 || s.fabricationLevel > 7) {
-      return { success: false, error: `Nivel de fabricación inválido para ${s.workType}` };
-    }
   }
 
-  const hasMeaningfulSkill = skills.some(
-    s => s.designLevel > 0 || s.fabricationLevel > 0,
-  );
+  const hasMeaningfulSkill = skills.some(s => s.designLevel > 0);
   if (!hasMeaningfulSkill) {
     return {
       success: false,
-      error:
-        'Debes declarar al menos un tipo de trabajo con nivel mayor a 0 en diseño (CAD) o fabricación (CAM)',
+      error: 'Debes declarar al menos un tipo de trabajo con nivel mayor a 0 en diseño (CAD)',
     };
   }
 
   try {
     // Upsert usando INSERT ... ON CONFLICT DO UPDATE
     for (const skill of skills) {
-      if (skill.designLevel === 0 && skill.fabricationLevel === 0) {
-        // Si ambos en 0 → eliminar la fila si existe
+      if (skill.designLevel === 0) {
+        // Si diseño en 0 → eliminar la fila si existe
         await db.delete(technicianSkill).where(
           and(eq(technicianSkill.userId, identity.id), eq(technicianSkill.workType, skill.workType))
         );
@@ -94,14 +83,14 @@ export async function updateSkillsAction(skills: SkillInput[]) {
             userId: identity.id,
             workType: skill.workType,
             designLevel: skill.designLevel,
-            fabricationLevel: skill.fabricationLevel,
+            fabricationLevel: 0,
             updatedAt: new Date(),
           })
           .onConflictDoUpdate({
             target: [technicianSkill.userId, technicianSkill.workType],
             set: {
               designLevel: skill.designLevel,
-              fabricationLevel: skill.fabricationLevel,
+              fabricationLevel: 0,
               updatedAt: new Date(),
             },
           });
@@ -235,10 +224,7 @@ export async function technicianHasSkills(userId: string): Promise<boolean> {
     .where(
       and(
         eq(technicianSkill.userId, userId),
-        or(
-          gt(technicianSkill.designLevel, 0),
-          gt(technicianSkill.fabricationLevel, 0),
-        ),
+        gt(technicianSkill.designLevel, 0),
       ),
     )
     .limit(1);
