@@ -1,13 +1,6 @@
 /**
- * v4.6 — Cálculo de deadlines respetando calendario laboral configurable.
- * Usado por startWorkAction para computar workDeadline a partir de plazos
- * cotizados en días y/o horas.
- *
- * Reglas:
- * - businessDaysMask: bitmask, bit 0=Lun, 1=Mar, 2=Mié, 3=Jue, 4=Vie, 5=Sáb, 6=Dom.
- * - holidays: lista de fechas YYYY-MM-DD que se saltan igual que un día no laborable.
- * - business hours [startHour, endHour): un slot horario abierto a la izquierda.
- *   Ej: startHour=8, endHour=20 → la jornada cubre 12 h.
+ * @deprecated Legacy v4.6 — calendario laboral configurable. Ya no se usa en runtime;
+ * workDeadline = desiredDeliveryAt del dentista. Se mantiene para tests unitarios.
  */
 
 export type BusinessCalendar = {

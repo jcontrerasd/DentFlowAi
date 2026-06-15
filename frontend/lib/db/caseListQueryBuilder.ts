@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { clinicalCase, caseInvitation, organization } from '@/lib/db/schema';
+import { clinicalCase, caseAssignment, organization } from '@/lib/db/schema';
 import { alias } from 'drizzle-orm/pg-core';
 import {
   and,
@@ -111,17 +111,17 @@ function invitationExistsSubquery(
   options?: { allowWithdrawn?: boolean },
 ) {
   const conditions: SQL[] = [
-    eq(caseInvitation.clinicalCaseId, clinicalCase.id),
-    eq(caseInvitation.technicianId, technicianId),
+    eq(caseAssignment.clinicalCaseId, clinicalCase.id),
+    eq(caseAssignment.technicianId, technicianId),
   ];
   if (!options?.allowWithdrawn) {
-    conditions.push(ne(caseInvitation.status, 'withdrawn'));
+    conditions.push(ne(caseAssignment.status, 'withdrawn'));
   }
   if (extra) conditions.push(extra);
   return exists(
     db
       .select({ x: sql`1` })
-      .from(caseInvitation)
+      .from(caseAssignment)
       .where(and(...conditions)),
   );
 }
@@ -311,7 +311,7 @@ export function buildCaseListFilterWhere(
       parts.push(
         invitationExistsSubquery(
           userId,
-          gte(caseInvitation.invitedAt, parseDateStart(filters.offerDateStart)),
+          gte(caseAssignment.assignedAt, parseDateStart(filters.offerDateStart)),
         ),
       );
     }
@@ -319,7 +319,7 @@ export function buildCaseListFilterWhere(
       parts.push(
         invitationExistsSubquery(
           userId,
-          lte(caseInvitation.invitedAt, parseDateEnd(filters.offerDateEnd)),
+          lte(caseAssignment.assignedAt, parseDateEnd(filters.offerDateEnd)),
         ),
       );
     }

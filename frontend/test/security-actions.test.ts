@@ -91,7 +91,7 @@ describe('STAB-033 — withdrawCaseAction', () => {
 
 // ─── STAB-034: createBidAction security ──────────────────────────────────────
 
-// STAB-034 removed — createBidAction deleted (replaced by submitQuoteAction via caseInvitation)
+// STAB-034 removed — createBidAction deleted (replaced by submitQuoteAction via caseAssignment)
 
 // ─── STAB-035: getSignedUrlAction security ───────────────────────────────────
 

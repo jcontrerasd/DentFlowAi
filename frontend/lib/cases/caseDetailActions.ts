@@ -37,6 +37,9 @@ export type GetCaseDetailActionStateInput = {
   invitationStatus?: string | null;
   assignedTechnicianId?: string | null;
   viewerId?: string | null;
+  /** Snapshot de precio de lista en borrador (v5.8) */
+  hasListPrice?: boolean;
+  hasDesiredDeliveryAt?: boolean;
 };
 
 function action(
@@ -70,12 +73,16 @@ function dentistActions(input: GetCaseDetailActionStateInput): CaseDetailActions
           : 'No hay cambios por guardar',
     ),
     publish: action(
-      draft && !published,
+      draft && !published && !!input.hasListPrice && !!input.hasDesiredDeliveryAt,
       published
         ? 'Este caso ya fue publicado'
-        : draft
-          ? undefined
-          : 'Solo disponible en borrador',
+        : !draft
+          ? 'Solo disponible en borrador'
+          : !input.hasListPrice
+            ? 'Define un precio de lista para esta combinación (o espera a que el equipo lo configure)'
+            : !input.hasDesiredDeliveryAt
+              ? 'Indica la fecha de entrega deseada antes de publicar'
+              : undefined,
     ),
     edit: action(draft, 'Solo disponible en borrador'),
     delete: action(

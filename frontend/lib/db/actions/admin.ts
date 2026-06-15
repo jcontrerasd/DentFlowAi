@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { user, organization, clinicalCase, bid, file, annotation, accounts, sessions, review, caseInvitation, clinicalCaseDelivery, clinicalCaseEvent, commercialRound, contactGuardAudit, auditLog, technicianNoResponseEvent } from "@/lib/db/schema";
+import { user, organization, clinicalCase, bid, file, annotation, accounts, sessions, review, caseAssignment, clinicalCaseDelivery, clinicalCaseEvent, commercialRound, contactGuardAudit, auditLog, technicianNoResponseEvent } from "@/lib/db/schema";
 import { eq, ne, desc, sql } from "drizzle-orm";
 import * as bcrypt from "bcryptjs";
 import GCPStorageService from "@/lib/services/gcp-storage";
@@ -289,14 +289,14 @@ export async function purgeAllBusinessDataAdmin(): Promise<PurgeReport> {
     const delDeliveries = await db.delete(clinicalCaseDelivery).returning({ id: clinicalCaseDelivery.id });
     log('clinicalCaseDelivery', 'Entregas de trabajo', delDeliveries.length);
 
-    // v5.0: eventos de no-respuesta (sanción rolling). Borrar antes de caseInvitation:
+    // v5.0: eventos de no-respuesta (sanción rolling). Borrar antes de caseAssignment:
     // su FK case_invitation_id es SET NULL, pero la purga limpia el historial completo.
     // technician_availability NO se toca (declaración personal del técnico, modo never).
     const delNoResponseEvents = await db.delete(technicianNoResponseEvent).returning({ id: technicianNoResponseEvent.id });
     log('technicianNoResponseEvent', 'Eventos de no-respuesta (sanción rolling)', delNoResponseEvents.length);
 
-    const delInvitations = await db.delete(caseInvitation).returning({ id: caseInvitation.id });
-    log('caseInvitation', 'Invitaciones a técnicos', delInvitations.length);
+    const delInvitations = await db.delete(caseAssignment).returning({ id: caseAssignment.id });
+    log('caseAssignment', 'Invitaciones a técnicos', delInvitations.length);
 
     const delRounds = await db.delete(commercialRound).returning({ id: commercialRound.id });
     log('commercialRound', 'Rondas comerciales', delRounds.length);

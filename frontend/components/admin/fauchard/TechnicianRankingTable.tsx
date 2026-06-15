@@ -92,7 +92,7 @@ export default function TechnicianRankingTable({ data }: TechnicianRankingTableP
               <th className="px-6 py-5">Score Actual</th>
               <th className="px-6 py-5">Desempeño (30d)</th>
               <th className="px-6 py-5">Tasa Resp.</th>
-              <th className="px-6 py-5">Últ. Inv.</th>
+              <th className="px-6 py-5">Últ. Asig.</th>
               <th className="px-6 py-5 text-center">Estado</th>
             </tr>
           </thead>
@@ -137,27 +137,29 @@ export default function TechnicianRankingTable({ data }: TechnicianRankingTableP
                 <td className="px-6 py-5">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 text-[10px] font-medium text-muted">
-                      <span>Inv: <b className="text-foreground">{t.invitationsCount}</b></span>
+                      <span>Asig: <b className="text-foreground">{t.assignmentsCount ?? t.invitationsCount ?? 0}</b></span>
                       <span className="w-1 h-1 bg-surface-off rounded-full" />
-                      <span>Gan: <b className="text-primary">{t.acceptedCount}</b></span>
+                      <span>Acept: <b className="text-primary">{t.acceptedCount ?? 0}</b></span>
+                      <span className="w-1 h-1 bg-surface-off rounded-full" />
+                      <span>Exp: <b className="text-warning">{t.expiredCount ?? 0}</b></span>
                     </div>
                     <div className="w-20 h-1 bg-surface-2 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-primary" 
-                        style={{ width: `${t.winRate * 100}%` }} 
+                      <div
+                        className="h-full bg-primary"
+                        style={{ width: `${(t.acceptRate ?? t.winRate ?? 0) * 100}%` }}
                       />
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-5">
-                  <span className={`text-[10px] font-mono font-bold ${t.responseRate > 0.8 ? 'text-primary' : t.responseRate > 0.5 ? 'text-warning' : 'text-error'}`}>
-                    {(t.responseRate * 100).toFixed(0)}%
+                  <span className={`text-[10px] font-mono font-bold ${(t.technicianResponseRate ?? t.responseRate ?? 0) > 0.8 ? 'text-primary' : (t.technicianResponseRate ?? t.responseRate ?? 0) > 0.5 ? 'text-warning' : 'text-error'}`}>
+                    {((t.technicianResponseRate ?? t.responseRate ?? 0) * 100).toFixed(0)}%
                   </span>
                 </td>
                 <td className="px-6 py-5">
                   <div className="flex items-center gap-1.5 text-[10px] font-medium text-faint">
                     <Clock className="w-3 h-3" />
-                    {t.daysWithoutInvitation === 999 ? 'Nunca' : `${t.daysWithoutInvitation}d ago`}
+                    {(t.daysWithoutAssignment ?? t.daysWithoutInvitation) === 999 ? 'Nunca' : `${t.daysWithoutAssignment ?? t.daysWithoutInvitation}d ago`}
                   </div>
                 </td>
                 <td className="px-6 py-5">

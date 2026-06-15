@@ -73,6 +73,8 @@ async function sendViaEmailJS(params: { subject: string; toEmail: string; body: 
 
 export type NotificationType =
   | 'NUEVA_INVITACION'
+  | 'NUEVA_ASIGNACION'
+  | 'ASIGNACION_ACEPTADA'
   | 'TRABAJO_CONFIRMADO'
   /** Dentista: Fauchard confirma que la contraparte técnica inició el plazo (no usar TRABAJO_CONFIRMADO, es plantilla de técnico). */
   | 'FAUCHARD_INICIO_PLAZO_DENTISTA'
@@ -139,8 +141,16 @@ export function channelsForNotification(type: NotificationType): NotificationCha
 
 const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) => string }> = {
   NUEVA_INVITACION: {
-    subject: 'Fauchard: nueva invitación de trabajo',
-    body: (data) => `Hola ${data.name},\n\nFauchard te informa que tienes una nueva invitación para cotizar un caso en DentFlowAi. Responde antes de las ${data.deadline} para participar.\n\nVer casos: ${baseUrl()}/dashboard/cases?preset=nuevas`,
+    subject: 'Fauchard: nueva asignación de trabajo',
+    body: (data) => `Hola ${data.name},\n\nFauchard te informa que tienes una nueva asignación de diseño en DentFlowAi. Responde antes de las ${data.deadline}.\n\nVer casos: ${baseUrl()}/dashboard/cases?preset=nuevas`,
+  },
+  NUEVA_ASIGNACION: {
+    subject: 'Fauchard: nueva asignación de trabajo',
+    body: (data) => `Hola ${data.name},\n\nFauchard te informa que tienes una nueva asignación de diseño en DentFlowAi. Responde antes de las ${data.deadline}.\n\nVer casos: ${baseUrl()}/dashboard/cases?preset=nuevas`,
+  },
+  ASIGNACION_ACEPTADA: {
+    subject: 'Fauchard: asignación aceptada — trabajo en curso',
+    body: (data) => `Hola,\n\nFauchard confirma que un técnico aceptó la asignación del caso ${data.caseNumber || data.caseId}. El trabajo puede iniciar.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
   TRABAJO_CONFIRMADO: {
     subject: 'Fauchard: tu propuesta fue seleccionada',

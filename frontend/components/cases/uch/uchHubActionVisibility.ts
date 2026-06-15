@@ -58,7 +58,7 @@ export function computeIncludeCaseActionTimeline(p: ComputeIncludeCaseActionTime
   const isAssignedWinner = !!(p.currentUserId && p.clinicalCase?.assignedTechnicianId === p.currentUserId);
   if (!p.actingAsTecnico || !isAssignedWinner) return false;
 
-  if (p.caseStatus === 'aceptadaPendienteInicio' && p.myInvitation?.status === 'confirmed') {
+  if (p.caseStatus === 'aceptadaPendienteInicio' && p.myInvitation?.status === 'accepted') {
     if (p.clinicalCase?.workStartedAt) return false;
     if (timelineEventsInclude(p.timelineEvents, ['TRABAJO_INICIADO'])) return false;
     return true;

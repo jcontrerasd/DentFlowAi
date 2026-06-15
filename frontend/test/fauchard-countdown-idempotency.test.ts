@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { db } from '@/lib/db';
-import { clinicalCase, caseInvitation, user, fauchardConfig } from '@/lib/db/schema';
+import { clinicalCase, caseAssignment, user, fauchardConfig } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import {
   evaluateQuotesAction,
@@ -52,8 +52,8 @@ describe.runIf(runIntegration)('fauchard countdown idempotency', () => {
 
     const [inv] = await db
       .select()
-      .from(caseInvitation)
-      .where(eq(caseInvitation.clinicalCaseId, caseId))
+      .from(caseAssignment)
+      .where(eq(caseAssignment.clinicalCaseId, caseId))
       .limit(1);
 
     if (!inv) throw new Error('No invitation');

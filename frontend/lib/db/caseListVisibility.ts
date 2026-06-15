@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { clinicalCase, caseInvitation } from '@/lib/db/schema';
+import { clinicalCase, caseAssignment } from '@/lib/db/schema';
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { canActAsTecnico } from '@/lib/auth-helpers';
 import {
@@ -41,12 +41,12 @@ export async function userCanAccessClinicalCase(
   if (canActAsTecnico(role) && role !== 'admin') {
     if (caseRow.assignedTechnicianId === userId) return true;
     const [inv] = await db
-      .select({ id: caseInvitation.id })
-      .from(caseInvitation)
+      .select({ id: caseAssignment.id })
+      .from(caseAssignment)
       .where(
         and(
-          eq(caseInvitation.clinicalCaseId, caseId),
-          eq(caseInvitation.technicianId, userId),
+          eq(caseAssignment.clinicalCaseId, caseId),
+          eq(caseAssignment.technicianId, userId),
         ),
       )
       .limit(1);
@@ -114,9 +114,9 @@ export async function buildActiveCaseVisibilityWhere(
 
   if (canActAsTecnico(role) && role !== 'admin') {
     const techInvs = await db
-      .select({ caseId: caseInvitation.clinicalCaseId })
-      .from(caseInvitation)
-      .where(eq(caseInvitation.technicianId, userId));
+      .select({ caseId: caseAssignment.clinicalCaseId })
+      .from(caseAssignment)
+      .where(eq(caseAssignment.technicianId, userId));
 
     const techCaseIds = techInvs.map((i) => i.caseId);
 

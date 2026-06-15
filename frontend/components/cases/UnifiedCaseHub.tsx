@@ -6,7 +6,7 @@ import { Activity, AlertCircle, Clock, X, Send, CheckCircle2, XCircle, ArrowUp }
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getSignedUrlAction } from '@/lib/db/actions/cases';
-import { submitQuoteAction } from '@/lib/db/actions/fauchard';
+import { acceptAssignmentAction } from '@/lib/db/actions/assignment';
 import { dispatchDashboardMetricsRefresh } from '@/lib/dashboard/dashboardRefresh';
 import { useToast } from '@/context/ToastContext';
 import type { InvitationItem } from '@/lib/db/actions/invitations';
@@ -22,6 +22,8 @@ import UchDeliveryPanel, { newDeliveryEntry } from '@/components/cases/uch/UchDe
 import type { DeliveryFileEntry } from '@/components/cases/uch/UchDeliveryPanel';
 import UchDentistReviewPanel from '@/components/cases/uch/UchDentistReviewPanel';
 import UchFauchardActionsPanel from '@/components/cases/uch/UchFauchardActionsPanel';
+import { CaseDesiredDeliveryChip } from '@/components/cases/CaseDesiredDeliveryChip';
+import { shouldShowDesiredDeliveryInUch } from '@/lib/cases/caseDeliveryPresentation';
 import UchRatingPanel from '@/components/cases/uch/UchRatingPanel';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { useRemainingMsUntil, formatCountdownHMS } from '@/lib/hooks/useRemainingUntil';
@@ -555,50 +557,26 @@ export default function UnifiedCaseHub({
       showError('Ingresa un precio válido mayor a 0');
       return;
     }
-    const res = await submitQuoteAction(myInvitation.id, {
-      kind: 'flat',
-      price: numericPrice,
-      ...(quoteFlatUnit === 'horas'
-        ? { deliveryHours: quoteDays }
-        : { deliveryDays: quoteDays }),
-      notes: quoteNotes || undefined,
-    });
+    const res = await acceptAssignmentAction(myInvitation.id);
     setIsSubmittingQuote(false);
     if (res.success) {
-      showSuccess('Cotización enviada. Te avisaremos si eres seleccionado.');
+      showSuccess('Asignación aceptada.');
       dispatchDashboardMetricsRefresh();
       await onInvitationUpdate?.();
     } else {
-      showError(res.error || 'Error al enviar la cotización');
+      showError(res.error || 'Error al aceptar la asignación');
     }
   };
 
-  const comparative = (clinicalCase as any)?.comparativeOffers as
-    | {
-        invitationId: string;
-        rank: number;
-        totalPriceCLP: number;
-        quotedDays: number | null;
-        quotedHours?: number | null;
-        techNotes: string | null;
-        respondedAt: string | Date | null;
-        designPriceCLP?: number | null;
-        designDays?: number | null;
-        designHours?: number | null;
-      }[]
-    | undefined;
+  const comparativeLength = 0;
 
   const techInvitationPanel =
     !!myInvitation &&
     (
       (caseStatus === 'enEvaluacion' &&
         (myInvitation.status === 'pending' ||
-          myInvitation.status === 'expired' ||
-          myInvitation.status === 'quoted')) ||
-      (caseStatus === 'propuestaLista' &&
-        (myInvitation.status === 'quoted' ||
-          myInvitation.status === 'rejected' ||
-          myInvitation.status === 'pending')) ||
+          myInvitation.status === 'expired')) ||
+      (caseStatus === 'aceptadaPendienteInicio' && myInvitation.status === 'accepted') ||
       (caseStatus === 'cerrado' && myInvitation.status === 'rejected')
     );
 
@@ -618,7 +596,7 @@ export default function UnifiedCaseHub({
     clinicalCase,
     currentUserId: currentUser?.id,
     myInvitation,
-    comparativeLength: comparative?.length ?? 0,
+    comparativeLength,
     techInvitationPanel,
     includeDelivery,
     timelineEvents: filteredEvents as { action: string }[],
@@ -675,7 +653,7 @@ export default function UnifiedCaseHub({
       includeCaseActions,
       includeDelivery,
       primaryAction,
-      comparative?.length ?? 0,
+      comparativeLength,
       uchDeadlineDepMs(clinicalCase?.proposalExpiresAt),
       uchDeadlineDepMs(clinicalCase?.updatedAt),
       uchDeadlineDepMs(clinicalCase?.workDeadline),
@@ -733,6 +711,15 @@ export default function UnifiedCaseHub({
             <div>
               <h3 className="text-sm font-semibold text-foreground tracking-tight">Centro de control</h3>
               <p className="text-[10px] text-faint mt-0.5">Actividad del caso — flujo guiado</p>
+              {shouldShowDesiredDeliveryInUch(caseStatus, clinicalCase?.workDeadline) &&
+                clinicalCase?.desiredDeliveryAt && (
+                <div className="mt-2">
+                  <CaseDesiredDeliveryChip
+                    value={clinicalCase.desiredDeliveryAt}
+                    variant="compact"
+                  />
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -811,11 +798,10 @@ export default function UnifiedCaseHub({
           invitation={
             myInvitation
               ? {
-                  quotedPrice: myInvitation.quotedPrice,
-                  quotedDays: myInvitation.quotedDays,
-                  quotedHours: myInvitation.quotedHours,
+                  compensation: myInvitation.compensation,
+                  deadlineDays: myInvitation.deadlineDays,
+                  deadlineHours: myInvitation.deadlineHours,
                   respondedAt: myInvitation.respondedAt ?? null,
-                  techNotes: myInvitation.techNotes ?? null,
                   status: myInvitation.status,
                 }
               : null
@@ -1044,7 +1030,7 @@ export default function UnifiedCaseHub({
                         actingAsTecnico={actingAsTecnico}
                         clinicalCase={clinicalCase}
                         myInvitation={myInvitation}
-                        comparative={comparative}
+                        comparative={undefined}
                         currentUserId={currentUser?.id}
                         quotePrice={quotePrice}
                         setQuotePrice={setQuotePrice}

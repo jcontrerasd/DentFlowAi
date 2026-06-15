@@ -12,7 +12,7 @@
  */
 
 import { db } from '@/lib/db';
-import { user, caseInvitation, clinicalCase, review, leagueChangeEvent } from '@/lib/db/schema';
+import { user, caseAssignment, clinicalCase, review, leagueChangeEvent } from '@/lib/db/schema';
 import { and, desc, eq, gte, inArray, isNotNull } from 'drizzle-orm';
 import { getActiveConfig, type FauchardConfigRow } from '@/lib/db/actions/fauchard';
 import { isLeagueEngineEnabled } from '@/lib/constants/availabilityFlags';
@@ -24,6 +24,7 @@ import {
   type AscentResult,
   type DescentResult,
 } from '@/lib/league';
+import { isCompletedOnTime } from '@/lib/cases/workDeadline';
 
 /** Surface server-only del flag del motor para Client Components (banner/UI admin). */
 export async function getLeagueEngineEnabledAction(): Promise<{ enabled: boolean }> {
@@ -34,8 +35,7 @@ export async function getLeagueEngineEnabledAction(): Promise<{ enabled: boolean
  * Métricas de elegibilidad de liga para un técnico, sobre los últimos
  * `lCasesEvaluated` casos completados **de su liga actual**.
  *
- * Reutiliza la misma noción de "on-time" del score Fauchard (deadline naive
- * `assignedAt + quotedDays/quotedHours`, ver `calculateScoreFromBulkData`).
+ * Puntualidad alineada al score Fauchard: ventana publishedAt → desiredDeliveryAt.
  */
 export async function computeLeagueMetricsAction(
   technicianId: string,
@@ -59,18 +59,18 @@ export async function computeLeagueMetricsAction(
       .select({
         caseId: clinicalCase.id,
         completedAt: clinicalCase.completedAt,
-        assignedAt: clinicalCase.assignedAt,
-        quotedDays: caseInvitation.quotedDays,
-        quotedHours: caseInvitation.quotedHours,
+        publishedAt: clinicalCase.publishedAt,
+        desiredDeliveryAt: clinicalCase.desiredDeliveryAt,
+        deadlineDays: caseAssignment.deadlineDays,
+        deadlineHours: caseAssignment.deadlineHours,
       })
-      .from(caseInvitation)
-      .innerJoin(clinicalCase, eq(caseInvitation.clinicalCaseId, clinicalCase.id))
+      .from(caseAssignment)
+      .innerJoin(clinicalCase, eq(caseAssignment.clinicalCaseId, clinicalCase.id))
       .where(
         and(
-          eq(caseInvitation.technicianId, technicianId),
-          eq(caseInvitation.status, 'confirmed'),
+          eq(caseAssignment.technicianId, technicianId),
+          eq(caseAssignment.status, 'accepted'),
           isNotNull(clinicalCase.completedAt),
-          isNotNull(clinicalCase.assignedAt),
           eq(clinicalCase.caseLeague, league)
         )
       )
@@ -84,11 +84,12 @@ export async function computeLeagueMetricsAction(
     let onTime = 0;
     let withDeadline = 0;
     for (const c of windowCases) {
-      if (c.assignedAt && c.completedAt && (c.quotedDays || c.quotedHours)) {
-        withDeadline++;
-        const ms = (c.quotedDays ?? 0) * 86_400_000 + (c.quotedHours ?? 0) * 3_600_000;
-        const deadline = new Date(new Date(c.assignedAt).getTime() + ms);
-        if (new Date(c.completedAt) <= deadline) onTime++;
+      if (!c.completedAt) continue;
+      const hasWindow = c.desiredDeliveryAt != null || (c.publishedAt != null && c.deadlineDays != null);
+      if (!hasWindow) continue;
+      withDeadline++;
+      if (isCompletedOnTime(c.completedAt, c.desiredDeliveryAt, c.publishedAt, c.deadlineDays)) {
+        onTime++;
       }
     }
     const punctuality = withDeadline > 0 ? onTime / withDeadline : null;
@@ -174,12 +175,12 @@ export async function evaluateTechnicianAscentAction(
     if (techRow.transitionStartedAt) {
       const completedSince = await db
         .select({ id: clinicalCase.id })
-        .from(caseInvitation)
-        .innerJoin(clinicalCase, eq(caseInvitation.clinicalCaseId, clinicalCase.id))
+        .from(caseAssignment)
+        .innerJoin(clinicalCase, eq(caseAssignment.clinicalCaseId, clinicalCase.id))
         .where(
           and(
-            eq(caseInvitation.technicianId, technicianId),
-            eq(caseInvitation.status, 'confirmed'),
+            eq(caseAssignment.technicianId, technicianId),
+            eq(caseAssignment.status, 'confirmed'),
             isNotNull(clinicalCase.completedAt),
             eq(clinicalCase.caseLeague, league),
             gte(clinicalCase.completedAt, techRow.transitionStartedAt)

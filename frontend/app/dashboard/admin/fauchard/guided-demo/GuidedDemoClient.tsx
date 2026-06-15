@@ -35,7 +35,7 @@ interface Technician {
   load: number;         // active cases
   noResp: number;       // sanction level
   score: number;
-  components: { Q: number; P: number; E: number; C: number; B: number; N: number };
+  components: { Q: number; P: number; E: number; L: number; N: number };
   excluded: boolean;
   exclusionReason?: string;
   invited?: boolean;
@@ -49,49 +49,49 @@ const TECHNICIANS: Technician[] = [
   {
     id: 't1', name: 'Carlos Vega', lab: 'Lab Andes Pro', league: 'Platino', leagueColor: 'text-violet-400',
     quality: 4.8, punctuality: 94, experience: 7, load: 2, noResp: 0,
-    score: 0.847, components: { Q: 0.192, P: 0.141, E: 0.175, C: 0.150, B: 0.120, N: 0.069 },
-    excluded: false, invited: true, responded: true, quote: 148000, deliveryDays: 6,
+    score: 0.847, components: { Q: 0.35, P: 0.22, E: 0.18, L: 0.08, N: 0.02 },
+    excluded: false, invited: true, responded: true,
   },
   {
     id: 't2', name: 'Andrea Rojas', lab: 'Lab Costa Digital', league: 'Oro', leagueColor: 'text-yellow-400',
     quality: 4.5, punctuality: 89, experience: 6, load: 1, noResp: 0,
-    score: 0.791, components: { Q: 0.180, P: 0.134, E: 0.150, C: 0.170, B: 0.100, N: 0.057 },
-    excluded: false, invited: true, responded: true, quote: 132000, deliveryDays: 8,
+    score: 0.791, components: { Q: 0.30, P: 0.20, E: 0.16, L: 0.10, N: 0.03 },
+    excluded: false, invited: false, responded: false,
   },
   {
     id: 't3', name: 'Matías Herrera', lab: 'Lab Roble CAD', league: 'Oro', leagueColor: 'text-yellow-400',
     quality: 4.3, punctuality: 96, experience: 6, load: 3, noResp: 0,
-    score: 0.743, components: { Q: 0.172, P: 0.144, E: 0.150, C: 0.120, B: 0.090, N: 0.067 },
-    excluded: false, invited: true, responded: false, ignored: true, quote: undefined, deliveryDays: undefined,
+    score: 0.743, components: { Q: 0.28, P: 0.21, E: 0.15, L: 0.12, N: 0.04 },
+    excluded: false, invited: false,
   },
   {
     id: 't4', name: 'Sofía Pinto', lab: 'Lab Norte Studio', league: 'Plata', leagueColor: 'text-slate-300',
     quality: 4.1, punctuality: 82, experience: 5, load: 0, noResp: 0,
-    score: 0.698, components: { Q: 0.164, P: 0.123, E: 0.125, C: 0.185, B: 0.080, N: 0.021 },
+    score: 0.698, components: { Q: 0.26, P: 0.18, E: 0.14, L: 0.09, N: 0.02 },
     excluded: false, invited: false,
   },
   {
     id: 't5', name: 'Diego Farías', lab: 'Lab Pino Tech', league: 'Plata', leagueColor: 'text-slate-300',
     quality: 3.9, punctuality: 88, experience: 5, load: 1, noResp: 1,
-    score: 0.651, components: { Q: 0.156, P: 0.132, E: 0.125, C: 0.165, B: 0.060, N: 0.013 },
+    score: 0.651, components: { Q: 0.24, P: 0.17, E: 0.13, L: 0.08, N: 0.05 },
     excluded: false, invited: false,
   },
   {
     id: 't6', name: 'Ignacio Salas', lab: 'Lab Sur CAM', league: 'Bronce', leagueColor: 'text-orange-400',
     quality: 3.7, punctuality: 91, experience: 3, load: 0, noResp: 0,
-    score: 0.512, components: { Q: 0.148, P: 0.137, E: 0.075, C: 0.100, B: 0.050, N: 0.002 },
+    score: 0.512, components: { Q: 0.20, P: 0.15, E: 0.10, L: 0.06, N: 0.01 },
     excluded: true, exclusionReason: 'Liga insuficiente para Zirconia COMPLEJO',
   },
   {
     id: 't7', name: 'Paula Mendoza', lab: 'Lab Río Studio', league: 'Bronce', leagueColor: 'text-orange-400',
     quality: 3.5, punctuality: 78, experience: 3, load: 7, noResp: 2,
-    score: 0.381, components: { Q: 0.140, P: 0.117, E: 0.075, C: 0.020, B: 0.020, N: 0.009 },
+    score: 0.381, components: { Q: 0.15, P: 0.12, E: 0.08, L: 0.03, N: 0.02 },
     excluded: true, exclusionReason: 'Cooldown activo (ignoró invitación hace 1h)',
   },
   {
     id: 't8', name: 'Roberto Calvo', lab: 'Lab Valle Design', league: 'Bronce', leagueColor: 'text-orange-400',
     quality: 3.6, punctuality: 85, experience: 2, load: 2, noResp: 0,
-    score: 0.422, components: { Q: 0.144, P: 0.128, E: 0.050, C: 0.060, B: 0.040, N: 0.000 },
+    score: 0.422, components: { Q: 0.16, P: 0.13, E: 0.07, L: 0.05, N: 0.00 },
     excluded: true, exclusionReason: 'Liga insuficiente para Zirconia COMPLEJO',
   },
 ];
@@ -102,50 +102,38 @@ const TECHNICIANS: Technician[] = [
 
 const PHASES = [
   {
-    id: 0, title: 'Caso Creado',
-    subtitle: 'La dentista abre un nuevo caso en DentFlowAI',
+    id: 0, title: 'Caso Publicado',
+    subtitle: 'La dentista publica el caso; Fauchard recibe el escenario clínico',
     icon: <User className="w-5 h-5" />,
     color: 'text-primary', bg: 'bg-primary-hl', border: 'border-primary/20',
   },
   {
-    id: 1, title: 'Fauchard Evalúa el Pool',
-    subtitle: 'El algoritmo puntúa a todos los técnicos registrados en tiempo real',
+    id: 1, title: 'Clasificación',
+    subtitle: 'Se deriva workType, liga del caso y categoría de disponibilidad',
     icon: <Zap className="w-5 h-5" />,
     color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20',
   },
   {
-    id: 2, title: 'Filtrado y Exclusiones',
-    subtitle: 'Técnicos no elegibles quedan fuera del pool activo',
-    icon: <XCircle className="w-5 h-5" />,
-    color: 'text-error', bg: 'bg-error/10', border: 'border-error/20',
-  },
-  {
-    id: 3, title: 'Invitaciones Enviadas',
-    subtitle: 'Los 3 técnicos con mayor score reciben una notificación instantánea',
-    icon: <Bell className="w-5 h-5" />,
-    color: 'text-jade', bg: 'bg-jade/10', border: 'border-jade/20',
-  },
-  {
-    id: 4, title: 'Ventana de Cotización',
-    subtitle: 'Los técnicos invitados tienen 90 min para enviar su propuesta de precio',
-    icon: <Timer className="w-5 h-5" />,
-    color: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/20',
-  },
-  {
-    id: 5, title: 'Dentista Compara Propuestas',
-    subtitle: 'DentFlowAI presenta las cotizaciones recibidas en una tabla comparativa',
+    id: 2, title: 'Ranking Q/P/E/L/N',
+    subtitle: 'Fauchard puntúa y ordena el pool elegible (determinístico)',
     icon: <Microscope className="w-5 h-5" />,
     color: 'text-primary', bg: 'bg-primary-hl', border: 'border-primary/20',
   },
   {
-    id: 6, title: 'Caso Asignado',
-    subtitle: 'La dentista elige al ganador. Fauchard registra el evento y actualiza scores.',
+    id: 3, title: 'Asignación #1',
+    subtitle: 'Un único técnico recibe la asignación con plazo para responder',
+    icon: <Bell className="w-5 h-5" />,
+    color: 'text-jade', bg: 'bg-jade/10', border: 'border-jade/20',
+  },
+  {
+    id: 4, title: 'Aceptación e inicio',
+    subtitle: 'El técnico acepta; el caso pasa a ejecución (sin comparativo)',
     icon: <Trophy className="w-5 h-5" />,
     color: 'text-jade', bg: 'bg-jade/10', border: 'border-jade/20',
   },
 ];
 
-const TOTAL_PHASES = PHASES.length; // 0-6
+const TOTAL_PHASES = PHASES.length;
 
 // ---------------------------------------------------------------------------
 // Componente principal
@@ -191,9 +179,9 @@ export default function GuidedDemoClient() {
     return () => { if (autoPlayRef.current) clearTimeout(autoPlayRef.current); };
   }, [autoPlay, phase, nextPhase]);
 
-  // Animación de scores en la fase 1
+  // Animación de scores en la fase 2 (ranking)
   useEffect(() => {
-    if (phase !== 1) return;
+    if (phase !== 2) return;
     const targets: Record<string, number> = {};
     TECHNICIANS.forEach(t => { targets[t.id] = 0; });
     setScoreReveal(targets);
@@ -210,12 +198,12 @@ export default function GuidedDemoClient() {
     return () => timers.forEach(clearTimeout);
   }, [phase]);
 
-  // Countdown timer en fase 4
+  // Countdown timer en fase 3 (plazo de respuesta a asignación)
   useEffect(() => {
-    if (phase === 4 && !timerRunning) {
+    if (phase === 3 && !timerRunning) {
       setTimerRunning(true);
     }
-    if (phase !== 4) {
+    if (phase !== 3) {
       setTimerRunning(false);
       if (timerRef.current) clearInterval(timerRef.current);
     }
@@ -405,10 +393,29 @@ export default function GuidedDemoClient() {
           </motion.div>
         )}
 
-        {/* FASE 1 — Evaluación del Pool */}
+        {/* FASE 1 — Clasificación */}
         {phase === 1 && (
           <motion.div key="p1" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
-            <p className="text-xs text-faint">Los scores se calculan usando <strong className="text-foreground">αQ·FQ + αP·FP + αE·FE − αC·FC + αB·FB − αN·FN</strong> con la configuración actual. Las barras se revelan en orden de cálculo.</p>
+            <p className="text-xs text-faint">
+              Fauchard clasifica el caso: <strong className="text-foreground">corona_posterior</strong> · liga <strong className="text-foreground">plata</strong> · categoría <strong className="text-foreground">coronas</strong>.
+            </p>
+            <div className="grid grid-cols-3 gap-4">
+              {['workType', 'caseLeague', 'category'].map((k, i) => (
+                <div key={k} className="p-4 rounded-2xl bg-surface/30 border border-divider text-center">
+                  <p className="text-[9px] font-black text-faint uppercase">{k}</p>
+                  <p className="text-sm font-black text-primary mt-1">
+                    {['corona_posterior', 'plata', 'coronas'][i]}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* FASE 2 — Ranking + exclusiones */}
+        {phase === 2 && (
+          <motion.div key="p2rank" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
+            <p className="text-xs text-faint">Score <strong className="text-foreground">αQ·Q + αP·P + αE·E − αL·L − αN·N</strong> (asignación directa, sin sorteo).</p>
 
             <div className="space-y-3">
               {TECHNICIANS.map((t, i) => {
@@ -444,7 +451,7 @@ export default function GuidedDemoClient() {
                     </span>
 
                     <div className="flex gap-1 shrink-0">
-                      {(['Q','P','E','C','B','N'] as const).map(k => (
+                      {(['Q','P','E','L','N'] as const).map(k => (
                         <div key={k} className="flex flex-col items-center">
                           <span className="text-[6px] text-faint font-black">{k}</span>
                           <span className="text-[8px] font-mono text-muted">{t.components[k].toFixed(2)}</span>
@@ -462,9 +469,9 @@ export default function GuidedDemoClient() {
           </motion.div>
         )}
 
-        {/* FASE 2 — Filtrado y Exclusiones */}
+        {/* FASE 2b — Tarjetas elegibles/excluidos */}
         {phase === 2 && (
-          <motion.div key="p2" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
+          <motion.div key="p2" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4 mt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {TECHNICIANS.map((t, i) => (
                 <motion.div
@@ -515,20 +522,20 @@ export default function GuidedDemoClient() {
                 <p className="text-[9px] font-bold text-error uppercase">Excluidos</p>
               </div>
               <div className="p-4 rounded-2xl bg-primary-hl border border-primary/20 text-center">
-                <p className="text-2xl font-black text-primary">3</p>
-                <p className="text-[9px] font-bold text-primary uppercase">Invitar (top-N)</p>
+                <p className="text-2xl font-black text-primary">1</p>
+                <p className="text-[9px] font-bold text-primary uppercase">Asignado #1</p>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* FASE 3 — Invitaciones */}
+        {/* FASE 3 — Asignación directa */}
         {phase === 3 && (
           <motion.div key="p3" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-6">
-            <p className="text-xs text-faint">Fauchard selecciona los <strong className="text-foreground">3 técnicos elegibles de mayor score</strong> y les envía una notificación push + email con los detalles del caso.</p>
+            <p className="text-xs text-faint">Fauchard asigna al <strong className="text-foreground">técnico #1 del ranking</strong>. Un solo destinatario; plazo para aceptar o rechazar.</p>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {invited.map((t, i) => (
+            <div className="grid grid-cols-1 md:grid-cols-1 max-w-sm mx-auto gap-4">
+              {invited.slice(0, 1).map((t, i) => (
                 <motion.div
                   key={t.id}
                   initial={{ opacity: 0, scale: 0.8, y: 20 }}
@@ -560,14 +567,14 @@ export default function GuidedDemoClient() {
                   </div>
 
                   <div className="p-2 rounded-xl bg-jade/10 text-[8px] text-jade font-bold">
-                    Invitación #{i + 1} enviada
+                    Asignación enviada · #{i + 1}
                   </div>
                 </motion.div>
               ))}
             </div>
 
             <div className="p-4 rounded-2xl bg-surface-2/60 border border-divider space-y-1">
-              <p className="text-[9px] font-black text-faint uppercase tracking-wider">Técnicos no invitados (en espera)</p>
+              <p className="text-[9px] font-black text-faint uppercase tracking-wider">Siguientes en cadena de reintentos</p>
               <div className="flex flex-wrap gap-2 mt-2">
                 {TECHNICIANS.filter(t => !t.invited && !t.excluded).map(t => (
                   <span key={t.id} className="text-[9px] font-bold bg-surface border border-divider px-2 py-1 rounded-lg text-muted">
@@ -579,254 +586,30 @@ export default function GuidedDemoClient() {
           </motion.div>
         )}
 
-        {/* FASE 4 — Ventana de Cotización */}
+        {/* FASE 4 — Aceptación e inicio */}
         {phase === 4 && (
           <motion.div key="p4" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-6">
-
-            {/* Timer central */}
-            <div className="flex flex-col items-center py-6 gap-2">
-              <p className="text-[9px] font-black text-faint uppercase tracking-widest">Tiempo Restante para Cotizar</p>
-              <div className={`text-5xl font-mono font-black tabular-nums ${timerSec < 1800 ? 'text-error' : timerSec < 3600 ? 'text-warning' : 'text-foreground'}`}>
-                {fmtTimer(timerSec)}
-              </div>
-              <div className="w-64 h-1.5 bg-surface-2 rounded-full overflow-hidden">
-                <div
-                  className={`h-full transition-all duration-200 ${timerSec < 1800 ? 'bg-error' : timerSec < 3600 ? 'bg-warning' : 'bg-primary'}`}
-                  style={{ width: `${(timerSec / (90 * 60)) * 100}%` }}
-                />
-              </div>
-              <p className="text-[9px] text-faint">Plazo original: 90 minutos (demo × 72x velocidad)</p>
-            </div>
-
-            {/* Estado de cada técnico invitado */}
-            <div className="space-y-3">
-              {invited.map((t, i) => {
-                const responded = timerSec < 80 * 60 && !t.ignored;
-                const ignored = t.ignored && timerSec < 70 * 60;
-                const pending = !responded && !ignored;
-
-                return (
-                  <motion.div
-                    key={t.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.1 }}
-                    className={`flex items-center gap-4 p-4 rounded-2xl border transition-all ${
-                      responded ? 'bg-jade/5 border-jade/30' :
-                      ignored ? 'bg-error/5 border-error/20' :
-                      'bg-surface/30 border-divider'
-                    }`}
-                  >
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                      responded ? 'bg-jade/20 text-jade' :
-                      ignored ? 'bg-error/20 text-error' :
-                      'bg-warning/20 text-warning'
-                    }`}>
-                      {responded ? <CheckCircle2 className="w-5 h-5" /> :
-                       ignored ? <XCircle className="w-5 h-5" /> :
-                       <Clock className="w-5 h-5 animate-pulse" />}
-                    </div>
-
-                    <div className="flex-1">
-                      <p className="text-[11px] font-black text-foreground">{t.name} · {t.lab}</p>
-                      <p className="text-[9px] text-faint">
-                        {responded ? `Cotización recibida: $${t.quote?.toLocaleString('es-CL')} · ${t.deliveryDays} días` :
-                         ignored ? 'Sin respuesta — cooldown activado' :
-                         'Pendiente de respuesta...'}
-                      </p>
-                    </div>
-
-                    <div>
-                      {responded && (
-                        <span className="text-[9px] font-black bg-jade/10 text-jade border border-jade/20 px-2 py-1 rounded-lg">✓ Cotizó</span>
-                      )}
-                      {ignored && (
-                        <span className="text-[9px] font-black bg-error/10 text-error border border-error/20 px-2 py-1 rounded-lg">⏸ Cooldown</span>
-                      )}
-                      {pending && (
-                        <span className="text-[9px] font-black bg-warning/10 text-warning border border-warning/20 px-2 py-1 rounded-lg animate-pulse">Esperando</span>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-
-            <div className="p-4 rounded-2xl bg-surface-2/60 border border-divider text-[10px] text-faint">
-              ℹ️ <strong className="text-foreground">Lab Roble CAD</strong> no respondió a tiempo. El motor registrará esto como «no-respuesta» y activará el cooldown de {90} min. El reemplazo automático puede dispararse si quedan ciclos disponibles.
-            </div>
-          </motion.div>
-        )}
-
-        {/* FASE 5 — Comparativo de Propuestas */}
-        {phase === 5 && (
-          <motion.div key="p5" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-6">
             <p className="text-xs text-faint">
-              DentFlowAI construye una tabla comparativa con las <strong className="text-foreground">2 propuestas recibidas</strong> y la envía a la Dra. Morales. El precio mostrado ya incluye el margen de plataforma.
+              <strong className="text-foreground">Carlos Vega (Lab Andes Pro)</strong> acepta la asignación. El caso pasa a ejecución — sin comparativo ni cotización.
             </p>
-
-            {/* Tabla comparativa */}
-            <div className="overflow-x-auto rounded-[2rem] border border-divider bg-surface/20">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-surface border-b border-divider text-[9px] font-black uppercase tracking-wider text-faint">
-                    <th className="px-6 py-4">Laboratorio</th>
-                    <th className="px-6 py-4">Score Fauchard</th>
-                    <th className="px-6 py-4">Precio (con margen)</th>
-                    <th className="px-6 py-4">Plazo de Entrega</th>
-                    <th className="px-6 py-4">Reputación</th>
-                    <th className="px-6 py-4">Liga</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-divider/40">
-                  {invited.filter(t => t.responded).map((t, i) => (
-                    <motion.tr
-                      key={t.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.2 }}
-                      className={`transition-colors ${
-                        selectedWinner === t.id ? 'bg-primary/5' : 'hover:bg-surface-2/30'
-                      }`}
-                    >
-                      <td className="px-6 py-4">
-                        <p className="text-xs font-bold text-foreground">{t.name}</p>
-                        <p className="text-[9px] text-faint">{t.lab}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-mono font-black text-primary">{t.score.toFixed(3)}</span>
-                        {i === 0 && <span className="ml-2 text-[8px] font-black bg-primary/10 text-primary px-1.5 py-0.5 rounded-md">TOP</span>}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-mono font-black text-foreground">
-                          ${((t.quote ?? 0) * 1.15).toLocaleString('es-CL')}
-                        </span>
-                        <p className="text-[8px] text-faint">neto: ${t.quote?.toLocaleString('es-CL')}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-xs font-bold text-foreground">{t.deliveryDays} días hábiles</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1">
-                          {[...Array(5)].map((_, si) => (
-                            <Star key={si} className={`w-3 h-3 ${si < Math.round(t.quality) ? 'text-warning fill-warning' : 'text-divider'}`} />
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-[9px] font-black ${t.leagueColor}`}>{t.league}</span>
-                      </td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="p-8 rounded-[2.5rem] bg-jade/10 border border-jade/30 text-center space-y-4"
+            >
+              <Trophy className="w-10 h-10 text-jade mx-auto" />
+              <h3 className="text-xl font-black text-foreground">Asignación aceptada</h3>
+              <p className="text-sm text-faint">Estado del caso → EN EJECUCIÓN</p>
+            </motion.div>
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={reset}
+                className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-surface-2 border border-divider text-sm font-black text-faint hover:text-foreground transition-all"
+              >
+                <RotateCcw className="w-4 h-4" /> Reiniciar Demo
+              </button>
             </div>
-
-            <p className="text-[10px] text-faint italic">
-              La Dra. Morales ve esta tabla en su panel de dentista. Tiene <strong className="text-foreground">2 horas</strong> para elegir antes de que expiren las propuestas.
-            </p>
-          </motion.div>
-        )}
-
-        {/* FASE 6 — Asignación Final */}
-        {phase === 6 && (
-          <motion.div key="p6" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-6">
-
-            {/* Selector de ganador */}
-            {!selectedWinner && (
-              <div className="p-6 rounded-[2rem] bg-primary-hl border border-primary/20 space-y-4">
-                <p className="text-sm font-black text-primary">¿A quién elige la Dra. Morales?</p>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  {invited.filter(t => t.responded).map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => setSelectedWinner(t.id)}
-                      className="flex-1 p-4 rounded-2xl bg-surface border border-divider hover:border-primary/40 hover:bg-primary/5 transition-all text-left space-y-1"
-                    >
-                      <p className="text-xs font-black text-foreground">{t.name}</p>
-                      <p className="text-[9px] text-faint">{t.lab} · ${((t.quote ?? 0) * 1.15).toLocaleString('es-CL')}</p>
-                      <p className="text-[9px] font-black text-primary">Score: {t.score.toFixed(3)}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Resultado */}
-            {selectedWinner && (() => {
-              const winner = TECHNICIANS.find(t => t.id === selectedWinner)!;
-              const loser = invited.filter(t => t.responded && t.id !== selectedWinner)[0];
-              return (
-                <div className="space-y-6">
-                  {/* Winner card */}
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="p-8 rounded-[2.5rem] bg-jade/10 border border-jade/30 text-center space-y-4"
-                  >
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: 'spring', stiffness: 300, delay: 0.2 }}
-                      className="w-16 h-16 mx-auto rounded-2xl bg-jade/20 border border-jade/30 flex items-center justify-center"
-                    >
-                      <Trophy className="w-8 h-8 text-jade" />
-                    </motion.div>
-                    <div>
-                      <p className="text-[9px] font-black text-jade uppercase tracking-widest">Laboratorio Seleccionado</p>
-                      <h3 className="text-2xl font-black text-foreground mt-1">{winner.name}</h3>
-                      <p className="text-sm text-faint">{winner.lab} · {winner.league}</p>
-                    </div>
-                    <div className="flex justify-center gap-6">
-                      <div>
-                        <p className="text-lg font-mono font-black text-foreground">${((winner.quote ?? 0) * 1.15).toLocaleString('es-CL')}</p>
-                        <p className="text-[8px] text-faint">Precio final</p>
-                      </div>
-                      <div>
-                        <p className="text-lg font-mono font-black text-foreground">{winner.deliveryDays}d</p>
-                        <p className="text-[8px] text-faint">Entrega</p>
-                      </div>
-                      <div>
-                        <p className="text-lg font-mono font-black text-primary">{winner.score.toFixed(3)}</p>
-                        <p className="text-[8px] text-faint">Score Fauchard</p>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  {/* Actualizaciones del sistema */}
-                  <div className="space-y-3">
-                    <p className="text-[9px] font-black text-faint uppercase tracking-widest">Efectos en el Sistema</p>
-                    {[
-                      { icon: <BadgeCheck className="w-4 h-4 text-jade" />, text: `Caso ${SYNTHETIC_CASE.id} → estado "EN_PRODUCCION"`, color: 'border-jade/20 bg-jade/5' },
-                      { icon: <ArrowRight className="w-4 h-4 text-primary" />, text: `Fauchard incrementa el score de calidad de ${winner.name} tras la entrega exitosa`, color: 'border-primary/20 bg-primary/5' },
-                      { icon: <AlertTriangle className="w-4 h-4 text-warning" />, text: `Lab Roble CAD: sanción nivel 1 registrada por no-respuesta (αN baja 14 días)`, color: 'border-warning/20 bg-warning/5' },
-                      { icon: <XCircle className="w-4 h-4 text-error" />, text: `${loser?.name}: propuesta no aceptada — no cuenta como sanción`, color: 'border-divider bg-surface/20' },
-                    ].map((item, i) => (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.3 + i * 0.15 }}
-                        className={`flex items-center gap-3 p-3 rounded-xl border ${item.color}`}
-                      >
-                        {item.icon}
-                        <p className="text-[10px] font-bold text-foreground">{item.text}</p>
-                      </motion.div>
-                    ))}
-                  </div>
-
-                  {/* Restart */}
-                  <div className="flex justify-center pt-4">
-                    <button
-                      onClick={reset}
-                      className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-surface-2 border border-divider text-sm font-black text-faint hover:text-foreground hover:border-primary/30 transition-all"
-                    >
-                      <RotateCcw className="w-4 h-4" /> Reiniciar Demo
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
           </motion.div>
         )}
 

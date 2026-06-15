@@ -108,7 +108,7 @@ export default function AvailabilityPanel() {
         <div>
           <h2 className="text-sm font-black text-foreground uppercase tracking-widest">Disponibilidad</h2>
           <p className="text-[11px] text-faint mt-1 max-w-sm">
-            {avail.levelGlobal ? 'Estás disponible para recibir invitaciones.' : 'En pausa: no recibirás nuevas invitaciones.'}
+            {avail.levelGlobal ? 'Estás disponible para recibir asignaciones.' : 'En pausa: no recibirás nuevas asignaciones.'}
           </p>
         </div>
         <GlobalAvailabilitySwitch userId={avail.userId} levelGlobal={avail.levelGlobal} level={level} pendingCount={pendingCount} onChanged={refresh} />
@@ -124,7 +124,7 @@ export default function AvailabilityPanel() {
       <div className="p-6 rounded-3xl bg-surface/40 border border-divider space-y-4">
         <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Capacidades y categorías</h3>
         <p className="text-[11px] text-faint">
-          Recibes invitaciones solo cuando el switch global, la capacidad (CAD) y la categoría están activos. Los valores se preservan aunque pauses la capacidad.
+          Recibes asignaciones solo cuando el switch global, la capacidad (CAD) y la categoría están activos. Los valores se preservan aunque pauses la capacidad.
         </p>
         <div className={`flex flex-col md:flex-row gap-6 ${avail.levelGlobal ? '' : 'opacity-60'}`}>
           <CapacityColumn cap="cad" label="CAD" />

@@ -1,16 +1,30 @@
-import { Activity, AlertCircle, Calendar, Users, XCircle } from 'lucide-react';
+import { Activity, AlertCircle, Calendar, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface FailedCase {
   caseId: string;
   reason: string;
-  details: any;
-  createdAt: string;
+  status?: string;
+  internalStatus?: string | null;
+  createdAt: string | Date;
 }
 
 interface Props {
   failedCases: FailedCase[];
+}
+
+function failureBadge(fc: FailedCase): { label: string; className: string } {
+  if (fc.status === 'sin_asignacion_fallo') {
+    return { label: 'Sin asignación', className: 'bg-error-hl text-error border-error/30' };
+  }
+  if (fc.internalStatus === 'no_eligible_pool_timeout') {
+    return { label: 'Pool agotado', className: 'bg-warning-hl text-warning border-warning/30' };
+  }
+  if (fc.status === 'sin_cotizaciones_fallo') {
+    return { label: 'Sin respuesta', className: 'bg-error-hl text-error border-error/30' };
+  }
+  return { label: 'Fallo asignación', className: 'bg-error-hl text-error border-error/30' };
 }
 
 export default function FailedSelectionsPanel({ failedCases }: Props) {
@@ -21,9 +35,9 @@ export default function FailedSelectionsPanel({ failedCases }: Props) {
           <div className="w-8 h-8 rounded-xl bg-primary-hl flex items-center justify-center text-primary">
             <Activity className="w-4 h-4" />
           </div>
-          <h2 className="text-lg font-bold text-foreground">Fallas de Selección</h2>
+          <h2 className="text-lg font-bold text-foreground">Casos sin asignación</h2>
         </div>
-        <p className="text-faint text-sm">No se han registrado fallas de selección en este período.</p>
+        <p className="text-faint text-sm">No se registraron casos fallidos en este período.</p>
       </div>
     );
   }
@@ -35,63 +49,40 @@ export default function FailedSelectionsPanel({ failedCases }: Props) {
           <div className="w-8 h-8 rounded-xl bg-error-hl flex items-center justify-center text-error">
             <XCircle className="w-4 h-4" />
           </div>
-          <h2 className="text-lg font-bold text-foreground">Fallas de Selección ({failedCases.length})</h2>
+          <h2 className="text-lg font-bold text-foreground">Casos sin asignación ({failedCases.length})</h2>
         </div>
       </div>
 
       <div className="space-y-4">
-        {failedCases.map((fc, i) => {
-          const exclusions = fc.details?.exclusionReasons || {};
-          const totalCandidates = fc.details?.candidatesTotal || 0;
-
+        {failedCases.map((fc) => {
+          const badge = failureBadge(fc);
           return (
-            <div key={i} className="bg-surface-2 rounded-2xl p-4 border border-divider">
-              <div className="flex items-start justify-between mb-3">
+            <div key={fc.caseId} className="bg-surface-2 rounded-2xl p-4 border border-divider">
+              <div className="flex items-start justify-between mb-3 gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-medium text-muted uppercase tracking-wider">
-                      Caso: {fc.caseId.slice(0, 8)}...
+                      Caso: {fc.caseId.slice(0, 8)}…
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-faint">
                     <Calendar className="w-3.5 h-3.5" />
-                    {format(new Date(fc.createdAt), "d MMM, yyyy HH:mm", { locale: es })}
+                    {format(new Date(fc.createdAt), 'd MMM, yyyy HH:mm', { locale: es })}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-error-hl text-error border border-error/30 text-xs font-semibold">
+                <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ${badge.className}`}>
                   <AlertCircle className="w-3 h-3" />
-                  Pool Vacío
+                  {badge.label}
                 </div>
               </div>
-
-              <div className="mb-3">
-                <p className="text-sm text-muted font-medium">Motivos de exclusión:</p>
-                <p className="text-xs text-faint mt-1">Total evaluados: {totalCandidates}</p>
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                <ExclusionStat label="Liga Inferior" count={exclusions.notInLeague || 0} />
-                <ExclusionStat label="Suspendidos" count={exclusions.suspended || 0} />
-                <ExclusionStat label="Sin Respuesta" count={exclusions.noResponse || 0} />
-                <ExclusionStat label="Inactivos" count={exclusions.inactive || 0} />
-                <ExclusionStat label="En Cooldown" count={exclusions.cooldown || 0} />
-                <ExclusionStat label="Sin Habilidades" count={exclusions.lowSkill || 0} />
-              </div>
+              <p className="text-sm text-muted font-medium">{fc.reason}</p>
+              {fc.internalStatus && (
+                <p className="text-[10px] text-faint mt-1 font-mono">internal: {fc.internalStatus}</p>
+              )}
             </div>
           );
         })}
       </div>
-    </div>
-  );
-}
-
-function ExclusionStat({ label, count }: { label: string; count: number }) {
-  return (
-    <div className="bg-surface rounded-xl p-2.5 border border-divider flex items-center justify-between">
-      <span className="text-xs font-medium text-muted">{label}</span>
-      <span className={`text-sm font-bold ${count > 0 ? 'text-foreground' : 'text-faint'}`}>
-        {count}
-      </span>
     </div>
   );
 }

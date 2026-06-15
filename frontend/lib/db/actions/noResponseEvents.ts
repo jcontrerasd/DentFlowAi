@@ -7,7 +7,7 @@
  */
 
 import { db } from '@/lib/db';
-import { technicianNoResponseEvent, fauchardConfig, caseInvitation, clinicalCase } from '@/lib/db/schema';
+import { technicianNoResponseEvent, fauchardConfig, caseAssignment, clinicalCase } from '@/lib/db/schema';
 import { and, eq, gt, lte, inArray, sql, asc, desc } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { notifyUser } from '../../services/notifications';
@@ -51,7 +51,7 @@ export async function recordNoResponseEventAction(
   try {
     const [row] = await db
       .insert(technicianNoResponseEvent)
-      .values({ technicianUserId: technicianId, caseInvitationId: invitationId ?? null, status: 'active', occurredAt: new Date() })
+      .values({ technicianUserId: technicianId, caseAssignmentId: invitationId ?? null, status: 'active', occurredAt: new Date() })
       .returning({ id: technicianNoResponseEvent.id });
     return { success: true, eventId: row.id };
   } catch (error) {
@@ -190,8 +190,8 @@ export async function getActiveNoResponseEventsForTechAction(
         caseNumber: clinicalCase.caseNumber,
       })
       .from(technicianNoResponseEvent)
-      .leftJoin(caseInvitation, eq(caseInvitation.id, technicianNoResponseEvent.caseInvitationId))
-      .leftJoin(clinicalCase, eq(clinicalCase.id, caseInvitation.clinicalCaseId))
+      .leftJoin(caseAssignment, eq(caseAssignment.id, technicianNoResponseEvent.caseAssignmentId))
+      .leftJoin(clinicalCase, eq(clinicalCase.id, caseAssignment.clinicalCaseId))
       .where(
         and(
           eq(technicianNoResponseEvent.technicianUserId, technicianId),
@@ -265,8 +265,8 @@ export async function getResponseHistoryAction(
         caseNumber: clinicalCase.caseNumber,
       })
       .from(technicianNoResponseEvent)
-      .leftJoin(caseInvitation, eq(caseInvitation.id, technicianNoResponseEvent.caseInvitationId))
-      .leftJoin(clinicalCase, eq(clinicalCase.id, caseInvitation.clinicalCaseId))
+      .leftJoin(caseAssignment, eq(caseAssignment.id, technicianNoResponseEvent.caseAssignmentId))
+      .leftJoin(clinicalCase, eq(clinicalCase.id, caseAssignment.clinicalCaseId))
       .where(
         and(
           eq(technicianNoResponseEvent.technicianUserId, technicianId),

@@ -80,6 +80,13 @@ import StatusBadge from '@/components/ui/StatusBadge';
 import CaseViewerStatusStripe from '@/components/cases/CaseViewerStatusStripe';
 import type { InvitationStatusForKpi } from '@/lib/dashboard/classifyCaseForDashboardKpi';
 import CaseWorkflowStepper from '@/components/cases/CaseWorkflowStepper';
+import { DesiredDeliveryPicker } from '@/components/cases/DesiredDeliveryPicker';
+import { CaseDesiredDeliveryReadOnly } from '@/components/cases/CaseDesiredDeliveryChip';
+import { toLocalDatetimeValue } from '@/lib/desiredDelivery';
+import {
+  formatDesiredDeliveryForSummary,
+  shouldShowListPriceToViewer,
+} from '@/lib/cases/caseDeliveryPresentation';
 import { CaseServiceTypeBadge, UchHubIcon } from '@/components/cases/CaseFichaHubAndServiceIcons';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { checkProposalExpiryAction } from '@/lib/db/actions/proposal';
@@ -112,12 +119,6 @@ const TimeCounter = ({ createdAt }: { createdAt: string | Date }) => {
   }, [createdAt]);
 
   return <span className="text-[10px] text-primary/80 font-mono tracking-normal shrink-0">hace {elapsed}</span>;
-};
-
-const formatDate = (dateValue: string | Date) => {
-  if (!dateValue) return '';
-  const d = new Date(dateValue);
-  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 };
 
 const formatCurrency = (amount: number) => {
@@ -192,8 +193,14 @@ function buildPublishCaseSummaryRows(c: any | null): { label: string; value: str
     { label: 'Escala color', value: strField(c.shade) },
     { label: 'Complejidad', value: complexity },
     { label: 'Urgencia', value: urgency },
+    { label: 'Entrega deseada', value: formatDesiredDeliveryForSummary(c.desiredDeliveryAt) },
     { label: 'Archivos', value: fileHint },
   ];
+
+  const listSale = c.listPriceSale != null ? parseFloat(String(c.listPriceSale)) : NaN;
+  if (Number.isFinite(listSale) && listSale > 0) {
+    rows.push({ label: 'Precio de referencia', value: formatCurrency(listSale) });
+  }
 
   const si = strField(c.specialInstructions);
   const dn = strField(c.doctorNotes);
@@ -692,6 +699,7 @@ function CaseDetailPageContent() {
           notesEsthetic: c.notesEsthetic || '',
           notesOclusal: c.notesOclusal || '',
           doctorNotes: (c.specialInstructions ?? c.doctorNotes) || '',
+          desiredDeliveryAt: toLocalDatetimeValue(c.desiredDeliveryAt),
           status: c.status,
           serviceType: c.serviceType
         });
@@ -903,7 +911,13 @@ function CaseDetailPageContent() {
       }
 
       // 5) Actualizar campos de texto del row.
-      await updateClinicalCaseAction(id as string, editForm);
+      const payload = {
+        ...editForm,
+        ...(editForm?.desiredDeliveryAt
+          ? { desiredDeliveryAt: new Date(editForm.desiredDeliveryAt).toISOString() }
+          : {}),
+      };
+      await updateClinicalCaseAction(id as string, payload);
 
       // 6) Refetch + regenerar signed URLs (visor 3D / descargas) + revoke previews + limpiar staging.
       const refreshed = await getCaseDetails(id as string);
@@ -1568,6 +1582,7 @@ function CaseDetailPageContent() {
       shade: clinicalCase.shadeCode ?? '',
       urgency: clinicalCase.urgency ?? '',
       doctorNotes: (clinicalCase.specialInstructions ?? clinicalCase.doctorNotes) || '',
+      desiredDeliveryAt: toLocalDatetimeValue(clinicalCase.desiredDeliveryAt),
     });
     setIsEditing(true);
   }, [clinicalCase, fieldsEditable]);
@@ -1585,6 +1600,7 @@ function CaseDetailPageContent() {
       notesEsthetic: c.notesEsthetic,
       notesOclusal: c.notesOclusal,
       doctorNotes: c.specialInstructions ?? c.doctorNotes,
+      desiredDeliveryAt: c.desiredDeliveryAt,
     });
   };
 
@@ -1618,12 +1634,21 @@ function CaseDetailPageContent() {
         invitationStatus: clinicalCase?.myInvitationStatus ?? myInvitation?.status,
         assignedTechnicianId: clinicalCase?.assignedTechnicianId,
         viewerId: authUserProfile?.id ?? null,
+        hasListPrice: (() => {
+          const sale = clinicalCase?.listPriceSale;
+          if (sale == null) return false;
+          const n = parseFloat(String(sale));
+          return Number.isFinite(n) && n > 0;
+        })(),
+        hasDesiredDeliveryAt: !!clinicalCase?.desiredDeliveryAt,
       }),
     [
       caseStatus,
       clinicalCase?.publishedAt,
       clinicalCase?.archivedByCurrentUser,
       clinicalCase?.canDelete,
+      clinicalCase?.listPriceSale,
+      clinicalCase?.desiredDeliveryAt,
       viewingAsAdmin,
       actingAsDentista,
       actingAsTecnico,
@@ -1945,7 +1970,6 @@ function CaseDetailPageContent() {
             const isLoser = !!(viewerIdStr && isAssigned && assignedTechnicianIdStr !== viewerIdStr);
             const isWinner = !!(viewerIdStr && isAssigned && assignedTechnicianIdStr === viewerIdStr);
             const invPending = myInvitation?.status === 'pending';
-            const invQuoted = myInvitation?.status === 'quoted';
             const invRejected = myInvitation?.status === 'rejected';
             // Un técnico que participó en el caso (tiene invitación → tiene acceso a esta
             // página) debe poder abrir el Centro de Control en solo lectura para revisar el
@@ -1971,12 +1995,8 @@ function CaseDetailPageContent() {
               Icon = Activity;
             } else if (invPending) {
               buttonStyles = 'bg-primary text-inverse shadow-lg shadow-sm hover:bg-primary';
-              label = 'Enviar Oferta';
+              label = 'Responder asignación';
               Icon = Activity;
-            } else if (invQuoted) {
-              buttonStyles = 'bg-warning-hl text-warning border-warning/20 hover:bg-warning-hl';
-              label = 'Cotización Enviada';
-              Icon = Clock;
             } else if (rejectedCanOpenHub) {
               buttonStyles = 'bg-surface-2 text-muted border-divider hover:bg-surface-off';
               label = 'Centro de Control';
@@ -2010,9 +2030,9 @@ function CaseDetailPageContent() {
                   <Icon className="w-4 h-4" />
                 )}
                 <span>{label}</span>
-                {invQuoted && myInvitation?.quotedPrice && (
+                {invPending && myInvitation?.compensation != null && (
                   <span className="ml-1 text-[9px] font-mono text-foreground/70">
-                    {formatCurrency(myInvitation.quotedPrice)} · {myInvitation.quotedDays}d
+                    {formatCurrency(myInvitation.compensation)} · {myInvitation.deadlineDays}d
                   </span>
                 )}
                 {isWinner &&
@@ -2483,6 +2503,39 @@ function CaseDetailPageContent() {
                             <span className="text-xs text-primary font-black uppercase">{clinicalCase?.shade}</span>
                           )}
                         </div>
+                        <div className="space-y-1 col-span-2">
+                          <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Entrega deseada</span>
+                          {canEditForm ? (
+                            <DesiredDeliveryPicker
+                              compact
+                              value={editForm?.desiredDeliveryAt ?? ''}
+                              onChange={(desiredDeliveryAt) => setEditForm((prev: any) => ({ ...prev, desiredDeliveryAt }))}
+                            />
+                          ) : (
+                            <CaseDesiredDeliveryReadOnly value={clinicalCase?.desiredDeliveryAt} />
+                          )}
+                        </div>
+                        {shouldShowListPriceToViewer({ role: userRole, viewingAsAdmin }) &&
+                          (clinicalCase?.listPriceSale != null || viewingAsAdmin) && (
+                          <div className="space-y-1 col-span-2">
+                            <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Precio de referencia</span>
+                            {viewingAsAdmin && clinicalCase?.listPriceCost != null ? (
+                              <div className="text-xs text-muted space-y-0.5">
+                                <p>Costo: {formatCurrency(parseFloat(String(clinicalCase.listPriceCost)))}</p>
+                                <p>Fee: {(parseFloat(String(clinicalCase.listPriceFeePercent ?? 0)) * 100).toFixed(1)}%</p>
+                                <p className="text-primary font-bold">
+                                  Venta: {clinicalCase.listPriceSale != null ? formatCurrency(parseFloat(String(clinicalCase.listPriceSale))) : '—'}
+                                </p>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-primary font-bold">
+                                {clinicalCase?.listPriceSale != null
+                                  ? formatCurrency(parseFloat(String(clinicalCase.listPriceSale)))
+                                  : 'No definido'}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       <div className="pt-4 border-t border-divider space-y-4">
@@ -2683,7 +2736,7 @@ function CaseDetailPageContent() {
               </div>
               <div>
                 <h3 className="text-xl text-foreground font-bold tracking-tight">Publicar Caso</h3>
-                <p className="text-xs text-faint mt-0.5">Los técnicos podrán ver y ofertar este caso</p>
+                <p className="text-xs text-faint mt-0.5">DentFlowAi asignará un laboratorio según el precio de lista fijado</p>
               </div>
             </div>
 
@@ -2693,6 +2746,13 @@ function CaseDetailPageContent() {
                 <p className="text-sm text-warning leading-relaxed">
                   Tienes cambios sin guardar. Debes guardarlos antes de publicar el caso.
                 </p>
+              </div>
+            )}
+
+            {!detailActions.publish.enabled && detailActions.publish.disabledReason && (
+              <div className="flex items-start gap-3 rounded-2xl border border-warning/20 bg-warning-hl px-4 py-3">
+                <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-warning leading-relaxed">{detailActions.publish.disabledReason}</p>
               </div>
             )}
 
@@ -2727,6 +2787,7 @@ function CaseDetailPageContent() {
                   variant="primary"
                   className="flex-1 py-3.5"
                   loading={loadingAction === 'publish'}
+                  disabled={!detailActions.publish.enabled}
                   onClick={() => void handlePublish()}
                 >
                   Publicar ahora

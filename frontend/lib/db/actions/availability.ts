@@ -10,7 +10,7 @@
  */
 
 import { db } from '@/lib/db';
-import { technicianAvailability, technicianSkill, user, caseInvitation } from '@/lib/db/schema';
+import { technicianAvailability, technicianSkill, user, caseAssignment } from '@/lib/db/schema';
 import { and, eq, sql } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { WORK_CATEGORIES, type WorkCategory } from '@/lib/constants/dental';
@@ -199,8 +199,8 @@ export async function getMyAvailabilityStatusAction(): Promise<ActionResult<{
     const level = await computeLevelForTechnicianAction(identity.id);
     const [pending] = await db
       .select({ n: sql<number>`count(*)::int` })
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.technicianId, identity.id), eq(caseInvitation.status, 'pending')));
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.technicianId, identity.id), eq(caseAssignment.status, 'pending')));
     return { success: true, enabled: true, availability, level, pendingCount: Number(pending?.n ?? 0) };
   } catch (error) {
     return { success: false, error: String(error) };

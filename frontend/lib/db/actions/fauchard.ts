@@ -8,10 +8,10 @@
  * dental de un oficio empírico a una ciencia formal.
  */
 
-import { db } from '@/lib/db';
+import { db, infraPromise } from '@/lib/db';
 import {
   clinicalCase,
-  caseInvitation,
+  caseAssignment,
   fauchardConfig,
   fauchardConfigLog,
   technicianSkill,
@@ -31,6 +31,7 @@ import type { ActionResult } from '@/lib/types/actions';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
 import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
+import { isCompletedOnTime } from '@/lib/cases/workDeadline';
 // ─── v5.0 — Modelo de disponibilidad / sanción rolling (gated por flag) ───
 import { isAvailabilityEnabled, isLeagueEngineEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
 import { applyLeagueTransitionPenalty } from '@/lib/leagueScore';
@@ -134,6 +135,7 @@ function getWorkTypeForCase(restorationLabel: string, teeth: number[] = []): str
 // ─── Helpers: configuración activa global / anclada por caso / por id ─────────
 
 export async function getActiveConfig(): Promise<FauchardConfigRow> {
+  if (infraPromise) await infraPromise;
   const [config] = await db
     .select()
     .from(fauchardConfig)
@@ -167,13 +169,13 @@ export async function getConfigForCase(caseId: string): Promise<FauchardConfigRo
 export async function batchExpireInvitationsForCases(caseIds: string[]): Promise<void> {
   if (!caseIds.length) return;
   await db
-    .update(caseInvitation)
+    .update(caseAssignment)
     .set({ status: 'expired' })
     .where(
       and(
-        inArray(caseInvitation.clinicalCaseId, caseIds),
-        eq(caseInvitation.status, 'pending'),
-        lt(caseInvitation.expiresAt, new Date())
+        inArray(caseAssignment.clinicalCaseId, caseIds),
+        eq(caseAssignment.status, 'pending'),
+        lt(caseAssignment.expiresAt, new Date())
       )
     );
 }
@@ -187,7 +189,14 @@ function dimensionsForServiceType(_serviceType: string): string[] {
 
 type BulkScoringData = {
   reviews: { revieweeId: string; rating: number; dimension: string }[];
-  completedInvs: { technicianId: string; completedAt: Date | null; assignedAt: Date | null; quotedDays: number | null; quotedHours: number | null }[];
+  completedInvs: {
+    technicianId: string;
+    completedAt: Date | null;
+    publishedAt: Date | null;
+    desiredDeliveryAt: Date | null;
+    deadlineDays: number | null;
+    deadlineHours: number | null;
+  }[];
   skills: { userId: string; workType: string; designLevel: number }[];
   recentInvs: { technicianId: string }[];
   techUsers: { id: string; lastInvitedAt: Date | null; leagueTransitionStartedAt: Date | null }[];
@@ -210,19 +219,19 @@ async function bulkLoadTechnicianData(
       .where(and(inArray(review.revieweeId, techIds), gt(review.createdAt, qualityWindow))),
 
     db.select({
-      technicianId: caseInvitation.technicianId,
+      technicianId: caseAssignment.technicianId,
       completedAt: clinicalCase.completedAt,
-      assignedAt: clinicalCase.assignedAt,
-      quotedDays: caseInvitation.quotedDays,
-      quotedHours: caseInvitation.quotedHours,
+      publishedAt: clinicalCase.publishedAt,
+      desiredDeliveryAt: clinicalCase.desiredDeliveryAt,
+      deadlineDays: caseAssignment.deadlineDays,
+      deadlineHours: caseAssignment.deadlineHours,
     })
-    .from(caseInvitation)
-    .innerJoin(clinicalCase, eq(caseInvitation.clinicalCaseId, clinicalCase.id))
+    .from(caseAssignment)
+    .innerJoin(clinicalCase, eq(caseAssignment.clinicalCaseId, clinicalCase.id))
     .where(and(
-      inArray(caseInvitation.technicianId, techIds),
-      eq(caseInvitation.status, 'confirmed'),
+      inArray(caseAssignment.technicianId, techIds),
+      eq(caseAssignment.status, 'accepted'),
       isNotNull(clinicalCase.completedAt),
-      isNotNull(clinicalCase.assignedAt),
     )),
 
     db.select({
@@ -233,9 +242,9 @@ async function bulkLoadTechnicianData(
     .from(technicianSkill)
     .where(and(inArray(technicianSkill.userId, techIds), eq(technicianSkill.workType, workType))),
 
-    db.select({ technicianId: caseInvitation.technicianId })
-      .from(caseInvitation)
-      .where(and(inArray(caseInvitation.technicianId, techIds), gt(caseInvitation.invitedAt, loadWindow))),
+    db.select({ technicianId: caseAssignment.technicianId })
+      .from(caseAssignment)
+      .where(and(inArray(caseAssignment.technicianId, techIds), gt(caseAssignment.assignedAt, loadWindow))),
 
     db.select({ id: user.id, lastInvitedAt: user.lastInvitedAt, leagueTransitionStartedAt: user.leagueTransitionStartedAt })
       .from(user)
@@ -245,6 +254,7 @@ async function bulkLoadTechnicianData(
   return { reviews, completedInvs, skills, recentInvs, techUsers };
 }
 
+/** @deprecated Usar rankAssignmentCandidates / computeAssignmentScore (Q/P/E/L/N). */
 function calculateScoreFromBulkData(
   technicianId: string,
   data: BulkScoringData,
@@ -278,10 +288,8 @@ function calculateScoreFromBulkData(
   const techInvs = data.completedInvs.filter(i => i.technicianId === technicianId);
   let onTimeCases = 0;
   for (const inv of techInvs) {
-    if (inv.completedAt && inv.assignedAt && (inv.quotedDays || inv.quotedHours)) {
-      const ms = (inv.quotedDays ?? 0) * 86_400_000 + (inv.quotedHours ?? 0) * 3_600_000;
-      const deadline = new Date(new Date(inv.assignedAt).getTime() + ms);
-      if (new Date(inv.completedAt) <= deadline) onTimeCases++;
+    if (inv.completedAt && isCompletedOnTime(inv.completedAt, inv.desiredDeliveryAt, inv.publishedAt, inv.deadlineDays)) {
+      onTimeCases++;
     }
   }
   const P = techInvs.length > 0 ? onTimeCases / techInvs.length : 0.80;
@@ -318,6 +326,7 @@ function calculateScoreFromBulkData(
 
 // ─── S2-02: Calcular score de un técnico para un caso ────────────────────────
 
+/** @deprecated Usar rankAssignmentCandidates / computeAssignmentScore (Q/P/E/L/N). */
 async function calculateTechnicianScore(
   technicianId: string,
   workType: string,
@@ -361,14 +370,14 @@ async function calculateTechnicianScore(
     .select({
       completedAt: clinicalCase.completedAt,
       assignedAt: clinicalCase.assignedAt,
-      quotedDays: caseInvitation.quotedDays,
-      quotedHours: caseInvitation.quotedHours,
+      deadlineDays: caseAssignment.deadlineDays,
+      deadlineHours: caseAssignment.deadlineHours,
     })
-    .from(caseInvitation)
-    .innerJoin(clinicalCase, eq(caseInvitation.clinicalCaseId, clinicalCase.id))
+    .from(caseAssignment)
+    .innerJoin(clinicalCase, eq(caseAssignment.clinicalCaseId, clinicalCase.id))
     .where(and(
-      eq(caseInvitation.technicianId, technicianId),
-      eq(caseInvitation.status, 'confirmed'),
+      eq(caseAssignment.technicianId, technicianId),
+      eq(caseAssignment.status, 'confirmed'),
       isNotNull(clinicalCase.completedAt),
       isNotNull(clinicalCase.assignedAt),
     ));
@@ -376,11 +385,11 @@ async function calculateTechnicianScore(
   const totalCompleted = completedInvs.length;
   let onTimeCases = 0;
   for (const inv of completedInvs) {
-    if (inv.completedAt && inv.assignedAt && (inv.quotedDays || inv.quotedHours)) {
+    if (inv.completedAt && inv.assignedAt && (inv.deadlineDays || inv.deadlineHours)) {
       // Aproximación de scoring: no respeta horario laboral ni feriados.
       // Si hay horas, se suman como ventana 24/7; si hay días, se cuentan calendario.
       const ms =
-        (inv.quotedDays ?? 0) * 86_400_000 + (inv.quotedHours ?? 0) * 3_600_000;
+        (inv.deadlineDays ?? 0) * 86_400_000 + (inv.deadlineHours ?? 0) * 3_600_000;
       const deadline = new Date(new Date(inv.assignedAt).getTime() + ms);
       if (new Date(inv.completedAt) <= deadline) onTimeCases++;
     }
@@ -402,9 +411,9 @@ async function calculateTechnicianScore(
 
   // C — Índice de carga reciente
   const recentInvs = await db
-    .select({ id: caseInvitation.id })
-    .from(caseInvitation)
-    .where(and(eq(caseInvitation.technicianId, technicianId), gt(caseInvitation.invitedAt, loadWindow)));
+    .select({ id: caseAssignment.id })
+    .from(caseAssignment)
+    .where(and(eq(caseAssignment.technicianId, technicianId), gt(caseAssignment.assignedAt, loadWindow)));
   const invitationCount = recentInvs.length;
 
   const C = Math.min(invitationCount / (avgPoolLoad > 0 ? avgPoolLoad : 1), cMax);
@@ -530,249 +539,23 @@ export async function runFauchardAction(caseId: string): Promise<{
   technicianIds?: string[];
   fauchardConfigId?: string;
   error?: string;
-  /** v5.0 — el caso entró a la cola `pendiente_pool` (no es un fallo terminal). */
   pooled?: boolean;
 }> {
-  const identity = await getServerIdentity();
-  if (!identity) return { success: false, error: 'No autenticado' };
-
-  try {
-    const config = await getConfigForCase(caseId);
-
-    console.log('[DEBUG] 2. get clinicalCase');
-    const [cCaseRow] = await db
-      .select({
-        cc: clinicalCase,
-        restorationCode: restorationTypeTable.label,
-      })
-      .from(clinicalCase)
-      .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
-      .where(eq(clinicalCase.id, caseId))
-      .limit(1) as any;
-
-    if (!cCaseRow) return { success: false, error: 'Caso no encontrado' };
-    const cCase = cCaseRow.cc;
-
-    console.log('[DEBUG] 3. getWorkTypeForCase');
-    const workType = getWorkTypeForCase(
-      cCaseRow.restorationCode || '',
-      (cCase.teeth as number[]) || []
-    );
-    const serviceType = cCase.serviceType || SERVICE_TYPES.SOLO_DISENO;
-    const availabilityOn = isAvailabilityEnabled();
-    const caseCategory = categoryForWorkType(workType);
-    const requiredCaps = capacitiesForServiceType(serviceType);
-
-    console.log('[DEBUG] 4. update internalStatus');
-    await db.update(clinicalCase)
-      .set({ internalStatus: INTERNAL_CASE_STATUSES.SELECCIONANDO_TECNICOS })
-      .where(eq(clinicalCase.id, caseId));
-
-    const now = new Date();
-    const inactivityThreshold = new Date(now.getTime() - config.dInactivityDays * 86400000);
-    const cooldownThreshold = new Date(now.getTime() - config.tCooldownMinutes * 60000);
-    const loadWindow = new Date(now.getTime() - config.wLoadDays * 86400000);
-
-    console.log('[DEBUG] 5. select candidates');
-    const candidates = await db
-      .select()
-      .from(user)
-      .where(
-        and(
-          eq(user.role, 'tecnico'),
-          eq(user.isAvailable, true),
-          eq(user.isActive, true)
-        )
-      );
-
-    // S8-02: Lógica de reintento con expansión de categorías
-    let filtered: any[] = [];
-    
-    let exclusionReasons = {
-      notInLeague: 0,
-      suspended: 0,
-      noResponse: 0,
-      inactive: 0,
-      cooldown: 0,
-      lowSkill: 0,
-      notAvailable: 0
-    };
-
-    const attempts = [
-      { category: 'current' }, // Intento 1: Misma categoría
-      { category: 'expand_1' },  // Intento 2: +1 categoría inferior
-      { category: 'all' }        // Intento 3: Todas las categorías
-    ];
-
-    for (const attempt of attempts) {
-      filtered = [];
-      exclusionReasons = { notInLeague: 0, suspended: 0, noResponse: 0, inactive: 0, cooldown: 0, lowSkill: 0, notAvailable: 0 };
-      
-      console.log(`[DEBUG] Attempt ${attempt.category}`);
-      const [caseData] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
-      const caseLeague = caseData?.caseLeague || 'bronce';
-
-      const leaguePool = candidates.filter(tech => {
-        if (attempt.category === 'all') return true;
-        if (attempt.category === 'expand_1') {
-          const leagues = ['bronce', 'plata', 'oro', 'elite'];
-          const targetIdx = leagues.indexOf(caseLeague.toLowerCase());
-          const expandedLeagues = leagues.slice(Math.max(0, targetIdx - 1));
-          const match = expandedLeagues.includes((tech.leagueLevel ?? 'bronce').toLowerCase());
-          if (!match) exclusionReasons.notInLeague++;
-          return match;
-        }
-        const match = (tech.leagueLevel ?? 'bronce').toLowerCase() === caseLeague.toLowerCase();
-        if (!match) exclusionReasons.notInLeague++;
-        return match;
-      });
-
-      for (const tech of leaguePool) {
-        if (tech.suspendedUntil && new Date(tech.suspendedUntil) > now) { exclusionReasons.suspended++; continue; }
-        // Exclusión binaria legacy por no-respuesta: SOLO cuando el modelo nuevo está
-        // apagado. Con el flag on, la sanción se absorbe en el término −αN·N del score
-        // y el auto-OFF de Nivel 3 (que apaga level_global) saca al técnico vía AND triple.
-        if (!availabilityOn && (tech.consecutiveNoResponse ?? 0) >= 3) { exclusionReasons.noResponse++; continue; }
-        // Inactividad: solo excluir si tenemos registro de último login y es antiguo
-        if (tech.lastLoginAt && new Date(tech.lastLoginAt) < inactivityThreshold) { exclusionReasons.inactive++; continue; }
-
-        console.log(`[DEBUG] Checking tech ${tech.id} cooldown`);
-        const [recentInv] = await db
-          .select()
-          .from(caseInvitation)
-          .where(and(
-            eq(caseInvitation.technicianId, tech.id),
-            gt(caseInvitation.invitedAt, cooldownThreshold),
-            eq(caseInvitation.workType, workType)
-          ))
-          .limit(1);
-        if (recentInv) { exclusionReasons.cooldown++; continue; }
-
-        console.log(`[DEBUG] Checking tech ${tech.id} skills`);
-        const minSkillLevel = MIN_SKILL_FOR_CATEGORY[caseLeague] ?? 1;
-        const [skill] = await db.select().from(technicianSkill)
-          .where(and(
-            eq(technicianSkill.userId, tech.id),
-            eq(technicianSkill.workType, workType),
-            gte(technicianSkill.designLevel, minSkillLevel)
-          ))
-          .limit(1);
-        if (!skill) { exclusionReasons.lowSkill++; continue; }
-
-        // Regla de elegibilidad AND triple (v5.0) — solo con el modelo habilitado.
-        // Solo_diseno exige CAD.
-        if (availabilityOn) {
-          // Capa 2 (red de seguridad): garantizar la fila de disponibilidad antes de
-          // evaluar elegibilidad. computeEligibleAction excluye a quien no tiene fila;
-          // esto cubre técnicos legacy / inserts manuales / altas que no pasaron por la
-          // Capa 1, para que nadie quede excluido por carecer de fila. Idempotente.
-          await ensureTechnicianAvailabilityAction(tech.id);
-          let eligible = true;
-          for (const cap of requiredCaps) {
-            if (!(await computeEligibleAction(tech.id, caseCategory, cap))) { eligible = false; break; }
-          }
-          if (!eligible) { exclusionReasons.notAvailable++; continue; }
-        }
-
-        filtered.push(tech);
-      }
-
-      if (filtered.length >= config.nInvited) break;
-    }
-
-    if (filtered.length === 0) {
-      console.log('[DEBUG] filtered.length === 0', exclusionReasons);
-      const [cCase] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
-      
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'sistema',
-        action: 'SELECCION_FALLIDA',
-        content: `No se encontraron técnicos disponibles. Total evaluados: ${candidates.length}. Excluidos por - Liga: ${exclusionReasons.notInLeague}, Suspendidos: ${exclusionReasons.suspended}, Sin respuesta: ${exclusionReasons.noResponse}, Inactivos: ${exclusionReasons.inactive}, Cooldown: ${exclusionReasons.cooldown}, Habilidades insuficientes: ${exclusionReasons.lowSkill}.`,
-        payload: { exclusionReasons, candidatesTotal: candidates.length, visibleTo: 'sistema' },
-      });
-
-      // v5.0: con el modelo habilitado Y la cola activa, 0 elegibles NO es fallo
-      // terminal. El caso entra a `pendiente_pool` (escenario A); el dentista ve
-      // "buscando técnicos" (banner Fase 6), no un error. Solo una vez por ciclo.
-      // `POOL_PENDIENTE_ENABLED` es el kill-switch secundario: si está apagado,
-      // Fauchard ignora la cola y falla directo aunque el modelo esté on.
-      if (availabilityOn && isPoolPendienteEnabled()) {
-        if (cCase?.internalStatus !== POOL_INTERNAL_STATUS) {
-          await enterPendingPoolAction(caseId);
-        }
-        return { success: false, pooled: true, error: 'pendiente_pool', fauchardConfigId: config.id };
-      }
-
-      if (cCase) {
-        if (cCase.doctorId) await notifyUser(cCase.doctorId, 'FALLO_SELECCION_DENTISTA', { caseId });
-        const [admin] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'admin')).limit(1);
-        if (admin) await notifyUser(admin.id, 'SIN_COTIZACIONES_FALLO', { caseId });
-      }
-
-      return { success: false, error: 'No se encontraron técnicos disponibles para tu caso en este momento.' };
-    }
-
-    // Promedio real de invitaciones del pool en la ventana de carga (para componente C)
-    let avgPoolLoad = 1;
-    if (filtered.length > 0) {
-      const poolIds = filtered.map(t => t.id);
-      const [loadResult] = await db
-        .select({ total: sql<number>`count(*)` })
-        .from(caseInvitation)
-        .where(and(inArray(caseInvitation.technicianId, poolIds), gt(caseInvitation.invitedAt, loadWindow)));
-      avgPoolLoad = Math.max(Number(loadResult?.total ?? 0) / filtered.length, 1);
-    }
-
-    // Calcular scores para el pool elegible — bulk load (5 queries paralelas en vez de N×5)
-    const bulkData = await bulkLoadTechnicianData(filtered.map(t => t.id), config, workType);
-
-    // v5.0: factor N (no-respuesta) por técnico para el término −αN·N del score.
-    const nByTech = new Map<string, number>();
-    if (availabilityOn) {
-      for (const tech of filtered) {
-        const lvl = await computeLevelForTechnicianAction(tech.id);
-        nByTech.set(tech.id, levelToScoreN(lvl.level));
-      }
-    }
-
-    const scored: { id: string; score: number }[] = [];
-    for (const tech of filtered) {
-      const { score } = calculateScoreFromBulkData(tech.id, bulkData, config, avgPoolLoad, serviceType, { n: nByTech.get(tech.id) ?? 0 });
-      scored.push({ id: tech.id, score });
-    }
-
-    // Selección probabilística ponderada sin reemplazo
-    const nToInvite = Math.min(config.nInvited, scored.length);
-    const selected: string[] = [];
-    const pool = [...scored];
-
-    for (let i = 0; i < nToInvite; i++) {
-      const totalScore = pool.reduce((acc, t) => acc + t.score, 0);
-      if (totalScore === 0) {
-        const idx = Math.floor(Math.random() * pool.length);
-        selected.push(pool[idx].id);
-        pool.splice(idx, 1);
-      } else {
-        const rand = Math.random() * totalScore;
-        let cumulative = 0;
-        let chosenIdx = 0;
-        for (let j = 0; j < pool.length; j++) {
-          cumulative += pool[j].score;
-          if (rand <= cumulative) { chosenIdx = j; break; }
-        }
-        selected.push(pool[chosenIdx].id);
-        pool.splice(chosenIdx, 1);
-      }
-    }
-
-    return { success: true, technicianIds: selected, fauchardConfigId: config.id };
-  } catch (error) {
-    console.error('[runFauchardAction] Error:', error);
-    return { success: false, error: String(error) };
+  const { runAssignmentAction } = await import('./assignment');
+  const result = await runAssignmentAction(caseId);
+  if (result.pooled) {
+    return { success: false, pooled: true, fauchardConfigId: result.fauchardConfigId, error: result.error };
   }
+  if (!result.success || !result.technicianId) {
+    return { success: false, error: result.error, fauchardConfigId: result.fauchardConfigId };
+  }
+  return {
+    success: true,
+    technicianIds: [result.technicianId],
+    fauchardConfigId: result.fauchardConfigId,
+  };
 }
+
 
 // ─── v5.0 — Helpers de elegibilidad, reemplazo y reactivación de cola ────────
 
@@ -807,69 +590,9 @@ export async function selectReplacementCandidateAction(
   excludeTechIds: string[],
 ): Promise<{ success: boolean; technicianId?: string; error?: string }> {
   try {
-    const config = await getConfigForCase(caseId);
-    const [cRow] = await db
-      .select({ cc: clinicalCase, restorationCode: restorationTypeTable.label })
-      .from(clinicalCase)
-      .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
-      .where(eq(clinicalCase.id, caseId))
-      .limit(1) as any;
-    if (!cRow) return { success: false, error: 'Caso no encontrado' };
-    const cCase = cRow.cc;
-    const workType = getWorkTypeForCase(cRow.restorationCode || '', (cCase.teeth as number[]) || []);
-    const serviceType = cCase.serviceType || SERVICE_TYPES.SOLO_DISENO;
-    const caseLeague = cCase.caseLeague || 'bronce';
-    const minSkillLevel = MIN_SKILL_FOR_CATEGORY[caseLeague] ?? 1;
-    const category = categoryForWorkType(workType);
-    const requiredCaps = capacitiesForServiceType(serviceType);
-    const availabilityOn = isAvailabilityEnabled();
-    const exclude = new Set(excludeTechIds);
-    const now = new Date();
-
-    const candidates = await db
-      .select()
-      .from(user)
-      .where(and(eq(user.role, 'tecnico'), eq(user.isAvailable, true), eq(user.isActive, true)));
-
-    const eligible: string[] = [];
-    for (const tech of candidates) {
-      if (exclude.has(tech.id)) continue;
-      if (tech.suspendedUntil && new Date(tech.suspendedUntil) > now) continue;
-      if (!availabilityOn && (tech.consecutiveNoResponse ?? 0) >= 3) continue;
-
-      const [skill] = await db.select().from(technicianSkill)
-        .where(and(eq(technicianSkill.userId, tech.id), eq(technicianSkill.workType, workType), gte(technicianSkill.designLevel, minSkillLevel)))
-        .limit(1);
-      if (!skill) continue;
-
-      if (availabilityOn) {
-        // Self-heal: garantizar la fila antes de evaluar (excluye sin fila).
-        await ensureTechnicianAvailabilityAction(tech.id);
-        let ok = true;
-        for (const cap of requiredCaps) {
-          if (!(await computeEligibleAction(tech.id, category, cap))) { ok = false; break; }
-        }
-        if (!ok) continue;
-      }
-      eligible.push(tech.id);
-    }
-
-    if (!eligible.length) return { success: true };
-
-    const bulkData = await bulkLoadTechnicianData(eligible, config, workType);
-    const nByTech = new Map<string, number>();
-    if (availabilityOn) {
-      for (const id of eligible) {
-        const lvl = await computeLevelForTechnicianAction(id);
-        nByTech.set(id, levelToScoreN(lvl.level));
-      }
-    }
-    let best: { id: string; score: number } | null = null;
-    for (const id of eligible) {
-      const { score } = calculateScoreFromBulkData(id, bulkData, config, 1, serviceType, { n: nByTech.get(id) ?? 0 });
-      if (!best || score > best.score) best = { id, score };
-    }
-    return { success: true, technicianId: best?.id };
+    const { rankAssignmentCandidates } = await import('./assignment');
+    const ranked = await rankAssignmentCandidates(caseId, excludeTechIds);
+    return { success: true, technicianId: ranked[0]?.technicianId };
   } catch (error) {
     return { success: false, error: String(error) };
   }
@@ -903,118 +626,20 @@ export async function sendInvitationsAction(
   technicianIds: string[],
   inviteCtx?: { fauchardConfigId: string; pinCaseToConfig?: boolean },
 ) {
-  const identity = await getServerIdentity();
-  if (!identity) return { success: false, error: 'No autenticado' };
-
-  try {
-    const config = inviteCtx?.fauchardConfigId
-      ? await loadFauchardConfigById(inviteCtx.fauchardConfigId)
-      : await getConfigForCase(caseId);
-    const expiresAt = new Date(Date.now() + config.tQuoteMinutes * 60000);
-
-    const [cCaseRow] = await db
-      .select({ cc: clinicalCase, restorationCode: restorationTypeTable.code })
-      .from(clinicalCase)
-      .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
-      .where(eq(clinicalCase.id, caseId))
-      .limit(1) as any;
-    const cCase = cCaseRow?.cc;
-
-    const workType = getWorkTypeForCase(cCaseRow?.restorationCode || '', (cCase?.teeth as number[]) || []);
-
-    let invitedCount = 0;
-    let skippedInvites = 0;
-
-    for (const techId of technicianIds) {
-      const [existing] = await db
-        .select({ id: caseInvitation.id })
-        .from(caseInvitation)
-        .where(
-          and(
-            eq(caseInvitation.clinicalCaseId, caseId),
-            eq(caseInvitation.technicianId, techId),
-            inArray(caseInvitation.status, ['pending', 'quoted']),
-          ),
-        )
-        .limit(1);
-
-      if (existing) {
-        skippedInvites += 1;
-        continue;
-      }
-
-      const { score } = await calculateTechnicianScore(techId, workType, cCase?.serviceType || SERVICE_TYPES.SOLO_DISENO, config);
-
-      const [createdInv] = await db.insert(caseInvitation).values({
-        clinicalCaseId: caseId,
-        technicianId: techId,
-        status: 'pending',
-        invitedAt: new Date(),
-        expiresAt,
-        scoreAtInvite: String(score.toFixed(4)),
-        workType,
-      }).returning({ id: caseInvitation.id });
-
-      await db.update(user)
-        .set({ lastInvitedAt: new Date() })
-        .where(eq(user.id, techId));
-
-      await notifyUser(techId, 'NUEVA_INVITACION' as any, {
-        caseId,
-        deadline: expiresAt.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }),
-      });
-      
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'sistema',
-        action: CASE_EVENTS.INVITACION_ENVIADA,
-        content: 'Invitación de cotización registrada.',
-        payload: { technicianId: techId, expiresAt: expiresAt.toISOString(), visibleTo: 'sistema' },
-      });
-
-      if (createdInv?.id) {
-        await logCaseEvent({
-          caseId,
-          userId: techId,
-          type: 'sistema',
-          action: CASE_EVENTS.INVITACION_RECIBIDA,
-          content: 'Te llegó una invitación para cotizar este caso.',
-          payload: {
-            invitationId: createdInv.id,
-            expiresAt: expiresAt.toISOString(),
-            visibleTo: 'tecnico',
-            ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
-          },
-        });
-      }
-      invitedCount += 1;
-    }
-
-    await db.update(clinicalCase)
-      .set({
-        status: 'enEvaluacion',
-        internalStatus: INTERNAL_CASE_STATUSES.COTIZACIONES_ABIERTAS,
-        updatedAt: new Date(),
-        ...(inviteCtx?.pinCaseToConfig && inviteCtx.fauchardConfigId
-          ? { fauchardConfigId: inviteCtx.fauchardConfigId }
-          : {}),
-      })
-      .where(eq(clinicalCase.id, caseId));
-
-    return { success: true, invitedCount, skippedInvites, expiresAt };
-  } catch (error) {
-    console.error('[sendInvitationsAction] Error:', error);
-    return { success: false, error: String(error) };
-  }
+  const { assignCaseAction } = await import('./assignment');
+  const techId = technicianIds[0];
+  if (!techId) return { success: false, error: 'Sin técnico para asignar' };
+  const res = await assignCaseAction(caseId, techId, {
+    fauchardConfigId: inviteCtx?.fauchardConfigId,
+    pinCaseToConfig: inviteCtx?.pinCaseToConfig,
+  });
+  if (!res.success) return res;
+  return { success: true, invitedCount: 1, skippedInvites: 0, expiresAt: res.expiresAt };
 }
 
-// ─── S2-05: Técnico responde a invitación ────────────────────────────────────
+// ─── Asignación: aceptar (reemplaza cotización) ─────────────────────────────
 
-/**
- * Payload de cotización — solo modo flat (solo_diseno).
- * Acepta `deliveryDays` (1–365) o `deliveryHours` (1–24), mutuamente excluyentes.
- */
+/** @deprecated — redirige a aceptación de asignación. */
 export type QuoteInput = {
   kind: 'flat';
   price: number;
@@ -1023,164 +648,14 @@ export type QuoteInput = {
   notes?: string;
 };
 
-/**
- * Valida y normaliza un slot de plazo. Retorna `{ days, hours }` con exactamente
- * uno > 0 (el otro 0 o null según corresponda). Para slots opcionales (shipping)
- * permitir 0 días = sin flete. Para slots obligatorios el valor debe ser ≥ 1.
- */
-function normalizeTurnaroundSlot(
-  days: number | undefined,
-  hours: number | undefined,
-  opts: { slotName: string; allowZeroDays?: boolean; required?: boolean }
-): { ok: true; days: number | null; hours: number | null } | { ok: false; error: string } {
-  const hasDays = days != null && Number.isFinite(days);
-  const hasHours = hours != null && Number.isFinite(hours);
-  if (hasDays && hasHours && days !== 0 && hours !== 0) {
-    return { ok: false, error: `${opts.slotName}: indica días o horas, no ambos` };
-  }
-  if (hasHours && hours !== 0) {
-    if (hours! < 1 || hours! > 24) {
-      return { ok: false, error: `${opts.slotName}: horas debe estar entre 1 y 24` };
-    }
-    return { ok: true, days: null, hours: Math.trunc(hours!) };
-  }
-  if (hasDays) {
-    const min = opts.allowZeroDays ? 0 : 1;
-    if (days! < min || days! > 365) {
-      return { ok: false, error: `${opts.slotName}: días debe estar entre ${min} y 365` };
-    }
-    return { ok: true, days: Math.trunc(days!), hours: null };
-  }
-  if (opts.required) {
-    return { ok: false, error: `${opts.slotName}: debes indicar el plazo (días u horas)` };
-  }
-  return { ok: true, days: null, hours: null };
-}
-
-/**
- * Wrapper retrocompatible: si llaman a submitQuoteAction(invId, price, days, notes)
- * se mapea a `{ kind: 'flat' }`. La firma nueva con QuoteInput es preferida.
- */
 export async function submitQuoteAction(
   invitationId: string,
-  priceOrInput: number | QuoteInput,
-  deliveryDays?: number,
-  notes?: string,
+  _priceOrInput?: number | QuoteInput,
+  _deliveryDays?: number,
+  _notes?: string,
 ) {
-  const identity = await getServerIdentity();
-  if (!identity?.id) return { success: false, error: 'No autenticado' };
-
-  // Normalizar firma a un único QuoteInput.
-  // Cuando el caller usa la firma legacy (number, number, notes) marcamos
-  // `isLegacyFlat` para relajar la validación de coherencia con serviceType:
-  // los flujos antiguos (tests, integraciones internas) seguirán funcionando.
-  const isLegacyFlat = typeof priceOrInput !== 'object';
-  const input: QuoteInput = typeof priceOrInput === 'object'
-    ? priceOrInput
-    : { kind: 'flat', price: priceOrInput as number, deliveryDays: deliveryDays ?? 0, notes };
-
-  try {
-    const [invitation] = await db
-      .select()
-      .from(caseInvitation)
-      .where(eq(caseInvitation.id, invitationId))
-      .limit(1);
-
-    if (!invitation) return { success: false, error: 'Invitación no encontrada' };
-    if (invitation.technicianId !== identity.id) return { success: false, error: 'No autorizado' };
-    if (invitation.status !== 'pending') return { success: false, error: 'Esta invitación ya fue respondida o expiró' };
-    if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
-      return { success: false, error: 'El tiempo para cotizar ha vencido' };
-    }
-
-    const guarded = await guardTextOrFail({
-      actionName: 'submitQuoteAction',
-      caseId: invitation.clinicalCaseId,
-      identity: { id: identity.id, orgId: identity.orgId, role: identity.role },
-      fields: [{ text: input.notes, field: 'techNotes' }],
-    });
-    if (!guarded.ok) return { success: false, error: guarded.error };
-
-    // Calcular totales y campos a persistir.
-    let totalPrice: number;
-    let flatDays: number | null = null;
-    let flatHours: number | null = null;
-    let notesText: string | undefined;
-
-    if (input.price <= 0) return { success: false, error: 'El precio debe ser mayor a 0' };
-    const slot = normalizeTurnaroundSlot(input.deliveryDays, input.deliveryHours, {
-      slotName: 'Plazo', required: true,
-    });
-    if (!slot.ok) return { success: false, error: slot.error };
-    flatDays = slot.days;
-    flatHours = slot.hours;
-    totalPrice = input.price;
-    notesText = input.notes;
-
-    const totalDaysCanonical = flatDays;
-    const totalHoursCanonical = flatHours;
-
-    await db.update(caseInvitation)
-      .set({
-        status: 'quoted',
-        quotedPrice: totalPrice,
-        quotedDays: totalDaysCanonical,
-        quotedHours: totalHoursCanonical,
-        quotedDesignPrice: null,
-        quotedDesignDays: null,
-        quotedDesignHours: null,
-        quotedFabricationPrice: null,
-        quotedFabricationDays: null,
-        quotedFabricationHours: null,
-        quotedShippingPrice: null,
-        quotedShippingDays: null,
-        quotedShippingHours: null,
-        techNotes: notesText?.slice(0, 200), // máx 200 chars
-        respondedAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(caseInvitation.id, invitationId));
-
-    // Resetear consecutiveNoResponse al responder
-    await db.update(user)
-      .set({ consecutiveNoResponse: 0 })
-      .where(eq(user.id, identity.id));
-
-    const notesTrim = notesText?.trim() ? notesText.trim().slice(0, 200) : null;
-    await logCaseEvent({
-      caseId: invitation.clinicalCaseId,
-      userId: identity.id,
-      type: 'sistema',
-      action: CASE_EVENTS.OFERTA_ENVIADA,
-      content:
-        'He enviado la Oferta.',
-      payload: {
-        invitationId,
-        visibleTo: 'tecnico',
-        quotedPrice: totalPrice,
-        quotedDays: totalDaysCanonical,
-        quotedHours: totalHoursCanonical,
-        techNotes: notesTrim,
-      },
-    });
-
-    await logCaseEvent({
-      caseId: invitation.clinicalCaseId,
-      userId: identity.id,
-      type: 'sistema',
-      action: 'COTIZACION_RECIBIDA',
-      content: 'Laboratorio envió cotización.',
-      payload: { invitationId, technicianId: identity.id, visibleTo: 'sistema' },
-    });
-
-    // Expirar invitaciones vencidas y evaluar si ya no quedan pendientes
-    await checkAndExpireInvitationsAction(invitation.clinicalCaseId);
-
-    return { success: true };
-  } catch (error) {
-    console.error('[submitQuoteAction] Error:', error);
-    return { success: false, error: String(error) };
-  }
+  const { acceptAssignmentAction } = await import('./assignment');
+  return acceptAssignmentAction(invitationId);
 }
 
 // ─── S2-06b: Verificación lazy de expiración ─────────────────────────────────
@@ -1190,20 +665,20 @@ export async function expirePendingInvitationsForCase(caseId: string) {
   const now = new Date();
   const expiredPending = await db
     .select()
-    .from(caseInvitation)
+    .from(caseAssignment)
     .where(
       and(
-        eq(caseInvitation.clinicalCaseId, caseId),
-        eq(caseInvitation.status, 'pending'),
-        lt(caseInvitation.expiresAt, now),
+        eq(caseAssignment.clinicalCaseId, caseId),
+        eq(caseAssignment.status, 'pending'),
+        lt(caseAssignment.expiresAt, now),
       ),
     );
 
   for (const inv of expiredPending) {
     await db
-      .update(caseInvitation)
+      .update(caseAssignment)
       .set({ status: 'expired', updatedAt: new Date() })
-      .where(eq(caseInvitation.id, inv.id));
+      .where(eq(caseAssignment.id, inv.id));
 
     await logCaseEvent({
       caseId: inv.clinicalCaseId,
@@ -1240,9 +715,9 @@ export async function tryEvaluateQuotesIfReady(caseId: string) {
   }
 
   const stillPending = await db
-    .select({ id: caseInvitation.id })
-    .from(caseInvitation)
-    .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'pending')));
+    .select({ id: caseAssignment.id })
+    .from(caseAssignment)
+    .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'pending')));
 
   if (stillPending.length > 0) {
     return { evaluated: false, reason: 'pending_invitations' as const };
@@ -1250,8 +725,8 @@ export async function tryEvaluateQuotesIfReady(caseId: string) {
 
   const [invCount] = await db
     .select({ count: count() })
-    .from(caseInvitation)
-    .where(eq(caseInvitation.clinicalCaseId, caseId));
+    .from(caseAssignment)
+    .where(eq(caseAssignment.clinicalCaseId, caseId));
 
   if (Number(invCount?.count ?? 0) === 0) {
     return { evaluated: false, reason: 'no_invitations' as const };
@@ -1275,121 +750,11 @@ export async function checkAndExpireInvitationsAction(caseId: string) {
   };
 }
 
-// ─── S2-07: Evaluar cotizaciones y seleccionar ganador ───────────────────────
+// ─── Evaluación comparativo (eliminado) ───────────────────────────────────────
 
-export async function evaluateQuotesAction(caseId: string) {
-  try {
-    // Idempotencia: la evaluación solo procede desde `enEvaluacion`.
-    // Si el caso ya transicionó (p. ej. `propuestaLista`, asignado, cerrado),
-    // no debemos volver a "construir la propuesta": eso resetea `proposalExpiresAt`,
-    // limpia `assignedTechnicianId`, y duplica eventos/notificaciones en cada lectura.
-    const [c0] = await db
-      .select({ status: clinicalCase.status, serviceType: clinicalCase.serviceType })
-      .from(clinicalCase)
-      .where(eq(clinicalCase.id, caseId))
-      .limit(1);
-    if (!c0 || c0.status !== CASE_STATUSES.EN_EVALUACION) {
-      return { success: true, alreadyEvaluated: true };
-    }
-
-    await db.update(clinicalCase)
-      .set({ internalStatus: INTERNAL_CASE_STATUSES.EVALUANDO_OFERTAS })
-      .where(eq(clinicalCase.id, caseId));
-
-    const config = await getConfigForCase(caseId);
-
-    const quotes = await db
-      .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted')));
-
-    if (quotes.length === 0) {
-      // S8-03: Reintento automático si no hay cotizaciones
-      const allInvs = await db.select().from(caseInvitation).where(eq(caseInvitation.clinicalCaseId, caseId));
-
-      if (allInvs.length <= config.nInvited) {
-        await logCaseEvent({
-          caseId,
-          userId: 'sistema',
-          type: 'sistema',
-          action: 'REINTENTO_SELECCION',
-          content: 'No se recibieron cotizaciones en el primer round. Iniciando reintento con pool ampliado.',
-          payload: { visibleTo: 'sistema' },
-        });
-
-        const res = await runFauchardAction(caseId);
-        if (res.success && res.technicianIds!.length > 0 && res.fauchardConfigId) {
-          await sendInvitationsAction(caseId, res.technicianIds!, { fauchardConfigId: res.fauchardConfigId });
-          return { success: true, retry: true };
-        }
-      }
-
-      await db.update(clinicalCase)
-        .set({ internalStatus: INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO, status: 'cerrado' })
-        .where(eq(clinicalCase.id, caseId));
-
-      await logCaseEvent({
-        caseId,
-        userId: 'sistema',
-        type: 'sistema',
-        action: CASE_EVENTS.CASO_SIN_OFERTAS_CERRADO,
-        content:
-          'No se recibieron ofertas para este caso en esta ronda. El caso ha sido cerrado. Puedes crear un nuevo caso cuando lo necesites.',
-        payload: { visibleTo: 'dentista', ...UCH_PAYLOAD_PRESENTATION_FAUCHARD },
-      });
-
-      const [cCase] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
-      if (cCase) {
-        if (cCase.doctorId) await notifyUser(cCase.doctorId, 'FALLO_SELECCION_DENTISTA', { caseId });
-        const [admin] = await db.select({ id: user.id }).from(user).where(eq(user.role, 'admin')).limit(1);
-        if (admin) await notifyUser(admin.id, 'SIN_COTIZACIONES_FALLO', { caseId });
-      }
-
-      return { success: false, error: 'Sin cotizaciones disponibles tras reintento' };
-    }
-
-    const qMinSelection = parseFloat(config.qMinSelection);
-    const qualityWindow = new Date(Date.now() - config.wQualityDays * 86400000);
-    // Q por dimensión (CAD/CAM) según el tipo de servicio, igual que el score.
-    const qualityDims = dimensionsForServiceType(c0.serviceType ?? SERVICE_TYPES.SOLO_DISENO);
-    const qualifiedQuotes: typeof quotes = [];
-    for (const q of quotes) {
-      const reviewRows = await db
-        .select({ rating: review.rating })
-        .from(review)
-        .where(and(
-          eq(review.revieweeId, q.technicianId),
-          inArray(review.dimension, qualityDims),
-          gt(review.createdAt, qualityWindow),
-        ));
-      const ratings = reviewRows.map(r => r.rating);
-      const Q = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length / 5 : 0.5;
-      if (Q >= qMinSelection) qualifiedQuotes.push(q);
-    }
-    const evaluationPool = qualifiedQuotes.length > 0 ? qualifiedQuotes : quotes;
-
-    // Ranking solo para orden de exhibición — el dentista elige después (comparativo anónimo)
-    const sorted = [...evaluationPool].sort((a, b) => {
-      const priceDiff = (a.quotedPrice ?? Infinity) - (b.quotedPrice ?? Infinity);
-      if (priceDiff !== 0) return priceDiff;
-      const daysDiff = (a.quotedDays ?? Infinity) - (b.quotedDays ?? Infinity);
-      if (daysDiff !== 0) return daysDiff;
-      return new Date(a.respondedAt ?? a.createdAt ?? 0).getTime() - new Date(b.respondedAt ?? b.createdAt ?? 0).getTime();
-    });
-
-    const buildRes = await buildProposalAction(caseId, sorted.map(q => q.id));
-    if (buildRes.alreadyBuilt) {
-      return { success: true, alreadyEvaluated: true, offerCount: sorted.length };
-    }
-    if (!buildRes.success) {
-      return { success: false, error: buildRes.error };
-    }
-
-    return { success: true, offerCount: sorted.length };
-  } catch (error) {
-    console.error('[evaluateQuotesAction] Error:', error);
-    return { success: false, error: String(error) };
-  }
+/** @deprecated — el comparativo ya no existe. */
+export async function evaluateQuotesAction(_caseId: string) {
+  return { success: true, skipped: true };
 }
 
 // ─── S2-08: Publicar vista comparativa (sin asignar laboratorio ni precio pactado)
@@ -1510,9 +875,9 @@ export async function penalizeNoResponseAction(technicianId: string, invitationI
           .where(eq(technicianAvailability.userId, technicianId));
 
         const pendings = await db
-          .select({ id: caseInvitation.id })
-          .from(caseInvitation)
-          .where(and(eq(caseInvitation.technicianId, technicianId), eq(caseInvitation.status, 'pending')));
+          .select({ id: caseAssignment.id })
+          .from(caseAssignment)
+          .where(and(eq(caseAssignment.technicianId, technicianId), eq(caseAssignment.status, 'pending')));
         if (pendings.length) {
           const { autoRejectOnAutoOffAction } = await import('./rejection');
           await autoRejectOnAutoOffAction(technicianId, pendings.map((p) => p.id));
@@ -1608,6 +973,8 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
   const identity = await getServerIdentity();
   if (!identity?.isSystemAdmin) return { success: false, error: 'No autorizado' };
 
+  if (infraPromise) await infraPromise;
+
   try {
     const [config] = await db
       .select({
@@ -1624,6 +991,7 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
         dBonusMaxDays: fauchardConfig.dBonusMaxDays,
         tCooldownMinutes: fauchardConfig.tCooldownMinutes,
         dInactivityDays: fauchardConfig.dInactivityDays,
+        maxAssignmentAttempts: fauchardConfig.maxAssignmentAttempts,
         nInvited: fauchardConfig.nInvited,
         qMinSelection: fauchardConfig.qMinSelection,
         tQuoteMinutes: fauchardConfig.tQuoteMinutes,
@@ -1689,10 +1057,8 @@ export async function updateFauchardParamsAction(params: Record<string, any>, re
 
       if (!current) throw new Error('No hay configuración activa');
 
-      // 1. Validaciones de pesos (α) — suma SOLO los α presentes en params.
-      // El panel legacy envía 5 (αQ..αB → suma 1.0); el panel v5.0 envía 6
-      // incluyendo αN (re-normalizado → suma 1.0). |Σα| siempre = 1.0.
-      const ALL_ALPHA_KEYS = ['alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaBonus', 'alphaNoResponse'];
+      // 1. Validaciones de pesos (α) — suma SOLO los α presentes en params (5 factores).
+      const ALL_ALPHA_KEYS = ['alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaNoResponse'];
       const presentAlphaKeys = ALL_ALPHA_KEYS.filter((k) => params[k] !== undefined);
       if (presentAlphaKeys.length > 0) {
         let αSum = 0;
@@ -1709,40 +1075,17 @@ export async function updateFauchardParamsAction(params: Record<string, any>, re
       }
 
       // 2. Otras validaciones
-      if (params.nInvited !== undefined && (params.nInvited < 3 || params.nInvited > 10)) {
-        throw new Error('Técnicos invitados (nInvited) debe estar entre 3 y 10');
+      if (params.maxAssignmentAttempts !== undefined) {
+        const v = parseInt(String(params.maxAssignmentAttempts), 10);
+        if (isNaN(v) || v < 1 || v > 10) {
+          throw new Error('Intentos máximos de asignación (maxAssignmentAttempts) debe estar entre 1 y 10');
+        }
       }
       if (params.tQuoteMinutes !== undefined && (params.tQuoteMinutes < 1 || params.tQuoteMinutes > 1440)) {
-        throw new Error('Tiempo de cotización (tQuoteMinutes) debe estar entre 1 y 1440 minutos (1 min a 24 h)');
+        throw new Error('Tiempo de respuesta a asignación (tQuoteMinutes) debe estar entre 1 y 1440 minutos (1 min a 24 h)');
       }
       if (params.tCooldownMinutes !== undefined && (params.tCooldownMinutes < 1 || params.tCooldownMinutes > 1440)) {
         throw new Error('Cooldown invitaciones (tCooldownMinutes) debe estar entre 1 y 1440 minutos (1 min a 24 h)');
-      }
-      if (params.platformFee !== undefined) {
-        const fee = parseFloat(params.platformFee);
-        if (isNaN(fee) || fee < 0.05 || fee > 0.50) {
-          throw new Error('El margen de plataforma (platformFee) debe estar entre 5% y 50%');
-        }
-      }
-      // v4.6 — Calendario laboral
-      const startCandidate = params.businessHoursStart !== undefined
-        ? parseInt(params.businessHoursStart) : (current as any).businessHoursStart ?? 8;
-      const endCandidate = params.businessHoursEnd !== undefined
-        ? parseInt(params.businessHoursEnd) : (current as any).businessHoursEnd ?? 20;
-      if (params.businessHoursStart !== undefined && (isNaN(startCandidate) || startCandidate < 0 || startCandidate > 22)) {
-        throw new Error('Hora de inicio (businessHoursStart) debe estar entre 0 y 22');
-      }
-      if (params.businessHoursEnd !== undefined && (isNaN(endCandidate) || endCandidate < 1 || endCandidate > 23)) {
-        throw new Error('Hora de fin (businessHoursEnd) debe estar entre 1 y 23');
-      }
-      if (startCandidate >= endCandidate) {
-        throw new Error('Hora de inicio debe ser menor que hora de fin');
-      }
-      if (params.businessDaysMask !== undefined) {
-        const mask = parseInt(params.businessDaysMask);
-        if (isNaN(mask) || mask < 1 || mask > 127) {
-          throw new Error('Máscara de días laborables debe estar entre 1 y 127 (al menos un día encendido)');
-        }
       }
 
       // v5.0 — Plazos, sanción, umbrales y heartbeat (cotas §11.2).
@@ -1856,6 +1199,7 @@ export async function getFauchardConfigLogAction(limit = 100): Promise<ActionRes
     const logs = await db
       .select({
         id: fauchardConfigLog.id,
+        configId: fauchardConfigLog.configId,
         parameterKey: fauchardConfigLog.parameterKey,
         oldValue: fauchardConfigLog.oldValue,
         newValue: fauchardConfigLog.newValue,
@@ -1878,146 +1222,213 @@ export async function getFauchardConfigLogAction(limit = 100): Promise<ActionRes
 
 export async function getFauchardMetricsAction(days: number = 30): Promise<ActionResult<{ metrics: any }>> {
   const identity = await getServerIdentity();
-  if (!identity?.isSystemAdmin) return { success: false, error: 'No autorizado' };
+  if (!identity?.isSystemAdmin && identity?.role !== 'admin') {
+    return { success: false, error: 'No autorizado' };
+  }
 
   try {
     const now = new Date();
     const startDate = subDays(now, days);
+    if (infraPromise) await infraPromise;
     const config = await getActiveConfig();
 
-    // 1. Invitaciones por técnico
-    const invData = await db
-      .select({
-        technicianId: user.id,
-        fullName: user.fullName,
-        leagueLevel: user.leagueLevel,
-        leagueTransitionStartedAt: user.leagueTransitionStartedAt,
-        isAvailable: user.isAvailable,
-        lastInvitedAt: user.lastInvitedAt,
-        status: caseInvitation.status,
-        price: caseInvitation.quotedPrice,
-        days: caseInvitation.quotedDays,
-      })
+    const technicians = await db
+      .select()
       .from(user)
-      .leftJoin(caseInvitation, and(eq(user.id, caseInvitation.technicianId), gte(caseInvitation.invitedAt, startDate)))
       .where(eq(user.role, 'tecnico'));
 
-    const techStats: Record<string, any> = {};
-    for (const row of invData) {
-      if (!techStats[row.technicianId]) {
-        techStats[row.technicianId] = {
-          technicianId: row.technicianId,
-          fullName: row.fullName,
-          leagueLevel: row.leagueLevel,
-          leagueInTransition: !!row.leagueTransitionStartedAt,
-          isAvailable: row.isAvailable,
-          invitationsCount: 0,
-          quotedCount: 0,
-          acceptedCount: 0,
-          prices: [],
-          deliveryDays: [],
-          lastInvitedAt: row.lastInvitedAt,
-        };
-      }
-      if (row.status) {
-        techStats[row.technicianId].invitationsCount++;
-        if (['quoted', 'accepted', 'confirmed', 'rejected'].includes(row.status)) techStats[row.technicianId].quotedCount++;
-        if (['accepted', 'confirmed'].includes(row.status)) techStats[row.technicianId].acceptedCount++;
-        if (row.price) techStats[row.technicianId].prices.push(row.price);
-        if (row.days) techStats[row.technicianId].deliveryDays.push(row.days);
-      }
+    const assignmentRows = await db
+      .select({
+        technicianId: caseAssignment.technicianId,
+        status: caseAssignment.status,
+        compensation: caseAssignment.compensation,
+        assignedAt: caseAssignment.assignedAt,
+        respondedAt: caseAssignment.respondedAt,
+      })
+      .from(caseAssignment)
+      .where(gte(caseAssignment.assignedAt, startDate));
+
+    type TechStat = {
+      technicianId: string;
+      fullName: string | null;
+      leagueLevel: string | null;
+      leagueInTransition: boolean;
+      isAvailable: boolean | null;
+      assignmentsCount: number;
+      respondedCount: number;
+      acceptedCount: number;
+      rejectedCount: number;
+      expiredCount: number;
+      compensations: number[];
+      responseMinutes: number[];
+      lastInvitedAt: Date | null;
+    };
+
+    const techStats: Record<string, TechStat> = {};
+    for (const tech of technicians) {
+      techStats[tech.id] = {
+        technicianId: tech.id,
+        fullName: tech.fullName,
+        leagueLevel: tech.leagueLevel,
+        leagueInTransition: !!tech.leagueTransitionStartedAt,
+        isAvailable: tech.isAvailable,
+        assignmentsCount: 0,
+        respondedCount: 0,
+        acceptedCount: 0,
+        rejectedCount: 0,
+        expiredCount: 0,
+        compensations: [],
+        responseMinutes: [],
+        lastInvitedAt: tech.lastInvitedAt,
+      };
     }
 
-    const invitationsByTechnician = await Promise.all(Object.values(techStats).map(async (ts: any) => {
-      // Calcular score actual para este técnico (usando un work_type genérico para el ranking)
-      const { score } = await calculateTechnicianScore(ts.technicianId, 'corona_posterior', SERVICE_TYPES.SOLO_DISENO, config);
-      
+    for (const row of assignmentRows) {
+      const ts = techStats[row.technicianId];
+      if (!ts) continue;
+      ts.assignmentsCount++;
+      if (row.status === 'accepted' || row.status === 'rejected') {
+        ts.respondedCount++;
+        if (row.respondedAt && row.assignedAt) {
+          ts.responseMinutes.push(
+            (new Date(row.respondedAt).getTime() - new Date(row.assignedAt).getTime()) / 60000,
+          );
+        }
+      }
+      if (row.status === 'accepted') ts.acceptedCount++;
+      if (row.status === 'rejected') ts.rejectedCount++;
+      if (row.status === 'expired') ts.expiredCount++;
+      if (row.compensation) ts.compensations.push(row.compensation);
+    }
+
+    const { rankCandidatesForScenario } = await import('./assignment');
+    const { deriveScenarioFromInputs } = await import('@/lib/fauchard/assignmentScenario');
+    const scenario = deriveScenarioFromInputs('Corona Unitaria', []);
+    const ranked = await rankCandidatesForScenario(scenario, config);
+    const scoreByTech = new Map(ranked.map((r) => [r.technicianId, r.score]));
+
+    const assignmentsByTechnician = Object.values(techStats).map((ts) => {
+      const decided = ts.acceptedCount + ts.rejectedCount;
       return {
         ...ts,
-        responseRate: ts.invitationsCount > 0 ? (ts.quotedCount / ts.invitationsCount) : 0,
-        winRate: ts.quotedCount > 0 ? (ts.acceptedCount / ts.quotedCount) : 0,
-        avgQuotedPrice: ts.prices.length > 0 ? (ts.prices.reduce((a: any, b: any) => a + b, 0) / ts.prices.length) : 0,
-        avgDeliveryDays: ts.deliveryDays.length > 0 ? (ts.deliveryDays.reduce((a: any, b: any) => a + b, 0) / ts.deliveryDays.length) : 0,
-        currentScore: score,
-        daysWithoutInvitation: ts.lastInvitedAt ? Math.floor((now.getTime() - new Date(ts.lastInvitedAt).getTime()) / 86400000) : 999,
+        technicianResponseRate: ts.assignmentsCount > 0 ? ts.respondedCount / ts.assignmentsCount : 0,
+        acceptRate: decided > 0 ? ts.acceptedCount / decided : 0,
+        avgCompensation:
+          ts.compensations.length > 0
+            ? ts.compensations.reduce((a, b) => a + b, 0) / ts.compensations.length
+            : 0,
+        avgResponseMinutes:
+          ts.responseMinutes.length > 0
+            ? ts.responseMinutes.reduce((a, b) => a + b, 0) / ts.responseMinutes.length
+            : null,
+        currentScore: scoreByTech.get(ts.technicianId) ?? 0,
+        daysWithoutAssignment: ts.lastInvitedAt
+          ? Math.floor((now.getTime() - new Date(ts.lastInvitedAt).getTime()) / 86400000)
+          : 999,
       };
-    }));
+    });
 
-    // 2. Distribución por cuartil (Equidad)
-    const sortedByScore = [...invitationsByTechnician].sort((a, b) => b.currentScore - a.currentScore);
+    const sortedByScore = [...assignmentsByTechnician].sort((a, b) => b.currentScore - a.currentScore);
     const top25Count = Math.ceil(sortedByScore.length * 0.25);
     const topQuartile = sortedByScore.slice(0, top25Count);
-    const totalInvs = invitationsByTechnician.reduce((acc, t) => acc + t.invitationsCount, 0);
-    const topInvs = topQuartile.reduce((acc, t) => acc + t.invitationsCount, 0);
-    const topQuartileShare = totalInvs > 0 ? (topInvs / totalInvs) : 0;
+    const totalAssignments = assignmentsByTechnician.reduce((acc, t) => acc + t.assignmentsCount, 0);
+    const topAssignments = topQuartile.reduce((acc, t) => acc + t.assignmentsCount, 0);
+    const topQuartileShare = totalAssignments > 0 ? topAssignments / totalAssignments : 0;
 
-    // 3. Alertas
-    const alerts: any[] = [];
-    if (topQuartileShare > 0.60) {
+    const alerts: {
+      type: 'concentration' | 'inactive_technician' | 'empty_pool';
+      message: string;
+      severity: 'warning' | 'critical';
+    }[] = [];
+
+    if (topQuartileShare > 0.6) {
       alerts.push({
         type: 'concentration',
         severity: 'warning',
-        message: `Concentración alta: el 25% superior de los técnicos acapara el ${(topQuartileShare * 100).toFixed(0)}% de las invitaciones.`,
+        message: `Concentración alta: el 25% superior de los técnicos acapara el ${(topQuartileShare * 100).toFixed(0)}% de las asignaciones.`,
       });
     }
 
-    const inactiveAvailable = invitationsByTechnician.filter(t => t.isAvailable && t.invitationsCount === 0 && t.daysWithoutInvitation > 7);
+    const inactiveAvailable = assignmentsByTechnician.filter(
+      (t) => t.isAvailable && t.assignmentsCount === 0 && t.daysWithoutAssignment > 7,
+    );
     if (inactiveAvailable.length > 0) {
       alerts.push({
         type: 'inactive_technician',
         severity: 'warning',
-        message: `${inactiveAvailable.length} técnicos disponibles no han recibido invitaciones en la última semana.`,
+        message: `${inactiveAvailable.length} técnicos disponibles no han recibido asignaciones en la última semana.`,
       });
     }
 
-    // 4. Casos fallidos y sus motivos de exclusión
     const failedCasesData = await db
       .select({
-        eventId: clinicalCaseEvent.id,
-        caseId: clinicalCaseEvent.clinicalCaseId,
-        content: clinicalCaseEvent.content,
-        payload: clinicalCaseEvent.payload,
-        createdAt: clinicalCaseEvent.createdAt,
+        caseId: clinicalCase.id,
+        status: clinicalCase.status,
+        internalStatus: clinicalCase.internalStatus,
+        updatedAt: clinicalCase.updatedAt,
       })
-      .from(clinicalCaseEvent)
+      .from(clinicalCase)
       .where(
         and(
-          eq(clinicalCaseEvent.action, 'SELECCION_FALLIDA'),
-          gte(clinicalCaseEvent.createdAt, startDate)
-        )
+          inArray(clinicalCase.status, [
+            INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO,
+            INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO,
+          ]),
+          gte(clinicalCase.updatedAt, startDate),
+        ),
       )
-      .orderBy(desc(clinicalCaseEvent.createdAt));
-    const failedCases = failedCasesData.map(c => ({
-      eventId: c.eventId,
+      .orderBy(desc(clinicalCase.updatedAt));
+
+    const failedCases = failedCasesData.map((c) => ({
       caseId: c.caseId,
-      reason: c.content || 'Pool vacío o sin cotizaciones',
-      details: c.payload,
-      createdAt: c.createdAt,
+      status: c.status,
+      internalStatus: c.internalStatus,
+      reason:
+        c.status === INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO
+          ? 'Sin técnicos elegibles para asignar'
+          : 'Pool agotado sin asignación exitosa',
+      createdAt: c.updatedAt,
     }));
 
     if (failedCases.length > 0) {
       alerts.push({
         type: 'empty_pool',
         severity: 'critical',
-        message: `Se detectaron ${failedCases.length} casos fallidos por falta de técnicos en el período.`,
+        message: `Se detectaron ${failedCases.length} casos sin asignación en el período.`,
       });
     }
 
-    // 5. Tasas globales
-    const totalInv = invitationsByTechnician.reduce((a, b) => a + b.invitationsCount, 0);
-    const totalQuoted = invitationsByTechnician.reduce((a, b) => a + b.quotedCount, 0);
-    const totalAccepted = invitationsByTechnician.reduce((a, b) => a + b.acceptedCount, 0);
+    const totalResponded = assignmentsByTechnician.reduce((a, b) => a + b.respondedCount, 0);
+    const totalAccepted = assignmentsByTechnician.reduce((a, b) => a + b.acceptedCount, 0);
+    const totalRejected = assignmentsByTechnician.reduce((a, b) => a + b.rejectedCount, 0);
+    const allResponseMinutes = assignmentRows
+      .filter(
+        (r) =>
+          r.respondedAt &&
+          r.assignedAt &&
+          (r.status === 'accepted' || r.status === 'rejected'),
+      )
+      .map(
+        (r) =>
+          (new Date(r.respondedAt!).getTime() - new Date(r.assignedAt).getTime()) / 60000,
+      );
+    const globalAvgResponseMinutes =
+      allResponseMinutes.length > 0
+        ? allResponseMinutes.reduce((a, b) => a + b, 0) / allResponseMinutes.length
+        : null;
 
     return {
       success: true,
       metrics: {
-        invitationsByTechnician,
+        assignmentsByTechnician,
         topQuartileShare,
         alerts,
         failedCases,
-        globalResponseRate: totalInv > 0 ? totalQuoted / totalInv : 0,
-        globalAcceptanceRate: totalQuoted > 0 ? totalAccepted / totalQuoted : 0,
-      }
+        technicianResponseRate: totalAssignments > 0 ? totalResponded / totalAssignments : 0,
+        technicianAcceptanceRate:
+          totalAccepted + totalRejected > 0 ? totalAccepted / (totalAccepted + totalRejected) : 0,
+        avgResponseMinutes: globalAvgResponseMinutes,
+      },
     };
   } catch (error) {
     console.error('[getFauchardMetricsAction] Error:', error);
@@ -2025,122 +1436,44 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
   }
 }
 
-// ─── S7-02: Simular algoritmo de selección (Admin) ───────────────────────────
+// ─── S7-02: Simular asignación directa (Admin) ───────────────────────────────
 
 export async function simulateFauchardAction(params: {
   restorationType: string;
-  caseComplexity: string;
-  serviceType: string;
-  configOverride?: Record<string, any>;
-}): Promise<ActionResult<{ simulation: any }>> {
+  restorationCode?: string;
+  caseComplexity?: string;
+  complexityMode?: 'auto' | 'manual';
+  serviceType?: string;
+  teeth?: number[];
+  excludeTechnicianIds?: string[];
+  configOverride?: Record<string, unknown>;
+  materialCode?: string;
+  shadeCode?: string;
+  urgencyLabel?: string;
+  notesEstheticLength?: number;
+}): Promise<ActionResult<{ simulation: import('@/lib/fauchard/simulationTypes').SimulationResult }>> {
   const identity = await getServerIdentity();
-  if (!identity?.isSystemAdmin) return { success: false, error: 'No autorizado' };
-
-  try {
-    const config = await getActiveConfig();
-    const finalConfig = { ...config, ...(params.configOverride || {}) };
-    const workType = getWorkTypeForCase(params.restorationType);
-
-    const now = new Date();
-    const inactivityThreshold = new Date(now.getTime() - finalConfig.dInactivityDays * 86400000);
-    const cooldownThreshold = new Date(now.getTime() - finalConfig.tCooldownMinutes * 60000);
-
-    // Pool de candidatos
-    const candidates = await db
-      .select()
-      .from(user)
-      .where(and(eq(user.role, 'tecnico'), eq(user.isActive, true)));
-
-    const distribution: any[] = [];
-    let eligibleCount = 0;
-
-    for (const tech of candidates) {
-      let excluded = false;
-      let exclusionReason = '';
-
-      // Filtros duros (simulados)
-      if (!tech.isAvailable) { excluded = true; exclusionReason = 'No disponible'; }
-      else if (tech.suspendedUntil && new Date(tech.suspendedUntil) > now) { excluded = true; exclusionReason = 'Suspendido'; }
-      else if ((tech.consecutiveNoResponse ?? 0) >= 3) { excluded = true; exclusionReason = 'Sin respuesta reiterada'; }
-      else if (tech.updatedAt && new Date(tech.updatedAt) < inactivityThreshold) { excluded = true; exclusionReason = 'Inactivo'; }
-      
-      // Skill check
-      const [skill] = await db
-        .select()
-        .from(technicianSkill)
-        .where(and(eq(technicianSkill.userId, tech.id), eq(technicianSkill.workType, workType)))
-        .limit(1);
-      
-      if (!skill || (skill.designLevel === 0)) { excluded = true; exclusionReason = 'Sin habilidad declarada'; }
-
-      // Cooldown check (simulado)
-      if (!excluded) {
-        const [recentInv] = await db
-          .select()
-          .from(caseInvitation)
-          .innerJoin(clinicalCase, eq(caseInvitation.clinicalCaseId, clinicalCase.id))
-          .where(and(eq(caseInvitation.technicianId, tech.id), gt(caseInvitation.invitedAt, cooldownThreshold), eq(clinicalCase.serviceType, params.serviceType)))
-          .limit(1);
-        if (recentInv) { excluded = true; exclusionReason = 'En cooldown'; }
-      }
-
-      const { score, components } = await calculateTechnicianScore(tech.id, workType, params.serviceType, finalConfig as FauchardConfigRow);
-      
-      if (!excluded) eligibleCount++;
-
-      distribution.push({
-        technicianId: tech.id,
-        fullName: tech.fullName,
-        leagueLevel: tech.leagueLevel,
-        score,
-        excluded,
-        exclusionReason,
-        components,
-      });
-    }
-
-    // Calcular probabilidades para los no excluidos
-    const activeDistribution = distribution.filter(d => !d.excluded);
-    const totalScore = activeDistribution.reduce((acc, d) => acc + d.score, 0);
-
-    for (const d of distribution) {
-      if (d.excluded) {
-        d.probability = 0;
-      } else {
-        d.probability = totalScore > 0 ? (d.score / totalScore) : (activeDistribution.length > 0 ? 1 / activeDistribution.length : 0);
-      }
-    }
-
-    // Funnel por etapas (para la presentación del embudo de selección).
-    // `byFilter` agrupa los excluidos por razón; `invited` = min(nInvited, elegibles).
-    const byFilter = distribution
-      .filter(d => d.excluded)
-      .reduce<Record<string, number>>((acc, d) => {
-        const key = d.exclusionReason || 'Excluido';
-        acc[key] = (acc[key] ?? 0) + 1;
-        return acc;
-      }, {});
-
-    const funnel = {
-      universe: candidates.length,
-      byFilter,
-      eligible: eligibleCount,
-      invited: Math.min(finalConfig.nInvited, eligibleCount),
-    };
-
-    return {
-      success: true,
-      simulation: {
-        eligiblePool: eligibleCount,
-        invitedCount: finalConfig.nInvited,
-        funnel,
-        distribution: distribution.sort((a, b) => b.score - a.score),
-      }
-    };
-  } catch (error) {
-    console.error('[simulateFauchardAction] Error:', error);
-    return { success: false, error: String(error) };
+  if (!identity?.isSystemAdmin && identity?.role !== 'admin') {
+    return { success: false, error: 'No autorizado' };
   }
+
+  const { simulateAssignmentAction } = await import('./assignment');
+  const restorationLabel =
+    WORK_TYPE_LABELS[params.restorationType] ?? params.restorationType;
+
+  return simulateAssignmentAction({
+    restorationLabel,
+    restorationCode: params.restorationCode,
+    teeth: params.teeth,
+    caseComplexity: params.caseComplexity as CaseComplexity | undefined,
+    complexityMode: params.complexityMode,
+    excludeTechnicianIds: params.excludeTechnicianIds,
+    configOverride: params.configOverride,
+    materialCode: params.materialCode,
+    shadeCode: params.shadeCode,
+    urgencyLabel: params.urgencyLabel,
+    notesEstheticLength: params.notesEstheticLength,
+  });
 }
 
 // ─── S7-05: Cambiar disponibilidad manualmente (Admin) ───────────────────────

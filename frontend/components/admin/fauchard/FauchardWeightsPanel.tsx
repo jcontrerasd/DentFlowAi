@@ -10,7 +10,7 @@ import { useFlashedParams } from '@/lib/hooks/useParamFlash';
 import { useState, useEffect } from 'react';
 
 /**
- * Editor de los 6 pesos del score (α). Lee/escribe el borrador compartido
+ * Editor de los 5 pesos del score (α). Lee/escribe el borrador compartido
  * (`FauchardDraftContext`); el guardado es global (no tiene botón propio).
  */
 export default function FauchardWeightsPanel({ initialFocusKey = null }: { initialFocusKey?: string | null }) {
@@ -25,7 +25,7 @@ export default function FauchardWeightsPanel({ initialFocusKey = null }: { initi
 
   const sum =
     draft.alphaQuality + draft.alphaPunctuality + draft.alphaExperience +
-    draft.alphaLoad + draft.alphaBonus + draft.alphaNoResponse;
+    draft.alphaLoad + draft.alphaNoResponse;
   const isSumValid = Math.abs(sum - 1.0) < 0.001;
 
   return (
@@ -52,16 +52,12 @@ export default function FauchardWeightsPanel({ initialFocusKey = null }: { initi
           <p className="text-[10px] text-faint italic px-1">Nivel de habilidad declarado para el tipo de trabajo específico.</p>
         </div>
         <div className="space-y-2">
-          <Slider label="Penalización por Carga (C)" value={draft.alphaLoad} onChange={(e) => setParam('alphaLoad', parseFloat(e.target.value))} min={0} max={0.5} step={0.01} valueSuffix=" (w)" tooltip={fauchardParamTooltip('alphaLoad')} onHelp={() => openHelp('alphaLoad')} paramNumber={fauchardParamNumber('alphaLoad')} flash={flashed.has('alphaLoad')} />
-          <p className="text-[10px] text-faint italic px-1">Reduce prioridad a técnicos con muchas invitaciones recientes.</p>
-        </div>
-        <div className="space-y-2">
-          <Slider label="Bono de Infrautilización (B)" value={draft.alphaBonus} onChange={(e) => setParam('alphaBonus', parseFloat(e.target.value))} min={0} max={0.5} step={0.01} valueSuffix=" (w)" tooltip={fauchardParamTooltip('alphaBonus')} onHelp={() => openHelp('alphaBonus')} paramNumber={fauchardParamNumber('alphaBonus')} flash={flashed.has('alphaBonus')} />
-          <p className="text-[10px] text-faint italic px-1">Prioriza a técnicos que llevan tiempo sin ser invitados.</p>
+          <Slider label="Carga activa (L)" value={draft.alphaLoad} onChange={(e) => setParam('alphaLoad', parseFloat(e.target.value))} min={0} max={0.5} step={0.01} valueSuffix=" (w)" tooltip={fauchardParamTooltip('alphaLoad')} onHelp={() => openHelp('alphaLoad')} paramNumber={fauchardParamNumber('alphaLoad')} flash={flashed.has('alphaLoad')} />
+          <p className="text-[10px] text-faint italic px-1">Penaliza técnicos con muchos casos activos en curso.</p>
         </div>
         <div className="space-y-2">
           <Slider label="Penalización por No-respuesta (N)" value={draft.alphaNoResponse} onChange={(e) => setParam('alphaNoResponse', parseFloat(e.target.value))} min={0} max={0.5} step={0.01} valueSuffix=" (w)" tooltip={fauchardParamTooltip('alphaNoResponse')} onHelp={() => openHelp('alphaNoResponse')} paramNumber={fauchardParamNumber('alphaNoResponse')} flash={flashed.has('alphaNoResponse')} />
-          <p className="text-[10px] text-faint italic px-1">Castiga a técnicos que dejan vencer invitaciones sin responder.</p>
+          <p className="text-[10px] text-faint italic px-1">Castiga asignaciones vencidas sin respuesta (ventana rolling 14d).</p>
         </div>
       </div>
 

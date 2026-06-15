@@ -23,11 +23,11 @@ export function levelToScoreN(level: SanctionLevel): number {
  * Coeficientes re-normalizados del score cuando el modelo de disponibilidad está
  * activo (|Σα| = 1.00 incluyendo αN). Ver tabla §2.5 / §6.1.
  */
+/** Pesos por defecto del score de asignación (Σ = 1.0): Q/P/E/L/N. */
 export const RENORMALIZED_ALPHAS = {
-  quality: 0.20,
-  punctuality: 0.15,
-  experience: 0.15,
+  quality: 0.25,
+  punctuality: 0.20,
+  experience: 0.20,
   load: 0.15,
-  bonus: 0.10,
-  noResponse: 0.25,
+  noResponse: 0.20,
 } as const;

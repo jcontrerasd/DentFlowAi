@@ -8,7 +8,7 @@
  */
 
 import { db } from '@/lib/db';
-import { caseInvitation, clinicalCase, fauchardConfig } from '@/lib/db/schema';
+import { caseAssignment, clinicalCase, fauchardConfig } from '@/lib/db/schema';
 import { eq, and, inArray, max } from 'drizzle-orm';
 import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
 
@@ -33,12 +33,12 @@ const QUOTE_ACTIVE_STATUSES = ['pending', 'quoted'] as const;
  */
 export async function getCaseQuoteDeadlineAt(caseId: string): Promise<Date | null> {
   const [row] = await db
-    .select({ deadline: max(caseInvitation.expiresAt) })
-    .from(caseInvitation)
+    .select({ deadline: max(caseAssignment.expiresAt) })
+    .from(caseAssignment)
     .where(
       and(
-        eq(caseInvitation.clinicalCaseId, caseId),
-        inArray(caseInvitation.status, [...QUOTE_ACTIVE_STATUSES]),
+        eq(caseAssignment.clinicalCaseId, caseId),
+        inArray(caseAssignment.status, [...QUOTE_ACTIVE_STATUSES]),
       ),
     );
 
@@ -55,17 +55,17 @@ export async function getCaseQuoteDeadlineAtBatch(
 
   const rows = await db
     .select({
-      caseId: caseInvitation.clinicalCaseId,
-      deadline: max(caseInvitation.expiresAt),
+      caseId: caseAssignment.clinicalCaseId,
+      deadline: max(caseAssignment.expiresAt),
     })
-    .from(caseInvitation)
+    .from(caseAssignment)
     .where(
       and(
-        inArray(caseInvitation.clinicalCaseId, caseIds),
-        inArray(caseInvitation.status, [...QUOTE_ACTIVE_STATUSES]),
+        inArray(caseAssignment.clinicalCaseId, caseIds),
+        inArray(caseAssignment.status, [...QUOTE_ACTIVE_STATUSES]),
       ),
     )
-    .groupBy(caseInvitation.clinicalCaseId);
+    .groupBy(caseAssignment.clinicalCaseId);
 
   for (const id of caseIds) map.set(id, null);
   for (const r of rows) {

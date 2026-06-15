@@ -10,7 +10,6 @@ interface Step {
 const BASE_STEPS: Step[] = [
   { status: 'borrador', label: 'Borrador' },
   { status: 'enEvaluacion', label: 'En evaluación' },
-  { status: 'propuestaLista', label: 'Propuesta lista' },
   { status: 'aceptadaPendienteInicio', label: 'Esperando inicio' },
   { status: 'enEjecucion', label: 'En ejecución' },
   { status: 'enRevision', label: 'En revisión' },
@@ -27,6 +26,7 @@ const TERMINAL_STEPS: Record<string, Step> = {
 const STEP_STATUS_ALIASES: Record<string, string> = {
   aceptado: 'aceptadaPendienteInicio',
   cambiosEnProceso: 'enEjecucion',
+  propuestaLista: 'enEvaluacion',
 };
 
 /**
@@ -79,7 +79,7 @@ export default function CaseWorkflowStepper({
 
   const statusOrder = steps.map((s) => s.status);
   const statusKey = resolveStepperStatusKey(currentStatus, statusOrder);
-  const idxPropuesta = steps.findIndex((s) => s.status === 'propuestaLista');
+  const idxEvaluacion = steps.findIndex((s) => s.status === 'enEvaluacion');
   const lastIdx = steps.length - 1;
 
   const rawIdx = statusOrder.indexOf(statusKey);
@@ -103,15 +103,15 @@ export default function CaseWorkflowStepper({
     if (techRejected) {
       // Desde comparativa hasta completado: banda de pérdida en rosa;
       // el terminal "Rechazado" queda en rojo sólido.
-      return idxPropuesta >= 0 && idx >= idxPropuesta && idx < lastIdx;
+      return idxEvaluacion >= 0 && idx >= idxEvaluacion && idx < lastIdx;
     }
     return false;
   };
 
   const connectorRose = (leftIdx: number) => {
     if (techRejected) {
-      if (idxPropuesta < 0) return false;
-      return leftIdx >= idxPropuesta && leftIdx < lastIdx;
+      if (idxEvaluacion < 0) return false;
+      return leftIdx >= idxEvaluacion && leftIdx < lastIdx;
     }
     return false;
   };
@@ -131,7 +131,7 @@ export default function CaseWorkflowStepper({
           : isTerminal && idx === steps.length - 1;
 
         const roseDone = inRoseDoneBand(idx);
-        const tealEarlyDone = techRejected && idxPropuesta >= 0 && idx < idxPropuesta;
+        const tealEarlyDone = techRejected && idxEvaluacion >= 0 && idx < idxEvaluacion;
 
         const showTerminalRejected = techRejected && isTerminalStep;
 
@@ -215,7 +215,7 @@ export default function CaseWorkflowStepper({
                       ? 'bg-error'
                       : connectorRose(idx)
                         ? 'bg-error'
-                        : idx < idxPropuesta
+                        : idx < idxEvaluacion
                           ? 'bg-primary'
                           : 'bg-surface-off'
                     : idx < currentIdx

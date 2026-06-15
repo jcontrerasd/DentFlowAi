@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { db } from '@/lib/db';
 import {
   clinicalCase,
-  caseInvitation,
+  caseAssignment,
   user,
   technicianSkill,
   fauchardConfig,
@@ -54,7 +54,7 @@ describe('Orchestration simulation (cotización comparativa)', () => {
         set: { name: 'Organización prueba UAT DentFlowAi', isActive: true, updatedAt: new Date() },
       });
 
-    await db.delete(caseInvitation).where(eq(caseInvitation.technicianId, techId));
+    await db.delete(caseAssignment).where(eq(caseAssignment.technicianId, techId));
 
     await db.insert(user).values({
       id: dentistId,
@@ -190,8 +190,8 @@ describe('Orchestration simulation (cotización comparativa)', () => {
 
     const invitations = await db
       .select()
-      .from(caseInvitation)
-      .where(eq(caseInvitation.clinicalCaseId, testCaseId));
+      .from(caseAssignment)
+      .where(eq(caseAssignment.clinicalCaseId, testCaseId));
     expect(invitations.length).toBeGreaterThanOrEqual(1);
 
     if (!invitations.some((inv) => inv.technicianId === techId) && updatedCase.fauchardConfigId) {
@@ -215,8 +215,8 @@ describe('Orchestration simulation (cotización comparativa)', () => {
 
     const [invitation] = await db
       .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, testCaseId), eq(caseInvitation.technicianId, techId)))
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, testCaseId), eq(caseAssignment.technicianId, techId)))
       .limit(1);
     expect(invitation).toBeDefined();
 
@@ -225,10 +225,10 @@ describe('Orchestration simulation (cotización comparativa)', () => {
 
     const stillPending = await db
       .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, testCaseId), eq(caseInvitation.status, 'pending')));
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, testCaseId), eq(caseAssignment.status, 'pending')));
     for (const p of stillPending) {
-      await db.update(caseInvitation).set({ status: 'expired', updatedAt: new Date() }).where(eq(caseInvitation.id, p.id));
+      await db.update(caseAssignment).set({ status: 'expired', updatedAt: new Date() }).where(eq(caseAssignment.id, p.id));
     }
     await evaluateQuotesAction(testCaseId);
 
@@ -250,12 +250,12 @@ describe('Orchestration simulation (cotización comparativa)', () => {
 
     const [winnerInv] = await db
       .select()
-      .from(caseInvitation)
+      .from(caseAssignment)
       .where(
         and(
-          eq(caseInvitation.clinicalCaseId, testCaseId),
-          eq(caseInvitation.status, 'quoted'),
-          eq(caseInvitation.technicianId, techId),
+          eq(caseAssignment.clinicalCaseId, testCaseId),
+          eq(caseAssignment.status, 'quoted'),
+          eq(caseAssignment.technicianId, techId),
         ),
       )
       .limit(1);

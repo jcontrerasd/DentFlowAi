@@ -18,6 +18,7 @@ import {
   Settings2,
   Bell,
   CreditCard,
+  DollarSign,
 } from 'lucide-react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
@@ -164,6 +165,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { name: 'ContactGuard', icon: Shield, href: '/dashboard/admin/contactguard' },
       { name: 'Control de Usuarios', icon: Users, href: '/dashboard/admin/users' },
       { name: 'Catálogo UI', icon: ListChecks, href: '/dashboard/admin/catalogos' },
+      { name: 'Precios', icon: DollarSign, href: '/dashboard/admin/prices' },
     ] : []),
   ];
 

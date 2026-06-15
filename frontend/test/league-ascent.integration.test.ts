@@ -22,7 +22,7 @@ let urgencyId: string;
 let prevFlag: string | undefined;
 
 async function seedCompletedCase(tech: string, opts: {
-  league: string; assignedDaysAgo: number; completedDaysAgo: number; quotedDays: number; rating: number;
+  league: string; assignedDaysAgo: number; completedDaysAgo: number; deadlineDays: number; rating: number;
 }): Promise<void> {
   const caseId = crypto.randomUUID();
   const assignedAt = new Date(Date.now() - opts.assignedDaysAgo * DAY).toISOString();
@@ -33,7 +33,7 @@ async function seedCompletedCase(tech: string, opts: {
     VALUES (${caseId}, ${ORG}, ${DOCTOR}, 'Ascent Case', false, 'completado', ${urgencyId},
       ${opts.league}, ${assignedAt}, ${completedAt}, ${tech})`);
   await db.execute(sql`INSERT INTO case_invitation (clinical_case_id, technician_id, status, quoted_days)
-    VALUES (${caseId}, ${tech}, 'confirmed', ${opts.quotedDays})`);
+    VALUES (${caseId}, ${tech}, 'confirmed', ${opts.deadlineDays})`);
   await db.execute(sql`INSERT INTO review (clinical_case_id, reviewer_id, reviewee_id, rating, dimension)
     VALUES (${caseId}, ${DOCTOR}, ${tech}, ${opts.rating}, 'design')`);
 }
@@ -63,19 +63,19 @@ describe.runIf(runIntegration)('ascenso + transición de liga (Fase 2, Sprint 2)
     urgencyId = u.id;
 
     // TECH_A cumple: 3 casos on-time en 'plata', ratings 5,5,4.
-    await seedCompletedCase(TECH_A, { league: 'plata', assignedDaysAgo: 20, completedDaysAgo: 16, quotedDays: 5, rating: 5 });
-    await seedCompletedCase(TECH_A, { league: 'plata', assignedDaysAgo: 15, completedDaysAgo: 11, quotedDays: 5, rating: 5 });
-    await seedCompletedCase(TECH_A, { league: 'plata', assignedDaysAgo: 10, completedDaysAgo: 6, quotedDays: 5, rating: 4 });
+    await seedCompletedCase(TECH_A, { league: 'plata', assignedDaysAgo: 20, completedDaysAgo: 16, deadlineDays: 5, rating: 5 });
+    await seedCompletedCase(TECH_A, { league: 'plata', assignedDaysAgo: 15, completedDaysAgo: 11, deadlineDays: 5, rating: 5 });
+    await seedCompletedCase(TECH_A, { league: 'plata', assignedDaysAgo: 10, completedDaysAgo: 6, deadlineDays: 5, rating: 4 });
 
     // TECH_B: rating bajo (2,2,3) → no cumple.
-    await seedCompletedCase(TECH_B, { league: 'plata', assignedDaysAgo: 20, completedDaysAgo: 16, quotedDays: 5, rating: 2 });
-    await seedCompletedCase(TECH_B, { league: 'plata', assignedDaysAgo: 15, completedDaysAgo: 11, quotedDays: 5, rating: 2 });
-    await seedCompletedCase(TECH_B, { league: 'plata', assignedDaysAgo: 10, completedDaysAgo: 6, quotedDays: 5, rating: 3 });
+    await seedCompletedCase(TECH_B, { league: 'plata', assignedDaysAgo: 20, completedDaysAgo: 16, deadlineDays: 5, rating: 2 });
+    await seedCompletedCase(TECH_B, { league: 'plata', assignedDaysAgo: 15, completedDaysAgo: 11, deadlineDays: 5, rating: 2 });
+    await seedCompletedCase(TECH_B, { league: 'plata', assignedDaysAgo: 10, completedDaysAgo: 6, deadlineDays: 5, rating: 3 });
 
     // TECH_C: en transición desde hace 10d; 2 casos completados en 'oro' después.
     await db.execute(sql`UPDATE "user" SET league_transition_started_at=${new Date(Date.now() - 10 * DAY).toISOString()} WHERE id=${TECH_C}`);
-    await seedCompletedCase(TECH_C, { league: 'oro', assignedDaysAgo: 8, completedDaysAgo: 5, quotedDays: 5, rating: 5 });
-    await seedCompletedCase(TECH_C, { league: 'oro', assignedDaysAgo: 5, completedDaysAgo: 2, quotedDays: 5, rating: 5 });
+    await seedCompletedCase(TECH_C, { league: 'oro', assignedDaysAgo: 8, completedDaysAgo: 5, deadlineDays: 5, rating: 5 });
+    await seedCompletedCase(TECH_C, { league: 'oro', assignedDaysAgo: 5, completedDaysAgo: 2, deadlineDays: 5, rating: 5 });
   });
 
   afterAll(async () => {

@@ -30,15 +30,15 @@ describe('CaseWorkflowStepper', () => {
     expect(terminalCircle?.className).toContain('bg-error text-inverse');
   });
 
-  it('variante techRejected: tramo propuesta–diseño usa círculos rose suaves (no sólidos como el terminal)', () => {
+  it('variante techRejected: tramo evaluación–diseño usa círculos rose suaves (no sólidos como el terminal)', () => {
     render(
       <CaseWorkflowStepper
         currentStatus="enRevision"
         variant="techRejected"
       />,
     );
-    const propuesta = screen.getByText('Propuesta lista');
-    const circle = propuesta.parentElement?.querySelector('.rounded-full');
+    const evaluacion = screen.getByText('En evaluación');
+    const circle = evaluacion.parentElement?.querySelector('.rounded-full');
     expect(circle?.className).toMatch(/error-hl/);
     expect(circle?.className).toMatch(/ring-error\/30/);
   });

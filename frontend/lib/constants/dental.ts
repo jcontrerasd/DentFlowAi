@@ -28,7 +28,7 @@ export const INTERNAL_CASE_STATUSES = {
   CASO_RECIBIDO: 'caso_recibido',
   CLASIFICANDO: 'clasificando',
   SELECCIONANDO_TECNICOS: 'seleccionandoTecnicos',
-  COTIZACIONES_ABIERTAS: 'cotizacionesAbiertas',
+  ASIGNACION_PENDIENTE: 'asignacionPendiente',
   EVALUANDO_OFERTAS: 'evaluandoOfertas',
   PROPUESTA_GENERADA: 'propuestaGenerada',
   PROPUESTA_PRESENTADA: 'propuestaPresentada',
@@ -36,6 +36,8 @@ export const INTERNAL_CASE_STATUSES = {
   EN_EJECUCION_DISENO: 'enEjecucionDiseno',
   EN_REVISION_DISENO: 'enRevisionDiseno',
   CAMBIOS_SOLICITADOS: 'cambiosSolicitados',
+  SIN_ASIGNACION_FALLO: 'sin_asignacion_fallo',
+  /** @deprecated legacy */
   SIN_COTIZACIONES_FALLO: 'sin_cotizaciones_fallo',
   PROPUESTA_EXPIRADA: 'propuestaExpirada',
   RECHAZADA_POR_DENTISTA: 'rechazadaPorDentista',

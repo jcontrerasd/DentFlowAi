@@ -3,31 +3,22 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  AlertCircle, Ban, CheckCircle2, Clock, Hammer, Send, Undo2, XCircle,
+  AlertCircle, Ban, CheckCircle2, Clock, Hammer, XCircle,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useDeadlineMs, useRemainingMsUntil, formatCountdownHMS } from '@/lib/hooks/useRemainingUntil';
-import ComparativeOffersPanel from '@/components/cases/ComparativeOffersPanel';
 import OfferConditionsBlock from '@/components/cases/OfferConditionsBlock';
 import UchQuoteBreakdown from '@/components/cases/uch/UchQuoteBreakdown';
-import { startWorkAction, withdrawQuoteAction } from '@/lib/db/actions/proposal';
+import { startWorkAction } from '@/lib/db/actions/proposal';
+import { acceptAssignmentAction } from '@/lib/db/actions/assignment';
 import { getRejectionUiEnabledAction } from '@/lib/db/actions/rejection';
 import UchRejectInvitationDialog from '@/components/cases/uch/UchRejectInvitationDialog';
 import { quoteDisplayFromInvitation } from '@/lib/uchQuoteDisplay';
 import type { InvitationItem } from '@/lib/db/actions/invitations';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { dispatchDashboardMetricsRefresh } from '@/lib/dashboard/dashboardRefresh';
-
-type ComparativeOffer = {
-  invitationId: string;
-  rank: number;
-  totalPriceCLP: number;
-  quotedDays: number | null;
-  quotedHours?: number | null;
-  techNotes: string | null;
-  respondedAt: string | Date | null;
-};
+import { CaseDesiredDeliveryChip } from '@/components/cases/CaseDesiredDeliveryChip';
 
 export type UchFauchardActionsPanelProps = {
   caseId: string;
@@ -36,29 +27,27 @@ export type UchFauchardActionsPanelProps = {
   actingAsTecnico: boolean;
   clinicalCase: any;
   myInvitation: InvitationItem | null | undefined;
-  comparative: ComparativeOffer[] | undefined;
+  comparative?: unknown;
   currentUserId?: string;
-  quotePrice: string;
-  setQuotePrice: (v: string) => void;
-  quoteDays: number;
-  setQuoteDays: (v: number) => void;
-  /** v4.6 — unidad del slot flat: 'dias' (legacy) o 'horas'. */
+  quotePrice?: string;
+  setQuotePrice?: (v: string) => void;
+  quoteDays?: number;
+  setQuoteDays?: (v: number) => void;
   quoteFlatUnit?: 'dias' | 'horas';
   setQuoteFlatUnit?: (v: 'dias' | 'horas') => void;
-  quoteNotes: string;
-  setQuoteNotes: (v: string) => void;
-  isSubmittingQuote: boolean;
+  quoteNotes?: string;
+  setQuoteNotes?: (v: string) => void;
+  isSubmittingQuote?: boolean;
   isStartingWork: boolean;
   setIsStartingWork: (v: boolean) => void;
-  setQuoteConfirmChecked: (v: boolean | ((p: boolean) => boolean)) => void;
-  setShowQuoteConfirm: (v: boolean) => void;
+  setQuoteConfirmChecked?: (v: boolean) => void;
+  setShowQuoteConfirm?: (v: boolean) => void;
   showSuccess: (msg: string) => void;
   showError: (msg: string) => void;
-  onInvitationUpdate?: () => Promise<void>;
+  onInvitationUpdate?: () => void | Promise<void>;
   onActionTriggered?: (action: string, data?: unknown) => Promise<unknown>;
-  onOpenDeliveryInline: () => void;
-  showDeliveryShortcut: boolean;
-  /** Ms del plazo de propuesta (detalle); prioridad sobre parseo en el panel. */
+  onOpenDeliveryInline?: () => void;
+  showDeliveryShortcut?: boolean;
   proposalDeadlineMs?: number | null;
   serverClockAnchor?: ServerClockAnchor | null;
 };
@@ -70,447 +59,226 @@ export default function UchFauchardActionsPanel({
   actingAsTecnico,
   clinicalCase,
   myInvitation,
-  comparative,
   currentUserId,
-  quotePrice,
-  setQuotePrice,
-  quoteDays,
-  setQuoteDays,
-  quoteFlatUnit = 'dias',
-  setQuoteFlatUnit,
-  quoteNotes,
-  setQuoteNotes,
-  isSubmittingQuote,
   isStartingWork,
   setIsStartingWork,
-  setQuoteConfirmChecked,
-  setShowQuoteConfirm,
   showSuccess,
   showError,
   onInvitationUpdate,
-  onActionTriggered,
-  onOpenDeliveryInline,
-  showDeliveryShortcut,
-  proposalDeadlineMs,
   serverClockAnchor,
 }: UchFauchardActionsPanelProps) {
-  const [showWithdrawConfirm, setShowWithdrawConfirm] = useState(false);
-  const [withdrawCheckUnderstand, setWithdrawCheckUnderstand] = useState(false);
-  const [withdrawCheckConfirm, setWithdrawCheckConfirm] = useState(false);
-  const [isWithdrawingQuote, setIsWithdrawingQuote] = useState(false);
-  // Rechazo individual de invitación (v5.0, gated por REJECTION_INDIVIDUAL_ENABLED).
   const [rejectionEnabled, setRejectionEnabled] = useState(false);
-  const [showRejectInvitation, setShowRejectInvitation] = useState(false);
-
-  const canRejectInvitation =
-    actingAsTecnico && myInvitation?.status === 'pending' && caseStatus === 'enEvaluacion';
+  const [showRejectAssignment, setShowRejectAssignment] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
 
   useEffect(() => {
-    if (!canRejectInvitation) return;
-    let active = true;
-    getRejectionUiEnabledAction()
-      .then((res) => { if (active) setRejectionEnabled(res.enabled); })
-      .catch(() => { if (active) setRejectionEnabled(false); });
-    return () => { active = false; };
-  }, [canRejectInvitation]);
+    getRejectionUiEnabledAction().then((r) => setRejectionEnabled(r.enabled));
+  }, []);
 
-  const canWithdrawQuote =
+  const assignmentExpiresMs = useDeadlineMs(myInvitation?.expiresAt ?? null);
+  const assignmentRemainingMs = useRemainingMsUntil(assignmentExpiresMs, serverClockAnchor);
+  const assignmentCountdown = formatCountdownHMS(assignmentRemainingMs);
+
+  const canAcceptAssignment =
     actingAsTecnico &&
-    myInvitation?.status === 'quoted' &&
-    (caseStatus === 'enEvaluacion' || caseStatus === 'propuestaLista');
+    myInvitation?.status === 'pending' &&
+    caseStatus === 'enEvaluacion' &&
+    assignmentRemainingMs > 0;
 
-  const quoteDeadlineMs = useDeadlineMs(
-    myInvitation?.expiresAt && myInvitation.status === 'pending' && caseStatus === 'enEvaluacion'
-      ? myInvitation.expiresAt
-      : null,
-  );
-  const quoteRemainingMs = useRemainingMsUntil(quoteDeadlineMs, serverClockAnchor ?? null);
+  const canRejectAssignment =
+    rejectionEnabled &&
+    actingAsTecnico &&
+    myInvitation?.status === 'pending' &&
+    caseStatus === 'enEvaluacion';
+
+  const canStartWork =
+    actingAsTecnico &&
+    caseStatus === 'aceptadaPendienteInicio' &&
+    myInvitation?.status === 'accepted';
+
+  const assignmentQuote = myInvitation
+    ? quoteDisplayFromInvitation({
+        compensation: myInvitation.compensation,
+        deadlineDays: myInvitation.deadlineDays,
+        deadlineHours: myInvitation.deadlineHours,
+      })
+    : null;
+
+  const handleAccept = async () => {
+    if (!myInvitation?.id) return;
+    setIsAccepting(true);
+    const res = await acceptAssignmentAction(myInvitation.id);
+    setIsAccepting(false);
+    if (res.success) {
+      showSuccess('Asignación aceptada. Cuando estés listo, inicia el trabajo.');
+      dispatchDashboardMetricsRefresh();
+      await onInvitationUpdate?.();
+    } else {
+      showError(res.error || 'No se pudo aceptar la asignación');
+    }
+  };
+
+  if (actingAsDentista && caseStatus === 'enEvaluacion') {
+    return (
+      <div className="rounded-xl border border-primary/20 bg-primary-hl p-4 space-y-2">
+        <div className="flex items-center gap-2">
+          <Clock className="w-4 h-4 text-primary flex-shrink-0" />
+          <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+            Fauchard está asignando tu caso
+          </span>
+        </div>
+        <p className="text-[11px] text-muted leading-relaxed">
+          El precio y plazo ya están definidos. Te avisaremos cuando un técnico acepte la asignación.
+        </p>
+        {clinicalCase?.listPriceSale != null && (
+          <p className="text-[11px] text-foreground font-semibold">
+            Precio acordado: ${Number(clinicalCase.listPriceSale).toLocaleString('es-CL')} CLP
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  if (!actingAsTecnico || !myInvitation) return null;
 
   return (
-    <div
-      data-testid="uch-case-actions-inline"
-      className="rounded-xl border border-divider bg-surface px-3 py-3 space-y-3"
-    >
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap gap-2">
-          {actingAsDentista && caseStatus === 'propuestaLista' && clinicalCase?.proposalExpiresAt && (
-            <div className="w-full">
-              <ComparativeOffersPanel
-                caseId={caseId}
-                caseNumber={clinicalCase?.caseNumber}
-                offers={comparative ?? []}
-                proposalDeadlineMs={proposalDeadlineMs}
-                proposalExpiresAt={clinicalCase.proposalExpiresAt}
-                serverClockAnchor={serverClockAnchor}
-                onUpdated={async () => {
-                  await onInvitationUpdate?.();
-                }}
-              />
-            </div>
-          )}
-          {actingAsDentista && clinicalCase?.pendingActionRequest && clinicalCase.pendingActionActor !== currentUserId && (
-            <div className="w-full flex flex-col gap-2 p-3 bg-warning-hl border border-warning/20 rounded-xl mb-2">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-warning" />
-                <span className="text-[10px] font-black text-foreground uppercase">Solicitud: {clinicalCase.pendingActionRequest}</span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    void onActionTriggered?.('resolve_flow', { approved: false });
-                  }}
-                  className="flex-1 py-2 bg-surface-2 text-foreground text-[9px] font-bold rounded-lg uppercase"
-                >
-                  Rechazar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void onActionTriggered?.('resolve_flow', { approved: true });
-                  }}
-                  className="flex-1 py-2 bg-warning text-inverse text-[9px] font-bold rounded-lg uppercase"
-                >
-                  Aprobar
-                </button>
-              </div>
-            </div>
-          )}
-          {actingAsTecnico && myInvitation && (
-            <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="w-full space-y-4">
-              {myInvitation.expiresAt && myInvitation.status === 'pending' && caseStatus === 'enEvaluacion' && (
-                <motion.div className="bg-surface-2/60 border border-divider rounded-xl p-3 space-y-2">
-                  <p className="text-[9px] font-black text-warning/70 uppercase tracking-widest">
-                    Plazo para enviar tu cotización
-                  </p>
-                  {quoteRemainingMs >= 0 && (
-                    <p className="text-lg font-mono font-black tabular-nums text-warning">
-                      {formatCountdownHMS(quoteRemainingMs)}
-                    </p>
-                  )}
-                  <p className="text-[10px] text-warning/90 flex items-center gap-1">
-                    <Clock className="w-3 h-3 flex-shrink-0" />
-                    Hasta el {format(new Date(myInvitation.expiresAt), "d 'de' MMMM 'a las' HH:mm", { locale: es })}
-                  </p>
-                </motion.div>
-              )}
-              {myInvitation.status === 'pending' && caseStatus === 'enEvaluacion' && (() => {
-                const DAY_OPTS = [1, 2, 3, 5, 7, 10, 15];
-                const HOUR_OPTS = [1, 2, 3, 4, 6, 8, 10, 12, 16, 20, 24];
-                const labelDay = (d: number) => `${d} ${d === 1 ? 'día hábil' : 'días hábiles'}`;
-                const labelHour = (h: number) => `${h} ${h === 1 ? 'hora' : 'horas'}`;
-                const flatReady = !!quotePrice && quoteDays > 0;
-                const disabled = isSubmittingQuote || !flatReady;
+    <div className="space-y-3">
+      {clinicalCase?.desiredDeliveryAt && (
+        <CaseDesiredDeliveryChip value={clinicalCase.desiredDeliveryAt} className="w-full justify-center" />
+      )}
 
-                return (
-                  <div className="space-y-3 bg-surface/40 border border-divider rounded-2xl p-4">
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">Precio (CLP)</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="Ej: 45000"
-                        value={quotePrice ? new Intl.NumberFormat('es-CL').format(Number(quotePrice)) : ''}
-                        onChange={(e) => setQuotePrice(e.target.value.replace(/\D/g, ''))}
-                        className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-faint focus:outline-none focus:border-primary/30"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <label className="text-[9px] font-black text-muted uppercase tracking-widest">Plazo de entrega</label>
-                        <div className="inline-flex rounded-lg border border-divider overflow-hidden">
-                          <button
-                            type="button"
-                            onClick={() => { setQuoteFlatUnit?.('dias'); setQuoteDays(0); }}
-                            className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteFlatUnit === 'dias' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
-                          >Días</button>
-                          <button
-                            type="button"
-                            onClick={() => { setQuoteFlatUnit?.('horas'); setQuoteDays(0); }}
-                            className={`px-2 py-0.5 text-[9px] font-bold uppercase ${quoteFlatUnit === 'horas' ? 'bg-primary text-inverse' : 'bg-surface-2 text-muted'}`}
-                          >Horas</button>
-                        </div>
-                      </div>
-                      <select
-                        value={quoteDays}
-                        onChange={(e) => setQuoteDays(Number(e.target.value))}
-                        className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/30"
-                      >
-                        <option value={0} disabled>Selecciona el plazo</option>
-                        {(quoteFlatUnit === 'horas' ? HOUR_OPTS : DAY_OPTS).map((d) => (
-                          <option key={d} value={d}>
-                            {quoteFlatUnit === 'horas' ? labelHour(d) : labelDay(d)}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[9px] font-black text-muted uppercase tracking-widest block mb-1">
-                        Nota (opcional) <span className="font-normal text-faint">{quoteNotes.length}/200</span>
-                      </label>
-                      <textarea
-                        maxLength={200}
-                        rows={2}
-                        placeholder="Comentario opcional para el dentista..."
-                        value={quoteNotes}
-                        onChange={(e) => setQuoteNotes(e.target.value)}
-                        className="w-full bg-surface-2 border border-divider rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-faint focus:outline-none focus:border-primary/30 resize-none"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setQuoteConfirmChecked(false);
-                        setShowQuoteConfirm(true);
-                      }}
-                      disabled={disabled}
-                      className="w-full py-2.5 bg-primary text-inverse text-[10px] font-black rounded-xl uppercase shadow-lg shadow-sm hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                    >
-                      {isSubmittingQuote ? (
-                        <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4" />
-                      )}
-                      Enviar oferta
-                    </button>
-                  </div>
-                );
-              })()}
-              {rejectionEnabled && canRejectInvitation && (
-                <button
-                  type="button"
-                  onClick={() => setShowRejectInvitation(true)}
-                  data-testid="uch-reject-invitation-open"
-                  className="w-full py-2 border border-error/20 text-error hover:bg-error-hl text-[10px] font-black uppercase rounded-xl transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-error/30"
-                >
-                  <Ban className="w-3.5 h-3.5" />
-                  Rechazar invitación
-                </button>
-              )}
-              {canWithdrawQuote && myInvitation.quotedPrice != null && (
-                <div className="rounded-xl border border-divider bg-surface p-3 space-y-3">
-                  <p className="text-[9px] font-black text-muted uppercase tracking-widest">Tu oferta enviada</p>
-                  <UchQuoteBreakdown
-                    quote={quoteDisplayFromInvitation(myInvitation)}
-                    variant="compact"
-                    tone="neutral"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setWithdrawCheckUnderstand(false);
-                      setWithdrawCheckConfirm(false);
-                      setShowWithdrawConfirm(true);
-                    }}
-                    className="w-full py-2 border border-error/20 text-error hover:bg-error text-[10px] font-black uppercase rounded-xl transition-all flex items-center justify-center gap-2"
-                    data-testid="uch-withdraw-quote-open"
-                  >
-                    <Undo2 className="w-3.5 h-3.5" />
-                    Retirar oferta
-                  </button>
-                </div>
-              )}
-              {myInvitation.quotedPrice != null &&
-                !(myInvitation.status === 'confirmed' && caseStatus === 'aceptadaPendienteInicio') &&
-                !canWithdrawQuote && (
-                <OfferConditionsBlock invitation={myInvitation} />
-              )}
-              {myInvitation.status === 'rejected' &&
-                !(
-                  !myInvitation.dentistRejectionFeedback?.trim() &&
-                  clinicalCase?.assignedTechnicianId &&
-                  clinicalCase.assignedTechnicianId !== currentUserId
-                ) && (
-                <div className="bg-error border border-error/20 rounded-xl p-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <XCircle className="w-4 h-4 text-error flex-shrink-0" />
-                    <span className="text-[10px] font-black text-error uppercase tracking-widest">
-                      {myInvitation.dentistRejectionFeedback?.trim()
-                        ? 'Oferta no contratada'
-                        : 'Oferta no seleccionada'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted leading-relaxed">
-                    {myInvitation.dentistRejectionFeedback?.trim()
-                      ? 'El dentista dejó un comentario sobre tu oferta. Puedes leerlo en el historial de esta conversación.'
-                      : 'Tu oferta no continúa en este proceso. Gracias por participar.'}
-                  </p>
-                </div>
-              )}
-              {caseStatus === 'aceptadaPendienteInicio' && myInvitation?.status === 'confirmed' && (
-                <div className="bg-primary-hl border border-primary/30 rounded-xl p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Hammer className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span className="text-[10px] font-black text-primary uppercase tracking-widest">El dentista aceptó la propuesta</span>
-                  </div>
-                  <p className="text-[10px] text-muted leading-relaxed">
-                    El dentista ha aceptado la propuesta. Cuando estés listo, confirma el inicio del trabajo. Esto notificará al dentista y comenzará el conteo de tu plazo comprometido.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      setIsStartingWork(true);
-                      const res = await startWorkAction(caseId);
-                      setIsStartingWork(false);
-                      if (res.success) {
-                        showSuccess('¡Trabajo iniciado! El plazo de entrega ha sido registrado.');
-                        await onInvitationUpdate?.();
-                      } else {
-                        showError(res.error || 'Error al iniciar el trabajo');
-                      }
-                    }}
-                    disabled={isStartingWork}
-                    className="w-full py-2.5 bg-primary hover:opacity-90 text-inverse text-[10px] font-black uppercase rounded-xl shadow-lg shadow-sm transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                  >
-                    {isStartingWork ? (
-                      <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" />
-                    ) : (
-                      <Hammer className="w-4 h-4" />
-                    )}
-                    Iniciar trabajo
-                  </button>
-                </div>
-              )}
-              {myInvitation.status === 'expired' && (
-                <div className="bg-error border border-error/20 rounded-xl p-3 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-error flex-shrink-0" />
-                  <span className="text-[10px] font-bold text-error">Esta invitación ha vencido.</span>
-                </div>
-              )}
-            </motion.div>
+      {canAcceptAssignment && (
+        <div className="rounded-xl border border-primary/30 bg-surface p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[9px] font-black text-muted uppercase tracking-widest">
+              Nueva asignación
+            </span>
+            <span className="text-[10px] font-mono text-warning tabular-nums">{assignmentCountdown}</span>
+          </div>
+          {assignmentQuote && (
+            <UchQuoteBreakdown quote={assignmentQuote} variant="compact" tone="neutral" />
           )}
-          {actingAsTecnico && caseStatus === 'enRevision' && (
-            <div className="w-full py-3 bg-warning-hl border border-warning/20 text-warning text-[10px] font-bold rounded-xl flex items-center justify-center gap-2">
-              <Clock className="w-4 h-4" />
-              Esperando revisión del dentista…
-            </div>
-          )}
-          {showDeliveryShortcut && (
+          <p className="text-[10px] text-muted leading-relaxed">
+            Acepta para comprometerte con la compensación y el plazo indicados, o rechaza si no puedes tomar el caso.
+          </p>
+          <button
+            type="button"
+            onClick={handleAccept}
+            disabled={isAccepting}
+            data-testid="uch-accept-assignment"
+            className="w-full py-2.5 bg-primary text-inverse text-[10px] font-black rounded-xl uppercase shadow-lg hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {isAccepting ? (
+              <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4" />
+            )}
+            Aceptar asignación
+          </button>
+          {canRejectAssignment && (
             <button
               type="button"
-              onClick={onOpenDeliveryInline}
-              className="w-full py-2.5 text-[10px] font-semibold text-primary/90 hover:text-primary border border-primary/20 rounded-xl"
+              onClick={() => setShowRejectAssignment(true)}
+              data-testid="uch-reject-assignment-open"
+              className="w-full py-2 border border-error/20 text-error hover:bg-error-hl text-[10px] font-black uppercase rounded-xl transition-colors flex items-center justify-center gap-2"
             >
-              Ir a entrega de diseño (formulario en el hilo)
+              <Ban className="w-3.5 h-3.5" />
+              Rechazar asignación
             </button>
           )}
         </div>
-      </div>
+      )}
 
-      {myInvitation && (
-        <UchRejectInvitationDialog
-          isOpen={showRejectInvitation}
-          onClose={() => setShowRejectInvitation(false)}
-          invitationId={myInvitation.id}
-          onRejected={async () => {
-            showSuccess('Invitación rechazada. El caso queda libre para otro técnico.');
-            dispatchDashboardMetricsRefresh();
-            await onInvitationUpdate?.();
-          }}
-        />
+      {myInvitation.status === 'accepted' && caseStatus === 'aceptadaPendienteInicio' && (
+        <div className="bg-primary-hl border border-primary/30 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Hammer className="w-4 h-4 text-primary flex-shrink-0" />
+            <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+              Asignación aceptada
+            </span>
+          </div>
+          <p className="text-[10px] text-muted leading-relaxed">
+            Cuando estés listo, confirma el inicio del trabajo. Esto notificará al dentista y comenzará el conteo de tu plazo.
+          </p>
+          {assignmentQuote && (
+            <OfferConditionsBlock
+              invitation={{
+                compensation: myInvitation.compensation,
+                deadlineDays: myInvitation.deadlineDays,
+                deadlineHours: myInvitation.deadlineHours,
+                status: myInvitation.status,
+              }}
+            />
+          )}
+          <button
+            type="button"
+            onClick={async () => {
+              setIsStartingWork(true);
+              const res = await startWorkAction(caseId);
+              setIsStartingWork(false);
+              if (res.success) {
+                showSuccess('¡Trabajo iniciado! El plazo de entrega ha sido registrado.');
+                await onInvitationUpdate?.();
+              } else {
+                showError(res.error || 'No se pudo iniciar el trabajo');
+              }
+            }}
+            disabled={!canStartWork || isStartingWork}
+            className="w-full py-2.5 bg-primary text-inverse text-[10px] font-black rounded-xl uppercase shadow-lg hover:opacity-90 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {isStartingWork ? (
+              <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" />
+            ) : (
+              <Hammer className="w-4 h-4" />
+            )}
+            Iniciar trabajo
+          </button>
+        </div>
+      )}
+
+      {myInvitation.status === 'rejected' &&
+        !(
+          clinicalCase?.assignedTechnicianId &&
+          clinicalCase.assignedTechnicianId !== currentUserId
+        ) && (
+        <div className="bg-error border border-error/20 rounded-xl p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <XCircle className="w-4 h-4 text-error flex-shrink-0" />
+            <span className="text-[10px] font-black text-error uppercase tracking-widest">
+              Asignación no continúa
+            </span>
+          </div>
+          <p className="text-[11px] text-muted leading-relaxed">
+            Esta asignación ya no está activa en este caso. Gracias por tu disponibilidad.
+          </p>
+        </div>
+      )}
+
+      {myInvitation.status === 'expired' && (
+        <div className="rounded-xl border border-warning/30 bg-warning-hl p-3 flex items-start gap-2">
+          <AlertCircle className="w-4 h-4 text-warning flex-shrink-0 mt-0.5" />
+          <p className="text-[11px] text-muted">
+            El plazo para responder a esta asignación venció
+            {myInvitation.expiresAt
+              ? ` (${format(new Date(myInvitation.expiresAt), "d MMM yyyy HH:mm", { locale: es })})`
+              : ''}.
+          </p>
+        </div>
       )}
 
       <AnimatePresence>
-        {showWithdrawConfirm && actingAsTecnico && myInvitation && (
-          <motion.div
-            className="fixed inset-0 z-[310] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 40 }}
-              className="bg-surface border border-error/20 border-b-0 sm:border-b rounded-t-2xl sm:rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 sm:mx-auto"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="uch-withdraw-quote-title"
-            >
-              <div className="text-center space-y-2">
-                <div className="w-14 h-14 bg-error rounded-2xl flex items-center justify-center mx-auto mb-2">
-                  <Undo2 className="w-6 h-6 text-error" />
-                </div>
-                <h3 id="uch-withdraw-quote-title" className="text-xl font-bold text-foreground">
-                  Retirar oferta
-                </h3>
-                <p className="text-sm text-muted">
-                  Esta oferta dejará de participar hasta que envíes una nueva (si el plazo lo permite).
-                </p>
-              </div>
-
-              <div className="bg-surface-2 rounded-2xl p-4">
-                <UchQuoteBreakdown
-                  quote={quoteDisplayFromInvitation(myInvitation)}
-                  variant="compact"
-                  tone="neutral"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <label className="flex items-start gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={withdrawCheckUnderstand}
-                    onChange={(e) => setWithdrawCheckUnderstand(e.target.checked)}
-                    className="mt-1 rounded border-divider"
-                  />
-                  <span className="text-xs text-muted leading-relaxed">
-                    Entiendo que <strong className="text-foreground">retiro mi oferta</strong> de este caso y el solicitante dejará de verla en el comparativo.
-                  </span>
-                </label>
-                <label className="flex items-start gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={withdrawCheckConfirm}
-                    onChange={(e) => setWithdrawCheckConfirm(e.target.checked)}
-                    className="mt-1 rounded border-divider"
-                  />
-                  <span className="text-xs text-muted leading-relaxed">
-                    <strong className="text-foreground">Confirmo</strong> que deseo retirar esta oferta y podré cotizar de nuevo mientras no venza el plazo de invitación.
-                  </span>
-                </label>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowWithdrawConfirm(false);
-                    setWithdrawCheckUnderstand(false);
-                    setWithdrawCheckConfirm(false);
-                  }}
-                  disabled={isWithdrawingQuote}
-                  className="flex-1 py-3 bg-surface-2 text-muted text-[10px] font-black uppercase rounded-2xl hover:bg-surface-off transition-all disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  data-testid="uch-withdraw-quote-confirm"
-                  disabled={isWithdrawingQuote || !withdrawCheckUnderstand || !withdrawCheckConfirm}
-                  onClick={async () => {
-                    setIsWithdrawingQuote(true);
-                    const res = await withdrawQuoteAction(myInvitation.id);
-                    setIsWithdrawingQuote(false);
-                    if (res.success) {
-                      setShowWithdrawConfirm(false);
-                      setWithdrawCheckUnderstand(false);
-                      setWithdrawCheckConfirm(false);
-                      showSuccess('Oferta retirada. Puedes enviar una nueva cotización.');
-                      dispatchDashboardMetricsRefresh();
-                      await onInvitationUpdate?.();
-                    } else {
-                      showError(res.error || 'No se pudo retirar la oferta');
-                    }
-                  }}
-                  className="flex-1 py-3 bg-error hover:bg-error text-inverse text-[10px] font-black uppercase rounded-2xl transition-all disabled:opacity-40"
-                >
-                  {isWithdrawingQuote ? 'Retirando…' : 'Retirar oferta'}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
+        {showRejectAssignment && myInvitation?.id && (
+          <UchRejectInvitationDialog
+            isOpen={showRejectAssignment}
+            invitationId={myInvitation.id}
+            onClose={() => setShowRejectAssignment(false)}
+            onRejected={async () => {
+              setShowRejectAssignment(false);
+              showSuccess('Asignación rechazada.');
+              dispatchDashboardMetricsRefresh();
+              await onInvitationUpdate?.();
+            }}
+          />
         )}
       </AnimatePresence>
     </div>

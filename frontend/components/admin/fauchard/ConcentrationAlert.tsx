@@ -46,15 +46,15 @@ export default function ConcentrationAlert({ alerts, topQuartileShare }: Concent
             {alert.type === 'concentration' && (
               <div className="pt-2 flex flex-wrap gap-4">
                 <Link 
-                  href="/dashboard/admin/algorithm"
+                  href="/dashboard/admin/fauchard"
                   className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider bg-warning-hl text-inverse px-4 py-1.5 rounded-xl hover:bg-warning transition-colors"
                 >
                   <Settings className="w-3 h-3" />
-                  Ajustar Pesos (C / B)
+                  Ajustar Pesos (αL / αQ)
                 </Link>
                 <p className="text-[10px] italic font-medium opacity-60 flex items-center gap-1">
                   <TrendingUp className="w-3 h-3" />
-                  Sugerencia: Incrementar Penalización por Carga
+                  Sugerencia: Incrementar penalización por carga (αL)
                 </p>
               </div>
             )}

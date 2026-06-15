@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   FileText, 
   Stethoscope, 
   Upload, 
@@ -11,7 +11,9 @@ import {
   CheckCircle2,
   Trash2,
   Palette,
-  ChevronLeft
+  ChevronLeft,
+  DollarSign,
+  AlertTriangle,
 } from 'lucide-react';
 import { TeethSelector } from './TeethSelector';
 import {
@@ -25,6 +27,10 @@ import {
   listUrgencyLevelsAction,
   type CatalogOption,
 } from '@/lib/db/actions/catalogs';
+import { resolveListPriceAction } from '@/lib/db/actions/priceRules';
+import { formatUchQuoteClp } from '@/lib/uchQuoteDisplay';
+import { defaultDesiredDeliveryLocal, isDesiredDeliveryValid } from '@/lib/desiredDelivery';
+import { DesiredDeliveryPicker } from './DesiredDeliveryPicker';
 import STLThumbnail from './STLThumbnail';
 
 
@@ -39,6 +45,8 @@ export interface CaseFormData {
   notesOclusal: string;
   notesEsthetic: string;
   doctorNotes: string;
+  /** Fecha/hora de entrega deseada (valor local yyyy-MM-ddTHH:mm). */
+  desiredDeliveryAt: string;
   /** Tipo de servicio del caso (siempre solo_diseno). */
   serviceType: ServiceType;
 }
@@ -95,6 +103,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
       notesOclusal: initialData?.notesOclusal || '',
       notesEsthetic: initialData?.notesEsthetic || '',
       doctorNotes: initialData?.doctorNotes || '',
+      desiredDeliveryAt: initialData?.desiredDeliveryAt || defaultDesiredDeliveryLocal(),
       serviceType: initialServiceType,
     };
   };
@@ -126,6 +135,9 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
   const [restorationTypes, setRestorationTypes] = useState<CatalogOption[]>([]);
   const [dentalMaterials, setDentalMaterials] = useState<CatalogOption[]>([]);
   const [urgencyLevels, setUrgencyLevels] = useState<CatalogOption[]>([]);
+  const [listPriceSale, setListPriceSale] = useState<number | null>(null);
+  const [listPriceLoading, setListPriceLoading] = useState(false);
+  const [listPriceChecked, setListPriceChecked] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +162,40 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Resolver precio de lista cuando las 4 dimensiones están definidas (paso 3+).
+  useEffect(() => {
+    const { restorationType, material, shade, urgency } = formData;
+    if (!restorationType || !material || !shade || !urgency) {
+      setListPriceSale(null);
+      setListPriceChecked(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setListPriceLoading(true);
+      const res = await resolveListPriceAction({
+        restorationType,
+        material,
+        shade,
+        urgency,
+      });
+      if (cancelled) return;
+      setListPriceLoading(false);
+      setListPriceChecked(true);
+      if (res.success) {
+        setListPriceSale(res.data?.salePrice ?? null);
+      } else {
+        setListPriceSale(null);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [formData.restorationType, formData.material, formData.shade, formData.urgency]);
 
 
   const handleFileChange = (key: keyof CaseFiles, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -187,8 +233,12 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
   const prevStep = () => setStep(s => s - 1);
 
   const isStepValid = () => {
-    if (step === 1) return formData.internalName.trim().length > 0 && formData.patientIdAnon.trim().length > 0 && formData.restorationType.length > 0;
-    if (step === 2) return formData.teeth.length > 0;
+    if (step === 1) {
+      return formData.internalName.trim().length > 0
+        && formData.patientIdAnon.trim().length > 0
+        && isDesiredDeliveryValid(formData.desiredDeliveryAt);
+    }
+    if (step === 2) return formData.teeth.length > 0 && formData.restorationType.length > 0;
     if (step === 3) return formData.material.length > 0;
     if (step === 4) {
       return files.superior !== null;
@@ -250,6 +300,17 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                   onChange={e => setFormData({ ...formData, patientIdAnon: e.target.value })}
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">
+                Fecha y hora de entrega deseada
+              </label>
+              <DesiredDeliveryPicker
+                value={formData.desiredDeliveryAt}
+                onChange={(desiredDeliveryAt) => setFormData({ ...formData, desiredDeliveryAt })}
+              />
+              <p className="text-[11px] text-faint px-1">Indica cuándo necesitas recibir el diseño. Debe ser una fecha futura.</p>
             </div>
 
             <div className="space-y-2">
@@ -378,6 +439,34 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                 </select>
               </div>
             </div>
+
+            {/* Precio de lista */}
+            {(listPriceLoading || listPriceChecked) && (
+              <div className={`rounded-xl border p-4 ${
+                listPriceSale != null
+                  ? 'border-primary/30 bg-primary/5'
+                  : 'border-warning/30 bg-warning-hl'
+              }`}>
+                {listPriceLoading ? (
+                  <p className="text-sm text-faint">Calculando precio...</p>
+                ) : listPriceSale != null ? (
+                  <div className="flex items-center gap-3">
+                    <DollarSign size={20} className="text-primary" />
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-faint">Precio de referencia</p>
+                      <p className="text-xl font-bold text-primary">{formatUchQuoteClp(listPriceSale)}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3 text-warning">
+                    <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+                    <p className="text-sm leading-snug">
+                      Precio no disponible para esta combinación. Podrás crear el caso; el equipo revisará la tarifa.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

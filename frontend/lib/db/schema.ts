@@ -147,6 +147,13 @@ export const clinicalCase = pgTable("clinical_case", {
   /** Idempotencia de la escalación del countdown de revisión (v5.2). Reset en cada entrega. */
   reviewReminderSentAt: timestamp("review_reminder_sent_at", { withTimezone: true, mode: 'date' }),
   reviewOverdueNotifiedAt: timestamp("review_overdue_notified_at", { withTimezone: true, mode: 'date' }),
+  /** v5.8 — Fecha/hora de entrega deseada declarada por el dentista al crear el caso. */
+  desiredDeliveryAt: timestamp("desired_delivery_at", { withTimezone: true, mode: 'date' }),
+  /** v5.8 — Snapshot congelado del precio de lista al crear/editar borrador. */
+  listPriceRuleId: uuid("list_price_rule_id"),
+  listPriceCost: numeric("list_price_cost", { precision: 12, scale: 2 }),
+  listPriceFeePercent: numeric("list_price_fee_percent", { precision: 5, scale: 4 }),
+  listPriceSale: numeric("list_price_sale", { precision: 12, scale: 2 }),
 }, (table) => [
 	uniqueIndex("clinical_case_case_number_uidx").on(table.caseNumber),
 	index("clinical_case_assignedTechnicianId_idx").on(table.assignedTechnicianId),
@@ -319,7 +326,9 @@ export const fauchardConfig = pgTable("fauchard_config", {
   // Filtros de exclusión
   tCooldownMinutes: integer("t_cooldown_minutes").default(720).notNull(),
   dInactivityDays: integer("d_inactivity_days").default(15).notNull(),
-  // Selección
+  // Selección — asignación directa (v5.9)
+  maxAssignmentAttempts: integer("max_assignment_attempts").default(3).notNull(),
+  // Legacy — mantener columnas hasta migración admin completa
   nInvited: integer("n_invited").default(5).notNull(),
   nFloor: integer("n_floor").default(3).notNull(),
   qMinSelection: numeric("q_min_selection", { precision: 3, scale: 2 }).default('0.60').notNull(),
@@ -396,66 +405,38 @@ export const fauchardHoliday = pgTable("fauchard_holiday", {
   uniqueIndex("fauchard_holiday_date_uidx").on(table.holidayDate),
 ]);
 
-// S0-04: Invitaciones de cotización (reemplaza bid — interna, invisible al dentista)
-export const caseInvitation = pgTable("case_invitation", {
+// Asignación directa Fauchard (1 técnico por intento; aceptar/rechazar, sin cotización)
+export const caseAssignment = pgTable("case_assignment", {
   id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
   clinicalCaseId: uuid("clinical_case_id").notNull().references(() => clinicalCase.id, { onDelete: 'cascade' }),
   technicianId: text("technician_id").notNull().references(() => user.id),
-  // pending | quoted | accepted | confirmed | rejected | expired | withdrawn
+  /** pending | accepted | rejected | expired */
   status: text("status").notNull().default('pending'),
-  invitedAt: timestamp("invited_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  assignedAt: timestamp("assigned_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true, mode: 'date' }),
-  quotedPrice: doublePrecision("quoted_price"),
-  quotedDays: integer("quoted_days"),
-  /**
-   * Desglose obligatorio para casos integrales (diseño + fabricación).
-   * Para solo_diseno y solo_fabricacion los cuatro campos quedan null y el total
-   * vive solo en quotedPrice / quotedDays. quotedPrice y quotedDays siguen siendo
-   * los valores canónicos (suma) para ordenamiento, comparativo y reporting.
-   */
-  quotedDesignPrice: doublePrecision("quoted_design_price"),
-  quotedDesignDays: integer("quoted_design_days"),
-  quotedFabricationPrice: doublePrecision("quoted_fabrication_price"),
-  quotedFabricationDays: integer("quoted_fabrication_days"),
-  /**
-   * Flete (v4.4): costo y días del traslado físico hasta el dentista.
-   * Aplica solo a casos con fabricación (integral o solo_fabricacion).
-   * El fee de plataforma NO aplica sobre el flete; se traslada 1:1 al dentista.
-   * En solo_diseno ambos campos quedan null.
-   */
-  quotedShippingPrice: doublePrecision("quoted_shipping_price"),
-  quotedShippingDays: integer("quoted_shipping_days"),
-  /**
-   * v4.6 — plazos en horas (1–24 h) por slot. Si el *_hours está poblado el slot es
-   * en horas; si no, en días. Mutuamente excluyente con *_days slot a slot.
-   */
-  quotedHours: integer("quoted_hours"),
-  quotedDesignHours: integer("quoted_design_hours"),
-  quotedFabricationHours: integer("quoted_fabrication_hours"),
-  quotedShippingHours: integer("quoted_shipping_hours"),
-  techNotes: text("tech_notes"),
+  /** Compensación al técnico (listPriceCost). */
+  compensation: doublePrecision("compensation"),
+  deadlineDays: integer("deadline_days"),
+  deadlineHours: integer("deadline_hours"),
   respondedAt: timestamp("responded_at", { withTimezone: true, mode: 'date' }),
-  scoreAtInvite: numeric("score_at_invite", { precision: 6, scale: 4 }),
+  scoreAtAssignment: numeric("score_at_assignment", { precision: 6, scale: 4 }),
   workType: text("work_type"),
-  /** Feedback obligatorio cuando el dentista rechaza esa oferta en el comparativo */
-  dentistRejectionFeedback: text("dentist_rejection_feedback"),
-  // ─── v5.0 — Rechazo explícito (individual / masivo) + marca de reemplazo ───
-  /** Rechazo individual del técnico (§3.2). FK al catálogo, RESTRICT. */
   rejectionReasonId: uuid("rejection_reason_id").references(() => invitationRejectionReason.id, { onDelete: 'restrict' }),
   rejectionComment: text("rejection_comment"),
   rejectedAt: timestamp("rejected_at", { withTimezone: true, mode: 'date' }),
-  /** Rechazo masivo al apagar el switch / auto-OFF Nivel 3 (§3.1). */
   bulkRejectionReasonId: uuid("bulk_rejection_reason_id").references(() => bulkRejectionReason.id, { onDelete: 'restrict' }),
   bulkRejectionComment: text("bulk_rejection_comment"),
-  /** Invitación generada por reemplazo automático tras un rechazo (§3.3). */
-  isReplacement: boolean("is_replacement").default(false).notNull(),
+  isReassignment: boolean("is_reassignment").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (table) => [
-  index("ci_case_idx").on(table.clinicalCaseId),
-  index("ci_tech_idx").on(table.technicianId),
-  index("ci_status_idx").on(table.status),
+  index("ca_case_idx").on(table.clinicalCaseId),
+  index("ca_tech_idx").on(table.technicianId),
+  index("ca_status_idx").on(table.status),
 ]);
+
+/** @deprecated */
+export const caseInvitation = caseAssignment;
 
 // Audit log de acciones del sistema (descargas, accesos sensibles)
 export const auditLog = pgTable("audit_log", {
@@ -561,7 +542,7 @@ export const clinicalCaseRelations = relations(clinicalCase, ({ one, many }) => 
   rounds: many(commercialRound),
   deliveries: many(clinicalCaseDelivery),
   events: many(clinicalCaseEvent),
-  invitations: many(caseInvitation),
+  assignments: many(caseAssignment),
   userArchives: many(caseUserArchive),
   copiedFromCase: one(clinicalCase, {
     fields: [clinicalCase.copiedFromCaseId],
@@ -588,7 +569,7 @@ export const userRelations = relations(user, ({ one, many }) => ({
   }),
   clinicalCases: many(clinicalCase),
   skills: many(technicianSkill),
-  invitations: many(caseInvitation),
+  assignments: many(caseAssignment),
 }));
 
 export const fileRelations = relations(file, ({ one }) => ({
@@ -730,6 +711,64 @@ export const urgencyLevel = pgTable("urgency_level", {
   uniqueIndex("urgency_level_code_uidx").on(table.code),
 ]);
 
+// ─── v5.8 — Mantenedor de precios de lista ───────────────────────────────────
+
+/** Regla de precio con dimensiones opcionales (NULL = comodín). */
+export const priceRule = pgTable("price_rule", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  code: text("code").notNull().unique(),
+  restorationTypeId: uuid("restoration_type_id").references(() => restorationType.id, { onDelete: 'restrict' }),
+  materialId: uuid("material_id").references(() => dentalMaterial.id, { onDelete: 'restrict' }),
+  shadeId: uuid("shade_id").references(() => vitaShade.id, { onDelete: 'restrict' }),
+  urgencyId: uuid("urgency_id").references(() => urgencyLevel.id, { onDelete: 'restrict' }),
+  cost: numeric("cost", { precision: 12, scale: 2 }).notNull(),
+  feePercent: numeric("fee_percent", { precision: 5, scale: 4 }).notNull(),
+  salePrice: numeric("sale_price", { precision: 12, scale: 2 }).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+});
+
+/** Auditoría inmutable de cambios en reglas de precio (v5.10). */
+export const priceRuleChangeEvent = pgTable("price_rule_change_event", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  ruleId: uuid("rule_id").references(() => priceRule.id, { onDelete: 'set null' }),
+  changedBy: text("changed_by").notNull().references(() => user.id),
+  action: text("action").notNull(),
+  fieldKey: text("field_key").notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  changeReason: text("change_reason").notNull(),
+  context: jsonb("context").default({}),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  index("prce_rule_created_idx").on(table.ruleId, table.createdAt),
+  index("prce_changed_by_idx").on(table.changedBy),
+  index("prce_action_idx").on(table.action),
+]);
+
+/** Cola de combinaciones sin precio (solicitadas al crear casos). */
+export const priceRuleRequest = pgTable("price_rule_request", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  restorationTypeId: uuid("restoration_type_id").notNull().references(() => restorationType.id, { onDelete: 'restrict' }),
+  materialId: uuid("material_id").notNull().references(() => dentalMaterial.id, { onDelete: 'restrict' }),
+  shadeId: uuid("shade_id").notNull().references(() => vitaShade.id, { onDelete: 'restrict' }),
+  urgencyId: uuid("urgency_id").notNull().references(() => urgencyLevel.id, { onDelete: 'restrict' }),
+  caseId: uuid("case_id").notNull().references(() => clinicalCase.id, { onDelete: 'cascade' }),
+  status: text().default('pending').notNull(),
+  resolvedRuleId: uuid("resolved_rule_id").references(() => priceRule.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("price_rule_request_pending_sig_uidx").on(
+    table.restorationTypeId,
+    table.materialId,
+    table.shadeId,
+    table.urgencyId,
+    table.status,
+  ),
+]);
+
 // ─── v5.0 — Disponibilidad del técnico, sanción rolling y catálogos de rechazo ──
 
 /**
@@ -766,7 +805,7 @@ export const technicianAvailability = pgTable("technician_availability", {
 export const technicianNoResponseEvent = pgTable("technician_no_response_event", {
   id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
   technicianUserId: text("technician_user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
-  caseInvitationId: uuid("case_invitation_id").references(() => caseInvitation.id, { onDelete: 'set null' }),
+  caseAssignmentId: uuid("case_assignment_id").references(() => caseAssignment.id, { onDelete: 'set null' }),
   occurredAt: timestamp("occurred_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   // active | expired_window | pardoned
   status: text("status").default('active').notNull(),
@@ -845,9 +884,9 @@ export const technicianNoResponseEventRelations = relations(technicianNoResponse
     references: [user.id],
     relationName: 'noResponseTechnician',
   }),
-  invitation: one(caseInvitation, {
-    fields: [technicianNoResponseEvent.caseInvitationId],
-    references: [caseInvitation.id],
+  assignment: one(caseAssignment, {
+    fields: [technicianNoResponseEvent.caseAssignmentId],
+    references: [caseAssignment.id],
   }),
   pardonedBy: one(user, {
     fields: [technicianNoResponseEvent.pardonedByUserId],
@@ -906,13 +945,16 @@ export const contactGuardAudit = pgTable("contact_guard_audit", {
   index("contact_guard_audit_case_idx").on(table.clinicalCaseId),
 ]);
 
-export const caseInvitationRelations = relations(caseInvitation, ({ one }) => ({
+export const caseAssignmentRelations = relations(caseAssignment, ({ one }) => ({
   clinicalCase: one(clinicalCase, {
-    fields: [caseInvitation.clinicalCaseId],
+    fields: [caseAssignment.clinicalCaseId],
     references: [clinicalCase.id],
   }),
   technician: one(user, {
-    fields: [caseInvitation.technicianId],
+    fields: [caseAssignment.technicianId],
     references: [user.id],
   }),
 }));
+
+/** @deprecated */
+export const caseInvitationRelations = caseAssignmentRelations;

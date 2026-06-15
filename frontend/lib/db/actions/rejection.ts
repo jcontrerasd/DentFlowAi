@@ -7,7 +7,7 @@
  */
 
 import { db } from '@/lib/db';
-import { caseInvitation, invitationRejectionReason, bulkRejectionReason } from '@/lib/db/schema';
+import { caseAssignment, invitationRejectionReason, bulkRejectionReason } from '@/lib/db/schema';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { logCaseEvent } from './cases';
@@ -64,7 +64,7 @@ export async function rejectInvitationIndividualAction(
   if (!identity?.id) return { success: false, error: 'No autenticado' };
 
   try {
-    const [inv] = await db.select().from(caseInvitation).where(eq(caseInvitation.id, invitationId)).limit(1);
+    const [inv] = await db.select().from(caseAssignment).where(eq(caseAssignment.id, invitationId)).limit(1);
     if (!inv) return { success: false, error: 'Invitación no encontrada' };
 
     const isAdmin = identity.role === 'admin' || identity.isSystemAdmin;
@@ -82,7 +82,7 @@ export async function rejectInvitationIndividualAction(
     }
 
     await db
-      .update(caseInvitation)
+      .update(caseAssignment)
       .set({
         status: 'rejected',
         rejectionReasonId: reasonId,
@@ -91,7 +91,7 @@ export async function rejectInvitationIndividualAction(
         respondedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(caseInvitation.id, invitationId));
+      .where(eq(caseAssignment.id, invitationId));
 
     await logCaseEvent({
       caseId: inv.clinicalCaseId,
@@ -179,17 +179,17 @@ async function rejectInvitationsInternal(
 ): Promise<ActionResult<{ rejected: number; replacementsSent: number }>> {
   try {
     const conditions = [
-      eq(caseInvitation.technicianId, userId),
-      eq(caseInvitation.status, 'pending'),
+      eq(caseAssignment.technicianId, userId),
+      eq(caseAssignment.status, 'pending'),
     ];
-    if (invitationIds.length) conditions.push(inArray(caseInvitation.id, invitationIds));
+    if (invitationIds.length) conditions.push(inArray(caseAssignment.id, invitationIds));
 
-    const targets = await db.select().from(caseInvitation).where(and(...conditions));
+    const targets = await db.select().from(caseAssignment).where(and(...conditions));
     if (!targets.length) return { success: true, rejected: 0, replacementsSent: 0 };
 
     const now = new Date();
     await db
-      .update(caseInvitation)
+      .update(caseAssignment)
       .set({
         status: 'rejected',
         bulkRejectionReasonId: bulkReasonId,
@@ -198,7 +198,7 @@ async function rejectInvitationsInternal(
         respondedAt: now,
         updatedAt: now,
       })
-      .where(inArray(caseInvitation.id, targets.map((t) => t.id)));
+      .where(inArray(caseAssignment.id, targets.map((t) => t.id)));
 
     let replacementsSent = 0;
     const replace = isAvailabilityEnabled();

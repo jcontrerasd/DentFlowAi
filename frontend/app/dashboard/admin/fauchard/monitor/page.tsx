@@ -5,9 +5,9 @@ import { getServerIdentity } from '@/lib/db/actions/impersonation';
 import { getFauchardMetricsAction } from '@/lib/db/actions/fauchard';
 import FauchardNav from '@/components/admin/fauchard/FauchardNav';
 import ConcentrationAlert from '@/components/admin/fauchard/ConcentrationAlert';
-import InvitationDistributionChart from '@/components/admin/fauchard/InvitationDistributionChart';
+import AssignmentDistributionChart from '@/components/admin/fauchard/AssignmentDistributionChart';
 import TechnicianRankingTable from '@/components/admin/fauchard/TechnicianRankingTable';
-import QuotationMetricsPanel from '@/components/admin/fauchard/QuotationMetricsPanel';
+import AssignmentMetricsPanel from '@/components/admin/fauchard/AssignmentMetricsPanel';
 import FailedSelectionsPanel from '@/components/admin/fauchard/FailedSelectionsPanel';
 import { Activity, AlertTriangle } from 'lucide-react';
 
@@ -15,18 +15,18 @@ export const metadata = {
   title: 'Monitoreo Fauchard | Admin DentFlow',
 };
 
-export default async function AdminFauchardMonitorPage({ searchParams }: { searchParams: any }) {
-  // Guard server-side: solo admin.
+export default async function AdminFauchardMonitorPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const identity = await getServerIdentity();
   if (!identity || (identity.role !== 'admin' && !identity.isSystemAdmin)) {
     redirect('/dashboard');
   }
 
-  const days = parseInt((await searchParams).days as string) || 30;
+  const sp = await searchParams;
+  const days = parseInt(sp.days as string) || 30;
   const res = await getFauchardMetricsAction(days);
 
   if (!res.success) {
-    return <ErrorState message={res.error} />;
+    return <ErrorState message={res.error ?? 'Error desconocido'} />;
   }
 
   const { metrics } = res;
@@ -37,28 +37,18 @@ export default async function AdminFauchardMonitorPage({ searchParams }: { searc
       <FauchardNav />
 
       <div className="space-y-12">
-        {/* Alertas */}
-        <ConcentrationAlert 
-          alerts={metrics.alerts} 
-          topQuartileShare={metrics.topQuartileShare} 
-        />
+        <ConcentrationAlert alerts={metrics.alerts} topQuartileShare={metrics.topQuartileShare} />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-          {/* Gráfico de Distribución */}
           <div className="lg:col-span-5">
-            <InvitationDistributionChart data={metrics.invitationsByTechnician} />
+            <AssignmentDistributionChart data={metrics.assignmentsByTechnician} />
           </div>
-
-          {/* KPIs Globales */}
           <div className="lg:col-span-7">
-            <QuotationMetricsPanel metrics={metrics} />
+            <AssignmentMetricsPanel metrics={metrics} />
           </div>
         </div>
 
-        {/* Tabla de Ranking */}
-        <TechnicianRankingTable data={metrics.invitationsByTechnician} />
-
-        {/* Panel de Fallas */}
+        <TechnicianRankingTable data={metrics.assignmentsByTechnician} />
         <FailedSelectionsPanel failedCases={metrics.failedCases} />
       </div>
     </div>
@@ -75,7 +65,7 @@ function Header({ days }: { days: number }) {
           </div>
           <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter">Observabilidad</h1>
         </div>
-        <p className="text-faint text-sm font-medium">Monitoreo de salud, equidad y desempeño de Fauchard.</p>
+        <p className="text-faint text-sm font-medium">Monitoreo de equidad y desempeño — asignación directa.</p>
       </div>
 
       <div className="flex items-center gap-2 p-1 bg-surface/60 border border-divider rounded-2xl">

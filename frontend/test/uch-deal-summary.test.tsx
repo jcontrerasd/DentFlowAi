@@ -16,7 +16,7 @@ describe('UchDealSummary', () => {
           workDeadline: '2028-05-12T12:00:00.000Z',
           proposedPrice: 999_000,
         }}
-        invitation={{ quotedPrice: 150_000, quotedDays: 5 }}
+        invitation={{ compensation: 150_000, deadlineDays: 5 }}
       />,
     );
     expect(screen.getByText(/\$150\.000/)).toBeInTheDocument();
@@ -37,11 +37,11 @@ describe('UchDealSummary', () => {
           workDeadline: null,
         }}
         invitation={{
-          quotedPrice: 125_000,
-          quotedDays: 7,
-          status: 'quoted',
+          compensation: 125_000,
+          deadlineDays: 7,
+          status: 'pending',
           respondedAt: '2026-05-12T15:05:00.000Z',
-          techNotes: 'Nota de prueba',
+
         }}
       />,
     );
@@ -70,9 +70,9 @@ describe('UchDealSummary', () => {
           workDeadline: null,
         }}
         invitation={{
-          quotedPrice: 45_555,
-          quotedDays: 2,
-          status: 'quoted',
+          compensation: 45_555,
+          deadlineDays: 2,
+          status: 'pending',
           respondedAt: '2026-05-12T15:03:00.000Z',
         }}
       />,
@@ -95,9 +95,9 @@ describe('UchDealSummary', () => {
         currentUserId="u-tech"
         clinicalCase={{ assignedTechnicianId: null, proposedPrice: null, workDeadline: null }}
         invitation={{
-          quotedPrice: 130_000,
-          quotedDays: 9,
-          status: 'quoted',
+          compensation: 130_000,
+          deadlineDays: 9,
+          status: 'pending',
           respondedAt: '2026-05-12T12:00:00.000Z',
         }}
       />,
@@ -150,9 +150,9 @@ describe('UchDealSummary', () => {
           workDeadline: null,
         }}
         invitation={{
-          quotedPrice: 88_000,
-          quotedDays: 5,
-          status: 'confirmed',
+          compensation: 88_000,
+          deadlineDays: 5,
+          status: 'accepted',
           respondedAt: '2026-05-10T10:00:00.000Z',
         }}
       />,

@@ -11,12 +11,38 @@ describe('getCaseDetailActionState', () => {
       isEditing: true,
       isFormDirty: true,
       canDelete: true,
+      hasListPrice: true,
+      hasDesiredDeliveryAt: true,
     });
     expect(a.edit.enabled).toBe(true);
     expect(a.publish.enabled).toBe(true);
     expect(a.save.enabled).toBe(true);
     expect(a.archive.enabled).toBe(false);
     expect(a.createCopy.enabled).toBe(false);
+  });
+
+  it('dentista en borrador sin precio: publicar deshabilitado', () => {
+    const a = getCaseDetailActionState({
+      status: CASE_STATUSES.BORRADOR,
+      publishedAt: null,
+      role: 'dentista',
+      hasListPrice: false,
+      hasDesiredDeliveryAt: true,
+    });
+    expect(a.publish.enabled).toBe(false);
+    expect(a.publish.disabledReason).toMatch(/precio de lista/i);
+  });
+
+  it('dentista en borrador sin fecha entrega: publicar deshabilitado', () => {
+    const a = getCaseDetailActionState({
+      status: CASE_STATUSES.BORRADOR,
+      publishedAt: null,
+      role: 'dentista',
+      hasListPrice: true,
+      hasDesiredDeliveryAt: false,
+    });
+    expect(a.publish.enabled).toBe(false);
+    expect(a.publish.disabledReason).toMatch(/entrega deseada/i);
   });
 
   it('dentista en borrador sin modo edición: grabar deshabilitado', () => {

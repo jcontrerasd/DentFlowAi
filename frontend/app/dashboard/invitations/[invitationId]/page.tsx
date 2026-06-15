@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { db } from '@/lib/db';
-import { caseInvitation } from '@/lib/db/schema';
+import { caseAssignment } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 type PageProps = {
@@ -10,9 +10,9 @@ type PageProps = {
 export default async function InvitationDetailRedirectPage({ params }: PageProps) {
   const { invitationId } = await params;
   const row = await db
-    .select({ caseId: caseInvitation.clinicalCaseId })
-    .from(caseInvitation)
-    .where(eq(caseInvitation.id, invitationId))
+    .select({ caseId: caseAssignment.clinicalCaseId })
+    .from(caseAssignment)
+    .where(eq(caseAssignment.id, invitationId))
     .limit(1);
 
   if (row[0]?.caseId) {

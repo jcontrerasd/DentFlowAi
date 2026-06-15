@@ -3,35 +3,24 @@
 /**
  * Borrador único de configuración Fauchard (single source of truth).
  *
- * Todos los tabs de edición (Pesos, Selección y Ronda, Plazos y Sanciones,
- * Calendario, Liga) leen y escriben este mismo borrador en vez de mantener su
- * propio `useState`. El guardado es **uno solo** (barra global) vía copy-on-write,
- * lo que elimina por construcción el lost-update entre secciones.
- *
- * Nota: `nFloor` queda reservado (sin editor). Los feriados (`fauchard_holiday`)
- * NO viven aquí: tienen su propia tabla y CRUD en FauchardCalendarPanel.
+ * Todos los tabs de edición (Pesos, Selección y Ronda, Plazos y Sanciones)
+ * leen y escriben este mismo borrador. El guardado es **uno solo** (barra global)
+ * vía copy-on-write. La liga (`l*`) vive en LeagueConfigPanel con guardado autónomo.
  */
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { updateFauchardParamsAction } from '@/lib/db/actions/fauchard';
 
-// Claves del borrador = SOLO parámetros del modelo (los que afectan score/selección
-// y alimentan el laboratorio). El calendario laboral (`business*` + feriados) y la
-// liga (`l*`) viven en sus propios espacios independientes, con guardado autónomo;
-// `nFloor` queda reservado.
+// Claves del borrador = parámetros del modelo de asignación directa (5 factores α + ventanas + plazos).
 export const EDITABLE_KEYS = [
-  // Pesos del score (Σ6 = 1.0)
-  'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaBonus', 'alphaNoResponse',
+  // Pesos del score (Σ5 = 1.0)
+  'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaNoResponse',
   // Ventanas del score
   'wQualityDays', 'wLoadDays', 'cMax', 'dBonusMaxDays',
   // Exclusión
   'tCooldownMinutes', 'dInactivityDays',
-  // Selección
-  'nInvited', 'qMinSelection',
-  // Cotización / propuesta
-  'tQuoteMinutes', 'tProposalHours',
-  // Fee
-  'platformFee',
+  // Asignación
+  'maxAssignmentAttempts', 'tQuoteMinutes',
   // v5.0 — plazos
   'tDentistReviewHours', 'tNoEligiblePoolHours', 'maxPoolCycles', 'replacementCutoffMinutes',
   // v5.0 — sanción rolling
@@ -45,13 +34,22 @@ export type Draft = Record<DraftKey, number>;
 
 export type DraftError = { rule: string; message: string };
 
-const ALPHA_KEYS: DraftKey[] = ['alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaBonus', 'alphaNoResponse'];
+const ALPHA_KEYS: DraftKey[] = ['alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaNoResponse'];
+
+/** Defaults cuando el config activo no trae el campo (p. ej. columna recién migrada). */
+const DRAFT_DEFAULTS: Partial<Record<DraftKey, number>> = {
+  maxAssignmentAttempts: 3,
+  tQuoteMinutes: 30,
+  level1Threshold: 1,
+  level2Threshold: 2,
+  level3Threshold: 3,
+};
 
 function toDraft(initialConfig: Record<string, unknown>): Draft {
   const d = {} as Draft;
   for (const k of EDITABLE_KEYS) {
     const v = Number(initialConfig[k]);
-    d[k] = Number.isFinite(v) ? v : 0;
+    d[k] = Number.isFinite(v) ? v : (DRAFT_DEFAULTS[k] ?? 0);
   }
   return d;
 }
@@ -61,13 +59,16 @@ export function computeDraftErrors(d: Draft): DraftError[] {
   const errs: DraftError[] = [];
   const sum = ALPHA_KEYS.reduce((acc, k) => acc + d[k], 0);
   if (Math.abs(sum - 1.0) > 0.001) {
-    errs.push({ rule: 'weights', message: `Los 6 pesos del score deben sumar 1.000 (suma actual: ${sum.toFixed(3)}).` });
+    errs.push({ rule: 'weights', message: `Los 5 pesos del score deben sumar 1.000 (suma actual: ${sum.toFixed(3)}).` });
   }
   if (!(d.level1Threshold < d.level2Threshold && d.level2Threshold < d.level3Threshold)) {
     errs.push({ rule: 'thresholds', message: 'Los umbrales de sanción deben cumplir Nivel 1 < Nivel 2 < Nivel 3.' });
   }
   if (!(d.inactivityReminderDays < d.inactivityAutoOffDays)) {
     errs.push({ rule: 'heartbeat', message: 'El recordatorio de actividad debe ser anterior al auto-OFF preventivo.' });
+  }
+  if (d.maxAssignmentAttempts < 1 || d.maxAssignmentAttempts > 10) {
+    errs.push({ rule: 'assignment', message: 'Los intentos máximos de asignación deben estar entre 1 y 10.' });
   }
   return errs;
 }
@@ -76,7 +77,7 @@ export function computeDraftErrors(d: Draft): DraftError[] {
 export function computeDraftWarnings(d: Draft): DraftError[] {
   const warns: DraftError[] = [];
   if (d.tCooldownMinutes > d.tQuoteMinutes * 4) {
-    warns.push({ rule: 'cooldown', message: 'El cooldown es muy alto respecto al tiempo de cotización: puede dejar la ronda sin técnicos.' });
+    warns.push({ rule: 'cooldown', message: 'El cooldown es muy alto respecto al tiempo de respuesta: puede dejar sin técnicos elegibles.' });
   }
   return warns;
 }
@@ -126,7 +127,13 @@ export function FauchardDraftProvider({
     async (reason: string) => {
       setSaving(true);
       try {
-        const res = await updateFauchardParamsAction(draft as Record<string, number>, reason);
+        const keysToSave = new Set<DraftKey>(dirtyKeys);
+        // Si cambió un α, el servidor exige Σ5 = 1.0 → enviar los cinco.
+        if (dirtyKeys.some((k) => ALPHA_KEYS.includes(k))) {
+          for (const k of ALPHA_KEYS) keysToSave.add(k);
+        }
+        const payload = Object.fromEntries([...keysToSave].map((k) => [k, draft[k]]));
+        const res = await updateFauchardParamsAction(payload, reason);
         if (res.success) {
           setInitial(draft);
           return { success: true };
@@ -138,7 +145,7 @@ export function FauchardDraftProvider({
         setSaving(false);
       }
     },
-    [draft],
+    [draft, dirtyKeys],
   );
 
   const value: DraftContextValue = {

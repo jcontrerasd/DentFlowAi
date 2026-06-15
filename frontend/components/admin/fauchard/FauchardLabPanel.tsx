@@ -4,7 +4,6 @@ import { useState, useEffect, useTransition } from 'react';
 import { simulateFauchardAction } from '@/lib/db/actions/fauchard';
 import { AlertCircle, Sparkles, RefreshCcw, FlaskConical, AlertTriangle, ChevronDown, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { SERVICE_TYPES } from '@/lib/constants/dental';
 import { useFauchardDraft } from './FauchardDraftContext';
 import { flashParams } from '@/lib/hooks/useParamFlash';
 
@@ -12,17 +11,10 @@ import { flashParams } from '@/lib/hooks/useParamFlash';
  *  Al pulsar un KPI se resaltan estos controles en los paneles editores. */
 const KPI_PARAMS = {
   quality: ['alphaQuality', 'alphaExperience'],
-  equity: ['alphaLoad', 'alphaBonus'],
-  agility: ['tQuoteMinutes', 'tProposalHours'],
+  equity: ['alphaLoad'],
+  agility: ['tQuoteMinutes', 'maxAssignmentAttempts'],
   emptyPool: ['tCooldownMinutes', 'dInactivityDays', 'alphaNoResponse'],
 } as const;
-
-// Escenario fijo para la simulación del pool real (ya no es seleccionable en el panel).
-const DEFAULT_SCENARIO = {
-  restorationType: 'corona_posterior',
-  caseComplexity: 'INTERMEDIO',
-  serviceType: SERVICE_TYPES.SOLO_DISENO as string,
-};
 
 /**
  * Laboratorio de decisión (read-only). Refleja el borrador compartido en vivo:
@@ -37,9 +29,8 @@ const PARAMETER_HELP_MAP: Record<string, { label: string; symbol: string; descri
   alphaQuality: { label: 'Calidad Histórica (αQ)', symbol: 'αQ', description: 'Prioriza a los técnicos con mejores calificaciones en trabajos anteriores de la misma dimensión.', example: 'Si αQ = 0.40, la reputación manda: Lab Andes (4.8⭐) será invitado antes que Lab Roble (4.0⭐).' },
   alphaPunctuality: { label: 'Puntualidad (αP)', symbol: 'αP', description: 'Favorece a los laboratorios que entregan dentro del plazo prometido.', example: 'Si αP = 0.30 y un técnico se retrasa seguido, su score cae en casos urgentes.' },
   alphaExperience: { label: 'Experiencia Especializada (αE)', symbol: 'αE', description: 'Prioriza a técnicos con mayor nivel de habilidad en el tipo de trabajo específico.', example: 'Para una Guía Quirúrgica, un especialista 7/7 supera al generalista si αE está alto.' },
-  alphaLoad: { label: 'Penalización por Carga (αC)', symbol: 'αC', description: 'Resta score a técnicos saturados para evitar cuellos de botella.', example: 'Si αC = 0.20, un lab excelente pero con 8 casos cede el turno a otro más libre.' },
-  alphaBonus: { label: 'Bono de Infrautilización (αB)', symbol: 'αB', description: 'Sube temporalmente el score de técnicos sin invitaciones recientes.', example: 'Un lab nuevo sin casos hace semanas recibe un impulso para entrar a la ronda.' },
-  alphaNoResponse: { label: 'Penalización por No-respuesta (αN)', symbol: 'αN', description: 'Resta score al técnico que ignora invitaciones repetidamente.', example: 'Si αN = 0.25 y Lab Pino ignoró 2 invitaciones (Nivel 2), su score cae fuerte.' },
+  alphaLoad: { label: 'Carga activa (αL)', symbol: 'αL', description: 'Resta score a técnicos saturados para evitar cuellos de botella.', example: 'Si αL = 0.20, un lab excelente pero con 8 casos cede el turno a otro más libre.' },
+  alphaNoResponse: { label: 'Penalización por No-respuesta (αN)', symbol: 'αN', description: 'Resta score al técnico que ignora asignaciones repetidamente.', example: 'Si αN = 0.25 y Lab Pino ignoró 2 asignaciones (Nivel 2), su score cae fuerte.' },
 };
 
 export default function FauchardLabPanel() {
@@ -53,7 +44,7 @@ export default function FauchardLabPanel() {
 
   const sumWeights =
     draft.alphaQuality + draft.alphaPunctuality + draft.alphaExperience +
-    draft.alphaLoad + draft.alphaBonus + draft.alphaNoResponse;
+    draft.alphaLoad + draft.alphaNoResponse;
   const isWeightsSumValid = Math.abs(sumWeights - 1.0) < 0.001;
 
   // Simulación reactiva (debounced) sobre el pool real, con el borrador completo.
@@ -63,7 +54,11 @@ export default function FauchardLabPanel() {
         startTransition(async () => {
           setErrorMessage(null);
           try {
-            const res = await simulateFauchardAction({ ...DEFAULT_SCENARIO, configOverride: draft });
+            const res = await simulateFauchardAction({
+              restorationType: 'corona_posterior',
+              caseComplexity: 'INTERMEDIO',
+              configOverride: draft,
+            });
             if (res.success) setSimulation(res.simulation);
             else setErrorMessage(res.error || 'Fallo en la simulación.');
           } catch {
@@ -77,29 +72,28 @@ export default function FauchardLabPanel() {
 
   // Indicadores de salud (derivados del borrador).
   const qualityFocus = Math.min(100, Math.round(((draft.alphaQuality + draft.alphaExperience) / 0.8) * 100));
-  const equityScore = Math.min(100, Math.round(((draft.alphaLoad + draft.alphaBonus) / 0.7) * 100));
+  const equityScore = Math.min(100, Math.round((draft.alphaLoad / 0.35) * 100));
   const emptyPoolRisk = Math.min(100, Math.round(
     (draft.tCooldownMinutes / 1440) * 30 +
     Math.max(0, (15 - draft.dInactivityDays) / 14) * 40 +
     draft.alphaNoResponse * 30,
   ));
-  const agilityScore = Math.round(Math.max(0, 100 - (draft.tQuoteMinutes / 180) * 40 - (draft.tProposalHours / 24) * 30));
+  const agilityScore = Math.round(Math.max(0, 100 - (draft.tQuoteMinutes / 180) * 50 - (draft.maxAssignmentAttempts / 10) * 20));
 
   const selectParam = (key: string) => {
     const help = PARAMETER_HELP_MAP[key];
     if (help) setSelectedParam({ key, ...help });
   };
 
-  const eligible = simulation?.eligiblePool ?? null;
-  const nInvitedWarning = eligible !== null && draft.nInvited > eligible;
+  const eligible = simulation?.funnel?.eligible ?? null;
+  const attemptsWarning = eligible !== null && draft.maxAssignmentAttempts > eligible;
 
   const axes = [
     { key: 'alphaQuality', label: 'Calidad', color: 'var(--color-primary)' },
     { key: 'alphaPunctuality', label: 'Puntual.', color: 'var(--color-jade)' },
     { key: 'alphaExperience', label: 'Exp.', color: '#a78bfa' },
-    { key: 'alphaNoResponse', label: 'No-Resp', color: 'var(--color-error)' },
-    { key: 'alphaBonus', label: 'Bono', color: 'var(--color-warning)' },
     { key: 'alphaLoad', label: 'Carga', color: '#fb923c' },
+    { key: 'alphaNoResponse', label: 'No-Resp', color: 'var(--color-error)' },
   ];
   const N = axes.length;
   const CX = 150, CY = 150, R = 105, maxVal = 0.5;
@@ -170,10 +164,10 @@ export default function FauchardLabPanel() {
       </div>
 
       {/* Alertas de dependencias */}
-      {(warnings.length > 0 || nInvitedWarning) && (
+      {(warnings.length > 0 || attemptsWarning) && (
         <div className="space-y-2">
-          {nInvitedWarning && (
-            <Warn text={`Invitas ${draft.nInvited} técnicos pero solo ${eligible} son elegibles en este escenario: la ronda no se podría llenar.`} />
+          {attemptsWarning && (
+            <Warn text={`Configuras ${draft.maxAssignmentAttempts} intentos pero solo ${eligible} técnicos son elegibles en este escenario: puede agotar el pool.`} />
           )}
           {warnings.map((w) => <Warn key={w.rule} text={w.message} />)}
         </div>
@@ -190,7 +184,7 @@ export default function FauchardLabPanel() {
           <span className="text-xs font-black text-foreground uppercase tracking-tight">Ver técnicos</span>
           {simulation && (
             <span className="text-[9px] font-black px-2 py-0.5 bg-primary-hl border border-primary/20 text-primary rounded-lg">
-              {simulation.eligiblePool} / {simulation.distribution?.length}
+              {simulation.funnel?.eligible ?? 0} / {simulation.funnel?.universe ?? 0}
             </span>
           )}
           <ChevronDown className={`w-4 h-4 text-faint ml-auto shrink-0 transition-transform ${showDist ? 'rotate-180' : ''}`} />
@@ -205,19 +199,20 @@ export default function FauchardLabPanel() {
             )}
             {simulation ? (
               <div className="space-y-1.5">
-                {simulation.distribution?.slice(0, 10).map((d: any) => (
-                  <div key={d.technicianId} className={`flex items-center gap-2 p-2 rounded-lg ${d.excluded ? 'opacity-40 bg-background/10' : 'bg-background/20'}`}>
+                {(simulation.ranked as Array<Record<string, unknown>>)?.slice(0, 10).map((d) => (
+                  <div key={d.technicianId as string} className={`flex items-center gap-2 p-2 rounded-lg ${d.excluded ? 'opacity-40 bg-background/10' : 'bg-background/20'}`}>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-bold text-foreground truncate">{d.fullName}</p>
+                      <p className="text-[11px] font-bold text-foreground truncate">{d.fullName as string}</p>
                       {d.excluded
-                        ? <p className="text-[8px] font-black uppercase text-error">{d.exclusionReason}</p>
-                        : <p className="text-[8px] font-bold uppercase text-faint">{d.leagueLevel}</p>}
+                        ? <p className="text-[8px] font-black uppercase text-error">{String(d.exclusionReason)}</p>
+                        : <p className="text-[8px] font-bold uppercase text-faint">{d.leagueLevel as string}</p>}
                     </div>
-                    <span className="text-[11px] font-mono font-bold text-primary shrink-0">{d.score.toFixed(3)}</span>
-                    <div className="w-12 h-1 bg-surface-2 rounded-full overflow-hidden shrink-0">
-                      <div className="h-full bg-primary" style={{ width: `${d.probability * 100}%` }} />
+                    <span className="text-[11px] font-mono font-bold text-primary shrink-0">{(d.score as number).toFixed(3)}</span>
+                    <div className="flex gap-0.5 shrink-0">
+                      {['Q', 'P', 'E', 'L', 'N'].map((k) => (
+                        <span key={k} className="text-[7px] font-mono text-faint">{(d.components as Record<string, number>)?.[k]?.toFixed(1)}</span>
+                      ))}
                     </div>
-                    <span className="text-[9px] font-mono text-faint shrink-0 w-9 text-right">{(d.probability * 100).toFixed(0)}%</span>
                   </div>
                 ))}
               </div>

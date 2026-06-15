@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { db } from '@/lib/db';
-import { clinicalCase, caseInvitation } from '@/lib/db/schema';
+import { clinicalCase, caseAssignment } from '@/lib/db/schema';
 import { and, eq, sql } from 'drizzle-orm';
 import {
   DEFAULT_CASE_LIST_FILTERS,
@@ -31,12 +31,12 @@ describe.runIf(runIntegration)('caseListSearch integration', () => {
     caseId = row.id;
 
     const [inv] = await db
-      .select({ id: caseInvitation.id })
-      .from(caseInvitation)
+      .select({ id: caseAssignment.id })
+      .from(caseAssignment)
       .where(
         and(
-          eq(caseInvitation.clinicalCaseId, caseId),
-          eq(caseInvitation.technicianId, TECH_UAT_ID),
+          eq(caseAssignment.clinicalCaseId, caseId),
+          eq(caseAssignment.technicianId, TECH_UAT_ID),
         ),
       )
       .limit(1);

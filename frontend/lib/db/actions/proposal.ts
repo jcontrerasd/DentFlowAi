@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { clinicalCase, caseInvitation, user } from '@/lib/db/schema';
+import { clinicalCase, caseAssignment, user } from '@/lib/db/schema';
 import { eq, and, inArray, ne } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { logCaseEvent } from './cases';
@@ -12,7 +12,7 @@ import type { ActionResult } from '@/lib/types/actions';
 import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
 import { archiveCaseFilesBestEffort } from '@/lib/db/archiveCaseFiles';
 import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
-import { addBusinessTime } from '@/lib/businessTime';
+import { resolveWorkDeadline } from '@/lib/cases/workDeadline';
 
 // S3-01 — Dentista acepta una oferta concreta (comparativo anónimo)
 export async function acceptProposalAction(caseId: string, invitationId: string): Promise<ActionResult> {
@@ -39,8 +39,8 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
 
     const [inv] = await db
       .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.id, invitationId), eq(caseInvitation.clinicalCaseId, caseId)))
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.id, invitationId), eq(caseAssignment.clinicalCaseId, caseId)))
       .limit(1);
 
     if (!inv || inv.status !== 'quoted') {
@@ -52,7 +52,7 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
     const fee = parseFloat(String(cfg.platformFee));
 
     // proposedPrice aplica el fee de plataforma al total cotizado.
-    const quotedTotal = inv.quotedPrice ?? 0;
+    const quotedTotal = inv.compensation ?? 0;
     const proposedPrice = quotedTotal * (1 + fee);
 
     return await db.transaction(async (tx) => {
@@ -62,40 +62,39 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
       // aquí les duplicaría el aviso en el UCH ("Otra oferta fue elegida" dos veces).
       const losers = await tx
         .select({
-          id: caseInvitation.id,
-          technicianId: caseInvitation.technicianId,
-          quotedPrice: caseInvitation.quotedPrice,
-          quotedDays: caseInvitation.quotedDays,
-          quotedHours: caseInvitation.quotedHours,
-          techNotes: caseInvitation.techNotes,
+          id: caseAssignment.id,
+          technicianId: caseAssignment.technicianId,
+          compensation: caseAssignment.compensation,
+          deadlineDays: caseAssignment.deadlineDays,
+          deadlineHours: caseAssignment.deadlineHours,
         })
-        .from(caseInvitation)
+        .from(caseAssignment)
         .where(and(
-          eq(caseInvitation.clinicalCaseId, caseId),
-          inArray(caseInvitation.status, ['pending', 'quoted']),
-          ne(caseInvitation.id, invitationId),
+          eq(caseAssignment.clinicalCaseId, caseId),
+          inArray(caseAssignment.status, ['pending', 'quoted']),
+          ne(caseAssignment.id, invitationId),
         ));
 
       await tx
-        .update(caseInvitation)
+        .update(caseAssignment)
         .set({ status: 'rejected', updatedAt: new Date() })
         .where(and(
-          eq(caseInvitation.clinicalCaseId, caseId),
-          inArray(caseInvitation.status, ['pending', 'quoted']),
-          ne(caseInvitation.id, invitationId),
+          eq(caseAssignment.clinicalCaseId, caseId),
+          inArray(caseAssignment.status, ['pending', 'quoted']),
+          ne(caseAssignment.id, invitationId),
         ));
 
       await tx
-        .update(caseInvitation)
+        .update(caseAssignment)
         .set({ status: 'confirmed', updatedAt: new Date() })
-        .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.id, invitationId)));
+        .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.id, invitationId)));
 
       await tx.update(clinicalCase).set({
         assignedTechnicianId: inv.technicianId,
         assignedAt: new Date(),
         proposedPrice,
-        proposedDeliveryDays: inv.quotedDays ?? null,
-        proposedDeliveryHours: inv.quotedHours ?? null,
+        proposedDeliveryDays: inv.deadlineDays ?? null,
+        proposedDeliveryHours: inv.deadlineHours ?? null,
         platformFee: String(fee),
         status: CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO,
         internalStatus: INTERNAL_CASE_STATUSES.ACEPTADA_CONFIGURANDO,
@@ -134,13 +133,12 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
       }, tx);
 
       for (const loser of losers) {
-        const qp = loser.quotedPrice != null ? Number(loser.quotedPrice) : NaN;
-        const qd = loser.quotedDays != null ? Math.trunc(Number(loser.quotedDays)) : NaN;
-        const qh = loser.quotedHours != null ? Math.trunc(Number(loser.quotedHours)) : NaN;
-        const techNotesPayload = loser.techNotes?.trim() ? loser.techNotes.trim().slice(0, 200) : null;
-        const quotedPricePayload = Number.isFinite(qp) && qp >= 0 ? qp : null;
-        const quotedDaysPayload = Number.isFinite(qd) && qd > 0 ? qd : null;
-        const quotedHoursPayload = Number.isFinite(qh) && qh > 0 ? qh : null;
+        const qp = loser.compensation != null ? Number(loser.compensation) : NaN;
+        const qd = loser.deadlineDays != null ? Math.trunc(Number(loser.deadlineDays)) : NaN;
+        const qh = loser.deadlineHours != null ? Math.trunc(Number(loser.deadlineHours)) : NaN;
+        const compensationPayload = Number.isFinite(qp) && qp >= 0 ? qp : null;
+        const deadlineDaysPayload = Number.isFinite(qd) && qd > 0 ? qd : null;
+        const deadlineHoursPayload = Number.isFinite(qh) && qh > 0 ? qh : null;
 
         await logCaseEvent({
           caseId,
@@ -151,10 +149,9 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
           payload: {
             visibleTo: 'tecnico',
             invitationId: loser.id,
-            quotedPrice: quotedPricePayload,
-            quotedDays: quotedDaysPayload,
-            quotedHours: quotedHoursPayload,
-            techNotes: techNotesPayload,
+            compensation: compensationPayload,
+            deadlineDays: deadlineDaysPayload,
+            deadlineHours: deadlineHoursPayload,
             ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
           },
           skipActivityUpdate: true,
@@ -169,10 +166,9 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
           payload: {
             visibleTo: 'dentista',
             invitationId: loser.id,
-            quotedPrice: quotedPricePayload,
-            quotedDays: quotedDaysPayload,
-            quotedHours: quotedHoursPayload,
-            techNotes: techNotesPayload,
+            compensation: compensationPayload,
+            deadlineDays: deadlineDaysPayload,
+            deadlineHours: deadlineHoursPayload,
           },
           skipActivityUpdate: true,
         }, tx);
@@ -230,8 +226,8 @@ export async function rejectInvitationOfferAction(
 
     const [inv] = await db
       .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.id, invitationId), eq(caseInvitation.clinicalCaseId, caseId)))
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.id, invitationId), eq(caseAssignment.clinicalCaseId, caseId)))
       .limit(1);
 
     if (!inv || inv.status !== 'quoted') {
@@ -240,13 +236,13 @@ export async function rejectInvitationOfferAction(
 
     const result = await db.transaction(async (tx) => {
       await tx
-        .update(caseInvitation)
+        .update(caseAssignment)
         .set({
           status: 'rejected',
-          dentistRejectionFeedback: fb,
+          rejectionComment: fb,
           updatedAt: new Date(),
         })
-        .where(eq(caseInvitation.id, invitationId));
+        .where(eq(caseAssignment.id, invitationId));
 
       await logCaseEvent({
         caseId,
@@ -258,15 +254,14 @@ export async function rejectInvitationOfferAction(
           visibleTo: 'dentista',
           invitationId: inv.id,
           feedback: fb,
-          quotedPrice:
-            inv.quotedPrice != null && Number.isFinite(Number(inv.quotedPrice))
-              ? Number(inv.quotedPrice)
+          compensation:
+            inv.compensation != null && Number.isFinite(Number(inv.compensation))
+              ? Number(inv.compensation)
               : null,
-          quotedDays:
-            inv.quotedDays != null && Number.isFinite(Number(inv.quotedDays))
-              ? Math.trunc(Number(inv.quotedDays))
+          deadlineDays:
+            inv.deadlineDays != null && Number.isFinite(Number(inv.deadlineDays))
+              ? Math.trunc(Number(inv.deadlineDays))
               : null,
-          techNotes: inv.techNotes?.trim() ? inv.techNotes.trim() : null,
         },
       }, tx);
 
@@ -287,9 +282,9 @@ export async function rejectInvitationOfferAction(
       await notifyUser(inv.technicianId, 'PROPUESTA_RECHAZADA_DENTISTA', { caseId, caseNumber: cCase.caseNumber });
 
       const stillQuoted = await tx
-        .select({ id: caseInvitation.id })
-        .from(caseInvitation)
-        .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted')));
+        .select({ id: caseAssignment.id })
+        .from(caseAssignment)
+        .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'quoted')));
 
       if (stillQuoted.length === 0) {
         await tx.update(clinicalCase).set({
@@ -326,89 +321,9 @@ export async function rejectInvitationOfferAction(
   }
 }
 
-/** Técnico retira su cotización antes de aceptación del dentista; la invitación vuelve a pending para recotizar. */
-export async function withdrawQuoteAction(invitationId: string): Promise<ActionResult> {
-  const identity = await getServerIdentity();
-  if (!identity?.id) return { success: false, error: 'No autenticado' };
-
-  try {
-    const [inv] = await db
-      .select()
-      .from(caseInvitation)
-      .where(eq(caseInvitation.id, invitationId))
-      .limit(1);
-
-    if (!inv) return { success: false, error: 'Invitación no encontrada' };
-    if (inv.technicianId !== identity.id) return { success: false, error: 'No autorizado' };
-    if (inv.status !== 'quoted') {
-      return { success: false, error: 'Solo puedes retirar una oferta que ya enviaste y sigue activa.' };
-    }
-
-    const [cCase] = await db
-      .select()
-      .from(clinicalCase)
-      .where(eq(clinicalCase.id, inv.clinicalCaseId))
-      .limit(1);
-
-    if (!cCase) return { success: false, error: 'Caso no encontrado' };
-
-    const allowedCaseStatuses = [CASE_STATUSES.EN_EVALUACION, CASE_STATUSES.PROPUESTA_LISTA] as string[];
-    if (!allowedCaseStatuses.includes(cCase.status)) {
-      return { success: false, error: 'Este caso ya no permite retirar la oferta.' };
-    }
-
-    if (cCase.status === CASE_STATUSES.PROPUESTA_LISTA) {
-      if (cCase.proposalExpiresAt && new Date(cCase.proposalExpiresAt) < new Date()) {
-        return { success: false, error: 'La ventana comparativa ya venció.' };
-      }
-    }
-
-    if (inv.expiresAt && new Date(inv.expiresAt) < new Date()) {
-      return { success: false, error: 'El plazo para cotizar en esta invitación ya venció.' };
-    }
-
-    const snapshot = {
-      quotedPrice: inv.quotedPrice,
-      quotedDays: inv.quotedDays,
-      techNotes: inv.techNotes?.trim() ? inv.techNotes.trim().slice(0, 200) : null,
-    };
-
-    await db.transaction(async (tx) => {
-      await tx
-        .update(caseInvitation)
-        .set({
-          status: 'pending',
-          quotedPrice: null,
-          quotedDays: null,
-          quotedDesignPrice: null,
-          quotedDesignDays: null,
-          quotedFabricationPrice: null,
-          quotedFabricationDays: null,
-          techNotes: null,
-          respondedAt: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(caseInvitation.id, invitationId));
-
-      await logCaseEvent({
-        caseId: inv.clinicalCaseId,
-        userId: identity.id as string,
-        type: 'sistema',
-        action: CASE_EVENTS.OFERTA_RETIRADA,
-        content: 'He retirado mi oferta. Puedo enviar una nueva mientras no venza el plazo de cotización.',
-        payload: {
-          visibleTo: 'tecnico',
-          invitationId: inv.id,
-          ...snapshot,
-        },
-      }, tx);
-    });
-
-    return { success: true };
-  } catch (error) {
-    console.error('[withdrawQuoteAction] Error:', error);
-    return { success: false, error: String(error) };
-  }
+/** @deprecated — el modelo comparativo fue reemplazado por asignación directa. */
+export async function withdrawQuoteAction(_invitationId: string): Promise<ActionResult> {
+  return { success: false, error: 'Las cotizaciones ya no están disponibles; usa aceptar o rechazar la asignación.' };
 }
 
 /** Expira la vista comparativa: sin técnico asignado, todas las cotizaciones activas pasan a retiradas */
@@ -421,19 +336,19 @@ export async function expireDentistComparativeWindowAction(caseId: string): Prom
 
     await db.transaction(async (tx) => {
       const affected = await tx
-        .select({ id: caseInvitation.id, technicianId: caseInvitation.technicianId })
-        .from(caseInvitation)
-        .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted')));
+        .select({ id: caseAssignment.id, technicianId: caseAssignment.technicianId })
+        .from(caseAssignment)
+        .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'quoted')));
 
       await tx
-        .update(caseInvitation)
+        .update(caseAssignment)
         .set({ status: 'withdrawn', updatedAt: now })
-        .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted')));
+        .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'quoted')));
 
       await tx
-        .update(caseInvitation)
+        .update(caseAssignment)
         .set({ status: 'withdrawn', updatedAt: now })
-        .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'pending')));
+        .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'pending')));
 
       await tx
         .update(clinicalCase)
@@ -503,32 +418,31 @@ export async function startWorkAction(caseId: string): Promise<ActionResult> {
     }
 
     const now = new Date();
-    // v4.6 — Computar workDeadline con calendario laboral + feriados configurables.
-    const { getConfigForCase } = await import('./fauchard');
-    const { listHolidayDatesGlobal } = await import('./fauchardHolidays');
-    const cfg = await getConfigForCase(caseId);
-    const holidays = await listHolidayDatesGlobal();
-    const calendar = {
-      startHour: cfg.businessHoursStart ?? 8,
-      endHour: cfg.businessHoursEnd ?? 20,
-      daysMask: cfg.businessDaysMask ?? 31,
-      holidays,
-    };
-    // `proposedDeliveryDays` / `proposedDeliveryHours` ya son los totales canónicos
-    // (suma de todos los slots — flat o split — calculados al aceptar la oferta).
-    const totalDays = cCase.proposedDeliveryDays ?? 0;
-    const totalHours = cCase.proposedDeliveryHours ?? 0;
-    const effectiveDays = totalDays > 0 ? totalDays : (totalHours > 0 ? 0 : 5);
-    const workDeadline = addBusinessTime(
-      now,
-      { days: effectiveDays, hours: totalHours },
-      calendar,
-    );
+
+    const [acceptedAssignment] = await db
+      .select({ deadlineDays: caseAssignment.deadlineDays })
+      .from(caseAssignment)
+      .where(
+        and(
+          eq(caseAssignment.clinicalCaseId, caseId),
+          eq(caseAssignment.technicianId, identity.id as string),
+          eq(caseAssignment.status, 'accepted'),
+        ),
+      )
+      .limit(1);
+
+    const workDeadline = resolveWorkDeadline({
+      desiredDeliveryAt: cCase.desiredDeliveryAt,
+      publishedAt: cCase.publishedAt,
+      deadlineDays: acceptedAssignment?.deadlineDays ?? cCase.proposedDeliveryDays,
+    });
 
     const [winnerInv] = await db
-      .select({ id: caseInvitation.id })
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'confirmed')))
+      .select({ id: caseAssignment.id })
+      .from(caseAssignment)
+      .where(
+        and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'accepted')),
+      )
       .limit(1);
 
     await db.update(clinicalCase)

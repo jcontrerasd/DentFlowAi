@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
-import { caseInvitation } from '@/lib/db/schema';
+import { caseAssignment } from '@/lib/db/schema';
 import { eq, and, lt, sql } from 'drizzle-orm';
 import { checkAndExpireInvitationsAction } from '@/lib/db/actions/fauchard';
 import { CASE_STATUSES } from '@/lib/constants/dental';
@@ -26,10 +26,10 @@ export async function GET(req: NextRequest) {
     const now = new Date();
 
     const expiredInvitations = await db
-      .select({ clinicalCaseId: caseInvitation.clinicalCaseId })
-      .from(caseInvitation)
+      .select({ clinicalCaseId: caseAssignment.clinicalCaseId })
+      .from(caseAssignment)
       .where(
-        and(eq(caseInvitation.status, 'pending'), lt(caseInvitation.expiresAt, now)),
+        and(eq(caseAssignment.status, 'pending'), lt(caseAssignment.expiresAt, now)),
       );
 
     const readyEvalRows = (await db.execute(sql`
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
         caseId,
         expired: result.expired,
         evaluated: result.evaluated,
-        alreadyEvaluated: result.evaluateResult?.alreadyEvaluated,
+        alreadyEvaluated: (result.evaluateResult as { alreadyEvaluated?: boolean } | undefined)?.alreadyEvaluated,
       });
     }
 

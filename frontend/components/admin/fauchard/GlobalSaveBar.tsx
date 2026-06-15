@@ -10,12 +10,10 @@ import { useFauchardDraft, type DraftKey } from './FauchardDraftContext';
 /** Etiquetas legibles para el diff de cambios. */
 const KEY_LABELS: Record<DraftKey, string> = {
   alphaQuality: 'Peso Calidad (αQ)', alphaPunctuality: 'Peso Puntualidad (αP)', alphaExperience: 'Peso Experiencia (αE)',
-  alphaLoad: 'Peso Carga (αC)', alphaBonus: 'Peso Bono (αB)', alphaNoResponse: 'Peso No-resp (αN)',
+  alphaLoad: 'Peso Carga (αL)', alphaNoResponse: 'Peso No-resp (αN)',
   wQualityDays: 'Ventana Calidad (días)', wLoadDays: 'Ventana Carga (días)', cMax: 'Techo de Carga', dBonusMaxDays: 'Bono máx (días)',
   tCooldownMinutes: 'Cooldown (min)', dInactivityDays: 'Inactividad (días)',
-  nInvited: 'Técnicos a invitar', qMinSelection: 'Umbral de selección',
-  tQuoteMinutes: 'Tiempo para cotizar (min)', tProposalHours: 'Validez propuesta (h)',
-  platformFee: 'Margen de plataforma',
+  maxAssignmentAttempts: 'Intentos máx. asignación', tQuoteMinutes: 'Tiempo respuesta asignación (min)',
   tDentistReviewHours: 'Revisión dentista (h)', tNoEligiblePoolHours: 'Espera pool (h)', maxPoolCycles: 'Ciclos de espera', replacementCutoffMinutes: 'Margen reemplazo (min)',
   noResponseWindowDays: 'Ventana no-resp (días)', noResponseRehabilitationDays: 'Rehabilitación (días)',
   level1Threshold: 'Umbral Nivel 1', level2Threshold: 'Umbral Nivel 2', level3Threshold: 'Umbral Nivel 3',

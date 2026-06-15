@@ -3,17 +3,130 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-export const INFRA_VERSION = 'v5.7';
+export const INFRA_VERSION = 'v5.11';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
 
+/** v5.9 — Renombra case_invitation → case_assignment y columnas legacy (PG no soporta RENAME COLUMN IF EXISTS). */
+async function migrateCaseInvitationToAssignment(db: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }) {
+  await db.execute(sql`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'case_invitation'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'case_assignment'
+      ) THEN
+        ALTER TABLE case_invitation RENAME TO case_assignment;
+      END IF;
+    END $$;
+  `);
+
+  const renames: [string, string][] = [
+    ['invited_at', 'assigned_at'],
+    ['score_at_invite', 'score_at_assignment'],
+    ['is_replacement', 'is_reassignment'],
+    ['quoted_price', 'compensation'],
+    ['quoted_days', 'deadline_days'],
+    ['quoted_hours', 'deadline_hours'],
+  ];
+
+  for (const [from, to] of renames) {
+    await db.execute(sql.raw(`
+      DO $$ BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'case_assignment' AND column_name = '${from}'
+        ) THEN
+          ALTER TABLE case_assignment RENAME COLUMN ${from} TO ${to};
+        END IF;
+      END $$;
+    `));
+  }
+
+  await db.execute(sql`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'case_assignment'
+      ) THEN
+        UPDATE case_assignment SET status = 'accepted' WHERE status IN ('confirmed', 'quoted');
+      END IF;
+    END $$;
+
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'technician_no_response_event'
+          AND column_name = 'case_invitation_id'
+      ) THEN
+        ALTER TABLE technician_no_response_event RENAME COLUMN case_invitation_id TO case_assignment_id;
+      END IF;
+    END $$;
+
+    CREATE INDEX IF NOT EXISTS ca_case_idx ON case_assignment(clinical_case_id);
+    CREATE INDEX IF NOT EXISTS ca_tech_idx ON case_assignment(technician_id);
+    CREATE INDEX IF NOT EXISTS ca_status_idx ON case_assignment(status);
+    CREATE INDEX IF NOT EXISTS ca_tech_assigned_idx
+      ON case_assignment(technician_id, assigned_at);
+    CREATE INDEX IF NOT EXISTS ca_case_pending_idx
+      ON case_assignment(clinical_case_id) WHERE (status = 'pending');
+  `);
+}
+
+/** v5.11 — Código opaco prc_NNN en price_rule + backfill. */
+async function migratePriceRuleCode(db: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }) {
+  await db.execute(sql`
+    ALTER TABLE price_rule ADD COLUMN IF NOT EXISTS code TEXT;
+  `);
+
+  await db.execute(sql`
+    DO $$
+    DECLARE
+      r RECORD;
+      n INT := 0;
+      max_existing INT := 0;
+      c TEXT;
+    BEGIN
+      FOR c IN SELECT code FROM price_rule WHERE code IS NOT NULL AND code ~ '^prc_[0-9]+$'
+      LOOP
+        n := NULLIF(regexp_replace(c, '^prc_', ''), '')::INT;
+        IF n > max_existing THEN max_existing := n; END IF;
+      END LOOP;
+      n := max_existing;
+      FOR r IN
+        SELECT id FROM price_rule WHERE code IS NULL ORDER BY created_at ASC, sort_order ASC, id ASC
+      LOOP
+        n := n + 1;
+        UPDATE price_rule SET code = 'prc_' || LPAD(n::text, 3, '0') WHERE id = r.id;
+      END LOOP;
+    END $$;
+  `);
+
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS price_rule_code_uidx ON price_rule(code);
+  `);
+
+  await db.execute(sql`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM price_rule WHERE code IS NULL
+      ) THEN
+        ALTER TABLE price_rule ALTER COLUMN code SET NOT NULL;
+      END IF;
+    EXCEPTION WHEN others THEN
+      NULL;
+    END $$;
+  `);
+}
+
 /**
- * Función interna para asegurar la integridad de la base de datos v3.0.
- * Este parche se ejecuta preventivamente para evitar errores de columnas faltantes.
+ * DDL idempotente que debe existir aunque el gate de INFRA_VERSION ya haya corrido
+ * (p. ej. HMR sin re-ejecutar el bloque versionado completo).
  */
-export async function ensureInfrastructure(db: any) {
-  // Migraciones incrementales: corren siempre (idempotentes con IF NOT EXISTS)
+export async function ensureIncrementalInfrastructure(db: any) {
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS audit_log (
@@ -32,6 +145,61 @@ export async function ensureInfrastructure(db: any) {
   } catch (e) {
     console.error("[Infrastructure] Error creando audit_log:", e);
   }
+
+  try {
+    await db.execute(sql`
+      ALTER TABLE fauchard_config
+        ADD COLUMN IF NOT EXISTS max_assignment_attempts INTEGER NOT NULL DEFAULT 3;
+    `);
+  } catch (e) {
+    console.error("[Infrastructure] Error añadiendo max_assignment_attempts:", e);
+  }
+
+  // v5.9 — case_invitation → case_assignment (idempotente; corre aunque INFRA_VERSION esté cacheada)
+  try {
+    await migrateCaseInvitationToAssignment(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error migrando case_assignment (v5.9):", e);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS price_rule_change_event (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        rule_id UUID REFERENCES price_rule(id) ON DELETE SET NULL,
+        changed_by TEXT NOT NULL REFERENCES "user"(id),
+        action TEXT NOT NULL,
+        field_key TEXT NOT NULL,
+        old_value TEXT,
+        new_value TEXT,
+        change_reason TEXT NOT NULL,
+        context JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS prce_rule_created_idx
+        ON price_rule_change_event(rule_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS prce_changed_by_idx
+        ON price_rule_change_event(changed_by);
+      CREATE INDEX IF NOT EXISTS prce_action_idx
+        ON price_rule_change_event(action);
+    `);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando price_rule_change_event:", e);
+  }
+
+  try {
+    await migratePriceRuleCode(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error migrando price_rule.code (v5.11):", e);
+  }
+}
+
+/**
+ * Función interna para asegurar la integridad de la base de datos v3.0.
+ * Este parche se ejecuta preventivamente para evitar errores de columnas faltantes.
+ */
+export async function ensureInfrastructure(db: any) {
+  await ensureIncrementalInfrastructure(db);
 
   if (globalForInfra.infrastructureChecked === INFRA_VERSION) return;
 
@@ -1159,6 +1327,55 @@ export async function ensureInfrastructure(db: any) {
         ADD COLUMN IF NOT EXISTS address_office TEXT;
     `);
 
+    // v5.8 — Entrega deseada + precio de lista en clinical_case + mantenedor de precios.
+    await db.execute(sql`
+      ALTER TABLE clinical_case
+        ADD COLUMN IF NOT EXISTS desired_delivery_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS list_price_rule_id UUID,
+        ADD COLUMN IF NOT EXISTS list_price_cost NUMERIC(12,2),
+        ADD COLUMN IF NOT EXISTS list_price_fee_percent NUMERIC(5,4),
+        ADD COLUMN IF NOT EXISTS list_price_sale NUMERIC(12,2);
+
+      CREATE TABLE IF NOT EXISTS price_rule (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        restoration_type_id UUID REFERENCES restoration_type(id) ON DELETE RESTRICT,
+        material_id UUID REFERENCES dental_material(id) ON DELETE RESTRICT,
+        shade_id UUID REFERENCES vita_shade(id) ON DELETE RESTRICT,
+        urgency_id UUID REFERENCES urgency_level(id) ON DELETE RESTRICT,
+        cost NUMERIC(12,2) NOT NULL,
+        fee_percent NUMERIC(5,4) NOT NULL,
+        sale_price NUMERIC(12,2) NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS price_rule_request (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        restoration_type_id UUID NOT NULL REFERENCES restoration_type(id) ON DELETE RESTRICT,
+        material_id UUID NOT NULL REFERENCES dental_material(id) ON DELETE RESTRICT,
+        shade_id UUID NOT NULL REFERENCES vita_shade(id) ON DELETE RESTRICT,
+        urgency_id UUID NOT NULL REFERENCES urgency_level(id) ON DELETE RESTRICT,
+        case_id UUID NOT NULL REFERENCES clinical_case(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'pending',
+        resolved_rule_id UUID REFERENCES price_rule(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS price_rule_request_pending_sig_uidx
+        ON price_rule_request(restoration_type_id, material_id, shade_id, urgency_id, status);
+
+      CREATE UNIQUE INDEX IF NOT EXISTS price_rule_active_sig_uidx
+        ON price_rule(
+          COALESCE(restoration_type_id, '00000000-0000-0000-0000-000000000000'::uuid),
+          COALESCE(material_id, '00000000-0000-0000-0000-000000000000'::uuid),
+          COALESCE(shade_id, '00000000-0000-0000-0000-000000000000'::uuid),
+          COALESCE(urgency_id, '00000000-0000-0000-0000-000000000000'::uuid)
+        )
+        WHERE is_active = TRUE;
+    `);
+
     // 7) Backfill de disponibilidad — SOLO si el modelo está habilitado.
     //    Evita correr el INSERT masivo en cada deploy con el feature apagado.
     //    Inferencia CAD/CAM desde technician_skill; categorías todo ON; caso
@@ -1177,6 +1394,38 @@ export async function ensureInfrastructure(db: any) {
       `);
       console.log("[DB] v5.0 backfill de technician_availability ejecutado (flag ON).");
     }
+
+    // v5.9 — Asignación directa: case_invitation → case_assignment + columnas renombradas
+    await migrateCaseInvitationToAssignment(db);
+    await db.execute(sql`
+      ALTER TABLE fauchard_config
+        ADD COLUMN IF NOT EXISTS max_assignment_attempts INTEGER NOT NULL DEFAULT 3;
+    `);
+
+    // v5.10 — Auditoría de cambios en reglas de precio de lista
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS price_rule_change_event (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        rule_id UUID REFERENCES price_rule(id) ON DELETE SET NULL,
+        changed_by TEXT NOT NULL REFERENCES "user"(id),
+        action TEXT NOT NULL,
+        field_key TEXT NOT NULL,
+        old_value TEXT,
+        new_value TEXT,
+        change_reason TEXT NOT NULL,
+        context JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS prce_rule_created_idx
+        ON price_rule_change_event(rule_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS prce_changed_by_idx
+        ON price_rule_change_event(changed_by);
+      CREATE INDEX IF NOT EXISTS prce_action_idx
+        ON price_rule_change_event(action);
+    `);
+
+    // v5.11 — Código opaco por regla de precio (prc_NNN)
+    await migratePriceRuleCode(db);
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
     console.log("[DB] Infraestructura verificada con éxito.");

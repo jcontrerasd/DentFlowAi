@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { notifyUser } from "../../services/notifications";
 import GCPStorageService from '@/lib/services/gcp-storage';
 import { db } from "@/lib/db";
-import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseInvitation, caseUserArchive } from "@/lib/db/schema";
+import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseAssignment, caseUserArchive } from "@/lib/db/schema";
 import { eq, desc, and, or, ne, not, sql, inArray, avg, exists, gt } from "drizzle-orm";
 import {
   archiveVisibilityForUser,
@@ -20,6 +20,12 @@ import { getSignedUrl, getUploadUrl } from "@/lib/gcs";
 import { canActAsTecnico, canActAsDentista } from "@/lib/auth-helpers";
 import { getServerIdentity } from "./impersonation";
 import { resolveCatalogCodesToIds } from "@/lib/db/catalogResolver";
+import {
+  enqueuePriceRuleRequestIfNeeded,
+  resolveListPriceSnapshot,
+} from '@/lib/db/actions/priceRules';
+import { validateDesiredDeliveryAt } from '@/lib/pricing/resolveListPrice';
+import { resolveClonedDesiredDeliveryAt } from '@/lib/cases/caseDeliveryPresentation';
 import { dentalMaterial, restorationType as restorationTypeTable, vitaShade, urgencyLevel } from "@/lib/db/schema";
 import type { ActionResult } from "@/lib/types/actions";
 import { CASE_STATUSES, INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
@@ -176,9 +182,9 @@ export async function getCaseEventsAction(
     // Obtener invitationId del técnico actual (para filtro por invitation)
     let currentInvitationId: string | null = null;
     if (identity.role === 'tecnico') {
-      const [myInv] = await db.select({ id: caseInvitation.id })
-        .from(caseInvitation)
-        .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.technicianId, identity.id as string)))
+      const [myInv] = await db.select({ id: caseAssignment.id })
+        .from(caseAssignment)
+        .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.technicianId, identity.id as string)))
         .limit(1);
       currentInvitationId = myInv?.id ?? null;
     }
@@ -193,7 +199,7 @@ export async function getCaseEventsAction(
     /** OFERTA_RECHAZADA / OFERTA_NO_SELECCIONADA (solo dentista): snapshot desde invitación si el JSON omitió números. */
     const rejectedOfferInvitationSnapshots = new Map<
       string,
-      { quotedPrice: number | null; quotedDays: number | null; techNotes: string | null }
+      { compensation: number | null; deadlineDays: number | null }
     >();
     if (identity.role === 'dentista') {
       const invIds = [
@@ -214,20 +220,18 @@ export async function getCaseEventsAction(
       if (invIds.length > 0) {
         const rows = await db
           .select({
-            id: caseInvitation.id,
-            quotedPrice: caseInvitation.quotedPrice,
-            quotedDays: caseInvitation.quotedDays,
-            techNotes: caseInvitation.techNotes,
+            id: caseAssignment.id,
+            compensation: caseAssignment.compensation,
+            deadlineDays: caseAssignment.deadlineDays,
           })
-          .from(caseInvitation)
-          .where(and(eq(caseInvitation.clinicalCaseId, caseId), inArray(caseInvitation.id, invIds)));
+          .from(caseAssignment)
+          .where(and(eq(caseAssignment.clinicalCaseId, caseId), inArray(caseAssignment.id, invIds)));
         for (const r of rows) {
-          const qp = r.quotedPrice != null ? Number(r.quotedPrice) : NaN;
-          const qd = r.quotedDays != null ? Math.trunc(Number(r.quotedDays)) : NaN;
+          const qp = r.compensation != null ? Number(r.compensation) : NaN;
+          const qd = r.deadlineDays != null ? Math.trunc(Number(r.deadlineDays)) : NaN;
           rejectedOfferInvitationSnapshots.set(r.id, {
-            quotedPrice: Number.isFinite(qp) && qp >= 0 ? qp : null,
-            quotedDays: Number.isFinite(qd) && qd > 0 ? qd : null,
-            techNotes: r.techNotes?.trim() ? r.techNotes.trim() : null,
+            compensation: Number.isFinite(qp) && qp >= 0 ? qp : null,
+            deadlineDays: Number.isFinite(qd) && qd > 0 ? qd : null,
           });
         }
       }
@@ -259,33 +263,27 @@ export async function getCaseEventsAction(
           const snap = rejectedOfferInvitationSnapshots.get(invId);
           if (snap) {
             const pickPrice = (): number | null => {
-              const raw = p.quotedPrice;
+              const raw = p.compensation;
               if (raw != null && raw !== '') {
                 const n = Number(raw as number | string);
                 if (Number.isFinite(n) && n >= 0) return n;
               }
-              return snap.quotedPrice;
+              return snap.compensation;
             };
             const pickDays = (): number | null => {
-              const raw = p.quotedDays;
+              const raw = p.deadlineDays;
               if (raw != null && raw !== '') {
                 const n = Math.trunc(Number(raw as number | string));
                 if (Number.isFinite(n) && n > 0) return n;
               }
-              return snap.quotedDays;
-            };
-            const pickNotes = (): string | null => {
-              const raw = p.techNotes;
-              if (typeof raw === 'string' && raw.trim()) return raw.trim();
-              return snap.techNotes;
+              return snap.deadlineDays;
             };
             mapped = {
               ...event,
               payload: {
                 ...p,
-                quotedPrice: pickPrice(),
-                quotedDays: pickDays(),
-                techNotes: pickNotes(),
+                compensation: pickPrice(),
+                deadlineDays: pickDays(),
               },
             };
           }
@@ -384,15 +382,15 @@ export async function getSignedUrlAction(fileName: string) {
       const isLegacyPublic = cCase.status === 'publicado';
 
       // Modelo v2: técnico con invitación confirmada (dentista aceptó la propuesta)
-      const { caseInvitation } = await import('@/lib/db/schema');
+      const { caseAssignment } = await import('@/lib/db/schema');
       const { eq: eqOp, and: andOp } = await import('drizzle-orm');
       const [confirmedInv] = await db
-        .select({ id: caseInvitation.id })
-        .from(caseInvitation)
+        .select({ id: caseAssignment.id })
+        .from(caseAssignment)
         .where(andOp(
-          eqOp(caseInvitation.clinicalCaseId, caseIdFromPath),
-          eqOp(caseInvitation.technicianId, userId as string),
-          eqOp(caseInvitation.status, 'confirmed')
+          eqOp(caseAssignment.clinicalCaseId, caseIdFromPath),
+          eqOp(caseAssignment.technicianId, userId as string),
+          eqOp(caseAssignment.status, 'confirmed')
         ))
         .limit(1);
 
@@ -491,7 +489,7 @@ export async function listCasesByOrganization(
                   urgencyLevel: true,
                   organization: { columns: { name: true } },
                   files: { limit: 1 },
-                  invitations: {
+                  assignments: {
                     where: (inv, { eq: eqOp }) => eqOp(inv.technicianId, techUserId),
                     orderBy: (inv, { desc: descOp }) => [descOp(inv.updatedAt)],
                   },
@@ -504,7 +502,7 @@ export async function listCasesByOrganization(
                   organization: true,
                   bids: { columns: { id: true, status: true, price: true } },
                   files: { limit: 3 },
-                  invitations: {
+                  assignments: {
                     where: (inv, { eq: eqOp }) => eqOp(inv.technicianId, techUserId),
                     orderBy: (inv, { desc: descOp }) => [descOp(inv.updatedAt)],
                   },
@@ -522,7 +520,7 @@ export async function listCasesByOrganization(
                   shade: true,
                   urgencyLevel: true,
                   files: { limit: 1 },
-                  invitations: {
+                  assignments: {
                     where: (inv, { eq: eqOp, gt: gtOp, and: andOp }) =>
                       andOp(eqOp(inv.status, 'pending'), gtOp(inv.expiresAt, new Date())),
                     orderBy: (inv, { desc: descOp }) => [descOp(inv.expiresAt)],
@@ -537,7 +535,7 @@ export async function listCasesByOrganization(
                   organization: true,
                   bids: { columns: { id: true, status: true, price: true } },
                   files: { limit: 3 },
-                  invitations: {
+                  assignments: {
                     where: (inv, { eq: eqOp, gt: gtOp, and: andOp }) =>
                       andOp(eqOp(inv.status, 'pending'), gtOp(inv.expiresAt, new Date())),
                     orderBy: (inv, { desc: descOp }) => [descOp(inv.expiresAt)],
@@ -556,7 +554,7 @@ export async function listCasesByOrganization(
     const quoteDeadlines = await getCaseQuoteDeadlineAtBatch(evalCaseIds);
 
     const processedResults = results.map((c: any) => {
-      const row = c as typeof c & { invitations?: typeof caseInvitation.$inferSelect[] };
+      const row = c as typeof c & { invitations?: typeof caseAssignment.$inferSelect[] };
       const invRows = Array.isArray(row.invitations) ? row.invitations : [];
       const representativeStatus = isTech
         ? pickInvitationStatusForKpi(invRows)
@@ -822,84 +820,19 @@ export async function getCaseDetails(caseId: string) {
       reviewDeadlineAt = await getCaseReviewDeadlineAt(caseId);
     }
 
-    let comparativeOffers: Array<{
-      invitationId: string;
-      rank: number;
-      totalPriceCLP: number;
-      quotedDays: number | null;
-      quotedHours: number | null;
-      techNotes: string | null;
-      respondedAt: Date | null;
-      // Desglose integral (Fase 4.4): nullable.
-      designPriceCLP?: number | null;
-      designDays?: number | null;
-      designHours?: number | null;
-      fabricationPriceCLP?: number | null;
-      fabricationDays?: number | null;
-      fabricationHours?: number | null;
-      // Flete (v4.4): expuesto SIN fee. nullable para casos legacy y solo_diseno.
-      shippingPriceCLP?: number | null;
-      shippingDays?: number | null;
-      shippingHours?: number | null;
-    }> | undefined;
+    // Modelo asignación directa: sin comparativo de ofertas.
+    const comparativeOffers = undefined;
 
-    const isOwningDentist =
-      userRole === 'dentista' && cCase.doctorId === userId && cCase.organizationId === orgId;
-    if ((isOwningDentist || isSystemAdmin) && cCase.status === CASE_STATUSES.PROPUESTA_LISTA) {
-      const { getConfigForCase } = await import('./fauchard');
-      const cfg = await getConfigForCase(caseId);
-      const fee = parseFloat(String(cfg.platformFee ?? '0.15'));
-
-      const rows = await db
-        .select()
-        .from(caseInvitation)
-        .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted')));
-
-      const sorted = [...rows].sort((a, b) => {
-        const pd = (a.quotedPrice ?? Infinity) - (b.quotedPrice ?? Infinity);
-        if (pd !== 0) return pd;
-        // Ordenamiento secundario: tiempo total aproximado (días*24 + horas).
-        const aTime = (a.quotedDays ?? 0) * 24 + (a.quotedHours ?? 0);
-        const bTime = (b.quotedDays ?? 0) * 24 + (b.quotedHours ?? 0);
-        if (aTime !== bTime) return aTime - bTime;
-        return new Date(a.respondedAt ?? a.createdAt ?? 0).getTime() - new Date(b.respondedAt ?? b.createdAt ?? 0).getTime();
-      });
-
-      comparativeOffers = sorted.map((row, i) => {
-        // v4.4 — Flete: fee NO aplica al flete. Lo separamos del total con-fee.
-        const shipping = row.quotedShippingPrice ?? 0;
-        const subtotalWithoutShipping = (row.quotedPrice ?? 0) - shipping;
-        return {
-          invitationId: row.id,
-          rank: i + 1,
-          totalPriceCLP: subtotalWithoutShipping * (1 + fee) + shipping,
-          quotedDays: row.quotedDays ?? null,
-          quotedHours: row.quotedHours ?? null,
-          techNotes: row.techNotes ?? null,
-          respondedAt: row.respondedAt ?? null,
-          designPriceCLP: row.quotedDesignPrice != null ? row.quotedDesignPrice * (1 + fee) : null,
-          designDays: row.quotedDesignDays ?? null,
-          designHours: row.quotedDesignHours ?? null,
-          fabricationPriceCLP: row.quotedFabricationPrice != null ? row.quotedFabricationPrice * (1 + fee) : null,
-          fabricationDays: row.quotedFabricationDays ?? null,
-          fabricationHours: row.quotedFabricationHours ?? null,
-          shippingPriceCLP: row.quotedShippingPrice ?? null,
-          shippingDays: row.quotedShippingDays ?? null,
-          shippingHours: row.quotedShippingHours ?? null,
-        };
-      });
+    if (userRole === 'tecnico') {
+      (cCase as any).listPriceRuleId = null;
+      (cCase as any).listPriceCost = null;
+      (cCase as any).listPriceFeePercent = null;
+      (cCase as any).listPriceSale = null;
     }
 
-    if (userRole === 'tecnico' && cCase.status === CASE_STATUSES.PROPUESTA_LISTA) {
-      (cCase as any).proposedPrice = undefined;
-      (cCase as any).proposedDeliveryDays = undefined;
-      (cCase as any).platformFee = undefined;
-    }
-
-    // Comparativo anónimo: el dentista no debe ver datos del laboratorio hasta aceptar una oferta
+    // Anonimato: dentista no ve técnico hasta asignación aceptada
     if (
       userRole === 'dentista' &&
-      cCase.status === CASE_STATUSES.PROPUESTA_LISTA &&
       !cCase.assignedTechnicianId
     ) {
       (cCase as any).technician = undefined;
@@ -907,21 +840,24 @@ export async function getCaseDetails(caseId: string) {
 
     const archivedByCurrentUser = await isCaseArchivedByUser(caseId, userId as string);
 
-    let myInvitationStatus: string | null = null;
+    let myAssignmentStatus: string | null = null;
     if (userRole === 'tecnico') {
-      const [canonicalInv] = await db
-        .select({ status: caseInvitation.status })
-        .from(caseInvitation)
+      const [canonical] = await db
+        .select({ status: caseAssignment.status })
+        .from(caseAssignment)
         .where(
           and(
-            eq(caseInvitation.clinicalCaseId, caseId),
-            eq(caseInvitation.technicianId, userId as string),
+            eq(caseAssignment.clinicalCaseId, caseId),
+            eq(caseAssignment.technicianId, userId as string),
           ),
         )
-        .orderBy(desc(caseInvitation.invitedAt))
+        .orderBy(desc(caseAssignment.assignedAt))
         .limit(1);
-      myInvitationStatus = canonicalInv?.status ?? null;
+      myAssignmentStatus = canonical?.status ?? null;
     }
+
+    /** @deprecated alias */
+    const myInvitationStatus = myAssignmentStatus;
 
     let copiedFromCaseNumber: string | null = null;
     if (cCase.copiedFromCaseId) {
@@ -1265,7 +1201,7 @@ export async function submitUserRatingAction(data: { caseId: string, revieweeId:
   if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
     return { success: false, error: "La calificación debe estar entre 1 y 5" };
   }
-  const dimension: 'design' = 'design';
+  const dimension = 'design' as const;
 
   // El comentario queda visible para el técnico (de forma anónima): debe pasar por
   // ContactGuard como cualquier campo libre para impedir desintermediación.
@@ -1755,7 +1691,47 @@ export async function updateClinicalCaseAction(caseId: string, data: any) {
 
   try {
     const resolved = await resolveCatalogCodesToIds(data);
+
+    const [existing] = await db
+      .select({
+        restorationTypeId: clinicalCase.restorationTypeId,
+        materialId: clinicalCase.materialId,
+        shadeId: clinicalCase.shadeId,
+        urgencyId: clinicalCase.urgencyId,
+      })
+      .from(clinicalCase)
+      .where(and(eq(clinicalCase.id, caseId), eq(clinicalCase.organizationId, orgId)))
+      .limit(1);
+
+    if (!existing) throw new Error('Caso no encontrado');
+
     const setPayload: Record<string, unknown> = { ...resolved, updatedAt: new Date() };
+
+    if (data.desiredDeliveryAt !== undefined) {
+      const desiredAt = validateDesiredDeliveryAt(data.desiredDeliveryAt);
+      if (!desiredAt) throw new Error('La fecha de entrega deseada debe ser futura y válida');
+      setPayload.desiredDeliveryAt = desiredAt;
+    }
+
+    const catalogFieldsChanged =
+      'material' in data || 'restorationType' in data || 'shade' in data || 'urgency' in data;
+
+    if (catalogFieldsChanged) {
+      const dimIds = {
+        restorationTypeId: (setPayload.restorationTypeId ?? existing.restorationTypeId) as string,
+        materialId: (setPayload.materialId ?? existing.materialId) as string,
+        shadeId: (setPayload.shadeId ?? existing.shadeId) as string,
+        urgencyId: (setPayload.urgencyId ?? existing.urgencyId) as string,
+      };
+      if (dimIds.restorationTypeId && dimIds.materialId && dimIds.shadeId && dimIds.urgencyId) {
+        const snapshot = await resolveListPriceSnapshot(dimIds);
+        Object.assign(setPayload, snapshot);
+        if (!snapshot.listPriceRuleId) {
+          await enqueuePriceRuleRequestIfNeeded(caseId, dimIds);
+        }
+      }
+    }
+
     if (Object.prototype.hasOwnProperty.call(data, 'doctorNotes')) {
       // El formulario de ficha usa `doctorNotes` como texto único; se persiste en `special_instructions`.
       // Evitar duplicar el mismo valor en `doctor_notes` (resúmenes / publicar mostraban dos filas iguales).
@@ -1819,10 +1795,23 @@ export async function createClinicalCaseAction(data: any) {
     const caseNumber = await getNextCaseNumber();
     const resolved = await resolveCatalogCodesToIds(data);
 
+    const desiredAt = validateDesiredDeliveryAt(data.desiredDeliveryAt);
+    if (!desiredAt) throw new Error('La fecha de entrega deseada es obligatoria y debe ser futura');
+
+    const dimIds = {
+      restorationTypeId: resolved.restorationTypeId as string,
+      materialId: resolved.materialId as string,
+      shadeId: resolved.shadeId as string,
+      urgencyId: resolved.urgencyId as string,
+    };
+    const priceSnapshot = await resolveListPriceSnapshot(dimIds);
+
     const [newCase] = await db
       .insert(clinicalCase)
       .values({
         ...resolved,
+        ...priceSnapshot,
+        desiredDeliveryAt: desiredAt,
         specialInstructions: data.specialInstructions ?? data.doctorNotes ?? null,
         doctorNotes: null,
         caseNumber,
@@ -1836,6 +1825,10 @@ export async function createClinicalCaseAction(data: any) {
         canBeDeleted: true,
       } as any)
       .returning();
+
+    if (!priceSnapshot.listPriceRuleId && dimIds.restorationTypeId && dimIds.materialId && dimIds.shadeId && dimIds.urgencyId) {
+      await enqueuePriceRuleRequestIfNeeded(newCase.id, dimIds);
+    }
 
     await logCaseEvent({
       caseId: newCase.id,
@@ -2071,10 +2064,10 @@ export async function withdrawCaseAction(caseId: string): Promise<ActionResult> 
 
     const [openInvites] = await db
       .select({ count: sql<number>`count(*)` })
-      .from(caseInvitation)
+      .from(caseAssignment)
       .where(and(
-        eq(caseInvitation.clinicalCaseId, caseId),
-        inArray(caseInvitation.status, ['pending', 'quoted'])
+        eq(caseAssignment.clinicalCaseId, caseId),
+        inArray(caseAssignment.status, ['pending', 'quoted'])
       ));
 
     if (Number(openInvites.count) > 0) {
@@ -2213,24 +2206,26 @@ export async function republishCaseAction(caseId: string, changeSummary?: string
     if (!result.success) return result as ActionResult;
 
     // Run Fauchard outside the transaction
-    const { classifyCaseAction, runFauchardAction, sendInvitationsAction } = await import('./fauchard');
+    const { classifyCaseAction } = await import('./fauchard');
+    const { runAssignmentAction, assignCaseAction } = await import('./assignment');
     await classifyCaseAction(caseId);
-    const selectionResult = await runFauchardAction(caseId);
-    // v5.0: 0 elegibles con el modelo on entra a `pendiente_pool`; el caso queda
-    // publicado (enEvaluacion) esperando técnicos, no se revierte a borrador.
+    const selectionResult = await runAssignmentAction(caseId);
     if (selectionResult.pooled) {
       return { success: true };
     }
-    if (!selectionResult.success || !selectionResult.technicianIds?.length || !selectionResult.fauchardConfigId) {
+    if (!selectionResult.success || !selectionResult.technicianId || !selectionResult.fauchardConfigId) {
       await db.update(clinicalCase)
         .set({ status: 'borrador', internalStatus: null, canBeDeleted: true, updatedAt: new Date(), lastActivityAt: new Date() })
         .where(eq(clinicalCase.id, caseId));
       return { success: false, error: selectionResult.error || 'No se encontraron técnicos disponibles para la republicación' };
     }
-    await sendInvitationsAction(caseId, selectionResult.technicianIds, {
+    const assignResult = await assignCaseAction(caseId, selectionResult.technicianId, {
       fauchardConfigId: selectionResult.fauchardConfigId,
       pinCaseToConfig: true,
     });
+    if (!assignResult.success) {
+      return { success: false, error: assignResult.error || 'No se pudo asignar el caso' };
+    }
 
     return { success: true };
   } catch (error) {
@@ -2312,6 +2307,28 @@ export async function cloneCaseFromTerminalAction(
       await GCPStorageService.clearArchivalMark(copiedGcsPaths);
     }
 
+    const clonedDesiredAt = resolveClonedDesiredDeliveryAt(source.desiredDeliveryAt);
+
+    let priceSnapshot: Awaited<ReturnType<typeof resolveListPriceSnapshot>> = {
+      listPriceRuleId: null,
+      listPriceCost: null,
+      listPriceFeePercent: null,
+      listPriceSale: null,
+    };
+    if (
+      source.restorationTypeId &&
+      source.materialId &&
+      source.shadeId &&
+      source.urgencyId
+    ) {
+      priceSnapshot = await resolveListPriceSnapshot({
+        restorationTypeId: source.restorationTypeId,
+        materialId: source.materialId,
+        shadeId: source.shadeId,
+        urgencyId: source.urgencyId,
+      });
+    }
+
     await db.transaction(async (tx) => {
       await tx.insert(clinicalCase).values({
         id: newCaseId,
@@ -2331,6 +2348,8 @@ export async function cloneCaseFromTerminalAction(
         caseComplexity: source.caseComplexity,
         specialInstructions: source.specialInstructions,
         doctorNotes: null,
+        desiredDeliveryAt: clonedDesiredAt,
+        ...priceSnapshot,
         status: CASE_STATUSES.BORRADOR,
         internalStatus: null,
         caseNumber,
@@ -2389,6 +2408,13 @@ export async function publishCaseAction(caseId: string): Promise<ActionResult> {
         status: clinicalCase.status,
         doctorId: clinicalCase.doctorId,
         publishedAt: clinicalCase.publishedAt,
+        desiredDeliveryAt: clinicalCase.desiredDeliveryAt,
+        listPriceRuleId: clinicalCase.listPriceRuleId,
+        listPriceSale: clinicalCase.listPriceSale,
+        restorationTypeId: clinicalCase.restorationTypeId,
+        materialId: clinicalCase.materialId,
+        shadeId: clinicalCase.shadeId,
+        urgencyId: clinicalCase.urgencyId,
       })
       .from(clinicalCase)
       .where(eq(clinicalCase.id, caseId))
@@ -2401,6 +2427,51 @@ export async function publishCaseAction(caseId: string): Promise<ActionResult> {
     }
     if (current.status !== 'borrador') return { success: false, error: "Solo se puede publicar un caso en borrador" };
 
+    if (!current.desiredDeliveryAt || !validateDesiredDeliveryAt(current.desiredDeliveryAt)) {
+      return {
+        success: false,
+        error: 'Debes indicar una fecha de entrega deseada válida (futura) antes de publicar.',
+      };
+    }
+
+    let listPriceRuleId = current.listPriceRuleId;
+    let pricePatch: Awaited<ReturnType<typeof resolveListPriceSnapshot>> | null = null;
+    if (
+      current.restorationTypeId &&
+      current.materialId &&
+      current.shadeId &&
+      current.urgencyId
+    ) {
+      pricePatch = await resolveListPriceSnapshot({
+        restorationTypeId: current.restorationTypeId,
+        materialId: current.materialId,
+        shadeId: current.shadeId,
+        urgencyId: current.urgencyId,
+      });
+      listPriceRuleId = pricePatch.listPriceRuleId;
+    }
+
+    if (!listPriceRuleId || !pricePatch?.listPriceSale) {
+      if (
+        current.restorationTypeId &&
+        current.materialId &&
+        current.shadeId &&
+        current.urgencyId
+      ) {
+        await enqueuePriceRuleRequestIfNeeded(caseId, {
+          restorationTypeId: current.restorationTypeId,
+          materialId: current.materialId,
+          shadeId: current.shadeId,
+          urgencyId: current.urgencyId,
+        });
+      }
+      return {
+        success: false,
+        error:
+          'No hay precio de lista para esta combinación. El equipo debe definir la tarifa en Admin → Precios antes de publicar.',
+      };
+    }
+
     await db.update(clinicalCase)
       .set({
         status: 'enEvaluacion',
@@ -2409,6 +2480,10 @@ export async function publishCaseAction(caseId: string): Promise<ActionResult> {
         publishedAt: new Date(),
         updatedAt: new Date(),
         lastActivityAt: new Date(),
+        listPriceRuleId: pricePatch.listPriceRuleId,
+        listPriceCost: pricePatch.listPriceCost,
+        listPriceFeePercent: pricePatch.listPriceFeePercent,
+        listPriceSale: pricePatch.listPriceSale,
       })
       .where(eq(clinicalCase.id, caseId));
 
@@ -2422,24 +2497,26 @@ export async function publishCaseAction(caseId: string): Promise<ActionResult> {
       stateChange: { from: 'borrador', to: 'enEvaluacion' }
     });
 
-    const { classifyCaseAction, runFauchardAction, sendInvitationsAction } = await import('./fauchard');
+    const { classifyCaseAction } = await import('./fauchard');
+    const { runAssignmentAction, assignCaseAction } = await import('./assignment');
     await classifyCaseAction(caseId);
-    const selectionResult = await runFauchardAction(caseId);
-    // v5.0: 0 elegibles con el modelo on entra a `pendiente_pool`; el caso queda
-    // publicado (enEvaluacion) esperando técnicos, no se revierte a borrador.
+    const selectionResult = await runAssignmentAction(caseId);
     if (selectionResult.pooled) {
       return { success: true };
     }
-    if (!selectionResult.success || !selectionResult.technicianIds?.length || !selectionResult.fauchardConfigId) {
+    if (!selectionResult.success || !selectionResult.technicianId || !selectionResult.fauchardConfigId) {
       await db.update(clinicalCase)
         .set({ status: 'borrador', internalStatus: null, canBeDeleted: true, updatedAt: new Date(), lastActivityAt: new Date() })
         .where(eq(clinicalCase.id, caseId));
       return { success: false, error: selectionResult.error || 'No se encontraron técnicos disponibles' };
     }
-    await sendInvitationsAction(caseId, selectionResult.technicianIds, {
+    const assignResult = await assignCaseAction(caseId, selectionResult.technicianId, {
       fauchardConfigId: selectionResult.fauchardConfigId,
       pinCaseToConfig: true,
     });
+    if (!assignResult.success) {
+      return { success: false, error: assignResult.error || 'No se pudo asignar el caso' };
+    }
 
     return { success: true };
   } catch (error) {
@@ -2468,8 +2545,8 @@ export async function republicarCaseAction(caseId: string): Promise<ActionResult
     if (!current) return { success: false, error: 'Caso no encontrado' };
     const isAdmin = identity.role === 'admin' || identity.isSystemAdmin;
     if (!isAdmin && current.doctorId !== identity.id) return { success: false, error: 'No autorizado' };
-    if (current.status !== INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO) {
-      return { success: false, error: 'Solo se puede republicar un caso sin cotizaciones' };
+    if (current.status !== INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO && current.status !== INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO) {
+      return { success: false, error: 'Solo se puede republicar un caso sin asignación' };
     }
 
     await db.update(clinicalCase)
@@ -2494,17 +2571,21 @@ export async function republicarCaseAction(caseId: string): Promise<ActionResult
       stateChange: { from: INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO, to: CASE_STATUSES.EN_EVALUACION },
     });
 
-    const { classifyCaseAction, runFauchardAction, sendInvitationsAction } = await import('./fauchard');
+    const { classifyCaseAction } = await import('./fauchard');
+    const { runAssignmentAction, assignCaseAction } = await import('./assignment');
     await classifyCaseAction(caseId);
-    const selectionResult = await runFauchardAction(caseId);
+    const selectionResult = await runAssignmentAction(caseId);
     if (selectionResult.pooled) return { success: true };
-    if (!selectionResult.success || !selectionResult.technicianIds?.length || !selectionResult.fauchardConfigId) {
+    if (!selectionResult.success || !selectionResult.technicianId || !selectionResult.fauchardConfigId) {
       return { success: false, error: selectionResult.error || 'No se encontraron técnicos disponibles' };
     }
-    await sendInvitationsAction(caseId, selectionResult.technicianIds, {
+    const assignResult = await assignCaseAction(caseId, selectionResult.technicianId, {
       fauchardConfigId: selectionResult.fauchardConfigId,
       pinCaseToConfig: true,
     });
+    if (!assignResult.success) {
+      return { success: false, error: assignResult.error || 'No se pudo asignar el caso' };
+    }
 
     return { success: true };
   } catch (error) {

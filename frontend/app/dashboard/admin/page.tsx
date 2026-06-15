@@ -9,6 +9,7 @@ import {
   Shield,
   Users,
   LayoutGrid,
+  DollarSign,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -50,7 +51,7 @@ const SECTIONS: { group: string; cards: SectionCard[] }[] = [
       {
         href: '/dashboard/admin/fauchard',
         title: 'Motor Fauchard',
-        desc: 'Configuración (pesos, selección, plazos, calendario), monitoreo y equidad, y simulador. Todo dentro del mismo hub.',
+        desc: 'Configuración (pesos, asignación, plazos), monitoreo y equidad, y simulador. Todo dentro del mismo hub.',
         icon: Settings2,
         accent: 'hover:bg-primary/5',
         border: 'hover:border-primary/30',
@@ -75,6 +76,18 @@ const SECTIONS: { group: string; cards: SectionCard[] }[] = [
         chipText: 'text-warning',
         chevron: 'group-hover:text-warning',
         glow: 'bg-warning-hl group-hover:bg-warning-hl',
+      },
+      {
+        href: '/dashboard/admin/prices',
+        title: 'Precios de lista',
+        desc: 'Crear, editar y bloquear tarifas por combinación de dimensiones. Cola de combinaciones pendientes.',
+        icon: DollarSign,
+        accent: 'hover:bg-success-hl',
+        border: 'hover:border-success/30',
+        chip: 'bg-success-hl',
+        chipText: 'text-success',
+        chevron: 'group-hover:text-success',
+        glow: 'bg-success-hl group-hover:bg-success-hl',
       },
       {
         href: '/dashboard/admin/contactguard',

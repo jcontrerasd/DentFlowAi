@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import {
   clinicalCase,
   clinicalCaseEvent,
-  caseInvitation,
+  caseAssignment,
   clinicalCaseHubRead,
 } from '@/lib/db/schema';
 import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
@@ -158,9 +158,9 @@ async function unreadTotalForCase(
   let currentInvitationId: string | null = null;
   if (identity.role === 'tecnico') {
     const [myInv] = await db
-      .select({ id: caseInvitation.id })
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.technicianId, identity.id as string)))
+      .select({ id: caseAssignment.id })
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.technicianId, identity.id as string)))
       .limit(1);
     currentInvitationId = myInv?.id ?? null;
   }
@@ -281,9 +281,9 @@ async function recentCaseIdsForHubBell(identity: Identity, limit: number): Promi
 
   if (canActAsTecnico(role) && role !== 'admin') {
     const invs = await db
-      .select({ caseId: caseInvitation.clinicalCaseId })
-      .from(caseInvitation)
-      .where(eq(caseInvitation.technicianId, userId));
+      .select({ caseId: caseAssignment.clinicalCaseId })
+      .from(caseAssignment)
+      .where(eq(caseAssignment.technicianId, userId));
     const invCaseIds = [...new Set(invs.map((i) => i.caseId))].slice(0, 500);
 
     const rows = await db

@@ -1,7 +1,7 @@
 'use server';
 import { canActAsTecnico } from "@/lib/auth-helpers";
 import { db } from '@/lib/db';
-import { technicianSkill, user, caseInvitation, technicianAvailability } from '@/lib/db/schema';
+import { technicianSkill, user, caseAssignment, technicianAvailability } from '@/lib/db/schema';
 import { eq, and, gt } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { WORK_TYPES } from '@/lib/constants/dental';
@@ -132,9 +132,9 @@ export async function toggleAvailabilityAction() {
 
     // S8-05: Si está apagando disponibilidad, verificar compromisos activos
     if (!newAvailability) {
-      const [activeBid] = await db.select({ id: caseInvitation.id })
-        .from(caseInvitation)
-        .where(and(eq(caseInvitation.technicianId, identity.id), eq(caseInvitation.status, 'confirmed')))
+      const [activeBid] = await db.select({ id: caseAssignment.id })
+        .from(caseAssignment)
+        .where(and(eq(caseAssignment.technicianId, identity.id), eq(caseAssignment.status, 'confirmed')))
         .limit(1);
       
       if (activeBid) {

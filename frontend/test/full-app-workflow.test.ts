@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { db } from '@/lib/db';
 import {
-  clinicalCase, caseInvitation, user, technicianSkill,
+  clinicalCase, caseAssignment, user, technicianSkill,
   fauchardConfig, clinicalCaseEvent, clinicalCaseDelivery, file, organization
 } from '@/lib/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
@@ -62,8 +62,8 @@ async function createCaseAndGetProposal(caseName: string): Promise<string> {
   await submitCaseToFauchardAction(caseId);
 
   // Encontrar todas las invitaciones pendientes y responderlas/expirarlas
-  const invitations = await db.select().from(caseInvitation)
-    .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'pending')));
+  const invitations = await db.select().from(caseAssignment)
+    .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'pending')));
 
   for (const inv of invitations) {
     if (inv.technicianId === tech1Id) {
@@ -71,7 +71,7 @@ async function createCaseAndGetProposal(caseName: string): Promise<string> {
       await submitQuoteAction(inv.id, 150000, 3, 'Oferta automatizada');
     } else {
       // Expirar las invitaciones de otros técnicos para que el algoritmo evalúe
-      await db.update(caseInvitation).set({ status: 'expired', updatedAt: new Date() }).where(eq(caseInvitation.id, inv.id));
+      await db.update(caseAssignment).set({ status: 'expired', updatedAt: new Date() }).where(eq(caseAssignment.id, inv.id));
     }
   }
 
@@ -104,7 +104,7 @@ describe('SETUP', () => {
       });
 
     // Limpiar invitaciones previas de técnicos de test
-    await db.delete(caseInvitation).where(inArray(caseInvitation.technicianId, [tech1Id, tech2Id]));
+    await db.delete(caseAssignment).where(inArray(caseAssignment.technicianId, [tech1Id, tech2Id]));
 
     // Dentista
     await db.insert(user).values({
@@ -207,21 +207,21 @@ describe('SUITE A — Happy Path: Full Lifecycle', () => {
     expect(['enEvaluacion', 'propuestaLista']).toContain(c.status);
     expect(c.fauchardConfigId, 'caso anclado a la fila fauchard_config usada al publicar').toBeTruthy();
 
-    const invitations = await db.select().from(caseInvitation).where(eq(caseInvitation.clinicalCaseId, caseId));
+    const invitations = await db.select().from(caseAssignment).where(eq(caseAssignment.clinicalCaseId, caseId));
     expect(invitations.length).toBeGreaterThanOrEqual(1);
   });
 
   it('A3: Técnico cotiza → propuesta generada', async () => {
     // Responder nuestra invitación y expirar las demás
-    const invitations = await db.select().from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'pending')));
+    const invitations = await db.select().from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'pending')));
 
     for (const inv of invitations) {
       if (inv.technicianId === tech1Id) {
         mockAs(tech1Id, 'tecnico');
         await submitQuoteAction(inv.id, 185000, 4, 'Corona posterior zirconia monolítica');
       } else {
-        await db.update(caseInvitation).set({ status: 'expired' }).where(eq(caseInvitation.id, inv.id));
+        await db.update(caseAssignment).set({ status: 'expired' }).where(eq(caseAssignment.id, inv.id));
       }
     }
 
@@ -234,16 +234,16 @@ describe('SUITE A — Happy Path: Full Lifecycle', () => {
     const [c] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
     expect(c.status).toBe('propuestaLista');
     expect(c.assignedTechnicianId).toBeNull();
-    const quoted = await db.select().from(caseInvitation).where(
-      and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted'))
+    const quoted = await db.select().from(caseAssignment).where(
+      and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'quoted'))
     );
     expect(quoted.length).toBeGreaterThan(0);
   });
 
   it('A4: Dentista acepta propuesta → aceptadaPendienteInicio', async () => {
     mockAs(dentistId, 'dentista');
-    const [winInv] = await db.select({ id: caseInvitation.id }).from(caseInvitation).where(
-      and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted'))
+    const [winInv] = await db.select({ id: caseAssignment.id }).from(caseAssignment).where(
+      and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'quoted'))
     ).limit(1);
     expect(winInv).toBeDefined();
     const res = await acceptProposalAction(caseId, winInv!.id);
@@ -303,7 +303,7 @@ describe('SUITE B — Dentist Rejects Proposal', () => {
   let caseId: string;
 
   it('B0: Setup limpio', async () => {
-    await db.delete(caseInvitation).where(inArray(caseInvitation.technicianId, [tech1Id, tech2Id]));
+    await db.delete(caseAssignment).where(inArray(caseAssignment.technicianId, [tech1Id, tech2Id]));
     await db
       .update(user)
       .set({ lastInvitedAt: null, consecutiveNoResponse: 0, lastLoginAt: new Date() })
@@ -318,8 +318,8 @@ describe('SUITE B — Dentist Rejects Proposal', () => {
 
   it('B2: Dentista rechaza la única oferta activa', async () => {
     mockAs(dentistId, 'dentista');
-    const [q] = await db.select({ id: caseInvitation.id }).from(caseInvitation).where(
-      and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted'))
+    const [q] = await db.select({ id: caseAssignment.id }).from(caseAssignment).where(
+      and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'quoted'))
     ).limit(1);
     expect(q).toBeDefined();
     const res = await rejectInvitationOfferAction(caseId, q!.id, 'Precio demasiado alto para este tratamiento.');
@@ -367,7 +367,7 @@ describe('SUITE E — Pre-rechazado + aceptación otra oferta', () => {
       set: { designLevel: 5, fabricationLevel: 5 },
     });
 
-    await db.delete(caseInvitation).where(inArray(caseInvitation.technicianId, [tech1Id, tech2Id]));
+    await db.delete(caseAssignment).where(inArray(caseAssignment.technicianId, [tech1Id, tech2Id]));
     await db
       .update(user)
       .set({ lastInvitedAt: null, consecutiveNoResponse: 0, lastLoginAt: new Date() })
@@ -390,8 +390,8 @@ describe('SUITE E — Pre-rechazado + aceptación otra oferta', () => {
 
     let pending = await db
       .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'pending')));
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'pending')));
 
     const [cRow] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
     const fcId = cRow.fauchardConfigId;
@@ -410,21 +410,21 @@ describe('SUITE E — Pre-rechazado + aceptación otra oferta', () => {
 
     pending = await db
       .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'pending')));
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'pending')));
 
     const ours = pending.filter((p) => targetTechs.has(p.technicianId));
     expect(ours.length).toBeGreaterThanOrEqual(2);
 
     for (const inv of pending) {
       if (targetTechs.has(inv.technicianId)) continue;
-      await db.update(caseInvitation).set({ status: 'expired', updatedAt: new Date() }).where(eq(caseInvitation.id, inv.id));
+      await db.update(caseAssignment).set({ status: 'expired', updatedAt: new Date() }).where(eq(caseAssignment.id, inv.id));
     }
 
     pending = await db
       .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'pending')));
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'pending')));
 
     for (const inv of pending) {
       if (!targetTechs.has(inv.technicianId)) continue;
@@ -442,8 +442,8 @@ describe('SUITE E — Pre-rechazado + aceptación otra oferta', () => {
 
     const quoted = await db
       .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted')));
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'quoted')));
 
     const q1 = quoted.find((q) => q.technicianId === tech1Id);
     const q2 = quoted.find((q) => q.technicianId === tech2Id);
@@ -481,7 +481,7 @@ describe('SUITE C — Iteration: Request Adjustments', () => {
   let caseId: string;
 
   it('C0: Setup limpio', async () => {
-    await db.delete(caseInvitation).where(inArray(caseInvitation.technicianId, [tech1Id, tech2Id]));
+    await db.delete(caseAssignment).where(inArray(caseAssignment.technicianId, [tech1Id, tech2Id]));
     await db
       .update(user)
       .set({ lastInvitedAt: null, consecutiveNoResponse: 0, lastLoginAt: new Date() })
@@ -492,8 +492,8 @@ describe('SUITE C — Iteration: Request Adjustments', () => {
     caseId = await createCaseAndGetProposal('E2E-ITER-' + Date.now());
 
     mockAs(dentistId, 'dentista');
-    const [quotedInv] = await db.select({ id: caseInvitation.id }).from(caseInvitation).where(
-      and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted'))
+    const [quotedInv] = await db.select({ id: caseAssignment.id }).from(caseAssignment).where(
+      and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'quoted'))
     ).limit(1);
     await acceptProposalAction(caseId, quotedInv!.id);
 
@@ -568,7 +568,7 @@ describe('SUITE G — Oferta integral desglosada (Fase 4.2)', () => {
   let invitationId: string;
 
   it('G0: Setup limpio y crear caso integral', async () => {
-    await db.delete(caseInvitation).where(inArray(caseInvitation.technicianId, [tech1Id, tech2Id]));
+    await db.delete(caseAssignment).where(inArray(caseAssignment.technicianId, [tech1Id, tech2Id]));
     await db
       .update(user)
       .set({ lastInvitedAt: null, consecutiveNoResponse: 0, lastLoginAt: new Date() })
@@ -586,8 +586,8 @@ describe('SUITE G — Oferta integral desglosada (Fase 4.2)', () => {
     caseId = newCase.id;
     await submitCaseToFauchardAction(caseId);
 
-    const [pending] = await db.select().from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'pending'), eq(caseInvitation.technicianId, tech1Id)))
+    const [pending] = await db.select().from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'pending'), eq(caseAssignment.technicianId, tech1Id)))
       .limit(1);
     expect(pending, 'invitación pendiente para tech1').toBeTruthy();
     invitationId = pending!.id;
@@ -600,15 +600,15 @@ describe('SUITE G — Oferta integral desglosada (Fase 4.2)', () => {
     });
     expect(res.success, (res as any).error ?? '').toBe(true);
 
-    const [inv] = await db.select().from(caseInvitation).where(eq(caseInvitation.id, invitationId)).limit(1);
+    const [inv] = await db.select().from(caseAssignment).where(eq(caseAssignment.id, invitationId)).limit(1);
     expect(inv.status).toBe('quoted');
-    expect(inv.quotedPrice).toBe(200000);
-    expect(inv.quotedDays).toBe(6);
+    expect(inv.compensation).toBe(200000);
+    expect(inv.deadlineDays).toBe(6);
   });
 
   it('G3: Firma legacy (flat para integral) sigue funcionando por retrocompat', async () => {
     // Crear otra invitación para esta validación
-    await db.delete(caseInvitation).where(inArray(caseInvitation.technicianId, [tech1Id]));
+    await db.delete(caseAssignment).where(inArray(caseAssignment.technicianId, [tech1Id]));
     await db.update(user).set({ lastInvitedAt: null, consecutiveNoResponse: 0 }).where(eq(user.id, tech1Id));
 
     mockAs(dentistId, 'dentista');
@@ -621,16 +621,16 @@ describe('SUITE G — Oferta integral desglosada (Fase 4.2)', () => {
       needsFabrication: true,
     });
     await submitCaseToFauchardAction(newCase.id);
-    const [pend] = await db.select().from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, newCase.id), eq(caseInvitation.status, 'pending'), eq(caseInvitation.technicianId, tech1Id)))
+    const [pend] = await db.select().from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, newCase.id), eq(caseAssignment.status, 'pending'), eq(caseAssignment.technicianId, tech1Id)))
       .limit(1);
 
     mockAs(tech1Id, 'tecnico');
     const res = await submitQuoteAction(pend!.id, 175000, 5, 'Legacy compat');
     expect(res.success, (res as any).error ?? '').toBe(true);
-    const [inv] = await db.select().from(caseInvitation).where(eq(caseInvitation.id, pend!.id)).limit(1);
-    expect(inv.quotedPrice).toBe(175000);
-    expect(inv.quotedDesignPrice).toBeNull();
+    const [inv] = await db.select().from(caseAssignment).where(eq(caseAssignment.id, pend!.id)).limit(1);
+    expect(inv.compensation).toBe(175000);
+    expect(inv.compensation).toBeNull();
   });
 });
 
@@ -642,7 +642,7 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
   let invitationId: string;
 
   it('H0: Setup — caso integral en evaluación con cotización split', async () => {
-    await db.delete(caseInvitation).where(inArray(caseInvitation.technicianId, [tech1Id, tech2Id]));
+    await db.delete(caseAssignment).where(inArray(caseAssignment.technicianId, [tech1Id, tech2Id]));
     await db
       .update(user)
       .set({ lastInvitedAt: null, consecutiveNoResponse: 0, lastLoginAt: new Date() })
@@ -662,12 +662,12 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
 
     const [pending] = await db
       .select()
-      .from(caseInvitation)
+      .from(caseAssignment)
       .where(
         and(
-          eq(caseInvitation.clinicalCaseId, caseId),
-          eq(caseInvitation.status, 'pending'),
-          eq(caseInvitation.technicianId, tech1Id),
+          eq(caseAssignment.clinicalCaseId, caseId),
+          eq(caseAssignment.status, 'pending'),
+          eq(caseAssignment.technicianId, tech1Id),
         ),
       )
       .limit(1);
@@ -691,16 +691,13 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
 
     const [inv] = await db
       .select()
-      .from(caseInvitation)
-      .where(eq(caseInvitation.id, invitationId))
+      .from(caseAssignment)
+      .where(eq(caseAssignment.id, invitationId))
       .limit(1);
     expect(inv.status).toBe('pending');
-    expect(inv.quotedPrice).toBeNull();
-    expect(inv.quotedDays).toBeNull();
-    expect(inv.quotedDesignPrice).toBeNull();
-    expect(inv.quotedFabricationPrice).toBeNull();
+    expect(inv.compensation).toBeNull();
+    expect(inv.deadlineDays).toBeNull();
     expect(inv.respondedAt).toBeNull();
-    expect(inv.techNotes).toBeNull();
 
     const events = await db
       .select()
@@ -711,8 +708,7 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
     const payload = retirada!.payload as Record<string, unknown>;
     expect(payload.invitationId).toBe(invitationId);
     expect(payload.visibleTo).toBe('tecnico');
-    expect(payload.quotedPrice).toBe(180_000);
-    expect(payload.techNotes).toBe('Primera cotización');
+    expect(payload.compensation).toBe(180_000);
   });
 
   it('H2: No permite retirar dos veces (ya está pending)', async () => {
@@ -734,12 +730,12 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
 
     const [inv] = await db
       .select()
-      .from(caseInvitation)
-      .where(eq(caseInvitation.id, invitationId))
+      .from(caseAssignment)
+      .where(eq(caseAssignment.id, invitationId))
       .limit(1);
     expect(inv.status).toBe('quoted');
-    expect(inv.quotedPrice).toBe(190_000);
-    expect(inv.techNotes).toBe('Segunda cotización');
+    expect(inv.compensation).toBe(190_000);
+    expect(inv.deadlineHours).toBe('Segunda cotización');
   });
 
   it('H4: Dentista no puede retirar la oferta del técnico', async () => {
@@ -752,7 +748,7 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
 
 describe('SUITE H-bis — Retiro en propuestaLista', () => {
   it('H5: Tras propuestaLista el técnico puede retirar y deja de estar quoted', async () => {
-    await db.delete(caseInvitation).where(inArray(caseInvitation.technicianId, [tech1Id, tech2Id]));
+    await db.delete(caseAssignment).where(inArray(caseAssignment.technicianId, [tech1Id, tech2Id]));
     await db
       .update(user)
       .set({ lastInvitedAt: null, consecutiveNoResponse: 0, lastLoginAt: new Date() })
@@ -772,8 +768,8 @@ describe('SUITE H-bis — Retiro en propuestaLista', () => {
 
     const invitations = await db
       .select()
-      .from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, plCaseId), eq(caseInvitation.status, 'pending')));
+      .from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, plCaseId), eq(caseAssignment.status, 'pending')));
 
     let tech1InvId: string | null = null;
     for (const inv of invitations) {
@@ -783,9 +779,9 @@ describe('SUITE H-bis — Retiro en propuestaLista', () => {
         await submitQuoteAction(inv.id, 160_000, 4, 'Oferta comparativo E2E');
       } else {
         await db
-          .update(caseInvitation)
+          .update(caseAssignment)
           .set({ status: 'expired', updatedAt: new Date() })
-          .where(eq(caseInvitation.id, inv.id));
+          .where(eq(caseAssignment.id, inv.id));
       }
     }
     expect(tech1InvId, 'invitación tech1 para cotizar').toBeTruthy();
@@ -800,12 +796,12 @@ describe('SUITE H-bis — Retiro en propuestaLista', () => {
 
     const [quoted] = await db
       .select()
-      .from(caseInvitation)
+      .from(caseAssignment)
       .where(
         and(
-          eq(caseInvitation.clinicalCaseId, plCaseId),
-          eq(caseInvitation.technicianId, tech1Id),
-          eq(caseInvitation.status, 'quoted'),
+          eq(caseAssignment.clinicalCaseId, plCaseId),
+          eq(caseAssignment.technicianId, tech1Id),
+          eq(caseAssignment.status, 'quoted'),
         ),
       )
       .limit(1);
@@ -817,16 +813,16 @@ describe('SUITE H-bis — Retiro en propuestaLista', () => {
 
     const [inv] = await db
       .select()
-      .from(caseInvitation)
-      .where(eq(caseInvitation.id, quoted!.id))
+      .from(caseAssignment)
+      .where(eq(caseAssignment.id, quoted!.id))
       .limit(1);
     expect(inv.status).toBe('pending');
 
     const stillQuoted = await db
-      .select({ id: caseInvitation.id })
-      .from(caseInvitation)
+      .select({ id: caseAssignment.id })
+      .from(caseAssignment)
       .where(
-        and(eq(caseInvitation.clinicalCaseId, plCaseId), eq(caseInvitation.id, quoted!.id), eq(caseInvitation.status, 'quoted')),
+        and(eq(caseAssignment.clinicalCaseId, plCaseId), eq(caseAssignment.id, quoted!.id), eq(caseAssignment.status, 'quoted')),
       );
     expect(stillQuoted).toHaveLength(0);
   });
@@ -839,7 +835,7 @@ describe('SUITE F — Solo diseño cierra en completado', () => {
   let caseId: string;
 
   it('F0: Setup limpio', async () => {
-    await db.delete(caseInvitation).where(inArray(caseInvitation.technicianId, [tech1Id, tech2Id]));
+    await db.delete(caseAssignment).where(inArray(caseAssignment.technicianId, [tech1Id, tech2Id]));
     await db
       .update(user)
       .set({ lastInvitedAt: null, consecutiveNoResponse: 0, lastLoginAt: new Date() })
@@ -860,14 +856,14 @@ describe('SUITE F — Solo diseño cierra en completado', () => {
 
     await submitCaseToFauchardAction(caseId);
 
-    const invitations = await db.select().from(caseInvitation)
-      .where(and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'pending')));
+    const invitations = await db.select().from(caseAssignment)
+      .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'pending')));
     for (const inv of invitations) {
       if (inv.technicianId === tech1Id) {
         mockAs(tech1Id, 'tecnico');
         await submitQuoteAction(inv.id, 120000, 3, 'Oferta solo diseño');
       } else {
-        await db.update(caseInvitation).set({ status: 'expired' }).where(eq(caseInvitation.id, inv.id));
+        await db.update(caseAssignment).set({ status: 'expired' }).where(eq(caseAssignment.id, inv.id));
       }
     }
     const [check] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
@@ -876,8 +872,8 @@ describe('SUITE F — Solo diseño cierra en completado', () => {
     }
 
     mockAs(dentistId, 'dentista');
-    const [winInv] = await db.select({ id: caseInvitation.id }).from(caseInvitation).where(
-      and(eq(caseInvitation.clinicalCaseId, caseId), eq(caseInvitation.status, 'quoted'))
+    const [winInv] = await db.select({ id: caseAssignment.id }).from(caseAssignment).where(
+      and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.status, 'quoted'))
     ).limit(1);
     await acceptProposalAction(caseId, winInv!.id);
 

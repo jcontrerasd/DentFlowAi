@@ -28,7 +28,7 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
       <div className="flex items-center justify-between gap-4">
         <div>
           <h3 className="text-sm font-bold text-foreground">Selección y Ronda</h3>
-          <p className="text-xs text-faint">Cómo Fauchard mide, filtra y elige técnicos, y los plazos de la ronda comercial.</p>
+          <p className="text-xs text-faint">Cómo Fauchard mide, filtra y asigna técnicos, y los plazos de respuesta.</p>
         </div>
         <FauchardHelpButton onClick={() => openHelp()} label="Selección y Ronda" />
       </div>
@@ -124,36 +124,25 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
           </div>
         </Section>
 
-        {/* Selección */}
-        <Section title="Reglas de selección" icon={<Users className="w-4 h-4" />}>
+        {/* Asignación */}
+        <Section title="Reglas de asignación" icon={<Users className="w-4 h-4" />}>
           <Slider
-            label="Técnicos a invitar por caso"
-            value={draft.nInvited}
-            min={3} max={10} step={1}
-            onChange={(e) => setParam('nInvited', parseInt(e.target.value))}
-            valueSuffix=" tech"
-            tooltip={fauchardParamTooltip('nInvited')}
-            onHelp={() => openHelp('nInvited')}
-            paramNumber={fauchardParamNumber('nInvited')}
-            flash={flashed.has('nInvited')}
-          />
-          <Slider
-            label="Umbral Mínimo de Selección (Q)"
-            value={draft.qMinSelection}
-            min={0} max={1} step={0.05}
-            onChange={(e) => setParam('qMinSelection', parseFloat(e.target.value))}
-            valueFormatter={(v) => v.toFixed(2)}
-            tooltip={fauchardParamTooltip('qMinSelection')}
-            onHelp={() => openHelp('qMinSelection')}
-            paramNumber={fauchardParamNumber('qMinSelection')}
-            flash={flashed.has('qMinSelection')}
+            label="Intentos máximos de asignación"
+            value={draft.maxAssignmentAttempts}
+            min={1} max={10} step={1}
+            onChange={(e) => setParam('maxAssignmentAttempts', parseInt(e.target.value))}
+            valueSuffix=" intentos"
+            tooltip="Máximo de técnicos a intentar por caso (rechazo o expiración)."
+            onHelp={() => openHelp('maxAssignmentAttempts')}
+            paramNumber={fauchardParamNumber('maxAssignmentAttempts')}
+            flash={flashed.has('maxAssignmentAttempts')}
           />
         </Section>
 
-        {/* Ronda comercial */}
-        <Section title="Ronda comercial" icon={<BadgePercent className="w-4 h-4" />}>
+        {/* Plazos de respuesta */}
+        <Section title="Plazos de asignación" icon={<BadgePercent className="w-4 h-4" />}>
           <Slider
-            label="Tiempo para Cotizar"
+            label="Tiempo para responder asignación"
             value={draft.tQuoteMinutes}
             min={1} max={1440} step={1}
             onChange={(e) => setParam('tQuoteMinutes', parseInt(e.target.value))}
@@ -167,28 +156,6 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
             onHelp={() => openHelp('tQuoteMinutes')}
             paramNumber={fauchardParamNumber('tQuoteMinutes')}
             flash={flashed.has('tQuoteMinutes')}
-          />
-          <Slider
-            label="Validez de Propuesta (horas)"
-            value={draft.tProposalHours}
-            min={1} max={24} step={1}
-            onChange={(e) => setParam('tProposalHours', parseInt(e.target.value))}
-            valueSuffix=" h"
-            tooltip={fauchardParamTooltip('tProposalHours')}
-            onHelp={() => openHelp('tProposalHours')}
-            paramNumber={fauchardParamNumber('tProposalHours')}
-            flash={flashed.has('tProposalHours')}
-          />
-          <Slider
-            label="Margen de Plataforma (Platform Fee)"
-            value={draft.platformFee * 100}
-            min={5} max={50} step={1}
-            onChange={(e) => setParam('platformFee', parseFloat(e.target.value) / 100)}
-            valueSuffix=" %"
-            tooltip={fauchardParamTooltip('platformFee')}
-            onHelp={() => openHelp('platformFee')}
-            paramNumber={fauchardParamNumber('platformFee')}
-            flash={flashed.has('platformFee')}
           />
         </Section>
       </div>

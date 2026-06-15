@@ -26,7 +26,7 @@ async function seedCompletedCase(opts: {
   league: string;
   assignedDaysAgo: number;
   completedDaysAgo: number;
-  quotedDays: number;
+  deadlineDays: number;
   rating: number;
 }): Promise<string> {
   const caseId = crypto.randomUUID();
@@ -39,7 +39,7 @@ async function seedCompletedCase(opts: {
       ${opts.league}, ${assignedAt}, ${completedAt}, ${TECH})`);
   await db.execute(sql`
     INSERT INTO case_invitation (clinical_case_id, technician_id, status, quoted_days)
-    VALUES (${caseId}, ${TECH}, 'confirmed', ${opts.quotedDays})`);
+    VALUES (${caseId}, ${TECH}, 'confirmed', ${opts.deadlineDays})`);
   await db.execute(sql`
     INSERT INTO review (clinical_case_id, reviewer_id, reviewee_id, rating, dimension)
     VALUES (${caseId}, ${DOCTOR}, ${TECH}, ${opts.rating}, 'design')`);
@@ -58,13 +58,13 @@ describe.runIf(runIntegration)('métricas de liga (Fase 2, Sprint 1)', () => {
     urgencyId = u.id;
 
     // 3 casos on-time en 'oro' (window): ratings 5,4,4. completedDaysAgo 16/11/6.
-    await seedCompletedCase({ league: 'oro', assignedDaysAgo: 20, completedDaysAgo: 16, quotedDays: 5, rating: 5 });
-    await seedCompletedCase({ league: 'oro', assignedDaysAgo: 15, completedDaysAgo: 11, quotedDays: 5, rating: 4 });
-    await seedCompletedCase({ league: 'oro', assignedDaysAgo: 10, completedDaysAgo: 6, quotedDays: 5, rating: 4 });
+    await seedCompletedCase({ league: 'oro', assignedDaysAgo: 20, completedDaysAgo: 16, deadlineDays: 5, rating: 5 });
+    await seedCompletedCase({ league: 'oro', assignedDaysAgo: 15, completedDaysAgo: 11, deadlineDays: 5, rating: 4 });
+    await seedCompletedCase({ league: 'oro', assignedDaysAgo: 10, completedDaysAgo: 6, deadlineDays: 5, rating: 4 });
     // 4º caso 'oro' MÁS antiguo y tardío (fuera de ventana de 3): rating 1, late.
-    await seedCompletedCase({ league: 'oro', assignedDaysAgo: 50, completedDaysAgo: 38, quotedDays: 1, rating: 1 });
+    await seedCompletedCase({ league: 'oro', assignedDaysAgo: 50, completedDaysAgo: 38, deadlineDays: 1, rating: 1 });
     // Caso en 'plata' (otra liga): NO debe contar para un técnico 'oro'.
-    await seedCompletedCase({ league: 'plata', assignedDaysAgo: 3, completedDaysAgo: 1, quotedDays: 5, rating: 1 });
+    await seedCompletedCase({ league: 'plata', assignedDaysAgo: 3, completedDaysAgo: 1, deadlineDays: 5, rating: 1 });
   });
 
   afterAll(async () => {

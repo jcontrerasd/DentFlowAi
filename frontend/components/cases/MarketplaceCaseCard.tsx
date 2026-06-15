@@ -16,6 +16,7 @@ import type { InvitationStatusForKpi } from '@/lib/dashboard/classifyCaseForDash
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { dispatchCaseHubToggle } from '@/lib/caseHubToggleEvent';
 import { getDentistCardZone, getTechnicianCardCta } from '@/lib/cases/dentistCardPresentation';
+import { formatDesiredDeliveryCompact } from '@/lib/cases/caseDeliveryPresentation';
 
 /** Marco de ficha sobre fondo oscuro: borde + aro interior muy suave. */
 const CASE_CARD_SHELL =
@@ -117,6 +118,7 @@ export default function MarketplaceCaseCard({
             completedAt: c.completedAt,
             material: c.material,
             fileCount: countFiles(c),
+            desiredDeliveryAt: c.desiredDeliveryAt,
           })
         : null,
     [isDentist, c],
@@ -170,10 +172,12 @@ export default function MarketplaceCaseCard({
     </motion.div>
   );
 
+  const deliveryCompact = formatDesiredDeliveryCompact(c.desiredDeliveryAt);
   const publishedShort = formatPublishedShort(c.createdAt);
   const metaLine = [
     formatCaseIdAndPac(c.caseNumber, c.patientIdAnon),
     publishedShort,
+    deliveryCompact ? `Entrega ${deliveryCompact}` : null,
   ]
     .filter(Boolean)
     .join(' · ');

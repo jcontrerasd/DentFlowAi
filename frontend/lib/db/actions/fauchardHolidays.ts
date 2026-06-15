@@ -1,5 +1,10 @@
 'use server';
 
+/**
+ * @deprecated Admin CRUD de feriados (v4.6). La UI de calendario fue retirada;
+ * la tabla `fauchard_holiday` permanece inerte en BD. No importar en runtime.
+ */
+
 import { db } from '@/lib/db';
 import { fauchardHoliday } from '@/lib/db/schema';
 import { eq, asc } from 'drizzle-orm';

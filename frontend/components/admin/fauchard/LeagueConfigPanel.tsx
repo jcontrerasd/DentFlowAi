@@ -34,6 +34,7 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [reason, setReason] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [engineEnabled, setEngineEnabled] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -66,10 +67,11 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
     setIsSubmitting(true);
     setMessage(null);
     try {
-      const res = await updateFauchardParamsAction(v);
+      const res = await updateFauchardParamsAction(v, reason.trim());
       if (res.success) {
         setMessage({ type: 'success', text: 'Parámetros de categorías actualizados' });
         setShowConfirm(false);
+        setReason('');
       } else {
         setMessage({ type: 'error', text: res.error });
       }
@@ -177,6 +179,9 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         onClose={() => setShowConfirm(false)}
         onConfirm={handleSave}
         isLoading={isSubmitting}
+        requireReason
+        reasonValue={reason}
+        onReasonChange={setReason}
         title="¿Confirmar Sistema de Categorías?"
         description={
           engineEnabled

@@ -1,19 +1,13 @@
-/** Datos normalizados para mostrar una oferta (total plano, solo_diseno). */
+/** Datos normalizados para mostrar compensación y plazo de una asignación. */
 export type UchQuoteDisplay = {
   totalPrice: number | null;
   totalDays: number | null;
-  /** v4.6 — total en horas si la oferta es en horas (mutuamente excluyente con totalDays). */
+  /** v4.6 — total en horas si el plazo es en horas (mutuamente excluyente con totalDays). */
   totalHours?: number | null;
-  techNotes?: string | null;
 };
 
 /**
  * v4.6 — Formatea un plazo expresado en días y/u horas como texto humano.
- * Reglas:
- * - Solo días: "1 día hábil" / "N días hábiles".
- * - Solo horas: "1 hora" / "N horas".
- * - Ambos (caso raro, slot mixto sumado): "N días hábiles · M horas".
- * - Nada poblado: "—".
  */
 export function formatTurnaround(t: { days?: number | null; hours?: number | null }): string {
   const d = t.days != null && t.days > 0 ? Math.trunc(t.days) : 0;
@@ -62,38 +56,35 @@ export function parseQuotePositiveDays(v: unknown): number | null {
 }
 
 export function quoteDisplayFromPayload(raw: Record<string, unknown>): UchQuoteDisplay {
+  const price = raw.compensation ?? raw.quotedPrice;
   return {
-    totalPrice: parseQuoteNumber(raw.quotedPrice),
-    totalDays: parseQuotePositiveDays(raw.quotedDays),
-    totalHours: parseQuotePositiveHours(raw.quotedHours),
-    techNotes: typeof raw.techNotes === 'string' ? raw.techNotes.trim() : null,
+    totalPrice: parseQuoteNumber(price),
+    totalDays: parseQuotePositiveDays(raw.deadlineDays),
+    totalHours: parseQuotePositiveHours(raw.deadlineHours),
   };
 }
 
 export function quoteDisplayFromInvitation(inv: {
+  compensation?: number | null;
   quotedPrice?: number | null;
-  quotedDays?: number | null;
-  quotedHours?: number | null;
-  techNotes?: string | null;
+  deadlineDays?: number | null;
+  deadlineHours?: number | null;
 }): UchQuoteDisplay {
   return {
-    totalPrice: inv.quotedPrice ?? null,
-    totalDays: inv.quotedDays ?? null,
-    totalHours: inv.quotedHours ?? null,
-    techNotes: inv.techNotes?.trim() ? inv.techNotes.trim() : null,
+    totalPrice: inv.compensation ?? inv.quotedPrice ?? null,
+    totalDays: inv.deadlineDays ?? null,
+    totalHours: inv.deadlineHours ?? null,
   };
 }
 
 export function quoteDisplayFromComparativeOffer(o: {
   totalPriceCLP: number;
-  quotedDays: number | null;
-  quotedHours?: number | null;
-  techNotes?: string | null;
+  deadlineDays: number | null;
+  deadlineHours?: number | null;
 }): UchQuoteDisplay {
   return {
     totalPrice: o.totalPriceCLP,
-    totalDays: o.quotedDays,
-    totalHours: o.quotedHours ?? null,
-    techNotes: o.techNotes?.trim() ? o.techNotes.trim() : null,
+    totalDays: o.deadlineDays,
+    totalHours: o.deadlineHours ?? null,
   };
 }

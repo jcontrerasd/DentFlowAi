@@ -20,20 +20,18 @@ describe('RENORMALIZED_ALPHAS', () => {
       Math.abs(RENORMALIZED_ALPHAS.punctuality) +
       Math.abs(RENORMALIZED_ALPHAS.experience) +
       Math.abs(RENORMALIZED_ALPHAS.load) +
-      Math.abs(RENORMALIZED_ALPHAS.bonus) +
       Math.abs(RENORMALIZED_ALPHAS.noResponse);
     expect(sumAbs).toBeCloseTo(1.0, 5);
   });
 
-  it('αN (0.25) es el segundo coeficiente tras calidad (0.20)', () => {
-    expect(RENORMALIZED_ALPHAS.noResponse).toBe(0.25);
-    expect(RENORMALIZED_ALPHAS.quality).toBe(0.2);
+  it('αN es el segundo coeficiente tras calidad', () => {
+    expect(RENORMALIZED_ALPHAS.noResponse).toBe(0.2);
+    expect(RENORMALIZED_ALPHAS.quality).toBe(0.25);
     const others = [
       RENORMALIZED_ALPHAS.punctuality,
       RENORMALIZED_ALPHAS.experience,
       RENORMALIZED_ALPHAS.load,
-      RENORMALIZED_ALPHAS.bonus,
     ];
-    for (const a of others) expect(RENORMALIZED_ALPHAS.noResponse).toBeGreaterThan(a);
+    for (const a of others) expect(RENORMALIZED_ALPHAS.quality).toBeGreaterThanOrEqual(a);
   });
 });

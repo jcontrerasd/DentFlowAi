@@ -283,36 +283,6 @@ export const PLAZOS_HELP: FauchardHelpSection = {
   ],
 };
 
-export const CALENDAR_HELP: FauchardHelpSection = {
-  title: 'Calendario laboral',
-  intro:
-    'Define la jornada y los días hábiles que usa Fauchard para calcular la fecha de entrega comprometida (workDeadline). Cuando un técnico cotiza en horas o días, el reloj solo corre dentro del horario laboral y salta noches, días no laborables y feriados.',
-  params: [
-    {
-      label: 'Hora apertura / cierre',
-      symbol: 'businessHours',
-      description: 'Inicio y fin de la jornada laboral. El reloj de entrega solo avanza dentro de esta franja; fuera de ella se "congela".',
-      example: 'Con jornada 08:00–20:00, si el Lab. Andes promete 6 horas de trabajo y empieza a las 18:00, el plazo no vence a medianoche: corren 2 h hoy y las 4 restantes mañana desde las 08:00.',
-    },
-    {
-      label: 'Días laborables',
-      symbol: 'businessDaysMask',
-      description: 'Qué días de la semana cuentan como hábiles (default L-V). El cálculo de plazos salta los días apagados.',
-      example: 'Con L-V, un trabajo de 1 día que arranca el viernes vence el lunes, no el sábado. Si tu operación trabaja sábado, enciéndelo y el reloj lo contará.',
-    },
-    {
-      label: 'Feriados',
-      symbol: 'holidays',
-      description: 'Fechas concretas que el cálculo de plazos trata como día no laborable, además de los días apagados de la semana.',
-      example: 'Si agregas el 18 de septiembre como feriado, un plazo que cruce esa fecha la salta automáticamente: el Lab. Andes no queda obligado a entregar en feriado.',
-    },
-  ],
-  notes: [
-    'El calendario laboral solo afecta workDeadline (la fecha de entrega). NO afecta la expiración de invitaciones ni de propuestas, que usan tiempo absoluto (corren de corrido, también de noche y fin de semana).',
-    'La hora de apertura debe ser menor que la de cierre, y al menos un día de la semana debe quedar encendido.',
-  ],
-};
-
 export const OBSERVABILITY_HELP: FauchardHelpSection = {
   title: 'Observabilidad',
   intro:
@@ -506,20 +476,16 @@ export const FAUCHARD_PARAM_TOOLTIP: Record<string, string> = {
   alphaPunctuality: descByLabel(WEIGHTS_HELP, 'Puntualidad'),
   alphaExperience: descByLabel(WEIGHTS_HELP, 'Experiencia Especializada'),
   alphaLoad: descByLabel(WEIGHTS_HELP, 'Penalización por Carga'),
-  alphaBonus: descByLabel(WEIGHTS_HELP, 'Bono de Infrautilización'),
   alphaNoResponse: descByLabel(WEIGHTS_HELP, 'Penalización por No-respuesta'),
-  // Selección y Ronda
+  // Selección y Ronda / Asignación
   wQualityDays: descByLabel(FILTERS_HELP, 'Calidad Histórica (días)'),
   wLoadDays: descByLabel(FILTERS_HELP, 'Carga Reciente (días)'),
   cMax: descByLabel(FILTERS_HELP, 'Techo Índice de Carga (C_max)'),
   dBonusMaxDays: descByLabel(FILTERS_HELP, 'Bono Infrautilización (días máx)'),
   tCooldownMinutes: descByLabel(FILTERS_HELP, 'Cooldown Invitaciones'),
   dInactivityDays: descByLabel(FILTERS_HELP, 'Inactividad Máxima (días)'),
-  nInvited: descByLabel(FILTERS_HELP, 'Técnicos a invitar por caso'),
-  qMinSelection: descByLabel(FILTERS_HELP, 'Umbral Mínimo de Selección'),
+  maxAssignmentAttempts: 'Máximo de técnicos a intentar por caso antes de cola pool o fallo.',
   tQuoteMinutes: descByLabel(FILTERS_HELP, 'Tiempo para Cotizar'),
-  tProposalHours: descByLabel(FILTERS_HELP, 'Validez de Propuesta (horas)'),
-  platformFee: descByLabel(FILTERS_HELP, 'Margen de Plataforma (Platform Fee)'),
   // Disponibilidad y Sanciones
   tDentistReviewHours: descByLabel(PLAZOS_HELP, 'Revisión del dentista'),
   tNoEligiblePoolHours: descByLabel(PLAZOS_HELP, 'Tiempo de espera (TTL)'),
@@ -532,10 +498,6 @@ export const FAUCHARD_PARAM_TOOLTIP: Record<string, string> = {
   level1Threshold: descByLabel(PLAZOS_HELP, 'Umbral Nivel 1 / 2 / 3'),
   level2Threshold: descByLabel(PLAZOS_HELP, 'Umbral Nivel 1 / 2 / 3'),
   level3Threshold: descByLabel(PLAZOS_HELP, 'Umbral Nivel 1 / 2 / 3'),
-  // Calendario laboral
-  businessHoursStart: descByLabel(CALENDAR_HELP, 'Hora apertura / cierre'),
-  businessHoursEnd: descByLabel(CALENDAR_HELP, 'Hora apertura / cierre'),
-  businessDaysMask: descByLabel(CALENDAR_HELP, 'Días laborables'),
   // Sistema de Categorías (Liga)
   lMinRating: descByLabel(LEAGUE_HELP, 'Calificación Mínima'),
   lCasesEvaluated: descByLabel(LEAGUE_HELP, 'Ventana de Evaluación (Casos)'),
@@ -556,7 +518,7 @@ export function fauchardParamTooltip(key: string): string {
 // Para que un link de ayuda muestre el parámetro con el MISMO nombre que tiene
 // en su panel de edición y pueda navegar al espacio que lo contiene.
 
-export type FauchardParamPanel = 'weights' | 'filters' | 'plazos' | 'calendar' | 'league';
+export type FauchardParamPanel = 'weights' | 'filters' | 'plazos' | 'league';
 
 /** Label exacto del control en su panel (ej. alphaNoResponse → "Penalización por No-respuesta (N)"). */
 export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
@@ -564,21 +526,17 @@ export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
   alphaQuality: 'Calidad Histórica (Q)',
   alphaPunctuality: 'Puntualidad (P)',
   alphaExperience: 'Experiencia Especializada (E)',
-  alphaLoad: 'Penalización por Carga (C)',
-  alphaBonus: 'Bono de Infrautilización (B)',
+  alphaLoad: 'Carga activa (L)',
   alphaNoResponse: 'Penalización por No-respuesta (N)',
-  // Selección y Ronda
+  // Asignación
   wQualityDays: 'Calidad Histórica (días)',
   wLoadDays: 'Carga Reciente (días)',
   cMax: 'Techo Índice de Carga (C_max)',
   dBonusMaxDays: 'Bono Infrautilización (días máx)',
   tCooldownMinutes: 'Cooldown Invitaciones',
   dInactivityDays: 'Inactividad Máxima (días)',
-  nInvited: 'Técnicos a invitar por caso',
-  qMinSelection: 'Umbral Mínimo de Selección (Q)',
-  tQuoteMinutes: 'Tiempo para Cotizar',
-  tProposalHours: 'Validez de Propuesta (horas)',
-  platformFee: 'Margen de Plataforma (Platform Fee)',
+  maxAssignmentAttempts: 'Intentos máximos de asignación',
+  tQuoteMinutes: 'Tiempo para responder asignación',
   // Disponibilidad y Sanciones
   tDentistReviewHours: 'Revisión del dentista',
   tNoEligiblePoolHours: 'Tiempo de espera (TTL)',
@@ -591,11 +549,6 @@ export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
   level1Threshold: 'Umbral Nivel 1 / 2 / 3',
   level2Threshold: 'Umbral Nivel 2',
   level3Threshold: 'Umbral Nivel 3',
-  // Calendario laboral
-  businessHoursStart: 'Hora apertura / cierre',
-  businessHoursEnd: 'Hora cierre',
-  businessDaysMask: 'Días laborables',
-  holidays: 'Feriados',
   // Sistema de Categorías (Liga)
   lMinRating: 'Calificación Mínima',
   lCasesEvaluated: 'Ventana de Evaluación (Casos)',
@@ -610,15 +563,14 @@ export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
 /** Panel (y por ende espacio de TabClient) que contiene cada parámetro. */
 export const FAUCHARD_PARAM_PANEL: Record<string, FauchardParamPanel> = {
   alphaQuality: 'weights', alphaPunctuality: 'weights', alphaExperience: 'weights',
-  alphaLoad: 'weights', alphaBonus: 'weights', alphaNoResponse: 'weights',
+  alphaLoad: 'weights', alphaNoResponse: 'weights',
   wQualityDays: 'filters', wLoadDays: 'filters', cMax: 'filters', dBonusMaxDays: 'filters',
-  tCooldownMinutes: 'filters', dInactivityDays: 'filters', nInvited: 'filters',
-  qMinSelection: 'filters', tQuoteMinutes: 'filters', tProposalHours: 'filters', platformFee: 'filters',
+  tCooldownMinutes: 'filters', dInactivityDays: 'filters', maxAssignmentAttempts: 'filters',
+  tQuoteMinutes: 'filters',
   tDentistReviewHours: 'plazos', tNoEligiblePoolHours: 'plazos', maxPoolCycles: 'plazos',
   replacementCutoffMinutes: 'plazos', inactivityReminderDays: 'plazos', inactivityAutoOffDays: 'plazos',
   noResponseWindowDays: 'plazos', noResponseRehabilitationDays: 'plazos',
   level1Threshold: 'plazos', level2Threshold: 'plazos', level3Threshold: 'plazos',
-  businessHoursStart: 'calendar', businessHoursEnd: 'calendar', businessDaysMask: 'calendar',
   lMinRating: 'league', lCasesEvaluated: 'league', lMinPunctuality: 'league', lCasesCompleted: 'league',
   lCasesTransition: 'league', lPenaltyTransition: 'league', lDescentRating: 'league', lDescentDays: 'league',
 };
@@ -628,15 +580,14 @@ export function fauchardParamLabel(key: string): string {
   return FAUCHARD_PARAM_LABEL[key] ?? key;
 }
 
-/** Panel que edita el parámetro ('weights' | 'filters' | 'plazos' | 'calendar'). */
+/** Panel que edita el parámetro ('weights' | 'filters' | 'plazos' | 'league'). */
 export function fauchardParamPanel(key: string): FauchardParamPanel | undefined {
   return FAUCHARD_PARAM_PANEL[key];
 }
 
 /** Espacio de TabClient (`/dashboard/admin/fauchard`) que contiene el parámetro. */
-export function fauchardParamSpace(key: string): 'parametros' | 'calendario' | 'categorias' {
+export function fauchardParamSpace(key: string): 'parametros' | 'categorias' {
   const panel = FAUCHARD_PARAM_PANEL[key];
-  if (panel === 'calendar') return 'calendario';
   if (panel === 'league') return 'categorias';
   return 'parametros';
 }
@@ -654,20 +605,18 @@ export function fauchardParamSpace(key: string): 'parametros' | 'calendario' | '
  * el orden de las pestañas, reordenar aquí para que la numeración siga siendo correlativa.
  */
 const FAUCHARD_PARAM_ORDER: string[] = [
-  // Pesos del Score
-  'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaBonus', 'alphaNoResponse',
-  // Selección y Ronda
+  // Pesos del Score (5 factores)
+  'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaNoResponse',
+  // Selección y asignación
   'wQualityDays', 'wLoadDays', 'cMax', 'dBonusMaxDays', 'tCooldownMinutes', 'dInactivityDays',
-  'nInvited', 'qMinSelection', 'tQuoteMinutes', 'tProposalHours', 'platformFee',
+  'maxAssignmentAttempts', 'tQuoteMinutes',
   // Disponibilidad y Sanciones
   'tDentistReviewHours', 'tNoEligiblePoolHours', 'maxPoolCycles', 'replacementCutoffMinutes',
   'inactivityReminderDays', 'inactivityAutoOffDays', 'noResponseWindowDays',
   'noResponseRehabilitationDays', 'level1Threshold', 'level2Threshold', 'level3Threshold',
-  // Sistema de Categorías (Liga) — N°29–36
+  // Sistema de Categorías (Liga)
   'lMinRating', 'lCasesEvaluated', 'lMinPunctuality', 'lCasesCompleted',
   'lCasesTransition', 'lPenaltyTransition', 'lDescentRating', 'lDescentDays',
-  // Calendario laboral — N°37–40
-  'businessHoursStart', 'businessHoursEnd', 'businessDaysMask', 'holidays',
 ];
 
 const FAUCHARD_PARAM_NUMBER: Record<string, number> = Object.fromEntries(
@@ -684,9 +633,8 @@ export function fauchardParamNumber(key: string): number | undefined {
  *  varias claves (umbrales / horario) bajo una representativa. */
 const HELP_SYMBOL_TO_KEY: Record<string, string> = {
   Q: 'alphaQuality', P: 'alphaPunctuality', E: 'alphaExperience',
-  C: 'alphaLoad', B: 'alphaBonus', N: 'alphaNoResponse',
+  L: 'alphaLoad', C: 'alphaLoad', N: 'alphaNoResponse',
   'level1-3': 'level1Threshold',
-  businessHours: 'businessHoursStart',
 };
 
 /** Clave de config de una tarjeta de ayuda (o undefined si no es un parámetro numerado,
@@ -700,7 +648,6 @@ export function helpParamKey(symbol?: string): string | undefined {
 /** Tarjetas de ayuda que agrupan varias claves bajo un mismo título (umbrales, horario). */
 const HELP_SYMBOL_TO_KEYS: Record<string, string[]> = {
   'level1-3': ['level1Threshold', 'level2Threshold', 'level3Threshold'],
-  businessHours: ['businessHoursStart', 'businessHoursEnd'],
 };
 
 /** Texto de número(s) para la insignia de una tarjeta de ayuda: "N°15" o "N°26–28"

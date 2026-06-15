@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { caseUserArchive, clinicalCase, caseInvitation } from '@/lib/db/schema';
+import { caseUserArchive, clinicalCase, caseAssignment } from '@/lib/db/schema';
 import { and, desc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import {
   CASE_STATUSES,
@@ -86,15 +86,15 @@ export async function assertUserMayArchiveCase(
       return { ok: true, caseRow };
     }
     const [inv] = await db
-      .select({ status: caseInvitation.status })
-      .from(caseInvitation)
+      .select({ status: caseAssignment.status })
+      .from(caseAssignment)
       .where(
         and(
-          eq(caseInvitation.clinicalCaseId, caseId),
-          eq(caseInvitation.technicianId, userId),
+          eq(caseAssignment.clinicalCaseId, caseId),
+          eq(caseAssignment.technicianId, userId),
         ),
       )
-      .orderBy(desc(caseInvitation.invitedAt))
+      .orderBy(desc(caseAssignment.assignedAt))
       .limit(1);
 
     const invStatus = inv?.status;

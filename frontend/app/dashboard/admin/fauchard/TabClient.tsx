@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { SlidersHorizontal, History, CalendarDays, Trophy } from 'lucide-react';
+import { SlidersHorizontal, History, Trophy } from 'lucide-react';
 import { fauchardParamPanel } from '@/lib/constants/fauchardHelp';
 import FauchardWeightsPanel from '@/components/admin/fauchard/FauchardWeightsPanel';
 import FauchardFiltersPanel from '@/components/admin/fauchard/FauchardFiltersPanel';
 import ConfigChangeLog from '@/components/admin/fauchard/ConfigChangeLog';
-import FauchardCalendarPanel from '@/components/admin/fauchard/FauchardCalendarPanel';
 import PlazosYSancionesPanel from '@/components/admin/fauchard/PlazosYSancionesPanel';
 import LeagueConfigPanel from '@/components/admin/fauchard/LeagueConfigPanel';
 import FauchardLabPanel from '@/components/admin/fauchard/FauchardLabPanel';
@@ -15,7 +14,7 @@ import GlobalSaveBar from '@/components/admin/fauchard/GlobalSaveBar';
 import { FauchardDraftProvider } from '@/components/admin/fauchard/FauchardDraftContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
-type Space = 'parametros' | 'calendario' | 'categorias' | 'historial';
+type Space = 'parametros' | 'categorias' | 'historial';
 
 export function TabClient({ config, showAvailabilityPanel = false }: { config: any; showAvailabilityPanel?: boolean }) {
   const searchParams = useSearchParams();
@@ -32,7 +31,7 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
   useEffect(() => {
     const fParam = searchParams.get('focus');
     const sParam = searchParams.get('space');
-    if (sParam && ['parametros', 'calendario', 'categorias', 'historial'].includes(sParam)) {
+    if (sParam && ['parametros', 'categorias', 'historial'].includes(sParam)) {
       setSpace(sParam as Space);
     } else if (fParam) {
       // Si llega focus sin space, asume el espacio de parámetros del modelo.
@@ -46,7 +45,6 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
   const spaces = [
     { id: 'parametros', label: 'Parámetros', icon: SlidersHorizontal },
     { id: 'categorias', label: 'Categorías', icon: Trophy },
-    { id: 'calendario', label: 'Calendario', icon: CalendarDays },
     { id: 'historial', label: 'Historial', icon: History },
   ];
 
@@ -117,11 +115,6 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
           )}
 
           {/* ── Espacios independientes ── */}
-          {space === 'calendario' && (
-            <div className="bg-surface/20 border border-divider rounded-[3rem] p-8 md:p-10 shadow-inner">
-              <FauchardCalendarPanel initialConfig={config} />
-            </div>
-          )}
           {space === 'categorias' && (
             <div className="bg-surface/20 border border-divider rounded-[3rem] p-8 md:p-10 shadow-inner">
               <LeagueConfigPanel initialConfig={config} />

@@ -51,8 +51,9 @@ export default function NewCasePage() {
         serviceType: formData.serviceType,
         doctorNotes: formData.doctorNotes,
         specialInstructions: formData.doctorNotes || null,
-        notesEsthetic: formData.notesEsthetic, // Campo restaurado
-        notesOclusal: formData.notesOclusal,   // Campo restaurado
+        notesEsthetic: formData.notesEsthetic,
+        notesOclusal: formData.notesOclusal,
+        desiredDeliveryAt: new Date(formData.desiredDeliveryAt).toISOString(),
       });
 
       // 2. Subir archivos a GCS vía Signed URLs.

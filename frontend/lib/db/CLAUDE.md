@@ -2,7 +2,7 @@
 
 ## Archivos clave
 - `schema.ts` — Definición de todas las tablas. Fuente de verdad del modelo.
-- `infrastructure.ts` — Conexión DB + runtime migrations (NO usar drizzle-kit push en producción). `INFRA_VERSION` actual: **v5.7**.
+- `infrastructure.ts` — Conexión DB + runtime migrations (NO usar drizzle-kit push en producción). `INFRA_VERSION` actual: **v5.8**.
 - `index.ts` — Exporta instancia `db`
 - `catalogResolver.ts` — resuelve `code`/`label` de catálogos UI → `*_id` antes de persistir.
 
@@ -37,10 +37,8 @@ Campos clave:
 - `serviceType`: `solo_diseno` | `solo_fabricacion` | `integral` — fuente de verdad del tipo de servicio
 - `needsFabrication`: boolean (`true` para `integral` y `solo_fabricacion`; mantenido por retrocompatibilidad con casos legacy)
 - `proposedPrice`, `proposedDeliveryDays`: oferta aceptada (totales canónicos del único técnico ganador)
-- `proposedDeliveryHours`, `proposedDesignHours`, `proposedFabricationHours`, `proposedShippingHours`: granularidad horaria opcional (v4.6) — usada por `buildProposalAction` + `startWorkAction` para computar `workDeadline` con `addBusinessTime()` respetando jornada y feriados. Si están null, el cálculo cae al equivalente en días
-- `proposalExpiresAt`: deadline del comparativo (fijado por `buildProposalAction`). **No resetear si `status !== enEvaluacion`** (idempotencia).
-- `assignedTechnicianId`: técnico ganador (uno solo por caso; no hay aprobación parcial)
-- `workDeadline`: fecha de entrega comprometida (se muestra en el stepper)
+- `proposedDeliveryDays`: días desde publicación hasta `desiredDeliveryAt` (seteado en `acceptAssignmentAction`)
+- `workDeadline`: fecha de entrega comprometida = `desiredDeliveryAt` (fallback: `publishedAt + deadlineDays`). Helper: `lib/cases/workDeadline.ts`
 - `fauchardConfigId`: config Fauchard anclada al publicar (copy-on-write admin)
 - `internalStatus`: estados internos granulares para el motor (no visible al usuario)
 
@@ -59,13 +57,10 @@ El motor Fauchard usa estos niveles para filtrar y puntuar invitados.
 ### `fauchardConfig`
 Parámetros del algoritmo. **Como máximo una fila `is_active`** (índice único parcial). El admin actualiza con copy-on-write: nueva fila + desactivar la anterior. Cada `clinicalCase` puede anclar `fauchardConfigId` al publicar.
 
-Campos de **calendario laboral** (v4.6, alimentan `lib/businessTime.ts`):
-- `businessHoursStart` (default 8), `businessHoursEnd` (default 20) — jornada `[start, end)` abierta a la derecha (8–20 = 12h diarias).
-- `businessDaysMask` (default 31 = `0b0011111` = L-V) — bitmask: bit 0=Lun, 1=Mar, 2=Mié, 3=Jue, 4=Vie, 5=Sáb, 6=Dom. Ej: 63 (`0b0111111`) habilita sábado.
-- Consumidos junto con la tabla `fauchard_holiday` por `addBusinessTime(from, days, hours, cfg, holidays)` para calcular `workDeadline` en `startWorkAction` y `buildProposalAction`. El reloj de feriado/horario aplica **solo** a `workDeadline` (no a la expiración de invitaciones ni de propuestas, que usan tiempo absoluto).
+Columnas legacy `business_*` (v4.6) permanecen con defaults pero **no se usan en runtime** (calendario retirado del configurador).
 
-### `fauchardHoliday` (v4.6)
-Lista global de feriados (no por config). Columnas: `holiday_date` (UNIQUE), `label`, `created_by`. Admin CRUD en `/dashboard/admin/fauchard` → panel Calendario. Actions en `lib/db/actions/fauchardHolidays.ts`.
+### `fauchardHoliday` (v4.6, inerte)
+Lista global de feriados. Tabla y actions en `fauchardHolidays.ts` permanecen por datos históricos; sin UI admin ni consumo en runtime.
 
 ### `caseUserArchive`
 Archivo por usuario y caso (`case_user_archive`). Usado por `archiveCaseForUserAction` / `unarchiveCaseForUserAction` en terminal.
@@ -126,7 +121,8 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 
 | Archivo | Responsabilidad |
 |---------|----------------|
-| `fauchard.ts` | Motor Fauchard: classifyCase, runFauchard, sendInvitations, submitQuote, evaluateQuotes, buildProposal |
+| `assignment.ts` | Asignación directa: `buildEligiblePoolForScenario`, `rankCandidatesForScenario`, `simulateAssignmentAction` (precio + ranking + `chainPosition`/`retryChainDetails`), `assignCaseAction` |
+| `fauchard.ts` | Motor Fauchard: classifyCase, runFauchard, sendInvitations, evaluateQuotes; `simulateFauchardAction` delega a `simulateAssignmentAction`; `getFauchardMetricsAction` (métricas `case_assignment`) |
 | `cases.ts` | CRUD casos, publicar, archivar, clonar, fabricación/despacho/recepción, `logCaseEvent()`, `getCaseEventsAction`, `submitUserRatingAction` (calificación del dentista al técnico: `dimension: 'design' \| 'fabrication'`, escala 1–5, una reseña por caso+reviewer+dimension; actualiza `avgRating` del técnico; emite `CALIFICACION_ENVIADA`) |
 | `proposal.ts` | acceptProposal, rejectInvitationOffer, startWork, withdrawQuote, expireDentistComparativeWindow |
 | `invitations.ts` | Listado de invitaciones; archivos visibles solo si `invitation.status === confirmed` |
@@ -139,7 +135,7 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 | `user.ts` / `organization.ts` | Perfil, onboarding, organizaciones |
 | `annotations.ts` | Anotaciones 3D en visor |
 | `catalogs.ts` | Listas administrables del wizard (vita_shade, restoration_type, dental_material, urgency_level): list públicas + CRUD admin |
-| `fauchardHolidays.ts` | CRUD de feriados globales (tabla `fauchard_holiday`, v4.6). Admin UI en `/dashboard/admin/fauchard` → FauchardCalendarPanel |
+| `fauchardHolidays.ts` | CRUD legacy de feriados (`fauchard_holiday`, v4.6). Deprecated — sin UI ni runtime |
 | `contactGuard.ts` | CRUD de reglas (regex/keyword) para moderar campos libres. Admin UI en `/dashboard/admin/contactguard`. Las reglas las consume `lib/contactGuard/guardOrFail.ts` en server actions de cotización, despacho y notas |
 | `availability.ts` (v5.0) | Disponibilidad declarada del técnico. `computeEligibleAction` = regla **AND triple** (`levelGlobal ∧ level<cap> ∧ cat<cat><cap>`), en tiempo real. `getAvailabilityForUserAction` crea fila default (infiere CAD/CAM de skills). `updateAvailabilityLevelAction` (al cambiar el nivel `global` **espeja** a `user.is_available` para no divergir del toggle legacy), `getAllEligibleForCategoryCapacityAction`. Gated por `AVAILABILITY_MODEL_ENABLED` (lo consulta Fauchard) |
 | `noResponseEvents.ts` (v5.0) | Sanción rolling: `recordNoResponseEventAction`, `getActiveEventsInWindowAction`, `expireEventsOutsideWindowAction` (cron), `pardonEventsAction` (admin), `computeLevelForTechnicianAction` (nivel 0–3 + nextExitDate). Reemplaza `user.consecutiveNoResponse` cuando el flag está on |
@@ -224,3 +220,24 @@ Los eventos de calificación (`action === 'CALIFICACION_ENVIADA'`) tienen visibi
 - Funciones: `verbAction` (createCaseAction, updateSkillsAction, etc.)
 - Constantes de estado: `CASE_STATUSES` en `lib/constants/dental.ts`
 - Constantes de evento: `CASE_EVENTS` en `lib/constants/caseEvents.ts`
+
+## Mantenedor de precios (`price_rule`, v5.8 · auditoría v5.10 · código v5.11 · cascada v5.12)
+
+- Tabla `price_rule`: reglas con dimensiones opcionales (NULL = comodín) y **`code` opaco** (`prc_001`, …). Lookup regresivo en `lib/pricing/resolveListPrice.ts` (sin cambios en runtime).
+- **Validación dimensiones (v5.12):** `lib/pricing/priceRuleDimensions.ts` — restauración obligatoria; cascada **Restauración → Urgencia → Material → Color** sin huecos. Patrones válidos: `R·*·*·*`, `R·U·*·*` (seed), `R·U·M·*`, `R·U·M·S`. Validación en `createPriceRuleAction` / `updatePriceRuleAction` / `resolvePendingPriceRequestAction`. Reglas legacy siguen resolviendo hasta editarse (badge «Revisar» en UI).
+- Tabla `price_rule_request`: cola de combinaciones sin precio al crear casos.
+- Snapshot congelado en `clinical_case`: `list_price_cost`, `list_price_fee_percent`, `list_price_sale`, `desired_delivery_at`.
+- **Delete (v5.11):** `deletePriceRuleAction` solo si ningún caso referencia `list_price_rule_id`; si hay vínculos, solo editar/bloquear/historial.
+- **Búsqueda UI:** `lib/pricing/priceRuleSearch.ts` — filtro client por código, restauración, material, color, urgencia.
+- **Simulador precio:** `resolveListPriceAction` usa `restorationType` como **code** (`rest_001`), no label.
+- **Auditoría (v5.10+):** tabla `price_rule_change_event` — acciones incluyen `deleted`. Motivo obligatorio en mutaciones admin. Helpers: `lib/pricing/priceRuleAudit.ts`. Lectura: `listPriceRuleChangeLogAction`.
+- Admin UI: `/dashboard/admin/prices` (pestañas Reglas / Historial; búsqueda; ordenación; cascada en formulario; avisos de jerarquía; preview «Probar combinación»; eliminar si sin casos vinculados). Actions: `lib/db/actions/priceRules.ts`.
+
+**Seed one-time** (matriz **R·U·*·*** = restauración × urgencia; material y color = `*`; costo 5000 / fee 15% / venta 5750):
+
+```bash
+cd frontend && npx tsx scripts/seed-price-rules.ts          # solo inserta faltantes
+cd frontend && npx tsx scripts/seed-price-rules.ts --reset  # borra todas y re-seed
+```
+
+Idempotente sin `--reset`: re-ejecutar solo inserta combinaciones nuevas si el admin agregó restauraciones o urgencias al catálogo.

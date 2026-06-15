@@ -21,11 +21,11 @@ export interface UchDealSummaryProps {
     assignedTechnicianId?: string | null;
   } | null;
   invitation?: {
+    compensation?: number | null;
     quotedPrice?: number | null;
-    quotedDays?: number | null;
-    quotedHours?: number | null;
+    deadlineDays?: number | null;
+    deadlineHours?: number | null;
     respondedAt?: string | Date | null;
-    techNotes?: string | null;
     status?: InvitationStatus | null;
   } | null;
   techOfferRejectedView?: boolean;
@@ -60,7 +60,7 @@ export default function UchDealSummary({
     (actingAsDentista || viewingAsAdmin || (actingAsTecnico && assigned)) &&
     !techRejectedSummary;
 
-  const quotedPrice = invitation?.quotedPrice ?? null;
+  const quotedPrice = invitation?.compensation ?? invitation?.quotedPrice ?? null;
   const techQuoteStatusExcluded = caseStatus === 'borrador' || caseStatus === 'publicado';
   const showTechQuote =
     actingAsTecnico &&
@@ -118,10 +118,10 @@ export default function UchDealSummary({
           ? (invitation?.quotedPrice ?? clinicalCase.proposedPrice)
           : clinicalCase.proposedPrice;
         const totalDays = useTechValues
-          ? (invitation?.quotedDays ?? clinicalCase.proposedDeliveryDays ?? null)
+          ? (invitation?.deadlineDays ?? clinicalCase.proposedDeliveryDays ?? null)
           : (clinicalCase.proposedDeliveryDays ?? null);
         const totalHours = useTechValues
-          ? (invitation?.quotedHours ?? clinicalCase.proposedDeliveryHours ?? null)
+          ? (invitation?.deadlineHours ?? clinicalCase.proposedDeliveryHours ?? null)
           : (clinicalCase.proposedDeliveryHours ?? null);
 
         const totalTurnaround = formatTurnaround({ days: totalDays, hours: totalHours });

@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { clinicalCase, caseInvitation } from '@/lib/db/schema';
+import { clinicalCase, caseAssignment } from '@/lib/db/schema';
 import { eq, sql } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { buildActiveCaseVisibilityWhere } from '@/lib/db/caseListVisibility';
@@ -81,13 +81,13 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
 
   const invRows = await db
     .select({
-      clinicalCaseId: caseInvitation.clinicalCaseId,
-      status: caseInvitation.status,
-      updatedAt: caseInvitation.updatedAt,
-      invitedAt: caseInvitation.invitedAt,
+      clinicalCaseId: caseAssignment.clinicalCaseId,
+      status: caseAssignment.status,
+      updatedAt: caseAssignment.updatedAt,
+      assignedAt: caseAssignment.assignedAt,
     })
-    .from(caseInvitation)
-    .where(eq(caseInvitation.technicianId, identity.id as string));
+    .from(caseAssignment)
+    .where(eq(caseAssignment.technicianId, identity.id as string));
 
   const invByCase = buildInvitationStatusByCaseId(invRows);
 

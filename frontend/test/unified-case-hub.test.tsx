@@ -176,8 +176,8 @@ describe('UnifiedCaseHub', () => {
     expect(ordered).toEqual(['uch-activity-event-ev-ctx-new', 'uch-activity-event-ev-ctx-old']);
   });
 
-  it('técnico en evaluación con oferta enviada: resumen en encabezado y fila Fauchard en el hilo', async () => {
-    const quotedInvitation: InvitationItem = {
+  it('técnico en evaluación con asignación pendiente: resumen y botón aceptar', async () => {
+    const pendingAssignment: InvitationItem = {
       id: 'inv-q-1',
       caseId: 'case-1',
       caseNumber: 'E-1',
@@ -187,14 +187,14 @@ describe('UnifiedCaseHub', () => {
       urgency: 'alta',
       caseComplexity: 'BASICO',
       serviceType: null,
-      status: 'quoted',
-      invitedAt: new Date(),
-      expiresAt: null,
-      quotedPrice: 99_999,
-      quotedDays: 15,
-      techNotes: 'super perdedor',
-      respondedAt: new Date('2026-05-12T15:05:00.000Z'),
-      isWinner: false,
+      status: 'pending',
+      assignedAt: new Date(),
+      expiresAt: new Date(Date.now() + 3600_000),
+      compensation: 99_999,
+      deadlineDays: 15,
+      deadlineHours: null,
+      isAssigned: false,
+      respondedAt: null,
       caseStatus: 'enEvaluacion',
       teeth: [],
       archivedByCurrentUser: false,
@@ -216,20 +216,20 @@ describe('UnifiedCaseHub', () => {
             assignedTechnicianId: null,
             caseNumber: 'E-1',
           }}
-          myInvitation={quotedInvitation}
+          myInvitation={pendingAssignment}
         />
       </ToastProvider>,
     );
     await waitFor(() => {
-      expect(screen.getByTestId('uch-case-actions-inline')).toBeInTheDocument();
+      expect(screen.getByTestId('uch-accept-assignment')).toBeInTheDocument();
     });
     expect(screen.getByTestId('uch-deal-summary')).toBeInTheDocument();
     const summary = screen.getByTestId('uch-deal-summary');
     expect(within(summary).getByText(/\$99\.999/)).toBeInTheDocument();
-    expect(screen.getByTestId('uch-withdraw-quote-open')).toBeInTheDocument();
+    expect(screen.getByTestId('uch-accept-assignment')).toBeInTheDocument();
   });
 
-  it('técnico en propuesta lista con oferta enviada: resumen en encabezado y fila Fauchard en el hilo', async () => {
+  it.skip('técnico en propuesta lista — flujo comparativo eliminado', async () => {
     const quotedInvitation: InvitationItem = {
       id: 'inv-q-pl',
       caseId: 'case-1',
@@ -240,14 +240,15 @@ describe('UnifiedCaseHub', () => {
       urgency: 'normal',
       caseComplexity: 'BASICO',
       serviceType: null,
-      status: 'quoted',
-      invitedAt: new Date(),
+      status: 'pending',
+      assignedAt: new Date(),
       expiresAt: null,
-      quotedPrice: 45_555,
-      quotedDays: 2,
-      techNotes: null,
+      compensation: 45_555,
+      deadlineDays: 2,
+      deadlineHours: null,
+      isAssigned: false,
+
       respondedAt: new Date('2026-05-12T15:03:00.000Z'),
-      isWinner: false,
       caseStatus: 'propuestaLista',
       teeth: [],
       archivedByCurrentUser: false,
@@ -639,12 +640,13 @@ describe('UnifiedCaseHub', () => {
     urgency: 'alta',
     caseComplexity: null,
     serviceType: null,
-    status: 'confirmed',
-    invitedAt: new Date(),
+    status: 'accepted',
+    assignedAt: new Date(),
     expiresAt: null,
-    quotedPrice: 50000,
-    quotedDays: 3,
-    isWinner: true,
+    compensation: 50000,
+    deadlineDays: 3,
+      deadlineHours: null,
+      isAssigned: false,
     caseStatus: 'aceptadaPendienteInicio',
     teeth: [],
     archivedByCurrentUser: false,
@@ -697,11 +699,12 @@ describe('UnifiedCaseHub', () => {
     caseComplexity: null,
     serviceType: null,
     status: 'rejected',
-    invitedAt: new Date(),
+    assignedAt: new Date(),
     expiresAt: null,
-    quotedPrice: 1000,
-    quotedDays: 5,
-    isWinner: false,
+    compensation: 1000,
+    deadlineDays: 5,
+      deadlineHours: null,
+      isAssigned: false,
     caseStatus: 'aceptadaPendienteInicio',
     teeth: [],
     archivedByCurrentUser: false,
@@ -1056,9 +1059,8 @@ describe('UnifiedCaseHub', () => {
             visibleTo: 'dentista',
             invitationId: 'inv-1',
             feedback: 'Muy caro',
-            quotedPrice: 125000,
-            quotedDays: 5,
-            techNotes: 'Incluye corona temporal.',
+            compensation: 125000,
+            deadlineDays: 5,
           },
           stateChange: {},
           createdAt: new Date().toISOString(),
@@ -1074,8 +1076,6 @@ describe('UnifiedCaseHub', () => {
     expect(screen.getByText(/Rechazaste una oferta/i)).toBeInTheDocument();
     expect(screen.getByText(priceLabel)).toBeInTheDocument();
     expect(screen.getByText(/5 días hábiles/i)).toBeInTheDocument();
-    expect(screen.getByText(/Comentario del oferente/i)).toBeInTheDocument();
-    expect(screen.getByText(/Incluye corona temporal/i)).toBeInTheDocument();
   });
 
   it('UchEventBubble: OFERTA_RECHAZADA dentista-only con user enmascarado y sin userId va a self', () => {
@@ -1123,7 +1123,7 @@ describe('UnifiedCaseHub', () => {
     expect(screen.getByTestId('uch-activity-event-ev-all-rej')).toHaveAttribute('data-uch-lane', 'self');
   });
 
-  it('UchEventBubble: dentista acepta quotedPrice y quotedDays como string en JSON', () => {
+  it('UchEventBubble: dentista acepta quotedPrice y deadlineDays como string en JSON', () => {
     const priceLabel = new Intl.NumberFormat('es-CL', {
       style: 'currency',
       currency: 'CLP',
@@ -1140,9 +1140,9 @@ describe('UnifiedCaseHub', () => {
             visibleTo: 'dentista',
             invitationId: 'inv-s',
             feedback: 'x',
-            quotedPrice: '99000',
-            quotedDays: '3',
-            techNotes: '',
+            compensation: '99000',
+            deadlineDays: '3',
+
           },
           stateChange: {},
           createdAt: new Date().toISOString(),
@@ -1199,9 +1199,8 @@ describe('UnifiedCaseHub', () => {
           payload: {
             visibleTo: 'tecnico',
             invitationId: 'inv-1',
-            quotedPrice: 88000,
-            quotedDays: 7,
-            techNotes: 'Incluye prueba de color.',
+            compensation: 88000,
+            deadlineDays: 7,
           },
           stateChange: {},
           createdAt: new Date().toISOString(),
@@ -1217,7 +1216,6 @@ describe('UnifiedCaseHub', () => {
     expect(screen.getByText(/Cotización enviada/i)).toBeInTheDocument();
     expect(screen.getByText(priceLabel)).toBeInTheDocument();
     expect(screen.getByText(/7 días hábiles/i)).toBeInTheDocument();
-    expect(screen.getByText(/Incluye prueba de color/i)).toBeInTheDocument();
   });
 
   it('UchEventBubble: dentista ve detalle en OFERTA_NO_SELECCIONADA al elegir otra oferta', () => {
@@ -1237,9 +1235,8 @@ describe('UnifiedCaseHub', () => {
           payload: {
             visibleTo: 'dentista',
             invitationId: 'inv-x',
-            quotedPrice: 70000,
-            quotedDays: 3,
-            techNotes: 'Zirconia monolítica.',
+            compensation: 70000,
+            deadlineDays: 3,
           },
           stateChange: {},
           createdAt: new Date().toISOString(),
@@ -1254,7 +1251,6 @@ describe('UnifiedCaseHub', () => {
     expect(screen.getByText('Oferta no seleccionada')).toBeInTheDocument();
     expect(screen.getByText(priceLabel)).toBeInTheDocument();
     expect(screen.getByText(/3 días hábiles/i)).toBeInTheDocument();
-    expect(screen.getByText(/Zirconia monolítica/i)).toBeInTheDocument();
   });
 
   it('UCH: muestra CASO_CREADO y CASO_PUBLICADO en el hilo (dentista)', () => {

@@ -1,5 +1,5 @@
-import type { LucideIcon } from 'lucide-react';
-import { Activity, AlertCircle, CheckCircle2, Circle, Clock, XCircle } from 'lucide-react';
+import { formatDesiredDeliveryCompact } from '@/lib/cases/caseDeliveryPresentation';
+import { Activity, AlertCircle, CheckCircle2, Circle, Clock, XCircle, type LucideIcon } from 'lucide-react';
 import { statusLabel } from '@/components/ui/StatusBadge';
 
 export type DentistCardZone = {
@@ -20,6 +20,7 @@ type DentistCardInput = {
   completedAt?: string | Date | null;
   material?: string | null;
   fileCount?: number;
+  desiredDeliveryAt?: string | Date | null;
 };
 
 function formatShortDate(value: string | Date | null | undefined): string | null {
@@ -45,11 +46,12 @@ export function getDentistCardZone(input: DentistCardInput): DentistCardZone {
   switch (status) {
     case 'borrador': {
       const fileBit = input.fileCount && input.fileCount > 0 ? `${input.fileCount} archivos` : null;
+      const deliveryBit = formatDesiredDeliveryCompact(input.desiredDeliveryAt);
       return {
         icon: Circle,
         iconClass: 'text-faint',
         primary: 'Borrador',
-        secondary: joinSecondary([material, fileBit]),
+        secondary: joinSecondary([material, deliveryBit && `entrega ${deliveryBit}`, fileBit]),
         ctaLabel: 'Continuar edición',
         ctaVariant: 'neutral',
       };
