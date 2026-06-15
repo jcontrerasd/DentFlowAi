@@ -48,14 +48,22 @@ git log --oneline --graph --all -10
 
 ## Deploy por versión
 
-`deploy_gui.py` y `deploy.sh` funcionan igual desde cualquier checkout. Solo hay que estar en la rama correcta antes de ejecutar.
+`deploy_gui.py` detecta la **rama Git actual** y aplica política de advertencia/bloqueo antes de desplegar.
 
-| Versión | Pasos |
-|---|---|
-| Deploy v1 a GCP dev | `git checkout v1` → `cd frontend && python3 deploy_gui.py` → seleccionar `develop` |
-| Deploy v1 a GCP prod | `git checkout v1` → `cd frontend && python3 deploy_gui.py` → seleccionar `production` |
-| Deploy v2 a GCP dev | `git checkout v2` → `cd frontend && python3 deploy_gui.py` → seleccionar `develop` |
-| Deploy v2 a GCP prod | Solo hacer cuando v2 esté 100% validado en staging |
+| Línea | GCP dev (pestaña STAGING) | GCP prod (pestaña PRODUCTION) |
+|-------|---------------------------|-------------------------------|
+| **v1 (antigua)** | `git checkout develop` → GUI STAGING | merge `develop→main` → `git checkout main` → GUI PRODUCTION |
+| **v2 (nueva)** | `git checkout v2` → GUI STAGING | merge `v2→main` → `git checkout main` → GUI PRODUCTION |
+| **Rollback** | — | `git checkout v1` (o tag `v1.0-produccion`) → GUI PRODUCTION *(advertencia)* |
+
+**Bloqueos en GUI:** no se puede desplegar a PRODUCTION desde `develop` ni `v2` (debe mergearse a `main` primero).
+
+### Qué muestra `deploy_gui.py`
+
+- Barra superior: rama, commit corto, tag (si aplica), cambios sin commit
+- Banner por pestaña STAGING/PRODUCTION según línea (v1 vs v2)
+- Resumen unificado antes de confirmar (servicio, flags, política de rama)
+- Botón **Versionado** → abre este documento
 
 ## Flujo de merge final (cuando v2 esté listo)
 

@@ -102,13 +102,15 @@ Moderación de campos libres (notas, trackingId) — bloquea intentos de saltars
 - El campo `dispatchTracking` está **exento** de la detección numérica/telefónica (`NUMERIC_EXEMPT_FIELDS`): su contenido legítimo es un código largo. URL externa / email / handle siguen aplicando ahí.
 - Las violaciones de `dominio_explicito` contenidas en una `url_http` se deduplican (se reporta la URL una sola vez).
 
-## Calendario laboral (v4.6) — businessTime + feriados
+## Plazos de entrega — `desiredDeliveryAt`
 
-`workDeadline` y los deadlines Fauchard respetan horario y feriados configurables:
-- Config en `fauchard_config`: `businessHoursStart` (default 8), `businessHoursEnd` (default 20), `businessDaysMask` (bitmask, default 31 = L-V).
-- Feriados globales en tabla `fauchard_holiday` (admin CRUD).
-- Helpers: [frontend/lib/businessTime.ts](frontend/lib/businessTime.ts) (`addBusinessTime`, `isBusinessDay`, `ymd`). Usado por `startWorkAction` para computar `workDeadline` desde días/horas cotizados.
-- Admin UI: [frontend/components/admin/fauchard/FauchardCalendarPanel.tsx](frontend/components/admin/fauchard/FauchardCalendarPanel.tsx); actions en [frontend/lib/db/actions/fauchardHolidays.ts](frontend/lib/db/actions/fauchardHolidays.ts).
+`workDeadline` = `desiredDeliveryAt` fijado por el dentista al publicar. El reloj del caso arranca en **publicación**; el técnico asignado debe cumplir dentro de esa fecha/hora. Sin calendario laboral administrable.
+
+- Helpers: [frontend/lib/cases/workDeadline.ts](frontend/lib/cases/workDeadline.ts) (`resolveWorkDeadline`, `computeProposedDeliveryDays`, `isCompletedOnTime`).
+- `startWorkAction` y puntualidad del score (P) usan ventana `publishedAt` → `desiredDeliveryAt`.
+- Columnas `business_*` en `fauchard_config` y tabla `fauchard_holiday` permanecen en BD (inertes). `lib/businessTime.ts` es legacy (solo tests).
+
+Configurador Fauchard admin: **3 espacios** — Parámetros · Categorías · Historial (`TabClient`).
 
 ## Comandos
 ```bash
@@ -126,7 +128,17 @@ cd frontend && python3 deploy_gui.py      # GUI gráfica de deploy (Tkinter, sin
 
 ## GUI de Deploy (`frontend/deploy_gui.py`)
 
-Interfaz gráfica Python/Tkinter que reimplementa `deploy.sh` sin dependencias externas. Permite desplegar a local/dev/prod con control visual de variables por entorno (incluido `NOTIFICATIONS_LIVE`). Uso: `cd frontend && python3 deploy_gui.py`. **GOTCHA:** `deploy.sh` no recorta comentarios inline de `.env.local`; la GUI sí los recorta al leer, y escribe sin comentario inline al guardar (evita romper comparaciones `=== 'true'`).
+Interfaz gráfica Python/Tkinter que reimplementa `deploy.sh` sin dependencias externas. Permite desplegar a local/dev/prod con control visual de variables por entorno (incluido `NOTIFICATIONS_LIVE`). Uso: `cd frontend && python3 deploy_gui.py`.
+
+**Política de ramas (dual-track):**
+- **STAGING (GCP dev):** desde `develop` (línea v1) o `v2` (cambio estructural)
+- **PRODUCTION (GCP prod):** solo desde `main` tras merge; **bloquea** `develop`/`v2`
+- **Rollback:** `v1` o tag `v1.0-produccion` en PRODUCTION con advertencia fuerte
+- Muestra rama, commit y working tree dirty antes de cada deploy
+
+Ver [Doc/Estrategia_Versionado.md](Doc/Estrategia_Versionado.md) y [Doc/Ciclo_Desarrollo.md](Doc/Ciclo_Desarrollo.md).
+
+**GOTCHA:** `deploy.sh` no recorta comentarios inline de `.env.local`; la GUI sí los recorta al leer, y escribe sin comentario inline al guardar (evita romper comparaciones `=== 'true'`).
 
 ## Sistema de preview de emails (DEMO local)
 
@@ -137,8 +149,10 @@ Para facilitar demos del flujo sin enviar correos reales. Gated por `NEXT_PUBLIC
 
 ## Flujo Git y Deploy
 
-- Ramas: **develop** (trabajo diario, staging) → **main** (producción). Nunca commitear directo a `main`.
-- Deploy: `cd frontend && bash deploy.sh [develop|production]` — o usar la GUI (`deploy_gui.py`).
+- **Versionado mayor:** línea v1 (`develop`→`main`) y línea v2 (`v2`→`main`) en paralelo; respaldo `v1` + tag `v1.0-produccion`. Ver [Doc/Estrategia_Versionado.md](Doc/Estrategia_Versionado.md).
+- **GCP dev:** deploy desde `develop` (v1) o `v2` vía pestaña STAGING en `deploy_gui.py`.
+- **GCP prod:** deploy solo desde `main` vía pestaña PRODUCTION (GUI bloquea `develop`/`v2`).
+- Deploy alternativo: `cd frontend && bash deploy.sh [develop|production]` — o usar la GUI (`deploy_gui.py`).
 - **Staging**: Cloud Run `dentflowai-frontend-dev` + Cloud SQL `dentflowai-psql-dev` (BD aislada de prod).
 - **Producción**: Cloud Run `dentflowai-frontend` + Cloud SQL `dentflowai-cbcf2-instance`.
 - Variables por entorno (`DATABASE_URL_DEV`/`_PROD`, `AUTH_URL_DEV`/`_PROD`, `NEXT_PUBLIC_APP_URL_DEV`/`_PROD`) viven en `frontend/.env.local` y se inyectan en Cloud Run por `deploy.sh`.
@@ -168,7 +182,7 @@ Diseño de lookup tables uniforme:
   - `id` (uuid PK) — referenciado por FK desde `clinical_case`.
   - `code` (text UNIQUE) — **opaco, system-generated** (`mat_001`, `vita_001`, `rest_001`, `urg_001`). Identificador estable sin relación semántica con el label.
   - `label` (text) — **único campo editable** por admin.
-  - `sort_order`, `is_active`. DDL + seed en [frontend/lib/db/infrastructure.ts](frontend/lib/db/infrastructure.ts) (`INFRA_VERSION` actual: **v5.7** — historial de versiones: v5.0 modelo de disponibilidad + tablas `technician_availability`/`technician_no_response_event` + catálogos de rechazo + columnas nuevas en `case_invitation`/`clinical_case`/`fauchard_config`; v5.1 `inactivity_reminder_sent_at`; v5.2 `review_reminder_sent_at`/`review_overdue_notified_at`; v5.3 columna `dimension` en `review` + índice único `case+reviewer+dimension`; v5.4 normalización de pesos del score a Σ6=1.0 con αN; v5.5 motor de ligas + `league_change_event`; v5.7 campos de dirección en `user`. Todo detrás de sus respectivos flags. Ver [Doc Servicio Orquestado/plan_flujo_tiempos.md](Doc%20Servicio%20Orquestado/plan_flujo_tiempos.md)).
+  - `sort_order`, `is_active`. DDL + seed en [frontend/lib/db/infrastructure.ts](frontend/lib/db/infrastructure.ts) (`INFRA_VERSION` actual: **v5.11** — … v5.11 `price_rule.code` (`prc_NNN`), delete condicionado y búsqueda en mantenedor; **v5.12** validación cascada de dimensiones en admin (`priceRuleDimensions.ts`). Ver [Doc Servicio Orquestado/plan_flujo_tiempos.md](Doc%20Servicio%20Orquestado/plan_flujo_tiempos.md)).
 - **FKs en clinical_case**: `material_id`, `restoration_type_id`, `shade_id`, `urgency_id` (todos con `ON DELETE RESTRICT`).
 - **Reglas de uso desde código**:
   - Form envía `code` opaco para material/restoration/shade y `label` para urgency. El resolver ([catalogResolver.ts](frontend/lib/db/catalogResolver.ts)) lo convierte a `*_id` antes de persistir.
@@ -262,6 +276,10 @@ Helpers: `frontend/lib/db/caseDeadlines.ts`. Evaluación/cierre de comparativo: 
 - **Global:** `getActiveConfig()` — config activa actual.
 - **Por caso:** `getConfigForCase(caseId)` — usa `fauchard_config_id` anclado si existe; si no, la activa.
 - **Publicar / republicar:** `runFauchardAction` devuelve `fauchardConfigId`; `sendInvitationsAction` recibe el mismo id.
+
+### Simulador y monitor (asignación directa)
+- **Simulador admin** (`simulateAssignmentAction` en `assignment.ts`, alias `simulateFauchardAction`): caso virtual con **4 catálogos de precio** (restauración, material, shade, urgencia → `pricePreview`) + **escenario de asignación** (piezas, complejidad auto/manual, notas estéticas simuladas) → mismos filtros que `buildEligiblePoolForScenario` + ranking `rankCandidatesForScenario` (Q/P/E/L/N). Salida: `retryChainDetails`, `chainPosition` por fila, cadena coloreada hasta `maxAssignmentAttempts`. Sin `nInvited` ni probabilidades.
+- **Monitor** (`getFauchardMetricsAction`): agregados sobre `case_assignment` (`assignmentsCount`, tasas respuesta/aceptación, fallos vía `sin_asignacion_fallo` / `sin_cotizaciones_fallo`).
 
 ## UCH — Reglas de Diseño DentFlowAi
 

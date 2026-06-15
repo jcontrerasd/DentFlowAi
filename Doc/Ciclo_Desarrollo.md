@@ -6,26 +6,43 @@ Guía paso a paso del flujo de trabajo: desde tu máquina local hasta producció
 
 ## 1. Visión general
 
+Hay **dos líneas de trabajo** (ver [Estrategia_Versionado.md](Estrategia_Versionado.md)). GCP dev y GCP prod tienen **un solo servicio cada uno** — cada deploy reemplaza la versión anterior.
+
+**Importante:** la pestaña **STAGING (dev)** en `deploy_gui.py` despliega a **GCP dev** (Cloud Run). No es la rama Git `develop`.
+
+### Línea A — versión antigua (v1)
+
+| Etapa | Rama Git | Deploy GUI | Destino |
+|-------|----------|------------|---------|
+| Trabajo | `develop` | — | local |
+| Staging | `develop` | pestaña **STAGING** | GCP dev |
+| Producción | `main` (tras merge `develop→main`) | pestaña **PRODUCTION** | GCP prod |
+
+Respaldo fijo: rama `v1` + tag `v1.0-produccion` (rollback de emergencia).
+
+### Línea B — cambio estructural (v2)
+
+| Etapa | Rama Git | Deploy GUI | Destino |
+|-------|----------|------------|---------|
+| Trabajo | `v2` | — | local |
+| Staging | `v2` | pestaña **STAGING** | GCP dev |
+| Producción | `main` (tras merge `v2→main`) | pestaña **PRODUCTION** | GCP prod |
+
+### Regla común
+
+> **GCP dev** ← rama de trabajo (`develop` o `v2`) · **GCP prod** ← solo `main` (después del merge).
+
+La GUI **bloquea** deploy a PRODUCTION desde `develop` o `v2` y muestra la rama/commit actual antes de desplegar.
+
 ```
-┌──────────────┐   git push    ┌──────────────┐   bash deploy.sh develop   ┌──────────────────┐
-│   LOCAL      │ ────────────▶ │  rama develop│ ────────────────────────▶  │  STAGING         │
-│ (tu equipo)  │               │  en GitHub   │                            │  Cloud Run dev   │
-└──────────────┘               └──────┬───────┘                            │  + Cloud SQL dev │
-                                      │ merge                              └──────────────────┘
-                                      ▼
-                               ┌──────────────┐   bash deploy.sh production
-                               │  rama main   │ ────────────────────────▶  ┌──────────────────┐
-                               │  en GitHub   │                            │  PRODUCCIÓN      │
-                               └──────────────┘                            │  Cloud Run prod  │
-                                                                           │  + Cloud SQL prod│
-                                                                           └──────────────────┘
+LOCAL → develop (v1) o v2 → STAGING GUI → GCP dev → merge → main → PRODUCTION GUI → GCP prod
 ```
 
 **Reglas de oro**:
 
-- Nunca trabajas directo en `main`. `main` = lo que está en `dentflowai.com`.
-- Toda feature nueva pasa por `develop` y se prueba en staging antes de ir a producción.
-- Las BD de staging y producción están **completamente separadas**. Modificar datos en una no afecta a la otra.
+- Nunca trabajas directo en `main`. `main` = lo que está en producción.
+- Mientras v2 está en curso, evita mergear `develop→main` salvo hotfix urgente en la línea v1.
+- Las BD de staging y producción están **completamente separadas**.
 
 ---
 

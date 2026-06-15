@@ -11,6 +11,12 @@ variables de entorno por deploy (p. ej. el flag de correo `NOTIFICATIONS_LIVE`).
 Uso:
     cd frontend && python3 deploy_gui.py
 
+Versionado Git (dual-track):
+  - Línea v1 (antigua): develop → pestaña STAGING (GCP dev); merge develop→main → PRODUCTION
+  - Línea v2 (nueva):    v2 → STAGING; merge v2→main → PRODUCTION
+  - Respaldo: v1 / tag v1.0-produccion (rollback prod de emergencia)
+  Ver Doc/Estrategia_Versionado.md
+
 Sin dependencias externas: usa solo la librería estándar de Python (tkinter).
 
 Equivalencias con los scripts existentes (la GUI **reimplementa** los comandos,
@@ -37,8 +43,10 @@ import secrets
 import subprocess
 import tempfile
 import threading
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
@@ -137,6 +145,195 @@ RESOURCE_KEYS = ["DATABASE_URL", "GCP_BUCKET_NAME", "AUTH_SECRET", "GCP_PROJECT_
                  "EMAILJS_PRIVATE_KEY"]
 
 CICLO_DOC = REPO_ROOT / "Doc" / "Ciclo_Desarrollo.md"
+VERSIONADO_DOC = REPO_ROOT / "Doc" / "Estrategia_Versionado.md"
+
+PolicyLevel = Literal["ok", "warn", "block"]
+
+STAGING_OK_BRANCHES = frozenset({"develop", "v2"})
+PRODUCTION_OK_BRANCHES = frozenset({"main"})
+PRODUCTION_ROLLBACK_BRANCHES = frozenset({"v1"})
+PRODUCTION_BLOCKED_BRANCHES = frozenset({"develop", "v2"})
+
+
+@dataclass
+class GitContext:
+    branch: str = "?"
+    commit_short: str = "?"
+    tag: str | None = None
+    is_dirty: bool = False
+    is_detached: bool = False
+    dirty_count: int = 0
+    error: str | None = None
+
+    @property
+    def summary(self) -> str:
+        if self.error:
+            return f"Git: error ({self.error})"
+        parts = [f"Rama: {self.branch}", f"commit {self.commit_short}"]
+        if self.tag:
+            parts.append(f"tag {self.tag}")
+        if self.is_dirty:
+            parts.append(f"⚠ {self.dirty_count} cambio(s) sin commit")
+        else:
+            parts.append("limpio")
+        return " · ".join(parts)
+
+
+@dataclass
+class DeployPolicyResult:
+    level: PolicyLevel
+    messages: list[str] = field(default_factory=list)
+    track: str | None = None  # v1 | v2 | main | rollback
+
+
+def _git_run(args: list[str], cwd: Path, timeout: int = 10) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+
+
+def load_git_context(repo_root: Path) -> GitContext:
+    try:
+        branch_r = _git_run(["rev-parse", "--abbrev-ref", "HEAD"], repo_root)
+        if branch_r.returncode != 0:
+            return GitContext(error=branch_r.stderr.strip() or "no es un repositorio git")
+
+        branch = branch_r.stdout.strip()
+        is_detached = branch == "HEAD"
+
+        if is_detached:
+            describe_r = _git_run(["describe", "--tags", "--exact-match"], repo_root)
+            if describe_r.returncode == 0:
+                branch = describe_r.stdout.strip()
+            else:
+                short_r = _git_run(["rev-parse", "--short", "HEAD"], repo_root)
+                branch = short_r.stdout.strip() if short_r.returncode == 0 else "HEAD"
+
+        short_r = _git_run(["rev-parse", "--short", "HEAD"], repo_root)
+        commit_short = short_r.stdout.strip() if short_r.returncode == 0 else "?"
+
+        tag_r = _git_run(["describe", "--tags", "--exact-match"], repo_root)
+        tag = tag_r.stdout.strip() if tag_r.returncode == 0 else None
+
+        status_r = _git_run(["status", "--porcelain"], repo_root)
+        dirty_lines = [ln for ln in status_r.stdout.splitlines() if ln.strip()] if status_r.returncode == 0 else []
+
+        return GitContext(
+            branch=branch,
+            commit_short=commit_short,
+            tag=tag,
+            is_dirty=len(dirty_lines) > 0,
+            is_detached=is_detached,
+            dirty_count=len(dirty_lines),
+            error=None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        return GitContext(error=str(exc))
+
+
+def evaluate_deploy_policy(env_key: str, git: GitContext) -> DeployPolicyResult:
+    if git.error:
+        return DeployPolicyResult("warn", [f"No se pudo leer Git: {git.error}"], None)
+
+    branch = git.branch
+    is_rollback = branch in PRODUCTION_ROLLBACK_BRANCHES or git.tag == "v1.0-produccion"
+
+    if env_key == "develop":
+        if branch == "v2":
+            return DeployPolicyResult(
+                "ok",
+                ["Línea v2: v2 → GCP dev (camino correcto para cambio estructural)."],
+                "v2",
+            )
+        if branch == "develop":
+            return DeployPolicyResult(
+                "ok",
+                ["Línea v1: develop → GCP dev (versión antigua en staging)."],
+                "v1",
+            )
+        if branch == "main":
+            return DeployPolicyResult(
+                "warn",
+                ["Normalmente no despliegas main a GCP dev. Usa develop (v1) o v2."],
+                "main",
+            )
+        if is_rollback:
+            return DeployPolicyResult(
+                "warn",
+                ["Rama/tag de respaldo v1: para staging habitual usa develop o v2."],
+                "rollback",
+            )
+        return DeployPolicyResult(
+            "warn",
+            [f"Rama '{branch}': staging recomendado desde develop (v1) o v2."],
+            None,
+        )
+
+    # production
+    if branch in PRODUCTION_BLOCKED_BRANCHES:
+        track = "v2" if branch == "v2" else "v1"
+        return DeployPolicyResult(
+            "block",
+            [
+                f"Bloqueado: estás en '{branch}' ({'línea v2' if branch == 'v2' else 'línea v1'}).",
+                "Haz merge a main antes de desplegar a PRODUCCIÓN.",
+                "  · v2 → merge v2→main → deploy desde main",
+                "  · develop → merge develop→main → deploy desde main",
+            ],
+            track,
+        )
+    if branch == "main":
+        return DeployPolicyResult(
+            "ok",
+            ["Prod: main → GCP prod (tras merge de la línea activa)."],
+            "main",
+        )
+    if is_rollback:
+        return DeployPolicyResult(
+            "warn",
+            [
+                "Rollback de emergencia a snapshot v1 (d9a9f5a).",
+                "Solo si es intencional — no es el flujo normal de release.",
+            ],
+            "rollback",
+        )
+    return DeployPolicyResult(
+        "block",
+        [f"Rama '{branch}': producción solo desde main (o v1/tag para rollback)."],
+        None,
+    )
+
+
+def build_deploy_summary(
+    env_key: str,
+    service: str,
+    image_tag: str,
+    git: GitContext,
+    policy: DeployPolicyResult,
+    notifications_live: bool,
+) -> str:
+    lines = [
+        "Vas a desplegar:",
+        f"  · Entorno GUI: {ENVIRONMENTS[env_key]['label']}",
+        f"  · Servicio: {service}",
+        f"  · Imagen tag: {image_tag}",
+        f"  · Rama Git: {git.branch} @ {git.commit_short}",
+    ]
+    if git.tag:
+        lines.append(f"  · Tag: {git.tag}")
+    if git.is_dirty:
+        lines.append(f"  · Working tree: ⚠ {git.dirty_count} cambio(s) sin commit")
+    else:
+        lines.append("  · Working tree: limpio")
+    lines.append(f"  · NOTIFICATIONS_LIVE: {'ON' if notifications_live else 'OFF'}")
+    if policy.messages:
+        lines.append("")
+        lines.extend(f"  · {m}" for m in policy.messages)
+    return "\n".join(lines)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -360,10 +557,11 @@ class DeployGUI:
         self.env = EnvFile(ENV_PATH)
         self.log_queue: queue.Queue = queue.Queue()
         self.runner = Runner(self.log_queue)
+        self.git_ctx = GitContext()
 
         root.title("DentFlowAi · Deploy GUI")
-        root.geometry("1040x760")
-        root.minsize(900, 640)
+        root.geometry("1040x800")
+        root.minsize(900, 680)
 
         self._build_header()
         self._build_notebook()
@@ -375,13 +573,24 @@ class DeployGUI:
 
     # -- layout --------------------------------------------------------------
     def _build_header(self):
-        bar = ttk.Frame(self.root, padding=(12, 8))
-        bar.pack(fill="x")
-        ttk.Label(bar, text="DentFlowAi · Deploy",
+        top = ttk.Frame(self.root, padding=(12, 8))
+        top.pack(fill="x")
+        row1 = ttk.Frame(top)
+        row1.pack(fill="x")
+        ttk.Label(row1, text="DentFlowAi · Deploy",
                   font=("TkDefaultFont", 14, "bold")).pack(side="left")
-        ttk.Label(bar, text="  local → dev → prod   (cada ambiente es independiente)",
+        ttk.Label(row1, text="  GCP dev ← develop o v2  ·  GCP prod ← main",
                   foreground="#666").pack(side="left")
-        ttk.Button(bar, text="Ayuda / Doc", command=self._open_doc).pack(side="right")
+        btn_frame = ttk.Frame(row1)
+        btn_frame.pack(side="right")
+        ttk.Button(btn_frame, text="Versionado", command=self._open_versionado_doc).pack(side="right", padx=(4, 0))
+        ttk.Button(btn_frame, text="Ayuda / Doc", command=self._open_doc).pack(side="right")
+
+        row2 = ttk.Frame(top)
+        row2.pack(fill="x", pady=(4, 0))
+        self.git_var = tk.StringVar(value="Git: leyendo…")
+        ttk.Label(row2, textvariable=self.git_var, foreground="#444",
+                  font=("TkDefaultFont", 10)).pack(side="left")
 
     def _build_notebook(self):
         self.nb = ttk.Notebook(self.root)
@@ -498,12 +707,28 @@ class DeployGUI:
             except Exception:  # noqa: BLE001
                 pass
         messagebox.showinfo("Documentación",
-                            f"Flujo completo en:\n{CICLO_DOC}\n\nlocal → dev → prod. "
-                            "Cada ambiente es independiente (servicio + BD + bucket propios).")
+                            f"Flujo completo en:\n{CICLO_DOC}\n\n"
+                            "Dual-track: develop/v2 → GCP dev; main → GCP prod.")
+
+    def _open_versionado_doc(self):
+        if VERSIONADO_DOC.exists():
+            try:
+                subprocess.Popen(["open", str(VERSIONADO_DOC)])
+                return
+            except Exception:  # noqa: BLE001
+                pass
+        messagebox.showinfo("Estrategia de versionado",
+                            f"Guía v1/v2/main en:\n{VERSIONADO_DOC}")
+
+    def _apply_git_context(self, git: GitContext) -> None:
+        self.git_ctx = git
+        self.git_var.set(git.summary)
+        for tab in self.env_tabs.values():
+            tab.refresh_branch_policy()
 
     def _preflight(self):
         # Parte rápida (no bloquea): binarios + presencia de .env.local.
-        bins = {b: which(b) for b in ("gcloud", "docker", "npm", "npx", "curl")}
+        bins = {b: which(b) for b in ("gcloud", "docker", "npm", "npx", "curl", "git")}
         missing = [b for b, ok in bins.items() if not ok]
         env_ok = ENV_PATH.exists()
         base = (".env.local ✓" if env_ok else ".env.local ✗ FALTA")
@@ -514,27 +739,35 @@ class DeployGUI:
             f"  .env.local : {'OK' if env_ok else 'NO ENCONTRADO en ' + str(ENV_PATH)}\n"
             f"  binarios   : " + ", ".join(f"{b}{'✓' if ok else '✗'}" for b, ok in bins.items()) + "\n"
         )
-        self.set_status("Comprobando cuenta gcloud…   |   " + base)
+        self.set_status("Comprobando Git y gcloud…   |   " + base)
 
-        if not bins["gcloud"]:
-            self.set_status("gcloud no instalado   |   " + base)
-            return
-
-        # Parte lenta (gcloud arranca lento): en un hilo, para no congelar la UI.
         def lookup():
-            try:
-                account = subprocess.run(
-                    ["gcloud", "config", "get-value", "account"],
-                    capture_output=True, text=True, timeout=15).stdout.strip() or "(sin cuenta)"
-                project = subprocess.run(
-                    ["gcloud", "config", "get-value", "project"],
-                    capture_output=True, text=True, timeout=15).stdout.strip() or "(sin proyecto)"
-            except Exception:  # noqa: BLE001
-                account = project = "(no disponible)"
+            git = load_git_context(REPO_ROOT) if bins.get("git") else GitContext(error="git no instalado")
+            gcloud_info = ("(gcloud no instalado)", "(gcloud no instalado)")
+            if bins["gcloud"]:
+                try:
+                    account = subprocess.run(
+                        ["gcloud", "config", "get-value", "account"],
+                        capture_output=True, text=True, timeout=15).stdout.strip() or "(sin cuenta)"
+                    project = subprocess.run(
+                        ["gcloud", "config", "get-value", "project"],
+                        capture_output=True, text=True, timeout=15).stdout.strip() or "(sin proyecto)"
+                    gcloud_info = (account, project)
+                except Exception:  # noqa: BLE001
+                    gcloud_info = ("(no disponible)", "(no disponible)")
 
-            def update(_rc):  # corre en el hilo de UI vía la cola
-                self._append(f"  cuenta gcloud : {account}\n  proyecto      : {project}\n")
-                self.set_status(f"gcloud: {account} · proyecto {project}   |   {base}")
+            def update(_rc):
+                self._apply_git_context(git)
+                self._append(
+                    "  Git\n"
+                    f"    {git.summary}\n"
+                    f"  cuenta gcloud : {gcloud_info[0]}\n"
+                    f"  proyecto      : {gcloud_info[1]}\n"
+                )
+                if git.error:
+                    self.set_status(f"Git con advertencia · {gcloud_info[0]}   |   {base}")
+                else:
+                    self.set_status(f"gcloud: {gcloud_info[0]} · {git.branch}@{git.commit_short}   |   {base}")
 
             self.log_queue.put(("__done__", update, 0))
 
@@ -572,9 +805,16 @@ class EnvTab:
         self.flag_src: dict[str, ttk.Label] = {}
         self.secret_vars: dict[str, tk.StringVar] = {}
         self.cr_vars: dict[str, tk.StringVar] = {}
+        self.flag_vars: dict[str, tk.BooleanVar] = {}
+        self.flag_src: dict[str, ttk.Label] = {}
+        self.secret_vars: dict[str, tk.StringVar] = {}
+        self.cr_vars: dict[str, tk.StringVar] = {}
         self.warn_var = tk.StringVar(value="")
+        self.policy_var = tk.StringVar(value="")
+        self.policy_level: PolicyLevel = "ok"
 
         self._build()
+        self.refresh_branch_policy()
 
     # -- construcción --------------------------------------------------------
     def _build(self):
@@ -582,7 +822,13 @@ class EnvTab:
         banner = tk.Label(self.body, text=f"  ▸  {meta['label']}   ·   servicio: {self.service}",
                           bg=self.accent, fg="white", anchor="w",
                           font=("TkDefaultFont", 12, "bold"), padx=10, pady=6)
-        banner.pack(fill="x", pady=(0, 10))
+        banner.pack(fill="x", pady=(0, 6))
+
+        self.policy_label = tk.Label(
+            self.body, textvariable=self.policy_var, anchor="w", justify="left",
+            font=("TkDefaultFont", 10, "bold"), padx=8, pady=6, wraplength=900,
+        )
+        self.policy_label.pack(fill="x", pady=(0, 8))
 
         self._section_resources()
         self._section_flags()
@@ -679,12 +925,35 @@ class EnvTab:
     def _info(self, label, desc):
         messagebox.showinfo(label, desc)
 
+    def _current_policy(self) -> DeployPolicyResult:
+        return evaluate_deploy_policy(self.env_key, self.app.git_ctx)
+
+    def refresh_branch_policy(self) -> None:
+        policy = self._current_policy()
+        self.policy_level = policy.level
+        text = "  ".join(policy.messages) if policy.messages else ""
+        self.policy_var.set(text)
+        colors = {
+            "ok": ("#e8f6ee", "#1a7f42"),
+            "warn": ("#fef9e7", "#9a7b0a"),
+            "block": ("#fdecea", "#922b21"),
+        }
+        bg, fg = colors.get(policy.level, ("#f4f4f4", "#333"))
+        self.policy_label.configure(bg=bg, fg=fg)
+        self._update_warning()
+
     def _update_warning(self):
-        if self.env_key == "develop" and self.flag_vars["NOTIFICATIONS_LIVE"].get():
-            self.warn_var.set("⚠ NOTIFICATIONS_LIVE=ON en STAGING: con datos clonados de prod se "
-                              "enviarán correos REALES a usuarios reales.")
-        else:
-            self.warn_var.set("")
+        parts: list[str] = []
+        policy = self._current_policy()
+        if policy.level == "block":
+            parts.append("⛔ " + (policy.messages[0] if policy.messages else "Deploy bloqueado por política de rama."))
+        elif policy.level == "warn" and self.env_key == "production":
+            parts.extend(f"⚠ {m}" for m in policy.messages)
+        if self.env_key == "develop" and self.flag_vars.get("NOTIFICATIONS_LIVE", tk.BooleanVar()).get():
+            parts.append("⚠ NOTIFICATIONS_LIVE=ON en STAGING: correos REALES a usuarios reales.")
+        if self.app.git_ctx.is_dirty:
+            parts.append(f"⚠ Working tree con {self.app.git_ctx.dirty_count} cambio(s) sin commit.")
+        self.warn_var.set("\n".join(parts))
 
     def _collect_env_vars(self) -> dict[str, str]:
         """Arma el set completo de env vars a inyectar (espejo de deploy.sh)."""
@@ -781,9 +1050,16 @@ class EnvTab:
     def _dry_run(self):
         missing = self._missing_required()
         build_cmd, deploy_cmd, ev = self._build_commands()
+        policy = self._current_policy()
+        summary = build_deploy_summary(
+            self.env_key, self.service, self.tag, self.app.git_ctx, policy,
+            ev.get("NOTIFICATIONS_LIVE") == "true",
+        )
         self.app._append("\n" + "═" * 70 + "\n")
         self.app._append(f"DRY-RUN · {ENVIRONMENTS[self.env_key]['label']}  (NO se despliega)\n")
         self.app._append("═" * 70 + "\n")
+        self.app._append(summary + "\n")
+        self.app._append(f"\nPolítica de rama: {policy.level.upper()}\n")
         if missing:
             self.app._append("✗ Faltan valores obligatorios: " + ", ".join(missing) + "\n")
         self.app._append("\n[1/3] BUILD:\n  " + " ".join(build_cmd) + "\n")
@@ -794,8 +1070,8 @@ class EnvTab:
             shown = mask(v) if ("SECRET" in k or "PRIVATE" in k or "DATABASE_URL" in k) else v
             self.app._append(f"  {k}: {shown}\n")
         self.app._append("\n[3/3] Smoke test del landing tras el deploy.\n")
-        if self.env_key == "develop" and ev.get("NOTIFICATIONS_LIVE") == "true":
-            self.app._append("⚠ NOTIFICATIONS_LIVE=true en staging → correos reales.\n")
+        if policy.level == "block":
+            self.app._append("⛔ Este deploy estaría BLOQUEADO por política de rama.\n")
         self.app.set_status("Dry-run mostrado (no se desplegó).")
 
     def _write_env_yaml(self, ev: dict[str, str]) -> str:
@@ -816,20 +1092,35 @@ class EnvTab:
             messagebox.showerror("Faltan valores",
                                  "Completa en .env.local (o en el formulario):\n- " + "\n- ".join(missing))
             return
-        # Confirmación según ambiente.
+
+        policy = self._current_policy()
+        if policy.level == "block":
+            messagebox.showerror(
+                "Deploy bloqueado",
+                "\n".join(policy.messages) or "Política de rama no permite este deploy.",
+            )
+            self.app._append("⛔ Deploy cancelado por política de rama.\n")
+            return
+
+        ev_preview = self._collect_env_vars()
+        summary = build_deploy_summary(
+            self.env_key, self.service, self.tag, self.app.git_ctx, policy,
+            ev_preview.get("NOTIFICATIONS_LIVE") == "true",
+        )
+
         if self.env_key == "production":
-            ans = _ask_typed(self.app.root, "Desplegar a PRODUCCIÓN",
-                             "Vas a desplegar a PRODUCCIÓN (usuarios reales).\n"
-                             "Escribe SI (mayúsculas) para continuar:")
+            prompt = (
+                f"{summary}\n\n"
+                "Vas a desplegar a PRODUCCIÓN (usuarios reales).\n"
+                "Escribe SI (mayúsculas) para continuar:"
+            )
+            ans = _ask_typed(self.app.root, "Desplegar a PRODUCCIÓN", prompt)
             if ans != "SI":
                 self.app._append("Deploy a producción cancelado.\n")
                 return
         else:
-            warn = ""
-            if self.flag_vars["NOTIFICATIONS_LIVE"].get():
-                warn = "\n\n⚠ NOTIFICATIONS_LIVE=ON → correos REALES en staging."
-            if not messagebox.askyesno("Desplegar a staging",
-                                       f"¿Desplegar a {self.service}?{warn}"):
+            if not messagebox.askyesno("Desplegar a staging", summary + "\n\n¿Continuar?"):
+                self.app._append("Deploy a staging cancelado.\n")
                 return
 
         build_cmd, deploy_cmd, ev = self._build_commands()
