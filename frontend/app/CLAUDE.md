@@ -10,8 +10,8 @@
 - `dashboard/cases/new/page.tsx` — Wizard de creación; pasa `serviceType` a `createClinicalCaseAction`
 - `dashboard/kanban/` — Vista kanban de casos
 - `dashboard/marketplace/` — Marketplace (técnicos)
-- `dashboard/invitations/` — Listado y detalle de invitaciones para técnicos
-- `dashboard/invitations/[invitationId]/` — Detalle invitación
+- `dashboard/invitations/` — Listado de **asignaciones** pendientes para técnicos (`case_assignment` status `pending`)
+- `dashboard/invitations/[invitationId]/` — Detalle de asignación
 - `dashboard/profile/` — Perfil y matriz de habilidades
 - `dashboard/finance/` — Finanzas (dentista)
 - `dashboard/bids/` — Ofertas/pujas (ruta existente, pendiente de documentación detallada)
@@ -28,7 +28,7 @@
 
 ## API routes
 - `api/auth/[...nextauth]/` — NextAuth 5.
-- `api/cron/evaluate-quotes/` — `GET`. Expira invitaciones vencidas y dispara `checkAndExpireInvitationsAction` (que reevalúa cotizaciones del caso). Protegido por header `Authorization: Bearer ${CRON_SECRET}` cuando `CRON_SECRET` está seteada. Pensado para Cloud Scheduler cada 5 min. NO invocar desde UI.
+- `api/cron/evaluate-quotes/` — `GET`. **Legacy** — expira invitaciones vencidas y dispara `checkAndExpireInvitationsAction` (solo casos históricos con cotizaciones). Protegido por header `Authorization: Bearer ${CRON_SECRET}`. Cloud Scheduler cada 5 min. NO invocar desde UI.
 - `api/cron/process-availability/` — `POST` (y `GET` para pruebas). v5.0. Cada hora corre dos tareas: `processAvailabilityMaintenanceAction` (expira no-respuestas fuera de ventana rolling, auto-OFF preventivo por inactividad > `inactivityAutoOffDays`, recordatorio > `inactivityReminderDays`) y `processDentistReviewDeadlinesAction` (escalación del countdown de revisión del dentista: recordatorio ≤25% + aviso al vencer, sin auto-acción). Inerte con `AVAILABILITY_MODEL_ENABLED` off. Mismo header `CRON_SECRET`.
 - `api/cron/process-pool-queue/` — `POST` (y `GET`). v5.0. Cada **2 min** (recomendado): `processPendingPoolReevaluationAction` (asigna si hay elegibles) + `processPendingPoolCheckInAction` (check-in al dentista al 50% del TTL) + `processPendingPoolExpirationAction` (re-encola o falla a `sin_cotizaciones_fallo`). Local: `LOCAL_POOL_CRON_INTERVAL_MS` (default 120000) en `lib/localCron.ts`. Mismo header `CRON_SECRET`.
 - `api/telemetry/` — `POST`. Endpoint interno de logs cliente (errores / warns / info). Aplica: validación de Origin/Referer + `Sec-Fetch-Site` contra `TELEMETRY_ALLOWED_ORIGINS`, rate limit por IP (`TELEMETRY_RATE_LIMIT_PER_MINUTE`), schema strict (`TelemetryPayload`), límite de tamaño (`MAX_BODY_CHARS=16000`), redacción server-side de emails / bearer tokens / claves. Firma HMAC opcional para integraciones S2S (`TELEMETRY_INGEST_TOKEN` + `X-Telemetry-Timestamp` + `X-Telemetry-Signature`). Cliente publica vía `NEXT_PUBLIC_LOG_ENDPOINT` (default `/api/telemetry`).
@@ -44,9 +44,9 @@ Esta es la página más compleja del sistema. Puntos clave:
 - `uchPresentationRole` — fuerza tabla A (dentista) o B (técnico) en el UCH cuando el admin es a la vez actor y viewer; se deriva de si el admin es el `doctorId` o `assignedTechnicianId` del caso.
 - **UCH montado pero oculto**: `uchPanelMounted` se pone a `true` la primera vez que se abre el hub y **nunca vuelve a false** mientras el id del caso no cambie. Esto evita desmontar el componente y perder el estado del countdown.
 - **Animación**: `framer-motion` anima la entrada/salida del panel; el desmontaje real solo ocurre al cambiar de caso.
-- **Countdown propuesta**: `proposalDeadlineMs` + `serverClockAnchor` se pasan al UCH. El countdown solo aparece en el header del UCH (no en el header de la página).
+- **Countdown aceptación asignación:** `proposalDeadlineMs` + `serverClockAnchor` se pasan al UCH. HMS en cabecera UCH (técnico). Legacy: countdown comparativo en `propuestaLista`.
 - **Ficha**: botones de gestión vía `CaseDetailManagementBar` + reglas en `lib/cases/caseDetailActions.ts`.
-- **Badge de dirección del dentista** (v5.8, tres niveles): en casos con `needsFabrication=true`, en el header junto al ID (`DF-XXXX`). Niveles: **dirección completa** (`País · Región · Comuna · Calle Número · Of. X`) para admin, dentista dueño y técnico **ganador** (`assignedTechnicianId === viewer`); **solo ubicación gruesa** (`País · Región · Comuna`) para cualquier otro técnico **invitado** al caso (cotizando/perdedor), para cotizar el traslado sin filtrar la dirección fina. Usa `getCaseDetails.doctor` (join con 6 columnas) y resuelve códigos con `SUPPORTED_COUNTRIES` / `REGIONS_BY_COUNTRY` de `lib/constants/addressData.ts`. **Gate en dos capas**: el servidor (`getCaseDetails` → `getDoctorAddressDisclosure` en `caseListVisibility.ts`) anula calle/número/oficina en `coarse` y los 6 campos en `none`; el cliente solo refuerza el render (el armado filtra campos vacíos, así un no-ganador nunca ve calle/número/oficina). Sin invitación, sin fabricación o sin dirección registrada → no se renderiza.
+- **Badge de dirección del dentista** (v5.8, legacy fabricación): en casos con `needsFabrication=true`. **Dirección completa** para admin, dentista dueño y técnico ganador; **ubicación gruesa** para otro técnico con asignación al caso. Gate en `getDoctorAddressDisclosure` (`caseListVisibility.ts`). En v2 (`solo_diseno`) el badge no aplica.
 
 ## Convenciones
 - Área dashboard: guard de sesión/onboarding en `dashboard/layout.tsx` (Client Component con `useAuth()`).

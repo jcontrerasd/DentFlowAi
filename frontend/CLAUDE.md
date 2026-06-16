@@ -47,7 +47,7 @@ text-teal-300 hover:text-teal-200 hover:underline underline-offset-2
 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/40 rounded-sm
 ```
 
-**Receta C — Fila de lista / item de menú** (timeline UCH, items invitación, filas tabla):
+**Receta C — Fila de lista / item de menú** (timeline UCH, items de asignación, filas tabla):
 ```
 transition-colors duration-150
 hover:bg-white/[0.04]
@@ -62,11 +62,9 @@ Reglas:
 - Si el fondo del componente ya es claro, usar `hover:bg-white/10` o cambiar el borde en lugar del fondo.
 
 ## Wizard de creación de casos (`app/dashboard/cases/new`)
-- `CaseCreationWizard.tsx` ofrece 3 tipos de servicio (radio): **Solo diseño**, **Solo fabricación**, **Diseño + Fabricación**.
-- El paso 4 (archivos) cambia según `serviceType`:
-  - `solo_diseno` / `integral` → tres slots de scans (`scan_superior`, `scan_inferior`, `scan_bite`).
-  - `solo_fabricacion` → **un único slot** con el archivo de diseño (STL/PLY/OBJ), persistido con `category: 'design_upload'` y `subType: 'dentist_design'`.
-- `app/dashboard/cases/new/page.tsx` envía `serviceType` al `createClinicalCaseAction` y mantiene `needsFabrication` por compatibilidad.
+- `CaseCreationWizard.tsx` — producto activo: **solo diseño** fijo (`SERVICE_TYPES.SOLO_DISENO`). Sin selector de 3 tipos (legacy en schema).
+- Paso de archivos: tres slots de scans (`superior`, `inferior`, `oclusal`). Campo `replacesMissingTeeth` (pónticos Sí/No).
+- `app/dashboard/cases/new/page.tsx` envía `serviceType: 'solo_diseno'` al `createClinicalCaseAction`.
 - Las listas de **material**, **color VITA**, **tipo de restauración** y **urgencia** se cargan vía server actions (`listVitaShadesAction`, etc.) en `lib/db/actions/catalogs.ts`. El form envía `code` opaco para material/restoration/shade y **`label`** para urgency (la lógica de negocio se compara contra labels estándar como `'Alta'`). `resolveCatalogCodesToIds` resuelve a id antes de persistir.
 - **No hay texto libre "Otro"**: si falta una opción, admin la agrega en `/dashboard/admin/catalogos`.
 
@@ -75,7 +73,7 @@ Reglas:
 - Punto de aviso ámbar (Nivel 2) / rojo (Nivel 3). Click → popover con `GlobalAvailabilitySwitch` + `ResponseStatusStepper` condensado + link al panel.
 - Panel completo en `/dashboard/profile/availability` (`AvailabilityPanel`): switch global, columnas CAD/CAM con **7 categorías** (`WORK_CATEGORIES` v5.13), historial de respuesta. Padre OFF deshabilita hijos visualmente pero **preserva** sus valores.
 - Wizard / ficha borrador: campo `replacesMissingTeeth` (pónticos), preview de clasificación (`resolveScenario`), `reclassifyCaseDraftAction` al editar piezas/restauración.
-- Toggle del switch global: OFF con invitaciones pendientes → `BulkRejectDialog` (mantener / rechazar todas); ON desde Nivel 3 → `ReactivationModal` (informativo, no bloqueante). Orquestado por `GlobalAvailabilitySwitch`.
+- Toggle del switch global: OFF con asignaciones pendientes → `BulkRejectDialog` (mantener / rechazar todas); ON desde Nivel 3 → `ReactivationModal` (informativo, no bloqueante). Orquestado por `GlobalAvailabilitySwitch`.
 - **Fuente de verdad única + sincronización legacy**: el switch v5.0 (`technician_availability.level_global`) y el toggle legacy del perfil (`user.is_available`) se **espejan en la capa de escritura** para que nunca diverjan entre superficies (badge del header · panel `/availability` · perfil) ni entre los dos flags independientes (`AVAILABILITY_MODEL_ENABLED` lee `level_global`; con ese flag off el filtro Fauchard legacy lee `user.is_available`). `updateAvailabilityLevelAction` (target `global`) también escribe `user.is_available`; `toggleAvailabilityAction` también escribe `technician_availability.level_global` (best-effort, solo si la fila existe). En el perfil, `components/profile/AvailabilityToggle.tsx` consulta `getMyAvailabilityStatusAction()` y, si la UI v5.0 está habilitada, renderiza el `GlobalAvailabilitySwitch` con estado en vivo (mismo control que el badge) en lugar del toggle legacy; con el flag off cae al toggle legacy (`user.is_available`).
 
 ## Tema (claro/oscuro/sistema)

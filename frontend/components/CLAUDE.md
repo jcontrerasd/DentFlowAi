@@ -4,7 +4,7 @@
 - `cases/` — UnifiedCaseHub, CaseWorkflowStepper, CaseCreationWizard, KanbanBoard, AcceptedProposalSummary, CaseDetailManagementBar, OfferConditionsBlock, **RepublicarModal** + **PendingPoolBanner** + **CheckInDentistaModal** (v5.0, cola pendiente_pool / republicar; gated por el rollout de disponibilidad)
 - `cases/uch/` — Subcomponentes del UCH (ver sección UCH abajo)
 - `profile/` — SkillMatrixForm (matriz habilidades 0-7 por tipo de trabajo), AvailabilityToggle (disponibilidad en el perfil: **flag-aware** — con la UI v5.0 habilitada renderiza el `GlobalAvailabilitySwitch` v5.0 con estado en vivo, compartiendo fuente de verdad con el badge del header; con el flag off cae al toggle legacy sobre `user.is_available`)
-- `invitations/` — InvitationCard, QuoteFormDrawer
+- `invitations/` — InvitationCard (lista asignaciones pendientes del técnico)
 - `admin/` — **Configurador Fauchard en 3 espacios** (nav pill en `TabClient`: Parámetros · Categorías · Historial). **Observabilidad** en `/dashboard/admin/observability`. Solo **Parámetros** usa borrador + laboratorio: **FauchardDraftContext** (6 factores α Q/P/E/B/L/N + asignación + plazos/sanción; sin legacy `nInvited`/`tProposalHours`), **GlobalSaveBar**, **FauchardLabPanel**, **FauchardWeightsPanel**, **FauchardFiltersPanel**, **PlazosYSancionesPanel** (gated). **LeagueConfigPanel** (keys `l*`, motivo obligatorio) e **Historial** (`ConfigChangeLog`, agrupa por versión). **Simulador** (`SimulatorWorkspace` + carpeta `simulator/` en `/simulate`): funnel workspace con stepper (Caso → Clasificación → Filtros → Ranking → Asignación), precio catálogo + escenario virtual; `simulateAssignmentAction` → ranking Q/P/E/B/L/N, `pricePreview`, cadena coloreada. **Monitor** (`/monitor`): `AssignmentDistributionChart`, `AssignmentMetricsPanel`, métricas sobre `case_assignment`. Otros: TechnicianRankingTable, ObservabilityPanel, etc.
 - `availability/` (v5.0) — AvailabilityBadge (header), AvailabilityPanel (`/dashboard/profile/availability`), GlobalAvailabilitySwitch (orquesta toggle + diálogos in-flight; al cambiar el nivel global espeja a `user.is_available` vía `updateAvailabilityLevelAction`), BulkRejectDialog, ReactivationModal, ResponseStatusStepper (3 nodos), ResponseHistoryView, **RolloutBanner** (Fase 7: aviso in-app dismissible con cookie `availability_banner_dismissed`, en `dashboard/layout` para técnicos). Gated por `AVAILABILITY_UI_TECNICO_ENABLED` (server-side vía `getMyAvailabilityStatusAction.enabled`)
 - `theme/` — ThemeProvider, ThemeContext, ThemeToggleButton (modo claro/oscuro/sistema; tokens en `app/theme.css`)
@@ -19,7 +19,12 @@
 
 ## CaseWorkflowStepper
 Renderiza la línea de tiempo de estados del caso:
-- `BASE_STEPS`: borrador → enEvaluacion → propuestaLista → aceptadaPendienteInicio → enEjecucion → enRevision → disenoAprobado
+
+**v2 activo (`solo_diseno`):**
+- `BASE_STEPS`: borrador → enEvaluacion → aceptadaPendienteInicio → enEjecucion → enRevision → completado (sin `propuestaLista`)
+
+**Legacy (`integral` / `solo_fabricacion`):**
+- Incluye `propuestaLista` y pasos de fabricación
 - `FABRICATION_STEPS` (solo `isIntegral || isSoloFab`): enFabricacion → enviado
 - `FINAL_STEP`: completado
 - Terminal: rechazado | cerrado (aparece appended al final si `isTerminal`)
@@ -40,26 +45,27 @@ Renderiza la línea de tiempo de estados del caso:
 ## CaseDetailManagementBar
 - Renderiza iconos Grabar / Publicar / Editar / Eliminar / **Republicar** / Archivar / Restaurar / Crear copia.
 - Estados visibles/habilitados vienen de `getCaseDetailActionState()` en `lib/cases/caseDetailActions.ts`.
-- **Republicar** (v5.0): visible solo cuando `status === 'sin_cotizaciones_fallo'` (dentista/admin). El icono abre `RepublicarModal`; la espera en `pendiente_pool` se muestra aparte con `PendingPoolBanner` + `CheckInDentistaModal` en la página del caso.
+- **Republicar** (v5.0): visible cuando `status === 'sin_asignacion_fallo'` o `sin_cotizaciones_fallo` (legacy). El icono abre `RepublicarModal`; la espera en `pendiente_pool` se muestra aparte con `PendingPoolBanner` + `CheckInDentistaModal` en la página del caso.
 
-## UchFauchardActionsPanel
-- `serviceType === 'integral'`: formulario split (Diseño + Fabricación) + total read-only.
-- `solo_diseno` / `solo_fabricacion`: un precio + un plazo (`kind: 'flat'`).
-- Sheet inferior de confirmación legal muestra desglose si la cotización es split.
-- En `aceptadaPendienteInicio`, botón "Iniciar fabricación" cuando es `solo_fabricacion`.
-- **Rechazar invitación** (v5.0): mientras `myInvitation.status === 'pending'` && `enEvaluacion`, si `REJECTION_INDIVIDUAL_ENABLED` está on (consultado vía `getRejectionUiEnabledAction`), muestra botón que abre `UchRejectInvitationDialog`. Solo el técnico invitado lo ve.
+## UchFauchardActionsPanel (v2)
+- `enEvaluacion` + asignación `pending`: panel **Aceptar / Rechazar asignación** con precio y plazo de catálogo (`acceptAssignmentAction`).
+- Tras aceptación: resumen del acuerdo; en `aceptadaPendienteInicio`, botón "Iniciar trabajo".
+- **Rechazar asignación** (v5.0): mientras `myInvitation.status === 'pending'` && `enEvaluacion`, si `REJECTION_INDIVIDUAL_ENABLED` está on, muestra botón que abre `UchRejectInvitationDialog`.
+
+### Legacy (integral / solo_fabricacion)
+- Formulario split o flat de cotización; sheet confirmación legal — solo casos históricos.
 
 ## UnifiedCaseHub (UCH) — componente más complejo
 Props clave:
 - `actingAsDentista` / `actingAsTecnico` — controlan qué UI/tablas se muestran.
 - `uchPresentationRole` — fuerza tabla A/B cuando admin tiene ambos flags.
 - `currentUser` — usuario real o simulado (para `resolveUchThreadLane`).
-- `proposalDeadlineMs` + `serverClockAnchor` — countdown del header.
+- `proposalDeadlineMs` + `serverClockAnchor` — countdown de aceptación de asignación en header (legacy: comparativo en `propuestaLista`).
 - `clinicalCase` — estado, fechas, laboratorio asignado, etc.
-- `myInvitation` — invitación del técnico viewer (filtra eventos por invitationId).
+- `myInvitation` — asignación del técnico viewer (filtra eventos por invitationId).
 
 Lógica interna:
-- `roleScopedEvents`: filtra eventos por rol y estado de invitación.
+- `roleScopedEvents`: filtra eventos por rol y estado de asignación.
 - `presentingAsDentista`: activa `splitCasoPublicadoForDentista()` para `CASO_PUBLICADO`.
 - `filteredEvents`: aplica filtro de fase (`todos` / `propuesta` / `diseno` / `produccion`) + split + orden.
 - `timelineRows`: mezcla eventos con filas de acción (`buildUchTimelineRows`).
@@ -69,12 +75,12 @@ Lógica interna:
 | Archivo | Responsabilidad |
 |---------|----------------|
 | `UchEventBubble.tsx` | Burbuja individual; llama `resolveUchThreadLane` para carril y voz |
-| `UchFauchardActionsPanel.tsx` | Cotizar, iniciar trabajo, acciones Fauchard |
-| `UchRejectInvitationDialog.tsx` | Rechazo individual de una invitación pending por el técnico (v5.0). Selector poblado de `invitation_rejection_reason`; "Otro" exige comentario. Lanzado desde `UchFauchardActionsPanel` solo si `getRejectionUiEnabledAction().enabled` (flag `REJECTION_INDIVIDUAL_ENABLED`, server-only surfaced al cliente). No cuenta como no-respuesta; dispara reemplazo si el modelo está on |
+| `UchFauchardActionsPanel.tsx` | Aceptar/rechazar asignación, iniciar trabajo |
+| `UchRejectInvitationDialog.tsx` | Rechazo individual de una asignación pending por el técnico (v5.0). Selector poblado de `invitation_rejection_reason`; "Otro" exige comentario. Dispara reemplazo si el modelo está on |
 | `UchDeliveryPanel.tsx` | Entrega de diseño/revisión (técnico) |
 | `UchDentistReviewPanel.tsx` | Revisión/aprobación del dentista |
-| `UchDealSummary.tsx` | Resumen del acuerdo aceptado (precio, desglose, plazo, entrega). La dirección de envío del dentista se muestra en el header de la ficha del caso (badge junto al ID), no aquí. |
-| `UchQuoteBreakdown.tsx` | Desglose diseño/fabricación en UI de cotización |
+| `UchDealSummary.tsx` | Resumen del acuerdo aceptado (precio/plazo de catálogo) |
+| `UchQuoteBreakdown.tsx` | **Legacy** — desglose diseño/fabricación en cotizaciones integral |
 | `UchRatingPanel.tsx` | Calificación anónima del dentista al laboratorio (`dimension: 'design' \| 'fabrication'`, escala `RatingScale`) vía `submitUserRatingAction`. Alimenta el componente Q del score Fauchard. Renderizado desde `UnifiedCaseHub` al cierre del caso |
 | `buildUchTimelineRows.ts` | Combina eventos y filas de acción ordenadas por timestamp |
 | `uchTimelineTypes.ts` | Tipos: `UchTimelineRow`, `UchCaseEventLite`, `UchActionRowId` |

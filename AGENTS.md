@@ -2,7 +2,7 @@
 
 Puente rápido para **Cursor** y otros agentes de código. La guía canónica del dominio, Fauchard y UCH está en [CLAUDE.md](CLAUDE.md).
 
-> **Disponibilidad del técnico (v5.0, flag `AVAILABILITY_MODEL_ENABLED`)**: el técnico declara disponibilidad jerárquica en 3 niveles (global · CAD/CAM · **7 categorías canónicas**: Coronas, Inlays/Onlays, Carillas, Puentes, Full Arch, Prótesis Removible, Guías Quirúrgicas). Fauchard filtra por regla AND triple + sanción rolling 14d. El técnico puede **rechazar una invitación individualmente** desde el UCH (flag `REJECTION_INDIVIDUAL_ENABLED`; no cuenta como no-respuesta, dispara reemplazo automático) — distinto del **rechazo masivo** al pausar su switch global. Detalle en [CLAUDE.md](CLAUDE.md) → Motor Fauchard.
+> **Disponibilidad del técnico (v5.0, flag `AVAILABILITY_MODEL_ENABLED`)**: el técnico declara disponibilidad jerárquica en 3 niveles (global · CAD/CAM · **7 categorías canónicas**: Coronas, Inlays/Onlays, Carillas, Puentes, Full Arch, Prótesis Removible, Guías Quirúrgicas). Fauchard filtra por regla AND triple + sanción rolling 14d. El técnico puede **rechazar una asignación individualmente** desde el UCH (flag `REJECTION_INDIVIDUAL_ENABLED`; no cuenta como no-respuesta, dispara reemplazo automático) — distinto del **rechazo masivo** al pausar su switch global. Detalle en [CLAUDE.md](CLAUDE.md) → Motor Fauchard.
 
 ## Orden de lectura
 

@@ -26,33 +26,44 @@ Perfil del usuario. Campos de ubicación (v5.7, todos `TEXT` nullable):
 
 Otros campos relevantes: `role`, `is_available`, `consecutive_no_response`, `onboarding_step`, `league_level`, `league_transition_started_at`, `league_demotion_watch_since`.
 
-`getUserProfileDirect` (`actions/user.ts`) selecciona todos los campos de dirección para el perfil del usuario autenticado. `getCaseDetails` (`actions/cases.ts`) incluye los 6 campos del doctor en el join `doctor` para el badge de dirección y aplica el gate `getDoctorAddressDisclosure` (`caseListVisibility.ts`, v5.8), que devuelve `full | coarse | none`: **full** (técnico ganador asignado, admin, dentista dueño) recibe los 6 campos; **coarse** (cualquier otro técnico invitado al caso cuando `needsFabrication`) recibe solo país/región/comuna para cotizar el traslado y se anulan calle/número/oficina; **none** (resto) recibe los 6 en `null`. Para `coarse` el server consulta si el viewer tiene invitación al caso. Gate autoritativo en servidor; el cliente solo refuerza el render.
+`getUserProfileDirect` (`actions/user.ts`) selecciona todos los campos de dirección para el perfil del usuario autenticado. `getCaseDetails` (`actions/cases.ts`) incluye los 6 campos del doctor en el join `doctor` para el badge de dirección y aplica el gate `getDoctorAddressDisclosure` (`caseListVisibility.ts`, v5.8), que devuelve `full | coarse | none`: **full** (técnico ganador asignado, admin, dentista dueño) recibe los 6 campos; **coarse** (cualquier otro técnico con asignación al caso cuando `needsFabrication`, legacy fabricación) recibe solo país/región/comuna; **none** (resto) recibe los 6 en `null`. Para `coarse` el server consulta si el viewer tiene asignación al caso. Gate autoritativo en servidor; el cliente solo refuerza el render.
 
 ### `clinicalCase`
-Estado del caso: `borrador → enEvaluacion → propuestaLista → aceptadaPendienteInicio → enEjecucion → enRevision [→ cambiosEnProceso] → disenoAprobado [→ enFabricacion → enviado] → completado`
+**Flujo v2 activo (`solo_diseno`):** `borrador → enEvaluacion → aceptadaPendienteInicio → enEjecucion → enRevision [→ cambiosEnProceso] → completado`
 
-Para `solo_fabricacion` el flujo salta `enEjecucion`/`enRevision`/`disenoAprobado` y va directo de `aceptadaPendienteInicio` → `enFabricacion`.
+Durante `enEvaluacion`, `internalStatus` puede ser `asignacionPendiente` (técnico debe aceptar) o `pendiente_pool` (sin elegibles). El caso **no** pasa por `propuestaLista` en flujos nuevos.
+
+**Legacy:** `propuestaLista` (comparativo), `disenoAprobado`, `enFabricacion`, `enviado` — solo casos históricos con `integral`/`solo_fabricacion`.
 
 Campos clave:
 - `serviceType`: `solo_diseno` | `solo_fabricacion` | `integral` — fuente de verdad del tipo de servicio
-- `needsFabrication`: boolean (`true` para `integral` y `solo_fabricacion`; mantenido por retrocompatibilidad con casos legacy)
-- `proposedPrice`, `proposedDeliveryDays`: oferta aceptada (totales canónicos del único técnico ganador)
-- `proposedDeliveryDays`: días desde publicación hasta `desiredDeliveryAt` (seteado en `acceptAssignmentAction`)
+- `needsFabrication`: boolean (`true` para `integral` y `solo_fabricacion`; mantenido por retrocompatibilidad)
+- `listPriceCost`, `listPriceSale`, `listPriceFeePercent`, `listPriceRuleId`: precio de catálogo anclado al publicar
+- `proposedPrice`, `proposedDeliveryDays`: acuerdo final (v2: desde catálogo en `acceptAssignmentAction`; legacy: cotización)
 - `workDeadline`: fecha de entrega comprometida = `desiredDeliveryAt` (fallback: `publishedAt + deadlineDays`). Helper: `lib/cases/workDeadline.ts`
 - `fauchardConfigId`: config Fauchard anclada al publicar (copy-on-write admin)
 - `internalStatus`: estados internos granulares para el motor (no visible al usuario)
+- `derivedWorkType`, `derivedCategory`, `replacesMissingTeeth` (v5.13): clasificación Fauchard
 
-### `caseInvitation`
-Una fila por técnico invitado por caso. Status: `pending | quoted | accepted | confirmed | rejected | expired | withdrawn`
+### `case_assignment` (v2 activo — alias Drizzle `caseInvitation`)
+Una fila por **asignación** técnico↔caso (top-1, no N invitados). Status: `pending | accepted | rejected | expired`
 
-Campos de cotización:
-- `quotedPrice`, `quotedDays`: **totales canónicos** (ordenamiento, comparativo, reporting). Para integral son suma de diseño + fabricación; para solo_diseno / solo_fabricacion son el único valor cotizado.
-- `quotedDesignPrice`, `quotedDesignDays`, `quotedFabricationPrice`, `quotedFabricationDays`: desglose **nullable**. Se persisten solo cuando `serviceType === 'integral'` (kind 'split'). Cotizaciones antiguas o de tipos flat quedan con estos campos null y la UI hace fallback al total.
+Campos v2:
+- `compensation`: precio al técnico (desde `listPriceCost` + fee)
+- `deadlineDays`: plazo derivado de `desiredDeliveryAt`
+- `expiresAt`: ventana para aceptar (`tQuoteMinutes`)
+- `isReplacement`: asignación de reemplazo tras rechazo
+- `rejectionReasonId`/`rejectionComment`/`rejectedAt`: rechazo individual
+- `bulkRejectionReasonId`/`bulkRejectionComment`: rechazo masivo / auto-OFF
+
+### `caseInvitation` (legacy — misma tabla física)
+La tabla `case_invitation` persiste datos históricos de cotización múltiple. Campos `quoted*` solo relevantes para casos v1:
+- `quotedPrice`, `quotedDays`: totales canónicos (legacy comparativo). Desglose `quotedDesign*`/`quotedFabrication*` solo para `integral`.
 - `techNotes`, `dentistRejectionFeedback`
 
 ### `technicianSkill`
 Habilidades del técnico por `workType`: `designLevel` y `fabricationLevel` (0–7 cada uno).
-El motor Fauchard usa estos niveles para filtrar y puntuar invitados.
+El motor Fauchard usa estos niveles para filtrar y puntuar candidatos a asignación.
 
 ### `fauchardConfig`
 Parámetros del algoritmo. **Como máximo una fila `is_active`** (índice único parcial). El admin actualiza con copy-on-write: nueva fila + desactivar la anterior. Cada `clinicalCase` puede anclar `fauchardConfigId` al publicar.
@@ -72,7 +83,7 @@ Tablas y columnas detrás del flag `AVAILABILITY_MODEL_ENABLED` (inertes con el 
 - **`clinical_case` v5.13**: `replaces_missing_teeth` (boolean, NULL legacy), `derived_work_type`, `derived_category` (poblados en `classifyCaseAction` / `reclassifyCaseDraftAction`).
 - **`technicianNoResponseEvent`** (`technician_no_response_event`) — timestamps individuales de no-respuesta para la ventana rolling. `status`: `active | expired_window | pardoned`. FK `caseInvitationId` ON DELETE SET NULL. Sustituye al modelo binario `user.consecutiveNoResponse` cuando el flag está on.
 - **`clinicalCase`** nuevas columnas: `pendingPoolCycleCount`, `pendingPoolStartedAt`, `pendingPoolCheckinSentAt` (cola `pendiente_pool` cuando Fauchard no halla elegibles) + `lastRevisionSubmittedAt` (reinicia el countdown `tDentistReviewHours` en cada entrega) + `reviewReminderSentAt`/`reviewOverdueNotifiedAt` (v5.2, idempotencia de la escalación de revisión; se reinician en cada entrega).
-- **`caseInvitation`** nuevas columnas: `rejectionReasonId`/`rejectionComment`/`rejectedAt` (rechazo individual), `bulkRejectionReasonId`/`bulkRejectionComment` (rechazo masivo / auto-OFF), `isReplacement` (invitación de reemplazo automático). FKs a catálogos con ON DELETE RESTRICT.
+- **`case_assignment`** nuevas columnas: `rejectionReasonId`/`rejectionComment`/`rejectedAt` (rechazo individual), `bulkRejectionReasonId`/`bulkRejectionComment` (rechazo masivo / auto-OFF), `isReplacement` (asignación de reemplazo automático). FKs a catálogos con ON DELETE RESTRICT.
 - **`fauchardConfig`** nuevas columnas (defaults entre paréntesis): `tDentistReviewHours` (48), `tNoEligiblePoolHours` (24), `maxPoolCycles` (2), `replacementCutoffMinutes` (10), `noResponseWindowDays` (14), `noResponseRehabilitationDays` (30), `level1Threshold`/`level2Threshold`/`level3Threshold` (1/2/3), `inactivityAutoOffDays` (30), `inactivityReminderDays` (7), `alphaNoResponse` (0.250), `changeReason` (auditoría).
 
 ### `clinicalCaseEvent`
@@ -81,7 +92,7 @@ Log de todos los eventos UCH. Campos: `userId`, `type`, `action`, `content`, `pa
 Convención de `payload`:
 - `visibleTo`: `'dentista'` | `'tecnico'` | `'ambos'` | `'sistema'` — filtra visibilidad
 - `presentationAuthor: 'fauchard'` — el receptor ve a Fauchard como emisor
-- `invitationId` — acota el evento al hilo de esa invitación (aislamiento técnico)
+- `invitationId` — acota el evento al hilo de esa asignación (aislamiento técnico; nombre de campo legacy)
 
 ### `review` (v5.3)
 Calificaciones del dentista al técnico por caso y fase. Columnas clave: `clinicalCaseId`, `reviewerId`, `revieweeId`, `rating` (1–5), `dimension` (`'design'` | `'fabrication'`), `comment` (nullable). Índice único `(clinical_case_id, reviewer_id, dimension)` — una sola reseña por caso por fase. Las calificaciones alimentan el componente Q del score Fauchard y la lógica de ascenso/descenso de ligas (motor usa `avgRating`). Acción: `submitUserRatingAction` en `cases.ts`.
@@ -120,13 +131,26 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 
 ## actions/ clave
 
+### Motor activo (v2 — asignación directa)
+
 | Archivo | Responsabilidad |
 |---------|----------------|
-| `assignment.ts` | Asignación directa: `buildEligiblePoolForScenario`, `rankCandidatesForScenario`, `simulateAssignmentAction` (precio + ranking + `chainPosition`/`retryChainDetails`), `assignCaseAction` |
-| `fauchard.ts` | Motor Fauchard: classifyCase, runFauchard, sendInvitations, evaluateQuotes; `simulateFauchardAction` delega a `simulateAssignmentAction`; `getFauchardMetricsAction` (métricas `case_assignment`) |
-| `cases.ts` | CRUD casos, publicar, archivar, clonar, fabricación/despacho/recepción, `logCaseEvent()`, `getCaseEventsAction`, `submitUserRatingAction` (calificación del dentista al técnico: `dimension: 'design' \| 'fabrication'`, escala 1–5, una reseña por caso+reviewer+dimension; actualiza `avgRating` del técnico; emite `CALIFICACION_ENVIADA`) |
-| `proposal.ts` | acceptProposal, rejectInvitationOffer, startWork, withdrawQuote, expireDentistComparativeWindow |
-| `invitations.ts` | Listado de invitaciones; archivos visibles solo si `invitation.status === confirmed` |
+| `assignment.ts` | **Motor principal:** `classifyCaseAction`, `runAssignmentAction`, `assignCaseAction`, `acceptAssignmentAction`, `rankAssignmentCandidates`, `buildEligiblePoolForScenario`, `rankCandidatesForScenario`, `simulateAssignmentAction` (precio + ranking + `chainPosition`/`retryChainDetails`) |
+| `poolQueue.ts` (v5.0) | Cola `pendiente_pool`: `enterPendingPoolAction`, `processPendingPoolReevaluationAction` (cron, asigna si hay elegibles + evento `CASO_EN_COLA`), `processPendingPoolCheckInAction` (50% TTL), `processPendingPoolExpirationAction` (re-encola o falla a `sin_asignacion_fallo`/`sin_cotizaciones_fallo`), `cancelPendingPoolAction`, `triggerPoolReevaluationOnTechnicianOnAction` |
+| `replacement.ts` (v5.0) | `tryReplaceAfterRejectAction` — asigna al siguiente del ranking tras rechazo, respetando `replacementCutoffMinutes` y `maxAssignmentAttempts`. NO se dispara por no-respuesta |
+| `rejection.ts` (v5.0) | `rejectInvitationIndividualAction` (rechazar asignación), `rejectInvitationsBulkAction`, `autoRejectOnAutoOffAction` |
+| `cases.ts` | CRUD casos, `publishCaseAction` (orquesta classify → runAssignment → assign), archivar, clonar, `logCaseEvent()`, `getCaseEventsAction`, `submitUserRatingAction` |
+| `availability.ts` (v5.0) | `computeEligibleAction` = regla **AND triple**; gated por `AVAILABILITY_MODEL_ENABLED` |
+| `noResponseEvents.ts` (v5.0) | Sanción rolling 14d |
+| `availabilityCron.ts` (v5.0/v5.1) | Cron horario disponibilidad + revisión dentista |
+| `fauchard.ts` | `getFauchardMetricsAction` (métricas `case_assignment`); `simulateFauchardAction` delega a `simulateAssignmentAction`; `runFauchardAction` solo reactivación pool legacy |
+
+### Soporte y admin
+
+| Archivo | Responsabilidad |
+|---------|----------------|
+| `proposal.ts` | `startWorkAction`, `acceptProposalAction` (legacy), `rejectInvitationOffer`, `withdrawQuote`, `expireDentistComparativeWindow` |
+| `invitations.ts` | Listado de asignaciones pendientes para técnicos; archivos visibles si `status === accepted` |
 | `skills.ts` | Matriz habilidades; lee rol desde DB (no JWT). `toggleAvailabilityAction` (toggle legacy del perfil) escribe `user.is_available` y **espeja** a `technician_availability.level_global` (best-effort, solo si la fila existe) para mantener sincronizado el switch v5.0 |
 | `files.ts` | Upload/download vía GCS signed URLs |
 | `impersonation.ts` | `getServerIdentity()` — resolver canónico de identidad |
@@ -140,9 +164,9 @@ Scripts one-time (ya aplicados): `migrate-catalogs-fk.ts`, `migrate-catalogs-opa
 | `contactGuard.ts` | CRUD de reglas (regex/keyword) para moderar campos libres. Admin UI en `/dashboard/admin/contactguard`. Las reglas las consume `lib/contactGuard/guardOrFail.ts` en server actions de cotización, despacho y notas |
 | `availability.ts` (v5.0) | Disponibilidad declarada del técnico. `computeEligibleAction` = regla **AND triple** (`levelGlobal ∧ level<cap> ∧ cat<cat><cap>`), en tiempo real. `getAvailabilityForUserAction` crea fila default (infiere CAD/CAM de skills). `updateAvailabilityLevelAction` (al cambiar el nivel `global` **espeja** a `user.is_available` para no divergir del toggle legacy), `getAllEligibleForCategoryCapacityAction`. Gated por `AVAILABILITY_MODEL_ENABLED` (lo consulta Fauchard) |
 | `noResponseEvents.ts` (v5.0) | Sanción rolling: `recordNoResponseEventAction`, `getActiveEventsInWindowAction`, `expireEventsOutsideWindowAction` (cron), `pardonEventsAction` (admin), `computeLevelForTechnicianAction` (nivel 0–3 + nextExitDate). Reemplaza `user.consecutiveNoResponse` cuando el flag está on |
-| `rejection.ts` (v5.0) | Rechazo explícito: `rejectInvitationIndividualAction` (§3.2), `rejectInvitationsBulkAction` (§3.1), `autoRejectOnAutoOffAction` (§3.2.bis). No cuenta como no-respuesta; dispara reemplazo si el flag está on |
-| `replacement.ts` (v5.0) | `tryReplaceAfterRejectAction` — invita al siguiente elegible del pool scoreado tras un rechazo, respetando cutoff temporal (`replacementCutoffMinutes`) y truncando `expiresAt` al deadline del caso. NO se dispara por no-respuesta |
-| `poolQueue.ts` (v5.0) | Cola `pendiente_pool`: `enterPendingPoolAction`, `processPendingPoolCheckInAction` (50% TTL, cron), `processPendingPoolExpirationAction` (re-encola o falla a `sin_cotizaciones_fallo`, cron), `cancelPendingPoolAction` (dentista/admin cierra el caso durante la espera), `triggerPoolReevaluationOnTechnicianOnAction` (event-driven). Importa Fauchard dinámicamente (evita ciclo) |
+| `rejection.ts` (v5.0) | *(ver Motor activo arriba)* |
+| `replacement.ts` (v5.0) | *(ver Motor activo arriba)* |
+| `poolQueue.ts` (v5.0) | *(ver Motor activo arriba)* |
 | `availabilityCron.ts` (v5.0/v5.1) | `processAvailabilityMaintenanceAction` — invocado por `/api/cron/process-availability` (cada hora). Expira no-respuestas fuera de ventana, auto-OFF preventivo (inactivo > `inactivityAutoOffDays`) y recordatorio (> `inactivityReminderDays`, idempotente vía `inactivity_reminder_sent_at`). Inerte con el flag off |
 | `dentistReviewCron.ts` (v5.0/v5.2) | `processDentistReviewDeadlinesAction` — invocado por el mismo cron horario. Escala el countdown de revisión del dentista: recordatorio cuando queda ≤25% del plazo + aviso al vencer, **sin auto-acción**. Idempotente por entrega (`review_reminder_sent_at`/`review_overdue_notified_at`). Inerte con el flag off |
 | `league.ts` (v5.5) | Motor de ligas (Fase 2): ascenso (triple criterio + ventana de transición penalizada), descenso (rating bajo sostenido), consolidación. Escribe estado en `user` + auditoría en `league_change_event`. `getLeagueEngineEnabledAction` expone el flag. Gated por `LEAGUE_ENGINE_ENABLED` |
@@ -166,23 +190,27 @@ Los eventos de calificación (`action === 'CALIFICACION_ENVIADA'`) tienen visibi
 - El dentista autor y admin siempre lo ven (ramas anteriores en el filtro).
 - El campo `ratingComment` se oculta al técnico vía `sanitizeUchPayloadForViewer`.
 
-## Idempotencia crítica en Fauchard
-- `evaluateQuotesAction` / `buildProposalAction`: guard `status === EN_EVALUACION`; `buildProposal` usa `UPDATE … WHERE status = enEvaluacion` (sin re-fijar `proposalExpiresAt`).
-- `expirePendingInvitationsForCase` vs `tryEvaluateQuotesIfReady`: las **lecturas** solo expiran invitaciones; evaluación en `submitQuote`, cron y `checkAndExpireInvitationsAction`.
-- Countdown 1: `expires_at` se fija en `sendInvitationsAction` (`tQuoteMinutes`); dedupe por técnico activo.
-- Countdown 2: `proposalExpiresAt` se fija una vez en `buildProposalAction` (`tProposalHours`).
-- Countdown 3 (v5.0): revisión del dentista — `tDentistReviewHours` (default 48); `clinical_case.last_revision_submitted_at` reinicia la ventana en cada entrega del técnico. Deadline wall-clock vía `getCaseReviewDeadlineAt(caseId)` (`caseDeadlines.ts`, gated), expuesto como `reviewDeadlineAt` en `getCaseDetails` y mostrado como HMS en la cabecera del UCH (dentista + técnico). **Sin auto-acción** al vencer: solo marca "Respuesta vencida" + escalación de notificaciones por cron (`processDentistReviewDeadlinesAction`, idempotente vía `review_reminder_sent_at`/`review_overdue_notified_at`, columnas v5.2 que `submitRevisionAction` reinicia).
+## Idempotencia y countdowns (v2)
+- **Lecturas** (`getCaseDetails`, `listCasesByOrganization`): solo expiran asignaciones vencidas — **no** re-ejecutan motor ni resetean deadlines.
+- **Countdown 1 (aceptación):** `expires_at` se fija en `assignCaseAction` (`tQuoteMinutes`).
+- **Countdown revisión (v5.0):** `tDentistReviewHours`; `last_revision_submitted_at` reinicia la ventana en cada entrega. Wall-clock vía `getCaseReviewDeadlineAt(caseId)`.
 - Ver `frontend/lib/db/caseDeadlines.ts`.
 
-## Modelo de disponibilidad (v5.0) en Fauchard — gated por `AVAILABILITY_MODEL_ENABLED`
-- **Elegibilidad**: antes del scoring, `runFauchardAction` aplica el AND triple (`computeEligibleAction(tech, categoría, capacidad)`) en cada `runFauchard` (sin caché del estado efectivo). La categoría se deriva del `workType` (`WORK_TYPE_TO_CATEGORY`); las capacidades del `serviceType` (solo_diseno→CAD, solo_fabricacion→CAM, integral→CAD∧CAM). Con el flag **off**, se mantiene el filtro legacy `consecutiveNoResponse >= 3`.
-- **Score (activo)**: `computeAssignmentScore` en `lib/fauchard/assignmentScore.ts` — Q/P/E/L/N con pesos de `fauchard_config` vía `parseAssignmentWeights`. `RENORMALIZED_ALPHAS` es referencia histórica (@deprecated).
-- **0 elegibles**: con el modelo on **y `POOL_PENDIENTE_ENABLED` on**, el caso entra a la cola `pendiente_pool` (`enterPendingPoolAction`) en vez de fallar; `runFauchardAction` retorna `{ pooled: true }` y el caller (publish/republish) deja el caso en `enEvaluacion`. `POOL_PENDIENTE_ENABLED` es el kill-switch secundario: apagado, Fauchard ignora la cola y falla directo a `sin_cotizaciones_fallo` aunque el modelo esté on.
-- **Sanción**: `penalizeNoResponseAction(techId, invitationId)` — con el flag on registra un evento rolling, recalcula nivel y aplica Nivel 2 (email) / Nivel 3 (auto-OFF de `level_global` + `autoRejectOnAutoOffAction` + email). Con el flag off, mantiene `consecutiveNoResponse` + suspensión a las 3.
-- Helpers expuestos para reemplazo/cola: `selectReplacementCandidateAction`, `isTechnicianEligibleForCaseAction`, `reevaluatePendingPoolCaseAction`.
+### Legacy — comparativo (solo casos v1 en BD)
+- `evaluateQuotesAction` / `buildProposalAction`: guard `status === EN_EVALUACION`; `proposalExpiresAt` en `propuestaLista`.
+- Cron `/api/cron/evaluate-quotes` (cada 5 min) para casos históricos con cotizaciones.
 
-## Fauchard asignación directa (activo)
-- `classifyCaseAction` + `runAssignmentAction` / `rankAssignmentCandidates`: filtro `designLevel` y score Q/P/E/L/N (`assignmentScore.ts`). Simulador comparte `buildEligiblePoolForScenario` con liga strict-first.
+## Modelo de disponibilidad (v5.0) en Fauchard — gated por `AVAILABILITY_MODEL_ENABLED`
+- **Elegibilidad**: antes del scoring, `runAssignmentAction` aplica el AND triple (`computeEligibleAction(tech, categoría, capacidad)`) en cada corrida (sin caché). La categoría se deriva del `workType` (`WORK_TYPE_TO_CATEGORY`); capacidad CAD para `solo_diseno`. Con el flag **off**, filtro legacy `consecutiveNoResponse >= 3`.
+- **Score (activo)**: `computeAssignmentScore` en `lib/fauchard/assignmentScore.ts` — Q/P/E/B/L/N con pesos de `fauchard_config` vía `parseAssignmentWeights`.
+- **0 elegibles**: con el modelo on **y `POOL_PENDIENTE_ENABLED` on**, el caso entra a `pendiente_pool` (`enterPendingPoolAction`); `runAssignmentAction` retorna `{ pooled: true }`. Con pool off → `sin_asignacion_fallo`.
+- **Sanción**: `penalizeNoResponseAction` — evento rolling, niveles 1/2/3. Con flag off, mantiene `consecutiveNoResponse`.
+- Helpers: `selectReplacementCandidateAction`, `isTechnicianEligibleForCaseAction`, `reevaluatePendingPoolCaseAction`.
+
+## Legacy (appendix — no usar en flujos nuevos)
+- **Cotización múltiple:** `runFauchardAction`, `sendInvitationsAction`, `submitQuoteAction`, `evaluateQuotesAction`, `buildProposalAction`, `acceptProposalAction`, `checkAndExpireInvitationsAction`.
+- **Fabricación:** `transitionToManufacturingAction`, `registerDispatchAction`, `confirmReceptionAction` (`integral`/`solo_fabricacion`).
+- Status `quoted` en `case_invitation` para datos históricos.
 
 ## submitQuoteAction (legacy)
 - Firma nueva: `submitQuoteAction(invitationId, input: QuoteInput)` con `kind: 'flat' | 'split'`.

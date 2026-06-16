@@ -21,7 +21,7 @@ alwaysApply: false
 - El UCH **no** es chat libre: flujo guiado (stepper + eventos + acciones embebidas en el hilo).
 - **Una acción primaria** expandida; resto colapsable en la misma lista.
 - Fauchard aparece como **voz del sistema** en el carril izquierdo cuando corresponde (`uchThreadLane`, `uchPresentation`).
-- Countdown de propuesta **solo** en header del UCH (no en página ni `ComparativeOffersPanel`).
+- Countdown de **aceptación de asignación** **solo** en header del UCH (técnico); no duplicar en ficha del caso.
 - No desmontar el UCH al cerrar panel — `uchPanelMounted`.
 - Carril: `resolveUchThreadLane()`; split `CASO_PUBLICADO`: `splitCasoPublicadoForDentista()`.
 - Stack: Next.js 15 + Drizzle + PostgreSQL + GCS (no Supabase).

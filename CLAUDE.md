@@ -40,27 +40,32 @@ scripts/               CLI Python legacy (toolkit.py — sync claims Firebase/ad
 ```
 
 ## Roles del sistema
-- `dentista` — crea casos, recibe propuestas anónimas, aprueba diseños
-- `tecnico` — recibe invitaciones, cotiza, entrega diseños/fabricaciones
+- `dentista` — crea casos, ve precio/plazo de catálogo, aprueba diseños
+- `tecnico` — recibe **asignaciones**, acepta o rechaza, entrega diseños
 - `admin` — panel Fauchard, impersonación, métricas
 
 ## Tipos de servicio (`clinicalCase.serviceType`)
 
-> **Producto activo (v2):** el wizard y los casos nuevos usan solo `solo_diseno` con **asignación directa** (`runAssignmentAction`, score Q/P/E/L/N). Los tipos `integral`/`solo_fabricacion` y el flujo de cotización/comparativo quedan como **legacy** en schema y UCH.
+> **Producto activo (v2):** el wizard y los casos nuevos usan solo `solo_diseno` con **asignación directa** (`runAssignmentAction`, score Q/P/E/B/L/N). Los tipos `integral`/`solo_fabricacion` y el flujo de cotización/comparativo quedan como **legacy** en schema y UCH.
 
 Definidos en `frontend/lib/constants/dental.ts → SERVICE_TYPES`:
-- `solo_diseno` — el dentista sube scans. Flujo: **Borrador → En evaluación → Propuesta lista → Esperando inicio → En ejecución → En revisión → Completado**.
+- `solo_diseno` — el dentista sube scans. Flujo v2: **Borrador → En evaluación (asignación) → Esperando inicio → En ejecución → En revisión → Completado**.
 - `solo_fabricacion` — el dentista sube **un único archivo de diseño** (STL/PLY/OBJ). El laboratorio solo fabrica. Flujo: **Borrador → En evaluación → Propuesta lista → Esperando inicio → En fabricación → Enviado → Completado** (sin pasos de diseño/revisión).
 - `integral` — el laboratorio diseña y fabrica. Flujo completo: solo diseño + En fabricación → Enviado → Completado.
 - `needsFabrication` (boolean) se mantiene en BD por compatibilidad: `true` para `integral` y `solo_fabricacion`, `false` para `solo_diseno`.
 
 ## Flujo de estados del caso (stepper)
+
+**v2 activo (`solo_diseno`):**
 ```
-BORRADOR → EN EVALUACIÓN → PROPUESTA LISTA → ESPERANDO INICIO
-→ EN EJECUCIÓN → EN REVISIÓN → DISEÑO APROBADO        [solo_diseno / integral]
-  [solo integral o solo_fabricacion] → EN FABRICACIÓN → ENVIADO
-→ COMPLETADO
+BORRADOR → EN EVALUACIÓN → ESPERANDO INICIO → EN EJECUCIÓN → EN REVISIÓN → COMPLETADO
 [terminal negativo] → RECHAZADO | CERRADO
+```
+Durante `enEvaluacion`, `internalStatus` puede ser `asignacionPendiente` (técnico debe aceptar) o `pendiente_pool` (sin elegibles).
+
+**Legacy (`integral` / `solo_fabricacion` — solo casos históricos en BD):**
+```
+BORRADOR → EN EVALUACIÓN → PROPUESTA LISTA → ESPERANDO INICIO → … → COMPLETADO
 ```
 - El componente `CaseWorkflowStepper.tsx` recibe `serviceType` y:
   - Agrega los pasos de fabricación cuando `isIntegral || isSoloFab`.
@@ -75,7 +80,13 @@ BORRADOR → EN EVALUACIÓN → PROPUESTA LISTA → ESPERANDO INICIO
 - `integral` sin CAM (legacy): aún cierra como `disenoAprobado`.
 - `solo_fabricacion`: tras `startWorkAction` el caso entra directo a `enFabricacion`; la entrega del despacho cierra el flujo.
 
-## Oferta del técnico
+## Precio y plazo (v2 — asignación directa)
+
+- Al publicar, el caso queda anclado a una **regla de precio** (`listPriceCost`, `listPriceSale`, `listPriceFeePercent`) resuelta desde catálogos UI.
+- El técnico asignado ve **compensación y plazo** fijos en la asignación (`case_assignment.compensation`, `deadlineDays` derivado de `desiredDeliveryAt`).
+- No hay ronda de cotización ni comparativo de ofertas en flujos nuevos.
+
+### Legacy — oferta cotizada (`submitQuoteAction`)
 - `solo_diseno` y `solo_fabricacion` → un único precio y plazo (`kind: 'flat'`).
 - `integral` → desglose obligatorio diseño + fabricación (`kind: 'split'`). Total = suma de ambos.
 - `submitQuoteAction` valida coherencia `serviceType` ⇄ `kind`; persiste totales en `quotedPrice`/`quotedDays` y el desglose en `quotedDesignPrice/Days` + `quotedFabricationPrice/Days`.
@@ -220,10 +231,10 @@ Columnas en tabla `user` (todas `TEXT`, nullable, agregadas vía `ALTER TABLE �
 
 **Ficha del caso — badge de ubicación (v5.8, divulgación en tres niveles)**: en `dashboard/cases/[id]/page.tsx`, en casos con fabricación (`needsFabrication=true`) el badge del header (junto al ID `DF-XXXX`) muestra la ubicación del dentista con distinto detalle según el viewer:
 - **Dirección completa** (`País · Región · Comuna · Calle Número · Of. X`): admin, dentista dueño y el técnico **ganador** (asignado, para despachar la fabricación).
-- **Solo ubicación gruesa** (`País · Región · Comuna`): cualquier otro técnico **invitado** al caso (cotizando o perdedor), para que pueda **cotizar el traslado**. Nunca ve calle/número/oficina.
-- **Sin badge**: técnico sin invitación al caso, casos sin fabricación, o dentista sin dirección registrada.
+- **Solo ubicación gruesa** (`País · Región · Comuna`): cualquier otro técnico **con asignación al caso** (legacy fabricación), para cotizar traslado. Nunca ve calle/número/oficina.
+- **Sin badge**: técnico sin asignación al caso, casos sin fabricación, o dentista sin dirección registrada.
 
-**getCaseDetails**: el join de `doctor` en `getCaseDetails` (`cases.ts`) incluye los 6 campos de dirección y aplica el gate autoritativo en servidor vía `getDoctorAddressDisclosure` (`caseListVisibility.ts`), que devuelve `full | coarse | none`: `coarse` anula solo calle/número/oficina; `none` anula los 6. Para `coarse` se consulta si el viewer tiene invitación al caso. El cliente solo refuerza el render (el armado de partes filtra los campos vacíos).
+**getCaseDetails**: el join de `doctor` en `getCaseDetails` (`cases.ts`) incluye los 6 campos de dirección y aplica el gate autoritativo en servidor vía `getDoctorAddressDisclosure` (`caseListVisibility.ts`), que devuelve `full | coarse | none`: `coarse` anula solo calle/número/oficina; `none` anula los 6. Para `coarse` se consulta si el viewer tiene asignación al caso. El cliente solo refuerza el render (el armado de partes filtra los campos vacíos).
 
 ## Restricciones críticas
 <important>NUNCA acceder a la DB desde componentes — solo Server Actions en frontend/lib/db/actions/</important>
@@ -231,29 +242,28 @@ Columnas en tabla `user` (todas `TEXT`, nullable, agregadas vía `ALTER TABLE �
 <important>Migraciones se ejecutan en runtime vía infrastructure.ts — NO usar drizzle-kit push en producción</important>
 <important>Leer frontend/AGENTS.md antes de escribir código Next.js</important>
 
-## Motor Fauchard (algoritmo de selección)
+## Motor Fauchard (algoritmo de selección — v2 asignación directa)
 
-El motor Fauchard es el núcleo de orquestación. Flujo de vida de un caso:
+El motor Fauchard es el núcleo de orquestación. Flujo de vida de un caso **nuevo** (`solo_diseno`):
 
-1. **Publicar** → `runFauchardAction` (clasifica, selecciona técnicos) → `sendInvitationsAction` (envía invitaciones + ancla config al caso con `fauchardConfigId`).
-2. **Cotizar** → `submitQuoteAction` (técnico responde con precio/plazo) → `checkAndExpireInvitationsAction`.
-3. **Evaluar** → `evaluateQuotesAction` — **idempotente**: solo procede si `status === EN_EVALUACION`. `buildProposalAction` fija `proposalExpiresAt = now + tProposalHours` (config anclada al caso).
-4. **Comparar y aceptar** → dentista elige oferta en `ComparativeOffersPanel` → `acceptProposalAction`.
-5. **Ejecutar** → `startWorkAction` → entregas iterativas → `approveWorkAction` / `requestRevisionAction`.
-6. **Fabricación** (`integral` / `solo_fabricacion`) → `transitionToManufacturingAction` → `registerDispatchAction`.
-7. **Cierre físico** → dentista confirma recepción con `confirmReceptionAction` → `completado`. (`solo_diseno` cierra en `approveWorkAction`.)
+1. **Publicar** → `publishCaseAction` → `classifyCaseAction` (work type v5.13, regla de precio) → `runAssignmentAction` (ranking Q/P/E/B/L/N).
+2. **Asignar** → si `ranked.length > 0`: `assignCaseAction` (top-1 en `case_assignment`, `internalStatus: asignacionPendiente`); si no hay elegibles y pool on: `enterPendingPoolAction` (`pendiente_pool`, evento `CASO_EN_COLA`).
+3. **Aceptar o rechazar** → técnico: `acceptAssignmentAction` (precio/plazo de catálogo) o `rejectInvitationIndividualAction` → `tryReplaceAfterRejectAction` (siguiente del ranking, hasta `maxAssignmentAttempts`, evento `ASIGNACION_REASIGNADA`).
+4. **Ejecutar** → `startWorkAction` → entregas iterativas → `approveWorkAction` / `requestRevisionAction` → `completado`.
+
+`sendInvitationsAction` es un **wrapper legacy** que delega en `assignCaseAction` (un solo técnico, no N invitados).
 
 ### Modelo de disponibilidad del técnico (v5.0, detrás de `AVAILABILITY_MODEL_ENABLED`)
 Reemplaza la exclusión binaria `consecutiveNoResponse >= 3` por un sistema gradual (todo inerte hasta encender el flag). Ver `Doc Servicio Orquestado/`:
 - **Elegibilidad AND triple**: el técnico declara disponibilidad en 3 niveles (global · CAD/CAM · **7 categorías**). Fauchard filtra por `computeEligibleAction` en cada corrida (sin caché). Campo clínico `replacesMissingTeeth` (pónticos) + árbol de decisión en `lib/fauchard/caseWorkType.ts` (v5.13).
 - **Sanción rolling 14d**: las no-respuestas suman a un nivel 1/2/3 (warning · penalización al score `−αN·N` · auto-OFF del switch global). Decae sola al salir de la ventana. Tablas `technician_availability` / `technician_no_response_event`.
-- **Cola `pendiente_pool`**: si no hay elegibles, el caso espera técnicos (TTL + check-in al dentista) en vez de fallar; `runFauchardAction` retorna `{ pooled: true }`. Reactivación event-driven al encender un técnico.
-- **Rechazo explícito** (individual/masivo) + **reemplazo automático** del siguiente del pool. Notificaciones vía EmailJS (`lib/services/notifications.ts`); reglas de canal por tipo en `channelsForNotification` (§9.5). **Envío real gated por `NOTIFICATIONS_LIVE`** (interruptor maestro de seguridad por ambiente: si no es `true`, `notifyUser` loguea sin enviar aunque haya credenciales — evita correos reales desde staging con datos clonados). Actions en `lib/db/actions/{availability,availabilityCron,noResponseEvents,rejection,replacement,poolQueue}.ts`.
-- **Crons (Cloud Scheduler, header `Authorization: Bearer ${CRON_SECRET}`)**: además de `evaluate-quotes` (cada 5 min), v5.0 agrega `/api/cron/process-availability` (cada hora → expira no-respuestas fuera de ventana, auto-OFF preventivo por inactividad, recordatorio) y `/api/cron/process-pool-queue` (cada 10 min → check-in al dentista al 50% del TTL + expiración/re-encole de la cola). Ambos inertes con `AVAILABILITY_MODEL_ENABLED` off. La Fase 2 de ligas agrega `/api/cron/process-league` (diario, gated por `LEAGUE_ENGINE_ENABLED`; además corre en local vía instrumentation). Comandos `gcloud` en `Doc/Ciclo_Desarrollo.md`.
-- **Republicar / cancelar**: caso en `sin_cotizaciones_fallo` → botón Republicar (`republicarCaseAction`, modal de doble confirmación); durante `pendiente_pool` el dentista ve banner "Buscando técnicos…" + Cancelar publicación (`cancelPendingPoolAction`) y un check-in modal al 50% del TTL.
+- **Cola `pendiente_pool`**: si no hay elegibles, el caso espera técnicos (TTL + check-in al dentista) en vez de fallar; `runAssignmentAction` retorna `{ pooled: true }`. Reactivación event-driven al encender un técnico + cron `processPendingPoolReevaluationAction`.
+- **Rechazo explícito** (individual/masivo) + **reemplazo automático** del siguiente del ranking. Notificaciones vía EmailJS (`lib/services/notifications.ts`); reglas de canal por tipo en `channelsForNotification` (§9.5). **Envío real gated por `NOTIFICATIONS_LIVE`** (interruptor maestro de seguridad por ambiente: si no es `true`, `notifyUser` loguea sin enviar aunque haya credenciales — evita correos reales desde staging con datos clonados). Actions en `lib/db/actions/{availability,availabilityCron,noResponseEvents,rejection,replacement,poolQueue}.ts`.
+- **Crons (Cloud Scheduler, header `Authorization: Bearer ${CRON_SECRET}`)**: `/api/cron/process-availability` (cada hora → expira no-respuestas fuera de ventana, auto-OFF preventivo por inactividad, recordatorio) y `/api/cron/process-pool-queue` (cada **2 min** → reevaluación pool, check-in al dentista al 50% del TTL + expiración/re-encole). Inertes con `AVAILABILITY_MODEL_ENABLED` off. La Fase 2 de ligas agrega `/api/cron/process-league` (diario, gated por `LEAGUE_ENGINE_ENABLED`; además corre en local vía instrumentation). Comandos `gcloud` en `Doc/Ciclo_Desarrollo.md`.
+- **Republicar / cancelar**: caso en `sin_asignacion_fallo` o `sin_cotizaciones_fallo` (legacy) → botón Republicar (`republicarCaseAction`, modal de doble confirmación); durante `pendiente_pool` el dentista ve banner "Buscando técnicos…" + Cancelar publicación (`cancelPendingPoolAction`) y un check-in modal al 50% del TTL.
 
 ### Motor de ligas (Fase 2, detrás de `LEAGUE_ENGINE_ENABLED`)
-Mueve a los técnicos entre 4 categorías fijas (Bronce/Plata/Oro/Élite) según desempeño. El **gating** de selección por liga ya operaba (expansión en 3 intentos en `runFauchardAction`); Fase 2 agrega el **movimiento automático**. Diseño: [Doc/DentFlowAI_Diseño_Funcional_Liga.md](Doc/DentFlowAI_Diseño_Funcional_Liga.md).
+Mueve a los técnicos entre 4 categorías fijas (Bronce/Plata/Oro/Élite) según desempeño. El **gating** de selección por liga opera en `runAssignmentAction` (expansión en 3 intentos); Fase 2 agrega el **movimiento automático**. Diseño: [Doc/DentFlowAI_Diseño_Funcional_Liga.md](Doc/DentFlowAI_Diseño_Funcional_Liga.md).
 - **Ascenso**: triple criterio (`avgRating ≥ lMinRating` ∧ `puntualidad ≥ lMinPunctuality` ∧ `completados ≥ lCasesCompleted`) sobre los últimos `lCasesEvaluated` casos de la liga actual → sube un nivel + abre **transición** (`lCasesTransition` casos con penalización `score·(1−lPenaltyTransition)`). Consolida al completar la ventana.
 - **Descenso**: rating `< lDescentRating` sostenido `lDescentDays` (watch `league_demotion_watch_since`); tope en bronce.
 - **Estado** en `user`: `league_level`, `league_transition_started_at`, `league_demotion_watch_since`, `league_last_evaluated_at`; auditoría en `league_change_event`. Esquema `INFRA_VERSION=v5.5`. Ver también v5.7 (dirección del usuario) más abajo.
@@ -261,28 +271,35 @@ Mueve a los técnicos entre 4 categorías fijas (Bronce/Plata/Oro/Élite) según
 - **Cron**: `processLeagueMaintenanceAction` (`lib/db/actions/leagueCron.ts`) → endpoint `/api/cron/process-league` (diario, Cloud Scheduler en dev/prod) **y** scheduler in-process en **local** (`frontend/instrumentation.ts` → `lib/localCron.ts`, solo fuera de `NODE_ENV=production`; controles `LOCAL_CRONS_ENABLED` / `LOCAL_LEAGUE_CRON_INTERVAL_MS`).
 - **UI admin**: badge de categoría + chip "Transición" en `TechnicianRankingTable`; `LeagueConfigPanel` con banner según flag e invariante `lDescentRating < lMinRating`.
 
-### Idempotencia garantizada
-- `evaluateQuotesAction` y `buildProposalAction`: solo transicionan desde `enEvaluacion`; `buildProposal` no reescribe `proposalExpiresAt` si el caso ya avanzó.
-- **Lecturas** (`getCaseDetails`, `listCasesByOrganization`): solo `expirePendingInvitationsForCase` — **no** llaman `evaluateQuotes` (evita reset del countdown 2 al refrescar).
+### Idempotencia y lecturas
+- **Lecturas** (`getCaseDetails`, `listCasesByOrganization`): solo expiran asignaciones vencidas — **no** re-ejecutan motor ni resetean deadlines.
+- Casos históricos con comparativo: ver bloque Legacy abajo.
 
 ### Countdowns independientes (etapas distintas)
 | Etapa | Config | Campo BD | Estado caso |
 |-------|--------|----------|-------------|
-| Técnicos cotizan | `tQuoteMinutes` | `case_invitation.expires_at` | `enEvaluacion` |
-| Dentista elige oferta | `tProposalHours` | `clinical_case.proposal_expires_at` | `propuestaLista` |
+| Técnico acepta asignación | `tQuoteMinutes` | `case_assignment.expires_at` | `enEvaluacion` |
 | Dentista revisa entrega (v5.0) | `tDentistReviewHours` | `clinical_case.last_revision_submitted_at` (+config) | `enRevision` |
 
-Helpers: `frontend/lib/db/caseDeadlines.ts`. Evaluación/cierre de comparativo: `submitQuote`, cron, `checkAndExpireInvitationsAction` (no en lecturas).
-- **Etapa 3 (revisión, v5.0):** `getCaseReviewDeadlineAt` = `last_revision_submitted_at + tDentistReviewHours` (wall-clock, gated). HMS en cabecera UCH (dentista + técnico); cada entrega reinicia el countdown. **Sin auto-acción** al vencer: marca "Respuesta vencida" + escalación por cron (`REVISION_PLAZO_POR_VENCER` / `REVISION_PLAZO_VENCIDO`).
+**Legacy — comparativo de ofertas:** `tProposalHours` → `clinical_case.proposal_expires_at` en `propuestaLista` (solo casos v1 en BD).
+
+Helpers: `frontend/lib/db/caseDeadlines.ts`.
+- **Etapa revisión (v5.0):** `getCaseReviewDeadlineAt` = `last_revision_submitted_at + tDentistReviewHours` (wall-clock, gated). HMS en cabecera UCH (dentista + técnico); cada entrega reinicia el countdown. **Sin auto-acción** al vencer: marca "Respuesta vencida" + escalación por cron (`REVISION_PLAZO_POR_VENCER` / `REVISION_PLAZO_VENCIDO`).
 
 ### Config Fauchard
 - **Global:** `getActiveConfig()` — config activa actual.
 - **Por caso:** `getConfigForCase(caseId)` — usa `fauchard_config_id` anclado si existe; si no, la activa.
-- **Publicar / republicar:** `runFauchardAction` devuelve `fauchardConfigId`; `sendInvitationsAction` recibe el mismo id.
+- **Publicar / republicar:** `classifyCaseAction` + `runAssignmentAction` anclan `fauchardConfigId` al caso; `assignCaseAction` usa esa config.
 
 ### Simulador y monitor (asignación directa)
-- **Simulador admin** (`/dashboard/admin/fauchard/simulate`): **funnel workspace** con stepper navegable (Caso · Clasificación · Filtros · Ranking · Asignación) — no wizard obligatorio. Panel activo izquierda + resultado persistente derecha. Motor: `simulateAssignmentAction` (alias `simulateFauchardAction`): caso virtual con **4 catálogos de precio** (`pricePreview`) + escenario (piezas, complejidad, notas) → `buildEligiblePoolForScenario` + `rankCandidatesForScenario` (Q/P/E/L/N). Salida: `retryChainDetails`, `chainPosition`, cadena coloreada hasta `maxAssignmentAttempts`. Override α solo en paso Ranking (sandbox, no persiste). Componentes en `components/admin/fauchard/simulator/`. Ruta legacy `sandbox-diagram` redirige a `/simulate`.
+- **Simulador admin** (`/dashboard/admin/fauchard/simulate`): **funnel workspace** con stepper navegable (Caso · Clasificación · Filtros · Ranking · Asignación) — no wizard obligatorio. Panel activo izquierda + resultado persistente derecha. Motor: `simulateAssignmentAction` (alias `simulateFauchardAction`): caso virtual con **4 catálogos de precio** (`pricePreview`) + escenario (piezas, complejidad, pónticos Sí/No, notas) → `buildEligiblePoolForScenario` + `rankCandidatesForScenario` (Q/P/E/B/L/N). Salida: `retryChainDetails`, `chainPosition`, cadena coloreada hasta `maxAssignmentAttempts`. Override α solo en paso Ranking (sandbox, no persiste). Componentes en `components/admin/fauchard/simulator/`. Ruta legacy `sandbox-diagram` redirige a `/simulate`.
 - **Monitor** (`getFauchardMetricsAction`): agregados sobre `case_assignment` (`assignmentsCount`, tasas respuesta/aceptación, fallos vía `sin_asignacion_fallo` / `sin_cotizaciones_fallo`).
+
+### Legacy (no usar en flujos nuevos)
+- **Cotización múltiple:** `runFauchardAction` + `sendInvitationsAction` (N técnicos), `submitQuoteAction`, `evaluateQuotesAction`, `buildProposalAction`, `acceptProposalAction`, `ComparativeOffersPanel` (eliminado del código activo).
+- **Idempotencia comparativo:** `evaluateQuotesAction` / `buildProposalAction` solo desde `enEvaluacion`; cron `/api/cron/evaluate-quotes` (cada 5 min) para casos históricos.
+- **Fabricación:** `transitionToManufacturingAction`, `registerDispatchAction`, `confirmReceptionAction` (`integral` / `solo_fabricacion`).
+- Tabla `case_invitation` (alias Drizzle `caseInvitation`) y campos `quoted*` persisten datos históricos.
 
 ## UCH — Reglas de Diseño DentFlowAi
 
@@ -290,19 +307,20 @@ Helpers: `frontend/lib/db/caseDeadlines.ts`. Evaluación/cierre de comparativo: 
 El UCH (UnifiedCaseHub) NO es un chat libre. Es una pantalla de flujo guiado con tres capas:
 1. **CaseWorkflowStepper** → línea de tiempo del estado del caso (`frontend/components/cases/CaseWorkflowStepper.tsx`).
 2. **EventStream** → historial de eventos renderizado por rol en `frontend/components/cases/UnifiedCaseHub.tsx` (vista única tipo Actividad; sin pestaña Resumen; filtros de fase: Todos / Propuesta / Diseño / Produc.).
-3. **ActionPanel** → acciones y formularios embebidos en el **mismo hilo** (`buildUchTimelineRows`, filas expandibles en `frontend/components/cases/uch/`), sin overlays `fixed inset-0` centrados por defecto. Confirmación legal breve de cotización: **sheet inferior** en el mismo hub.
+3. **ActionPanel** → acciones y formularios embebidos en el **mismo hilo** (`buildUchTimelineRows`, filas expandibles en `frontend/components/cases/uch/`), sin overlays `fixed inset-0` centrados por defecto.
 
 ### Principio fundamental
-Fauchard prioriza **una acción primaria** visible expandida en el hilo (revisión dentista, entrega de diseño, bloque Fauchard, etc.); el resto puede quedar colapsado en la misma lista. **No** hay chat libre al pie del UCH.
+Fauchard prioriza **una acción primaria** visible expandida en el hilo (aceptar asignación, revisión dentista, entrega de diseño, bloque Fauchard, etc.); el resto puede quedar colapsado en la misma lista. **No** hay chat libre al pie del UCH.
 
 ### Mensajes estandarizados por tipo
 | Tipo | Quién lo ve | Componente / ubicación en repo |
 |------|-------------|--------------------------------|
-| OFERTA_ENVIADA | Técnico (carril propio) | `UchFauchardActionsPanel.tsx` + `submitQuoteAction` |
-| OFERTAS_COMPARATIVAS_LISTAS | Dentista | `ComparativeOffersPanel.tsx` (embebido en hilo) |
-| PROPUESTA_ACEPTADA | Ambos | `AcceptedProposalSummary.tsx`, `UchDealSummary.tsx` |
-| OFERTA_RECHAZADA / OFERTA_NO_SELECCIONADA | Técnico (perdedor) | `UchEventBubble.tsx` con bloque de detalle snapshot |
-| OFERTA_RECHAZADA_POR_TECNICO | Sistema (enmascarado Fauchard) | `UchRejectInvitationDialog.tsx` + `rejectInvitationIndividualAction` — el técnico invitado rechaza explícitamente su invitación pendiente (gated por `REJECTION_INDIVIDUAL_ENABLED`). **No** cuenta como no-respuesta; dispara reemplazo automático si `AVAILABILITY_MODEL_ENABLED`. El dentista no ve nada explícito (el reemplazo aparece como nueva invitación). Distinto del rechazo **masivo** (`rejectInvitationsBulkAction`, al pausar el switch global). |
+| ASIGNACION_RECIBIDA / INVITACION_RECIBIDA | Técnico asignado | `UchFauchardActionsPanel.tsx` + `acceptAssignmentAction` |
+| ASIGNACION_REASIGNADA | Técnico (nuevo asignado) | Evento Fauchard tras `tryReplaceAfterRejectAction` |
+| CASO_EN_COLA | Dentista | `PendingPoolBanner` + evento en hilo (pool sin elegibles) |
+| PROPUESTA_ACEPTADA / ASIGNACION_ACEPTADA | Ambos | `AcceptedProposalSummary.tsx`, `UchDealSummary.tsx` |
+| OFERTA_RECHAZADA / OFERTA_NO_SELECCIONADA | Técnico (perdedor) | `UchEventBubble.tsx` con bloque de detalle snapshot (legacy) |
+| OFERTA_RECHAZADA_POR_TECNICO | Sistema (enmascarado Fauchard) | `UchRejectInvitationDialog.tsx` + `rejectInvitationIndividualAction` — el técnico rechaza explícitamente su asignación pendiente (gated por `REJECTION_INDIVIDUAL_ENABLED`). **No** cuenta como no-respuesta; dispara reemplazo automático si `AVAILABILITY_MODEL_ENABLED`. El dentista no ve detalle explícito (el reemplazo aparece como nueva asignación). Distinto del rechazo **masivo** (`rejectInvitationsBulkAction`, al pausar el switch global). |
 | TRABAJO_INICIADO | Ambos | `UchFauchardActionsPanel.tsx` + `startWorkAction` |
 | REVISION_ENVIADA | Ambos | `UchDeliveryPanel.tsx` + `submitRevisionAction` |
 | TRABAJO_APROBADO / REVISION_SOLICITADA | Ambos | `UchDentistReviewPanel.tsx` + `approveWorkAction` / `requestRevisionAction` |
@@ -320,7 +338,7 @@ El evento `CASO_PUBLICADO` llega del servidor enmascarado como Fauchard. El clie
 ### Resolución de carril (uchThreadLane.ts)
 `resolveUchThreadLane(event, viewer)` determina si una burbuja va a la izquierda (`thread`) o derecha (`self`) y si muestra cabecera "Fauchard" o el nombre del usuario:
 - **Tabla A (dentista)**: prioridades explícitas por acción; `isSelfHalfMarker` toma precedencia para `CASO_PUBLICADO`.
-- **Tabla B (técnico)**: `INVITACION_RECIBIDA` siempre thread+Fauchard; emisiones propias del técnico → self.
+- **Tabla B (técnico)**: `ASIGNACION_RECIBIDA` / `INVITACION_RECIBIDA` siempre thread+Fauchard; emisiones propias del técnico → self.
 - `uchPresentationRole` fuerza tabla A o B cuando admin tiene ambos flags activos.
 
 ### Ficha de caso — botones de gestión
@@ -331,16 +349,16 @@ El evento `CASO_PUBLICADO` llega del servidor enmascarado como Fauchard. El clie
 - **No** usar `republishCaseAction` en UI (ronda comercial legacy en el mismo `caseId`).
 - Lecturas (`getCaseDetails`, listados) no deben re-evaluar Fauchard ni resetear deadlines.
 
-### Countdowns (dos ventanas)
-**Etapa 1 — cotizar:** `evaluationExpiresAt` / `invitationExpiresAt` desde `getCaseQuoteDeadlineAt` (max `expires_at` de invitaciones `pending`/`quoted`). Banner en ficha dentista (`enEvaluacion`); HMS en tarjetas técnicas y UCH.
+### Countdowns
+**Etapa 1 — aceptar asignación:** `evaluationExpiresAt` / `invitationExpiresAt` desde `getCaseQuoteDeadlineAt` (max `expires_at` de asignaciones `pending`). HMS en cabecera UCH (técnico) y tarjetas de asignaciones; banner en ficha dentista durante `enEvaluacion` + `asignacionPendiente`.
 
-**Etapa 2 — elegir oferta:** `proposalExpiresAt` → `proposalDeadlineMs` en la página del caso. HMS **solo en cabecera UCH** cuando `status === propuestaLista` y viewer es dentista (no duplicar en `ComparativeOffersPanel`).
+**Legacy — comparativo:** `proposalExpiresAt` → `proposalDeadlineMs` solo en casos históricos con `propuestaLista`.
 
 - `serverClockAnchor` sincroniza reloj cliente-servidor.
 - `uchPanelMounted` evita desmontar el UCH al cerrar/abrir (preserva tick del timer en cliente).
 
 ### Anonimato
-- Dentista NUNCA ve nombre del técnico, precio cotizado, cantidad de invitados.
+- Dentista NUNCA ve nombre del técnico ni cantidad de candidatos evaluados.
 - Técnico NUNCA ve eventos de otros técnicos del mismo caso.
 - `sanitizeUchPayloadForViewer()` en `uchPresentation.ts` limpia `presentationAuthor`, `technicianId`, `revieweeId` según rol.
 - Admin ve identidades reales sin enmascarado.
@@ -350,14 +368,13 @@ El evento `CASO_PUBLICADO` llega del servidor enmascarado como Fauchard. El clie
 components/cases/
   UnifiedCaseHub.tsx             Componente principal del hub (EventStream + ActionPanel)
   CaseWorkflowStepper.tsx        Línea de tiempo de estados
-  ComparativeOffersPanel.tsx     Comparativa de ofertas para el dentista
+  PendingPoolBanner.tsx          Banner dentista durante pendiente_pool
   uch/
     UchEventBubble.tsx           Burbuja individual de evento
-    UchFauchardActionsPanel.tsx  Acciones Fauchard (cotizar, iniciar trabajo, etc.)
+    UchFauchardActionsPanel.tsx  Acciones Fauchard (aceptar/rechazar asignación, iniciar trabajo, etc.)
     UchDeliveryPanel.tsx         Panel de entrega (técnico)
     UchDentistReviewPanel.tsx    Panel de revisión (dentista)
-    UchDealSummary.tsx           Resumen del acuerdo aceptado
-    UchQuoteBreakdown.tsx        Desglose diseño/fabricación en cotizaciones integral
+    UchDealSummary.tsx           Resumen del acuerdo aceptado (precio/plazo de catálogo)
     UchRatingPanel.tsx           Calificación del dentista al técnico (v5.3, dimension: design|fabrication)
     buildUchTimelineRows.ts      Construye filas del timeline (eventos + acciones)
     uchTimelineTypes.ts          Tipos del timeline
@@ -369,12 +386,13 @@ lib/
   uchCasoPublicadoSplit.ts       Split client-side de CASO_PUBLICADO para dentista
   uchEventVisibility.ts          Regla de visibilidad para eventos visibleTo:tecnico
   uchUnread.ts                   Contadores de mensajes no leídos
-  uchQuoteDisplay.ts             Helpers de presentación de cotizaciones (formato CLP, desglose)
   caseEventsUchFilter.ts         Filtro de eventos por rol (espeja getCaseEventsAction)
                                    — incluye regla CALIFICACION_ENVIADA: solo el técnico con
                                      revieweeId === identity.id la ve (fallback a assignedTechnicianId)
   deadlineMs.ts                  Utilidades de deadline (toDeadlineMs, effectiveNowMs)
   hooks/useRemainingUntil.ts     Hook para countdown sincronizado con servidor
+
+Legacy (solo casos históricos): UchQuoteBreakdown.tsx, uchQuoteDisplay.ts
 ```
 
 ### Stack y rutas (UCH en este repo)

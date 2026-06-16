@@ -27,7 +27,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ### UCH — reglas específicas
 - No crear overlays `fixed inset-0` dentro del UCH para acciones del caso.
 - Las acciones van embebidas en el hilo como filas expandibles (`buildUchTimelineRows`).
-- El countdown de propuesta va **solo** en el header del UCH, no en el header de la página del caso.
+- El countdown de **aceptación de asignación** va **solo** en el header del UCH (técnico), no duplicado en la ficha.
 - No desmontar el UCH al cerrar el panel — usar `uchPanelMounted` + animación `framer-motion`.
 - Para el carril de burbujas: usar `resolveUchThreadLane()` de `lib/uchThreadLane.ts`, no implementar lógica propia.
 - El split de `CASO_PUBLICADO` para dentistas está en `lib/uchCasoPublicadoSplit.ts` — aplicar en `filteredEvents` del UCH, no en el servidor.
@@ -38,8 +38,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - `logCaseEvent()` de `cases.ts` para registrar cualquier evento en el hilo UCH.
 
 ### Tipos de servicio y asignación (producto activo)
-- `SERVICE_TYPES` en `dental.ts` expone solo `solo_diseno`. Asignación directa: `runAssignmentAction` → `rankAssignmentCandidates` con score **Q/P/E/L/N** (`assignmentScore.ts`).
+- `SERVICE_TYPES` en `dental.ts` expone solo `solo_diseno`. Asignación directa: `publishCaseAction` → `classifyCaseAction` → `runAssignmentAction` → `assignCaseAction` con score **Q/P/E/B/L/N** (`assignmentScore.ts`).
 - Wizard (`CaseCreationWizard`): solo diseño + scans; sin radio de 3 tipos. Publicar requiere regla de precio (`listPriceSale`).
+- Técnico **acepta o rechaza** la asignación — no cotiza. Precio/plazo vienen de catálogo + `desiredDeliveryAt`.
 - Legacy en schema/UCH: `integral`/`solo_fabricacion`, `submitQuoteAction`, comparativo — no usar en flujos nuevos.
 
 ### Tests
@@ -58,8 +59,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Badge de dirección en `dashboard/cases/[id]` para técnico/admin en casos con fabricación. Los códigos se resuelven a nombres legibles en cliente.
 
 ### Disponibilidad del técnico (v5.0, flag `AVAILABILITY_MODEL_ENABLED`)
-- 3 niveles jerárquicos (global · CAD/CAM · 5 categorías) → regla AND triple en `availability.ts`. Rechazo individual ≠ rechazo masivo (catálogos `invitation_rejection_reason` / `bulk_rejection_reason`).
-- **Rechazo individual en UCH** (flag `REJECTION_INDIVIDUAL_ENABLED`): botón "Rechazar invitación" en `UchFauchardActionsPanel` → `UchRejectInvitationDialog` → `rejectInvitationIndividualAction`. Solo el técnico invitado, mientras la invitación esté `pending`. **No** cuenta como no-respuesta y dispara reemplazo automático (`tryReplaceAfterRejectAction`). El **rechazo masivo** es distinto: lo hace el técnico al pausar el switch global (`rejectInvitationsBulkAction`). El flag server-only se expone al cliente con `getRejectionUiEnabledAction`.
+- 3 niveles jerárquicos (global · CAD/CAM · 7 categorías) → regla AND triple en `availability.ts`. Rechazo individual ≠ rechazo masivo (catálogos `invitation_rejection_reason` / `bulk_rejection_reason`).
+- **Rechazo individual en UCH** (flag `REJECTION_INDIVIDUAL_ENABLED`): botón "Rechazar asignación" en `UchFauchardActionsPanel` → `UchRejectInvitationDialog` → `rejectInvitationIndividualAction`. Solo el técnico asignado, mientras la asignación esté `pending`. **No** cuenta como no-respuesta y dispara reemplazo automático (`tryReplaceAfterRejectAction`).
 - Sanción rolling 14d (`noResponseEvents.ts`) reemplaza `consecutiveNoResponse` con el flag on; nivel 3 = auto-OFF. Cola `pendiente_pool` (`poolQueue.ts`) cuando no hay elegibles.
-- **Crons (v5.0)**: `/api/cron/process-availability` (hora) y `/api/cron/process-pool-queue` (10 min), header `Authorization: Bearer ${CRON_SECRET}`, inertes con el flag off. Dentista: banner `pendiente_pool` + check-in 50% TTL (`cancelPendingPoolAction`) y Republicar (`republicarCaseAction`) en `sin_cotizaciones_fallo`.
+- **Crons (v5.0)**: `/api/cron/process-availability` (hora) y `/api/cron/process-pool-queue` (cada **2 min**, incluye `processPendingPoolReevaluationAction`), header `Authorization: Bearer ${CRON_SECRET}`, inertes con el flag off. Dentista: banner `pendiente_pool` + check-in 50% TTL (`cancelPendingPoolAction`) y Republicar (`republicarCaseAction`) en `sin_asignacion_fallo` o `sin_cotizaciones_fallo` (legacy).
 - Notificaciones por **EmailJS** (no Resend) vía `lib/services/notifications.ts` (API REST server-side).
