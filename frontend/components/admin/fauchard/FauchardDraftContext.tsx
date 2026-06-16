@@ -3,7 +3,7 @@
 /**
  * Borrador único de configuración Fauchard (single source of truth).
  *
- * Todos los tabs de edición (Pesos, Selección y Ronda, Plazos y Sanciones)
+ * Todos los tabs de edición (Pesos, Selección y Asignación, Plazos y Sanciones)
  * leen y escriben este mismo borrador. El guardado es **uno solo** (barra global)
  * vía copy-on-write. La liga (`l*`) vive en LeagueConfigPanel con guardado autónomo.
  */
@@ -16,8 +16,10 @@ import { isDraftKeyDirty } from '@/lib/fauchard/alphaWeightNormalize';
 export const EDITABLE_KEYS = [
   // Pesos del score (Σ6 = 1.0)
   'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaBonus', 'alphaLoad', 'alphaNoResponse',
-  // Ventanas del score
-  'wQualityDays', 'wLoadDays', 'cMax', 'dBonusMaxDays',
+  // Ventanas del score (wQualityDays = ventana histórica unificada de Q y P)
+  'wQualityDays', 'dBonusMaxDays',
+  // Carga de referencia del factor L (piso del divisor de carga)
+  'loadReferenceMin',
   // Exclusión
   'tCooldownMinutes', 'dInactivityDays',
   // Asignación
@@ -41,6 +43,7 @@ const ALPHA_KEYS: DraftKey[] = ['alphaQuality', 'alphaPunctuality', 'alphaExperi
 const DRAFT_DEFAULTS: Partial<Record<DraftKey, number>> = {
   maxAssignmentAttempts: 3,
   tQuoteMinutes: 30,
+  loadReferenceMin: 5,
   level1Threshold: 1,
   level2Threshold: 2,
   level3Threshold: 3,

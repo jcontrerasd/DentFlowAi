@@ -328,6 +328,8 @@ export const fauchardConfig = pgTable("fauchard_config", {
   wLoadDays: integer("w_load_days").default(30).notNull(),
   cMax: numeric("c_max", { precision: 3, scale: 1 }).default('2.0').notNull(),
   dBonusMaxDays: integer("d_bonus_max_days").default(30).notNull(),
+  // Carga de referencia para normalizar el factor L (piso del divisor maxLoad). Configurable.
+  loadReferenceMin: integer("load_reference_min").default(5).notNull(),
   // Filtros de exclusión
   tCooldownMinutes: integer("t_cooldown_minutes").default(720).notNull(),
   dInactivityDays: integer("d_inactivity_days").default(15).notNull(),

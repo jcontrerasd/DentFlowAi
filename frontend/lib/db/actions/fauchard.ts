@@ -56,6 +56,7 @@ export interface FauchardConfigRow {
   wLoadDays: number;
   cMax: string;
   dBonusMaxDays: number;
+  loadReferenceMin: number;
   tCooldownMinutes: number;
   dInactivityDays: number;
   nInvited: number;
@@ -684,6 +685,7 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
         wLoadDays: fauchardConfig.wLoadDays,
         cMax: fauchardConfig.cMax,
         dBonusMaxDays: fauchardConfig.dBonusMaxDays,
+        loadReferenceMin: fauchardConfig.loadReferenceMin,
         tCooldownMinutes: fauchardConfig.tCooldownMinutes,
         dInactivityDays: fauchardConfig.dInactivityDays,
         maxAssignmentAttempts: fauchardConfig.maxAssignmentAttempts,
@@ -805,6 +807,7 @@ export async function updateFauchardParamsAction(
       range('level3Threshold', 1, 50, 'Umbral Nivel 3');
       range('inactivityAutoOffDays', 1, 365, 'Días para auto-OFF preventivo');
       range('inactivityReminderDays', 1, 365, 'Días para recordatorio');
+      range('loadReferenceMin', 5, 50, 'Carga de Trabajo (Min)');
 
       // Orden estricto de umbrales y heartbeat.
       const l1 = intParam('level1Threshold');

@@ -4,7 +4,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
 /** v5.15 — Bono de infrautilización (αB) reactivo en score; Σ6=1.0. */
-export const INFRA_VERSION = 'v5.15';
+export const INFRA_VERSION = 'v5.16';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -520,6 +520,7 @@ export async function ensureInfrastructure(db: any) {
           w_load_days INTEGER NOT NULL DEFAULT 30,
           c_max NUMERIC(3,1) NOT NULL DEFAULT 2.0,
           d_bonus_max_days INTEGER NOT NULL DEFAULT 30,
+          load_reference_min INTEGER NOT NULL DEFAULT 5,
           t_cooldown_minutes INTEGER NOT NULL DEFAULT 720,
           d_inactivity_days INTEGER NOT NULL DEFAULT 15,
           n_invited INTEGER NOT NULL DEFAULT 5,
@@ -560,6 +561,8 @@ export async function ensureInfrastructure(db: any) {
         ALTER TABLE fauchard_config ADD COLUMN IF NOT EXISTS l_descent_rating NUMERIC(3,2) NOT NULL DEFAULT 3.00;
         ALTER TABLE fauchard_config ADD COLUMN IF NOT EXISTS l_descent_days INTEGER NOT NULL DEFAULT 60;
         ALTER TABLE fauchard_config ADD COLUMN IF NOT EXISTS q_min_selection NUMERIC(3,2) NOT NULL DEFAULT 0.60;
+        -- v5.16 — carga de referencia configurable para el factor L (antes constante 5 hardcodeada)
+        ALTER TABLE fauchard_config ADD COLUMN IF NOT EXISTS load_reference_min INTEGER NOT NULL DEFAULT 5;
 
         -- Migración: t_cooldown_hours → t_cooldown_minutes (× 60)
         DO $migrate_cooldown$

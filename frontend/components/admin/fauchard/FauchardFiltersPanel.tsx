@@ -10,7 +10,7 @@ import { useFauchardDraft } from './FauchardDraftContext';
 import { useFlashedParams } from '@/lib/hooks/useParamFlash';
 
 /**
- * Editor de "Selección y Ronda". Lee/escribe el borrador compartido
+ * Editor de "Selección y Asignación". Lee/escribe el borrador compartido
  * (`FauchardDraftContext`); el guardado es global (sin botón propio).
  */
 export default function FauchardFiltersPanel({ initialFocusKey = null }: { initialFocusKey?: string | null }) {
@@ -27,10 +27,10 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-xs font-bold text-foreground">Selección y Ronda</h3>
+          <h3 className="text-xs font-bold text-foreground">Selección y Asignación</h3>
           <p className="text-[10px] text-faint hidden md:block">Filtros, plazos y reglas de asignación.</p>
         </div>
-        <FauchardHelpButton onClick={() => openHelp()} label="Selección y Ronda" />
+        <FauchardHelpButton onClick={() => openHelp()} label="Selección y Asignación" />
       </div>
 
       <FauchardHelpWindow isOpen={showHelp} onClose={() => setShowHelp(false)} section={FILTERS_HELP} focusKey={helpFocus} />
@@ -40,7 +40,7 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
         {/* Ventanas de medición */}
         <Section title="Ventanas de medición" icon={<Clock className="w-4 h-4" />}>
           <Slider
-            label="Calidad Histórica (días)"
+            label="Ventana histórica (días)"
             value={draft.wQualityDays}
             min={30} max={365} step={1}
             onChange={(e) => setParam('wQualityDays', parseInt(e.target.value))}
@@ -49,28 +49,6 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
             onHelp={() => openHelp('wQualityDays')}
             paramNumber={fauchardParamNumber('wQualityDays')}
             flash={flashed.has('wQualityDays')}
-          />
-          <Slider
-            label="Carga Reciente (días)"
-            value={draft.wLoadDays}
-            min={7} max={90} step={1}
-            onChange={(e) => setParam('wLoadDays', parseInt(e.target.value))}
-            valueSuffix=" d"
-            tooltip={fauchardParamTooltip('wLoadDays')}
-            onHelp={() => openHelp('wLoadDays')}
-            paramNumber={fauchardParamNumber('wLoadDays')}
-            flash={flashed.has('wLoadDays')}
-          />
-          <Slider
-            label="Techo Índice de Carga (C_max)"
-            value={draft.cMax}
-            min={1} max={5} step={0.1}
-            onChange={(e) => setParam('cMax', parseFloat(e.target.value))}
-            valueFormatter={(v) => `${v.toFixed(1)}×`}
-            tooltip={fauchardParamTooltip('cMax')}
-            onHelp={() => openHelp('cMax')}
-            paramNumber={fauchardParamNumber('cMax')}
-            flash={flashed.has('cMax')}
           />
           <Slider
             label="Bono Infrautilización (días máx)"
@@ -89,7 +67,7 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
         <Section title="Filtros de elegibilidad" icon={<ShieldAlert className="w-4 h-4" />}>
           <div className="rounded-2xl border border-warning/25 bg-warning-hl/20 p-5 space-y-8">
             <Slider
-              label="Cooldown Invitaciones"
+              label="Cooldown asignación"
               value={draft.tCooldownMinutes}
               min={1} max={1440} step={1}
               onChange={(e) => setParam('tCooldownMinutes', parseInt(e.target.value))}
@@ -136,6 +114,17 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
             onHelp={() => openHelp('maxAssignmentAttempts')}
             paramNumber={fauchardParamNumber('maxAssignmentAttempts')}
             flash={flashed.has('maxAssignmentAttempts')}
+          />
+          <Slider
+            label="Carga de Trabajo (Min)"
+            value={draft.loadReferenceMin}
+            min={5} max={50} step={1}
+            onChange={(e) => setParam('loadReferenceMin', parseInt(e.target.value))}
+            valueSuffix=" casos"
+            tooltip={fauchardParamTooltip('loadReferenceMin')}
+            onHelp={() => openHelp('loadReferenceMin')}
+            paramNumber={fauchardParamNumber('loadReferenceMin')}
+            flash={flashed.has('loadReferenceMin')}
           />
         </Section>
 

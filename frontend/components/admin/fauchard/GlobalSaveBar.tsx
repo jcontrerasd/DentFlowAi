@@ -12,7 +12,7 @@ import { useFauchardDraft, type DraftKey } from './FauchardDraftContext';
 const KEY_LABELS: Record<DraftKey, string> = {
   alphaQuality: 'Peso Calidad (αQ)', alphaPunctuality: 'Peso Puntualidad (αP)', alphaExperience: 'Peso Experiencia (αE)',
   alphaBonus: 'Peso Bono (αB)', alphaLoad: 'Peso Carga (αL)', alphaNoResponse: 'Peso No-resp (αN)',
-  wQualityDays: 'Ventana Calidad (días)', wLoadDays: 'Ventana Carga (días)', cMax: 'Techo de Carga', dBonusMaxDays: 'Bono máx (días)',
+  wQualityDays: 'Ventana histórica (días)', dBonusMaxDays: 'Bono máx (días)', loadReferenceMin: 'Carga de Trabajo (Min)',
   tCooldownMinutes: 'Cooldown (min)', dInactivityDays: 'Inactividad (días)',
   maxAssignmentAttempts: 'Intentos máx. asignación', tQuoteMinutes: 'Tiempo respuesta asignación (min)',
   tDentistReviewHours: 'Revisión dentista (h)', tNoEligiblePoolHours: 'Espera pool (h)', maxPoolCycles: 'Ciclos de espera', replacementCutoffMinutes: 'Margen reemplazo (min)',

@@ -54,9 +54,10 @@ export const WEIGHTS_HELP: FauchardHelpSection = {
       label: 'Puntualidad',
       symbol: 'P',
       description:
-        'Mide con qué frecuencia el técnico entrega dentro del plazo que prometió. Subirlo prioriza a quienes no se atrasan.',
+        'Mide con qué frecuencia el técnico entrega dentro del plazo que prometió. Subirlo prioriza a quienes no se atrasan. Se promedia sobre los casos completados dentro de la Ventana histórica (la misma que la Calidad).',
       example:
         'El Dr. Soto necesita la pieza antes de una cita ya agendada. El Lab. Andes entrega el 95% de sus casos a tiempo; el Lab. Pino suele atrasarse (70%). Si el peso de Puntualidad está alto (αP = 0.30), el cumplimiento manda y Fauchard prioriza al Lab. Andes para no arriesgar la fecha del paciente. Si lo bajas (αP = 0.05), el historial de atrasos casi no penaliza y el Lab. Pino podría recibir igualmente la invitación.',
+      links: [{ key: 'wQualityDays' }],
     },
     {
       label: 'Experiencia Especializada',
@@ -70,10 +71,9 @@ export const WEIGHTS_HELP: FauchardHelpSection = {
       label: 'Penalización por Carga',
       symbol: 'C',
       description:
-        'Resta score a los técnicos que ya acumulan muchos casos o invitaciones recientes. Reparte el trabajo y evita cuellos de botella.',
+        'Resta score a los técnicos que ya acumulan muchos casos activos en curso. Reparte el trabajo y evita cuellos de botella. Se mide como la carga activa actual del técnico, normalizada por la mayor carga del pool (no usa ventana temporal).',
       example:
-        'El Lab. Andes es excelente, pero esta semana ya tiene 8 casos abiertos; el Lab. Roble, casi tan bueno, solo 1. Si el peso de Carga está alto (αC = 0.20), la saturación penaliza con fuerza y Fauchard le cede el turno al Lab. Roble para cuidar los plazos de todos. Si lo pones en cero (αC = 0), la carga deja de importar: el Lab. Andes seguiría recibiendo todas las invitaciones hasta colapsar y los tiempos del marketplace empeorarían.',
-      links: [{ key: 'cMax' }, { key: 'wLoadDays' }],
+        'El Lab. Andes es excelente, pero ahora ya tiene 8 casos activos; el Lab. Roble, casi tan bueno, solo 1. Si el peso de Carga está alto (αL = 0.20), la saturación penaliza con fuerza y Fauchard le cede el turno al Lab. Roble para cuidar los plazos de todos. Si lo pones en cero (αL = 0), la carga deja de importar: el Lab. Andes seguiría recibiendo todas las asignaciones hasta colapsar y los tiempos del marketplace empeorarían.',
     },
     {
       label: 'Bono de Infrautilización',
@@ -103,36 +103,18 @@ export const WEIGHTS_HELP: FauchardHelpSection = {
 };
 
 export const FILTERS_HELP: FauchardHelpSection = {
-  title: 'Selección y Ronda',
+  title: 'Selección y Asignación',
   intro:
-    'Estos parámetros definen cómo Fauchard elige a los técnicos y los plazos de la ronda comercial: las ventanas con que mide a cada técnico, los filtros que lo excluyen del pool antes de calcular el score, las reglas de selección, y los tiempos y la comisión de la ronda. A diferencia de los pesos, aquí no hay suma que cuadrar: cada control es independiente.',
+    'Estos parámetros definen cómo Fauchard elige y asigna técnicos: la ventana con que mide su desempeño histórico, la carga de referencia del factor Carga, los filtros que excluyen del pool antes de calcular el score, y las reglas y plazos de la asignación directa. A diferencia de los pesos, aquí no hay suma que cuadrar: cada control es independiente.',
   params: [
     {
-      label: 'Calidad Histórica (días)',
+      label: 'Ventana histórica (días)',
       symbol: 'wQualityDays',
       description:
-        'Cuántos días hacia atrás se promedian las calificaciones para el factor Calidad. Acota la memoria de reputación.',
+        'Cuántos días hacia atrás se miden los factores históricos del score: la Calidad (promedio de calificaciones) y la Puntualidad (% de entregas a tiempo). Acota la memoria de desempeño del técnico de forma coherente en ambos ejes.',
       example:
-        'Si lo pones en 30, una mala racha del Lab. Andes el mes pasado pesa de lleno, pero sus buenas notas de hace 3 meses ya no cuentan. Subiéndolo a 180, la reputación se vuelve más estable y perdona tropiezos recientes.',
-      links: [{ key: 'alphaQuality' }],
-    },
-    {
-      label: 'Carga Reciente (días)',
-      symbol: 'wLoadDays',
-      description:
-        'Ventana para contar cuánto trabajo reciente acumula un técnico (invitaciones/casos), que alimenta la Penalización por Carga.',
-      example:
-        'Con 7 días, solo cuenta lo que el Lab. Andes tomó esta semana: se "libera" rápido. Con 30 días, arrastra su carga del último mes y Fauchard lo frena por más tiempo.',
-      links: [{ key: 'alphaLoad' }],
-    },
-    {
-      label: 'Techo Índice de Carga (C_max)',
-      symbol: 'cMax',
-      description:
-        'El Índice de Carga (C) mide cuántas veces más ocupado está un técnico respecto al promedio del pool: C = sus casos recientes ÷ promedio del pool. No es un conteo de casos, es un múltiplo — C = 1 significa "carga igual al promedio", C = 2 "el doble del promedio". Este techo limita hasta dónde puede crecer ese múltiplo: por saturado que esté un técnico, su penalización por carga se calcula con C como máximo igual a C_max. Ojo: el techo por sí solo no es la penalización. El castigo real al score es α_carga × C (peso "Penalización por Carga (C)" en Pesos del Score), de modo que la penalización máxima es α_carga × C_max.',
-      example:
-        'Si el pool promedia 5 casos y el Lab. Andes lleva 10, su C = 10 ÷ 5 = 2 (el doble del promedio). Con C_max = 2, da igual que el Andes tenga 10, 15 o 30 casos: su penalización se topa en 2× el promedio. Cuánto duele ese tope depende de α_carga: con α_carga = 0.15, cada 1× de carga sobre el promedio resta 0.15 al score y el castigo máximo es 0.15 × 2 = −0.30 (≈ la mitad del score positivo alcanzable). Bajar el techo a 1.5 (o bajar α_carga) suaviza el castigo a los muy ocupados; subirlos lo endurece y los aparta más de las rondas.',
-      links: [{ key: 'alphaLoad' }],
+        'Si lo pones en 30, una mala racha del Lab. Andes el mes pasado pesa de lleno (calidad y atrasos), pero su buen desempeño de hace 3 meses ya no cuenta. Subiéndolo a 180, la reputación se vuelve más estable y perdona tropiezos recientes.',
+      links: [{ key: 'alphaQuality' }, { key: 'alphaPunctuality' }],
     },
     {
       label: 'Bono Infrautilización (días máx)',
@@ -144,12 +126,12 @@ export const FILTERS_HELP: FauchardHelpSection = {
       links: [{ key: 'alphaBonus' }],
     },
     {
-      label: 'Cooldown Invitaciones',
+      label: 'Cooldown asignación',
       symbol: 'tCooldownMinutes',
       description:
-        'Tiempo que un técnico queda excluido tras rechazar o dejar expirar una invitación, antes de poder ser invitado de nuevo. Filtro previo al score.',
+        'Tiempo que un técnico queda excluido tras rechazar o dejar expirar una asignación, antes de poder volver a ser asignado. Filtro previo al score.',
       example:
-        'Con 120 min, si el Lab. Pino deja expirar una invitación, Fauchard no lo vuelve a considerar por 2 horas y le da el turno a otros. Bajarlo lo reintegra más rápido; subirlo lo aparta más tiempo.',
+        'Con 120 min, si el Lab. Pino deja expirar una asignación, Fauchard no lo vuelve a considerar por 2 horas y le da el turno a otros. Bajarlo lo reintegra más rápido; subirlo lo aparta más tiempo.',
     },
     {
       label: 'Inactividad Máxima (días)',
@@ -161,49 +143,26 @@ export const FILTERS_HELP: FauchardHelpSection = {
       links: [{ key: 'inactivityAutoOffDays' }],
     },
     {
-      label: 'Técnicos a invitar por caso',
-      symbol: 'nInvited',
-      description:
-        'Cuántos técnicos selecciona y notifica Fauchard simultáneamente por cada caso nuevo.',
-      example:
-        'Con 5, el Dr. Soto recibe hasta 5 cotizaciones para comparar. Subirlo a 8 amplía la competencia (mejores precios) pero reparte cada caso entre más técnicos; bajarlo concentra el caso en los mejores rankeados.',
-    },
-    {
-      label: 'Umbral Mínimo de Selección',
-      symbol: 'qMinSelection',
-      description:
-        'Calidad mínima (Q, en escala 0–1) que debe tener un técnico que ya cotizó para entrar al comparativo que ve el dentista. Es un filtro suave: si ninguna cotización lo alcanza, no bloquea — se usan todas.',
-      example:
-        'Con 0.60, si el Lab. Pino cotiza pero su calidad histórica equivale a Q=0.45, su oferta se descarta del comparativo del Dr. Soto (entran solo los de Q≥0.60). Si nadie llega a 0.60 en ese caso, el filtro se relaja y entran todas las cotizaciones para no dejar al dentista sin opciones. Subirlo exige más calidad; bajarlo abre la puerta a técnicos con menos historial.',
-    },
-    {
-      label: 'Tiempo para Cotizar',
+      label: 'Tiempo para responder asignación',
       symbol: 'tQuoteMinutes',
       description:
-        'Plazo máximo que tiene un técnico invitado para enviar su oferta antes de que la invitación expire (Etapa 1, técnicos cotizan).',
+        'Plazo máximo que tiene el técnico asignado para aceptar antes de que la asignación expire y pase al siguiente del ranking.',
       example:
-        'Con 90 min, cada técnico invitado al caso del Dr. Soto tiene hora y media para cotizar; pasado el plazo, su invitación expira y libera el cupo. Plazos cortos aceleran la ronda pero pueden dejar fuera a técnicos ocupados.',
+        'Con 240 min (4 h), el técnico asignado al caso del Dr. Soto tiene 4 horas para aceptar; si no responde, la asignación vence y se ofrece al siguiente candidato de la cadena de respaldo.',
     },
     {
-      label: 'Validez de Propuesta (horas)',
-      symbol: 'tProposalHours',
+      label: 'Carga de Trabajo (Min)',
+      symbol: 'loadReferenceMin',
       description:
-        'Plazo que tiene el dentista para elegir una oferta del comparativo antes de que venza (Etapa 2, dentista elige).',
+        'Cuántos casos activos se consideran "carga llena" como referencia para el factor Carga (L). Es el piso del divisor: la carga de cada técnico se normaliza dividiéndola por este valor (o por la mayor carga del pool si alguien lo supera). Subirlo hace que la penalización por carga sea más suave (cuesta más "llenarse"); bajarlo la endurece.',
       example:
-        'Con 2 h, el Dr. Soto debe escoger entre las ofertas dentro de 2 horas desde que se arma el comparativo. Es un countdown distinto del de cotización: corre después, y del lado del dentista.',
-    },
-    {
-      label: 'Margen de Plataforma (Platform Fee)',
-      symbol: 'platformFee',
-      description:
-        'Comisión de DentFlowAi sobre el precio base que cotiza el técnico. Afecta el precio final que ve el dentista (no aplica al flete).',
-      example:
-        'Con 15%, si el Lab. Andes cotiza $100.000, el Dr. Soto ve $115.000. Subirlo aumenta el ingreso de la plataforma pero encarece al dentista; el flete se cobra aparte, sin fee.',
+        'Con 5, un técnico con 1 caso activo tiene L = 1/5 = 0.20 (penalización leve) y con 5 casos llega a L = 1.0 (máxima). Si lo subes a 20, ese mismo técnico con 5 casos solo tendría L = 5/20 = 0.25: la carga influye mucho menos en el ranking.',
+      links: [{ key: 'alphaLoad' }],
     },
   ],
   notes: [
     'Cooldown e Inactividad Máxima son filtros de exclusión: se aplican ANTES de calcular el score. Un técnico que no los cumple ni siquiera entra al ranking.',
-    'Tiempo para Cotizar (Etapa 1, técnico) y Validez de Propuesta (Etapa 2, dentista) son countdowns independientes y consecutivos: no se solapan.',
+    'Carga de Trabajo (Min) no es un filtro: alimenta el factor Carga (L) del score. No excluye a nadie, solo regula cuánto penaliza estar ocupado.',
   ],
 };
 
@@ -279,7 +238,7 @@ export const PLAZOS_HELP: FauchardHelpSection = {
     'El recordatorio de inactividad debe ser anterior al auto-OFF (recordatorio < auto-OFF).',
     'La sanción decae sola al salir las no-respuestas de la ventana rolling: no requiere que un admin la limpie.',
     'El peso de la penalización (αN) y el resto de pesos del score se ajustan en la pestaña "Pesos del Score".',
-    'Los plazos de Cotización (Etapa 1) y Propuesta (Etapa 2) se ajustan en "Filtros y Tiempos"; aquí solo va la Revisión del dentista (Etapa 3).',
+    'El plazo para que el técnico acepte la asignación (Tiempo para responder asignación) se ajusta en "Selección y Asignación"; aquí solo va la Revisión del dentista.',
   ],
 };
 
@@ -298,8 +257,8 @@ export const OBSERVABILITY_HELP: FauchardHelpSection = {
     {
       label: 'Invitaciones sin respuesta',
       symbol: '#2',
-      description: '% de invitaciones que expiran sin que el técnico cotice.',
-      example: 'Si crece tras el rollout, suele ser un plazo de cotización muy corto o una sanción mal calibrada. Revisa el Tiempo para Cotizar y la Ventana rolling de la sanción.',
+      description: '% de asignaciones que expiran sin que el técnico responda.',
+      example: 'Si crece tras el rollout, suele ser un plazo de respuesta muy corto o una sanción mal calibrada. Revisa el Tiempo para responder asignación y la Ventana rolling de la sanción.',
       links: [{ key: 'tQuoteMinutes' }, { key: 'noResponseWindowDays' }],
     },
     {
@@ -339,7 +298,7 @@ export const OBSERVABILITY_HELP: FauchardHelpSection = {
       label: 'Tiempo medio del técnico al cotizar',
       symbol: '#10',
       description: 'Minutos promedio que tarda un técnico en responder con su oferta.',
-      example: 'Muy bajo puede ser sobre-compromiso (cotizan sin mirar); muy alto, saturación. Ayuda a ajustar el Tiempo para Cotizar.',
+      example: 'Muy bajo puede ser sobre-compromiso (aceptan sin mirar); muy alto, saturación. Ayuda a ajustar el Tiempo para responder asignación.',
       links: [{ key: 'tQuoteMinutes' }],
     },
     {
@@ -573,11 +532,11 @@ export const SIMULATOR_HELP: FauchardHelpSection = {
       links: [{ key: 'alphaNoResponse' }],
     },
     {
-      label: 'Ventana de calidad (Q)',
+      label: 'Ventana histórica (Q y P)',
       symbol: 'wQualityDays',
       description:
-        'Días hacia atrás con los que se promedian las calificaciones para el factor Q en esta simulación. Valor de la config activa.',
-      example: 'Con 30 días, solo cuentan ratings del último mes; con 180, la reputación es más estable y perdona rachas viejas.',
+        'Días hacia atrás con los que se miden los factores históricos en esta simulación: la Calidad (ratings) y la Puntualidad (% a tiempo). Valor de la config activa.',
+      example: 'Con 30 días, solo cuentan ratings y entregas del último mes; con 180, el desempeño es más estable y perdona rachas viejas.',
       links: [{ key: 'wQualityDays' }],
     },
     {
@@ -630,7 +589,7 @@ export const SIMULATOR_HELP: FauchardHelpSection = {
     },
   ],
   notes: [
-    'Parámetros de Configuración que no influyen en esta simulación: wLoadDays, cMax, nInvited, tProposalHours, platformFee y plazos post-asignación (revisión dentista, cola pool, sanción rolling).',
+    'Parámetros de Configuración que no influyen en esta simulación: nInvited, tProposalHours, platformFee y plazos post-asignación (revisión dentista, cola pool, sanción rolling). Nota: wLoadDays y cMax eran controles inertes y se retiraron de la configuración.',
     'Para cambiar valores persistentes, usa Configuración Fauchard (/dashboard/admin/fauchard). El panel "Parámetros activos" muestra solo los que afectan el motor de asignación directa.',
     'El filtro AND-triple de disponibilidad v5.0 solo aplica con AVAILABILITY_MODEL_ENABLED activo en el entorno.',
   ],
@@ -651,15 +610,14 @@ export const FAUCHARD_PARAM_TOOLTIP: Record<string, string> = {
   alphaLoad: descByLabel(WEIGHTS_HELP, 'Penalización por Carga'),
   alphaBonus: descByLabel(WEIGHTS_HELP, 'Bono de Infrautilización'),
   alphaNoResponse: descByLabel(WEIGHTS_HELP, 'Penalización por No-respuesta'),
-  // Selección y Ronda / Asignación
-  wQualityDays: descByLabel(FILTERS_HELP, 'Calidad Histórica (días)'),
-  wLoadDays: descByLabel(FILTERS_HELP, 'Carga Reciente (días)'),
-  cMax: descByLabel(FILTERS_HELP, 'Techo Índice de Carga (C_max)'),
+  // Selección y Asignación
+  wQualityDays: descByLabel(FILTERS_HELP, 'Ventana histórica (días)'),
   dBonusMaxDays: descByLabel(FILTERS_HELP, 'Bono Infrautilización (días máx)'),
-  tCooldownMinutes: descByLabel(FILTERS_HELP, 'Cooldown Invitaciones'),
+  tCooldownMinutes: descByLabel(FILTERS_HELP, 'Cooldown asignación'),
   dInactivityDays: descByLabel(FILTERS_HELP, 'Inactividad Máxima (días)'),
+  loadReferenceMin: descByLabel(FILTERS_HELP, 'Carga de Trabajo (Min)'),
   maxAssignmentAttempts: 'Máximo de técnicos a intentar por caso antes de cola pool o fallo.',
-  tQuoteMinutes: descByLabel(FILTERS_HELP, 'Tiempo para Cotizar'),
+  tQuoteMinutes: descByLabel(FILTERS_HELP, 'Tiempo para responder asignación'),
   // Disponibilidad y Sanciones
   tDentistReviewHours: descByLabel(PLAZOS_HELP, 'Revisión del dentista'),
   tNoEligiblePoolHours: descByLabel(PLAZOS_HELP, 'Tiempo de espera (TTL)'),
@@ -704,14 +662,13 @@ export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
   alphaLoad: 'Carga activa (L)',
   alphaNoResponse: 'Penalización por No-respuesta (N)',
   // Asignación
-  wQualityDays: 'Calidad Histórica (días)',
-  wLoadDays: 'Carga Reciente (días)',
-  cMax: 'Techo Índice de Carga (C_max)',
+  wQualityDays: 'Ventana histórica (días)',
   dBonusMaxDays: 'Bono Infrautilización (días máx)',
-  tCooldownMinutes: 'Cooldown Invitaciones',
+  tCooldownMinutes: 'Cooldown asignación',
   dInactivityDays: 'Inactividad Máxima (días)',
   maxAssignmentAttempts: 'Intentos máximos de asignación',
   tQuoteMinutes: 'Tiempo para responder asignación',
+  loadReferenceMin: 'Carga de Trabajo (Min)',
   // Disponibilidad y Sanciones
   tDentistReviewHours: 'Revisión del dentista',
   tNoEligiblePoolHours: 'Tiempo de espera (TTL)',
@@ -739,9 +696,9 @@ export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
 export const FAUCHARD_PARAM_PANEL: Record<string, FauchardParamPanel> = {
   alphaQuality: 'weights', alphaPunctuality: 'weights', alphaExperience: 'weights',
   alphaBonus: 'weights', alphaLoad: 'weights', alphaNoResponse: 'weights',
-  wQualityDays: 'filters', wLoadDays: 'filters', cMax: 'filters', dBonusMaxDays: 'filters',
+  wQualityDays: 'filters', dBonusMaxDays: 'filters',
   tCooldownMinutes: 'filters', dInactivityDays: 'filters', maxAssignmentAttempts: 'filters',
-  tQuoteMinutes: 'filters',
+  tQuoteMinutes: 'filters', loadReferenceMin: 'filters',
   tDentistReviewHours: 'plazos', tNoEligiblePoolHours: 'plazos', maxPoolCycles: 'plazos',
   replacementCutoffMinutes: 'plazos', inactivityReminderDays: 'plazos', inactivityAutoOffDays: 'plazos',
   noResponseWindowDays: 'plazos', noResponseRehabilitationDays: 'plazos',
@@ -782,9 +739,9 @@ export function fauchardParamSpace(key: string): 'parametros' | 'categorias' {
 const FAUCHARD_PARAM_ORDER: string[] = [
   // Pesos del Score (6 factores)
   'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaBonus', 'alphaLoad', 'alphaNoResponse',
-  // Selección y asignación
-  'wQualityDays', 'wLoadDays', 'cMax', 'dBonusMaxDays', 'tCooldownMinutes', 'dInactivityDays',
-  'maxAssignmentAttempts', 'tQuoteMinutes',
+  // Selección y asignación (orden = render del panel: Ventanas → Filtros → Reglas → Plazos)
+  'wQualityDays', 'dBonusMaxDays', 'tCooldownMinutes', 'dInactivityDays',
+  'maxAssignmentAttempts', 'loadReferenceMin', 'tQuoteMinutes',
   // Disponibilidad y Sanciones
   'tDentistReviewHours', 'tNoEligiblePoolHours', 'maxPoolCycles', 'replacementCutoffMinutes',
   'inactivityReminderDays', 'inactivityAutoOffDays', 'noResponseWindowDays',

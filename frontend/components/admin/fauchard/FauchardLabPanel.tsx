@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef } from 'react';
 import { simulateFauchardAction } from '@/lib/db/actions/fauchard';
-import { AlertCircle, Sparkles, RefreshCcw, FlaskConical, AlertTriangle, ChevronDown, Users } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { AlertCircle, RefreshCcw, FlaskConical, AlertTriangle, ChevronDown, Users } from 'lucide-react';
 import { useFauchardDraft } from './FauchardDraftContext';
 import { ACTIVE_ALPHA_KEYS } from '@/lib/fauchard/alphaWeightNormalize';
 import { flashParams } from '@/lib/hooks/useParamFlash';
@@ -18,27 +17,30 @@ const KPI_PARAMS = {
 } as const;
 
 /**
- * Laboratorio de decisión (read-only). Refleja el borrador compartido en vivo:
- * radar de pesos α + detalle de parámetro + KPIs + distribución de técnicos
- * **reales** (vía `simulateFauchardAction` con el borrador completo como override)
- * + alertas de dependencias. No edita parámetros (eso vive en los tabs).
+ * Laboratorio de decisión. Refleja el borrador compartido en vivo:
+ * radar de pesos α **editable** (arrastrar un vértice ajusta su peso, igual que el
+ * slider correspondiente — comparten `FauchardDraftContext`), tooltip por factor al
+ * pasar el mouse, KPIs + distribución de técnicos **reales** (vía `simulateFauchardAction`
+ * con el borrador completo como override) + alertas de dependencias.
  */
 
-type SelectedParamInfo = { key: string; label: string; symbol: string; description: string; example: string };
-
 const PARAMETER_HELP_MAP: Record<string, { label: string; symbol: string; description: string; example: string }> = {
-  alphaQuality: { label: 'Calidad Histórica (αQ)', symbol: 'αQ', description: 'Prioriza a los técnicos con mejores calificaciones en trabajos anteriores de la misma dimensión.', example: 'Si αQ = 0.40, la reputación manda: Lab Andes (4.8⭐) será invitado antes que Lab Roble (4.0⭐).' },
-  alphaPunctuality: { label: 'Puntualidad (αP)', symbol: 'αP', description: 'Favorece a los laboratorios que entregan dentro del plazo prometido.', example: 'Si αP = 0.30 y un técnico se retrasa seguido, su score cae en casos urgentes.' },
-  alphaExperience: { label: 'Experiencia Especializada (αE)', symbol: 'αE', description: 'Prioriza a técnicos con mayor nivel de habilidad en el tipo de trabajo específico.', example: 'Para una Guía Quirúrgica, un especialista 7/7 supera al generalista si αE está alto.' },
-  alphaBonus: { label: 'Bono de Infrautilización (αB)', symbol: 'αB', description: 'Aumento temporal de score para técnicos sin asignaciones recientes (días desde lastInvitedAt).', example: 'Si αB = 0.10 y el Lab. Sur lleva semanas sin asignación, su B=1.0 le empuja en el ranking frente a labs saturados.' },
-  alphaLoad: { label: 'Carga activa (αL)', symbol: 'αL', description: 'Resta score a técnicos saturados para evitar cuellos de botella.', example: 'Si αL = 0.20, un lab excelente pero con 8 casos cede el turno a otro más libre.' },
-  alphaNoResponse: { label: 'Penalización por No-respuesta (αN)', symbol: 'αN', description: 'Resta score al técnico que ignora asignaciones repetidamente.', example: 'Si αN = 0.25 y Lab Pino ignoró 2 asignaciones (Nivel 2), su score cae fuerte.' },
+  alphaQuality: { label: 'Calidad Histórica', symbol: 'αQ', description: 'Prioriza a los técnicos con mejores calificaciones en trabajos anteriores de la misma dimensión.', example: 'Si αQ = 0.40, la reputación manda: Lab Andes (4.8⭐) será invitado antes que Lab Roble (4.0⭐).' },
+  alphaPunctuality: { label: 'Puntualidad', symbol: 'αP', description: 'Favorece a los laboratorios que entregan dentro del plazo prometido.', example: 'Si αP = 0.30 y un técnico se retrasa seguido, su score cae en casos urgentes.' },
+  alphaExperience: { label: 'Experiencia Especializada', symbol: 'αE', description: 'Prioriza a técnicos con mayor nivel de habilidad en el tipo de trabajo específico.', example: 'Para una Guía Quirúrgica, un especialista 7/7 supera al generalista si αE está alto.' },
+  alphaBonus: { label: 'Bono de Infrautilización', symbol: 'αB', description: 'Aumento temporal de score para técnicos sin asignaciones recientes (días desde lastInvitedAt).', example: 'Si αB = 0.10 y el Lab. Sur lleva semanas sin asignación, su B=1.0 le empuja en el ranking frente a labs saturados.' },
+  alphaLoad: { label: 'Carga activa', symbol: 'αL', description: 'Resta score a técnicos saturados para evitar cuellos de botella.', example: 'Si αL = 0.20, un lab excelente pero con 8 casos cede el turno a otro más libre.' },
+  alphaNoResponse: { label: 'Penalización por No-respuesta', symbol: 'αN', description: 'Resta score al técnico que ignora asignaciones repetidamente.', example: 'Si αN = 0.25 y Lab Pino ignoró 2 asignaciones (Nivel 2), su score cae fuerte.' },
 };
 
 export default function FauchardLabPanel() {
-  const { draft, warnings } = useFauchardDraft();
+  const { draft, warnings, setParam } = useFauchardDraft();
 
-  const [selectedParam, setSelectedParam] = useState<SelectedParamInfo>({ key: 'alphaQuality', ...PARAMETER_HELP_MAP.alphaQuality });
+  const svgRef = useRef<SVGSVGElement>(null);
+  const draggingRef = useRef<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+  // Tooltip flotante (posición fija = coords del puntero) del factor bajo el mouse / en arrastre.
+  const [tip, setTip] = useState<{ key: string; x: number; y: number } | null>(null);
   const [showDist, setShowDist] = useState(false);
   const [simulation, setSimulation] = useState<any>(null);
   const [isPending, startTransition] = useTransition();
@@ -80,11 +82,6 @@ export default function FauchardLabPanel() {
   ));
   const agilityScore = Math.round(Math.max(0, 100 - (draft.tQuoteMinutes / 180) * 50 - (draft.maxAssignmentAttempts / 10) * 20));
 
-  const selectParam = (key: string) => {
-    const help = PARAMETER_HELP_MAP[key];
-    if (help) setSelectedParam({ key, ...help });
-  };
-
   const eligible = simulation?.funnel?.eligible ?? null;
   const attemptsWarning = eligible !== null && draft.maxAssignmentAttempts > eligible;
 
@@ -105,6 +102,46 @@ export default function FauchardLabPanel() {
   const dataPoints = axes.map((ax, i) => { const val = (draft[ax.key as keyof typeof draft] as number) / maxVal; return toXY(i, Math.min(val, 1)); });
   const dataPolygon = dataPoints.map((p) => `${p.x},${p.y}`).join(' ');
 
+  // Arrastre de un vértice → fija el peso α de ese eje (clamp 0–0.50, paso 0.01),
+  // proyectando el puntero sobre la dirección del eje. El slider espeja el valor
+  // (mismo `setParam` + contexto). No re-normaliza el resto: el medidor Σα avisa
+  // si la suma deja de ser 1.0, igual que al mover los sliders.
+  const applyDragValue = (clientX: number, clientY: number, i: number) => {
+    const svg = svgRef.current;
+    const ctm = svg?.getScreenCTM();
+    if (!svg || !ctm) return;
+    const pt = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse());
+    const ux = Math.cos(angle(i)), uy = Math.sin(angle(i));
+    const proj = (pt.x - CX) * ux + (pt.y - CY) * uy; // distancia con signo sobre el eje
+    const mag = Math.max(0, Math.min(proj / R, 1));    // 0..1 dentro del radar
+    const value = Math.round(mag * maxVal * 100) / 100; // 0..0.50, paso 0.01
+    setParam(axes[i].key as Parameters<typeof setParam>[0], value);
+  };
+  const startDrag = (e: React.PointerEvent, i: number) => {
+    e.preventDefault();
+    draggingRef.current = i;
+    setDragging(true);
+    (e.target as Element).setPointerCapture(e.pointerId);
+    setTip({ key: axes[i].key, x: e.clientX, y: e.clientY });
+    applyDragValue(e.clientX, e.clientY, i);
+  };
+  const moveDrag = (e: React.PointerEvent, i: number) => {
+    if (draggingRef.current !== i) return;
+    setTip({ key: axes[i].key, x: e.clientX, y: e.clientY });
+    applyDragValue(e.clientX, e.clientY, i);
+  };
+  const endDrag = (e: React.PointerEvent) => {
+    draggingRef.current = null;
+    setDragging(false);
+    try { (e.target as Element).releasePointerCapture(e.pointerId); } catch { /* noop */ }
+  };
+  const hoverTip = (e: React.PointerEvent, i: number) => {
+    if (draggingRef.current === null) setTip({ key: axes[i].key, x: e.clientX, y: e.clientY });
+  };
+  const leaveTip = () => { if (draggingRef.current === null) setTip(null); };
+
+  const tipInfo = tip ? PARAMETER_HELP_MAP[tip.key] : null;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -117,7 +154,7 @@ export default function FauchardLabPanel() {
 
       <div className="p-2.5 rounded-xl bg-surface/30 border border-divider">
         <h4 className="text-[10px] font-bold text-foreground mb-1">Radar α</h4>
-        <svg viewBox="0 0 300 300" className="w-full max-w-[180px] mx-auto h-auto">
+        <svg ref={svgRef} viewBox="0 0 300 300" className="w-full max-w-[180px] mx-auto h-auto touch-none">
           <defs>
             <radialGradient id="labRadarFill" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.35" />
@@ -128,30 +165,40 @@ export default function FauchardLabPanel() {
           {axes.map((_, i) => { const o = toXY(i, 1); return <line key={i} x1={CX} y1={CY} x2={o.x} y2={o.y} stroke="var(--color-divider)" strokeWidth="1" />; })}
           <polygon points={dataPolygon} fill="url(#labRadarFill)" stroke="var(--color-primary)" strokeWidth="2.5" strokeLinejoin="round" />
           {dataPoints.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r="5" fill={axes[i].color} stroke="var(--color-surface)" strokeWidth="2" className="cursor-pointer" onClick={() => selectParam(axes[i].key)} />
+            <g key={i}>
+              {/* Punto visible */}
+              <circle cx={p.x} cy={p.y} r={dragging && draggingRef.current === i ? 8 : 5} fill={axes[i].color} stroke="var(--color-surface)" strokeWidth="2" className="pointer-events-none transition-[r]" />
+              {/* Zona de agarre (transparente, área cómoda) */}
+              <circle
+                cx={p.x} cy={p.y} r="14" fill="transparent"
+                className={dragging ? 'cursor-grabbing' : 'cursor-grab'}
+                onPointerDown={(e) => startDrag(e, i)}
+                onPointerMove={(e) => moveDrag(e, i)}
+                onPointerUp={endDrag}
+                onPointerEnter={(e) => hoverTip(e, i)}
+                onPointerLeave={leaveTip}
+              />
+            </g>
           ))}
           {axes.map((ax, i) => {
             const lp = toXY(i, 1.2);
             const anchor = Math.cos(angle(i)) < -0.3 ? 'end' : Math.cos(angle(i)) > 0.3 ? 'start' : 'middle';
-            return <text key={i} x={lp.x} y={lp.y + 4} textAnchor={anchor} fontSize="9" fontWeight="700" fill="var(--color-muted)" className="cursor-pointer select-none" onClick={() => selectParam(ax.key)}>{ax.label}</text>;
+            return (
+              <text
+                key={i} x={lp.x} y={lp.y + 4} textAnchor={anchor} fontSize="9" fontWeight="700"
+                fill="var(--color-muted)" className="cursor-help select-none"
+                onPointerEnter={(e) => hoverTip(e, i)} onPointerLeave={leaveTip}
+              >{ax.label}</text>
+            );
           })}
           <circle cx={CX} cy={CY} r="3" fill="var(--color-primary)" opacity="0.5" />
         </svg>
+        <p className="text-[9px] text-faint text-center mt-1 leading-tight">Arrastra los vértices para ajustar α · pasa el mouse para ver cada factor</p>
         <div className={`mt-1 p-2 rounded-lg border text-[10px] font-bold flex items-center justify-between ${isWeightsSumValid ? 'bg-primary/5 border-primary/20 text-primary' : 'bg-error/5 border-error/20 text-error'}`}>
           <span>Σ α = {sumWeights.toFixed(3)}</span>
           <span>{isWeightsSumValid ? '✓ Válido' : '⚠ Debe sumar 1.0'}</span>
         </div>
       </div>
-
-      {/* Detalle del parámetro */}
-      <motion.div key={selectedParam.key} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="p-2.5 rounded-xl bg-surface/50 border border-divider space-y-1.5">
-        <div className="flex items-center gap-1.5 text-primary">
-          <Sparkles className="w-3.5 h-3.5 shrink-0" />
-          <h4 className="text-[10px] font-black uppercase tracking-wider text-foreground truncate">{selectedParam.label}</h4>
-          <span className="text-[8px] font-mono font-bold bg-surface-2 border border-divider px-1 py-0.5 rounded text-faint ml-auto shrink-0">{selectedParam.symbol}</span>
-        </div>
-        <p className="text-[10px] text-muted leading-snug line-clamp-2">{selectedParam.description}</p>
-      </motion.div>
 
       <div className="grid grid-cols-2 gap-2">
         <Kpi label="Foco en Calidad" value={qualityFocus} good={qualityFocus > 60} goodLabel="Exigente" badLabel="Balanceado" bar="bg-primary" onClick={() => flashParams([...KPI_PARAMS.quality])} />
@@ -219,6 +266,26 @@ export default function FauchardLabPanel() {
           </div>
         )}
       </div>
+
+      {/* Tooltip flotante del factor bajo el mouse / en arrastre (posición fija = puntero). */}
+      {tip && tipInfo && (
+        <div
+          className="fixed z-50 pointer-events-none w-56 max-w-[80vw] rounded-xl border border-divider bg-surface shadow-xl p-3 space-y-1.5"
+          style={{
+            left: Math.min(tip.x + 14, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 240),
+            top: tip.y + 14,
+          }}
+        >
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-black uppercase tracking-wider text-foreground">{tipInfo.label}</span>
+            <span className="text-[9px] font-mono font-bold bg-surface-2 border border-divider px-1 py-0.5 rounded text-primary ml-auto shrink-0">
+              {tipInfo.symbol} = {(draft[tip.key as keyof typeof draft] as number).toFixed(2)}
+            </span>
+          </div>
+          <p className="text-[10px] text-muted leading-snug">{tipInfo.description}</p>
+          <p className="text-[10px] text-faint leading-snug italic">{tipInfo.example}</p>
+        </div>
+      )}
     </div>
   );
 }

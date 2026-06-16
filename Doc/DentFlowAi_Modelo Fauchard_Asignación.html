@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DentFlowAi · Modelo Fauchard — Asignación directa</title>
+<style>
+  :root{
+    --bg:#0f1419; --surface:#1a212b; --surface2:#232c38; --border:#2e3a48;
+    --text:#e6edf3; --muted:#9bb0c3; --faint:#6b7d8f;
+    --teal:#2dd4bf; --teal-dim:#0f766e; --amber:#fbbf24; --rose:#fb7185;
+    --green:#4ade80; --blue:#60a5fa; --violet:#a78bfa;
+    --add:#4ade80; --sub:#fb7185;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:0 0 80px;
+  }
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px}
+  header.hero{
+    background:linear-gradient(135deg,#0f766e22,#0f141900),var(--surface);
+    border-bottom:1px solid var(--border); padding:48px 0 36px; margin-bottom:8px;
+  }
+  header.hero .wrap{max-width:960px}
+  .kicker{color:var(--teal);font-weight:600;letter-spacing:.08em;text-transform:uppercase;font-size:12px;margin:0 0 8px}
+  h1{font-size:32px;line-height:1.2;margin:0 0 12px;font-weight:700}
+  .lede{color:var(--muted);font-size:17px;margin:0;max-width:680px}
+  .meta{margin-top:20px;color:var(--faint);font-size:13px}
+  h2{font-size:24px;margin:48px 0 16px;padding-bottom:10px;border-bottom:1px solid var(--border);font-weight:700}
+  h3{font-size:18px;margin:32px 0 10px;font-weight:650}
+  p{margin:0 0 14px}
+  a{color:var(--teal)}
+  code{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-size:.86em;font-family:"SF Mono",Menlo,Consolas,monospace;color:#a5e8de}
+  .formula{
+    background:var(--surface);border:1px solid var(--teal-dim);border-radius:12px;
+    padding:24px;margin:20px 0;text-align:center;font-size:20px;font-family:"SF Mono",Menlo,monospace;
+    color:var(--text);overflow-x:auto;
+  }
+  .formula .add{color:var(--add);font-weight:700}
+  .formula .sub{color:var(--sub);font-weight:700}
+  .formula small{display:block;color:var(--faint);font-size:12px;font-family:-apple-system,sans-serif;margin-top:12px}
+  .callout{
+    background:var(--surface);border-left:4px solid var(--amber);border-radius:8px;
+    padding:16px 18px;margin:20px 0;color:var(--muted);font-size:14px;
+  }
+  .callout.teal{border-left-color:var(--teal)}
+  .callout strong{color:var(--text)}
+  .factor{
+    background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:0;margin:22px 0;overflow:hidden;
+  }
+  .factor-head{
+    display:flex;align-items:center;gap:14px;padding:18px 22px;
+    border-bottom:1px solid var(--border);
+  }
+  .badge{
+    width:46px;height:46px;border-radius:11px;display:grid;place-items:center;
+    font-size:22px;font-weight:800;flex:none;
+  }
+  .badge.add{background:#14532d44;color:var(--green);border:1px solid #16653480}
+  .badge.sub{background:#4c051744;color:var(--rose);border:1px solid #9f123980}
+  .factor-head h3{margin:0;font-size:18px}
+  .factor-head .sign{margin-left:auto;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px}
+  .sign.add{background:#14532d44;color:var(--green)}
+  .sign.sub{background:#4c051744;color:var(--rose)}
+  .factor-body{padding:18px 22px}
+  .factor-body p:last-child{margin-bottom:0}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--faint);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  td code{font-size:.85em}
+  .src{color:var(--faint);font-size:12.5px;margin-top:10px;font-family:"SF Mono",Menlo,monospace}
+  .src::before{content:"📄 ";font-family:initial}
+  ul.clean{margin:8px 0 14px;padding-left:20px}
+  ul.clean li{margin:5px 0}
+  .pill{display:inline-block;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:2px 10px;font-size:12px;color:var(--muted);margin:2px 4px 2px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+  @media(max-width:680px){.grid2{grid-template-columns:1fr}}
+  .mini{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .mini h4{margin:0 0 6px;font-size:14px;color:var(--teal)}
+  .mini p{margin:0;font-size:13px;color:var(--muted)}
+  .step{display:flex;gap:14px;margin:0 0 4px}
+  .step .num{flex:none;width:28px;height:28px;border-radius:50%;background:var(--teal-dim);color:#fff;display:grid;place-items:center;font-weight:700;font-size:13px}
+  .step .body{padding-bottom:18px;border-left:2px solid var(--border);margin-left:-15px;padding-left:28px;flex:1}
+  .step:last-child .body{border-left:none}
+  .step .body h4{margin:0 0 4px;font-size:15px}
+  .step .body p{margin:0;color:var(--muted);font-size:13.5px}
+  .toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 22px;margin:24px 0}
+  .toc h3{margin:0 0 10px}
+  .toc ol{margin:0;padding-left:20px;color:var(--muted)}
+  .toc a{text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .footer{color:var(--faint);font-size:12.5px;margin-top:56px;padding-top:20px;border-top:1px solid var(--border)}
+  .eq{font-family:"SF Mono",Menlo,monospace;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:inline-block;margin:6px 0;color:#a5e8de;font-size:13.5px}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="kicker">DentFlowAi · Motor de orquestación</p>
+    <h1>Modelo Fauchard — Cómo se decide a qué técnico se asigna un caso</h1>
+    <p class="lede">Documento de referencia del <strong>score de asignación directa</strong> (v2). Detalla cómo se compone cada uno de los seis factores —Q, P, E, B, L, N— que determinan el ranking de técnicos, de dónde sale cada dato y qué parámetro de configuración lo gobierna.</p>
+    <p class="meta">Fuente del modelo: <code>lib/fauchard/assignmentScore.ts</code> · <code>lib/db/actions/assignment.ts</code> &nbsp;|&nbsp; Modelo: asignación directa (top-1 + cadena de respaldo).</p>
+    <p class="meta" style="color:var(--teal)">⚙ <strong>Valores reales</strong> de este documento: config <b>activa v33</b> de <code>fauchard_config</code> (BD local <code>dentflowai_local</code>, capturada 2026-06-16). Flags de entorno <code>AVAILABILITY_MODEL_ENABLED</code> · <code>POOL_PENDIENTE_ENABLED</code> · <code>LEAGUE_ENGINE_ENABLED</code> = <b>ON</b> (local · dev · prod). No son los defaults del esquema.</p>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="toc">
+    <h3>Contenido</h3>
+    <ol>
+      <li><a href="#flujo">El flujo en dos fases: filtrar, luego puntuar</a></li>
+      <li><a href="#clasificacion">Clasificación del caso: workType y liga</a></li>
+      <li><a href="#formula">La fórmula del score</a></li>
+      <li><a href="#filtros">Fase 1 — Filtros duros (quién entra al ranking)</a></li>
+      <li><a href="#factores">Fase 2 — Los seis factores del score</a></li>
+      <li><a href="#pesos">Pesos α y la regla de la suma 1.000</a></li>
+      <li><a href="#empates">Orden final y desempates</a></li>
+      <li><a href="#cadena">De score a asignación: cadena de respaldo</a></li>
+      <li><a href="#ejemplo">Ejemplo numérico paso a paso</a></li>
+    </ol>
+  </div>
+
+  <h2 id="flujo">1 · El flujo en dos fases</h2>
+  <p>Cuando un dentista publica un caso, Fauchard <strong>no</strong> puntúa a todos los técnicos. Primero descarta a quienes no son aptos (filtros duros), y solo a los que sobreviven les calcula un score. El de score más alto recibe la asignación.</p>
+
+  <div class="step"><div class="num">1</div><div class="body"><h4>Clasificar el caso</h4><p>Se deriva el <em>tipo de trabajo</em> (workType), la <em>categoría</em> y la <em>liga</em> a partir de la restauración, número de piezas, pónticos y complejidad. (<code>classifyCaseAction</code> → <code>deriveScenarioFromInputs</code>)</p></div></div>
+  <div class="step"><div class="num">2</div><div class="body"><h4>Construir el pool elegible (filtros duros)</h4><p>Se recorre el universo de técnicos activos y se excluye a los que no pasan cada filtro. Si nadie pasa en modo estricto de liga, se expande la liga un nivel. (<code>buildEligiblePoolForScenario</code>)</p></div></div>
+  <div class="step"><div class="num">3</div><div class="body"><h4>Puntuar y rankear (score Q/P/E/B/L/N)</h4><p>Para cada técnico elegible se calcula el score con los pesos de la config activa y se ordena de mayor a menor. (<code>rankPool</code> → <code>computeAssignmentScore</code>)</p></div></div>
+  <div class="step"><div class="num">4</div><div class="body"><h4>Asignar al top-1</h4><p>El primero del ranking recibe la asignación pendiente; si no hay elegibles y la cola está activa, el caso entra a <code>pendiente_pool</code>. (<code>runAssignmentAction</code> → <code>assignCaseAction</code>)</p></div></div>
+
+  <h2 id="clasificacion">2 · Clasificación del caso: de dónde salen el <code>workType</code> y la liga</h2>
+  <p>Antes de filtrar o puntuar, el caso se «traduce» a dos valores derivados que alimentan toda la decisión: el <strong>tipo de trabajo (<code>workType</code>)</strong> y la <strong>liga</strong>. Ambos se calculan <b>automáticamente al publicar</b>, a partir de los campos clínicos que llenó el dentista — el dentista no los elige. (<code>resolveScenario()</code> en <code>lib/fauchard/caseWorkType.ts</code>)</p>
+  <div class="grid2">
+    <div class="mini"><h4>workType → alimenta E</h4><p>Selecciona <em>cuál</em> de las habilidades declaradas del técnico se lee para el factor Experiencia, y filtra por skill en ese tipo.</p></div>
+    <div class="mini"><h4>Liga → alimenta el filtro</h4><p>Define qué técnicos pueden tomar el caso y el nivel mínimo de skill para entrar al pool.</p></div>
+  </div>
+
+  <h3>A · Cómo se determina el tipo de trabajo (<code>workType</code>)</h3>
+  <p>Sale de combinar hasta <strong>tres campos del caso</strong>: <b>restauración + nº de piezas + pónticos</b> (¿reemplaza dientes ausentes?). Algunas restauraciones lo fijan solas; otras dependen de las piezas; y el póntico es lo que convierte una corona múltiple en un puente.</p>
+  <div class="callout">
+    <strong>El motor evalúa en este orden</strong> y se queda con la primera regla que aplica:
+    <ol class="clean" style="margin-top:8px">
+      <li><b>≥10 piezas</b> → arcada completa (full arch)</li>
+      <li>Restauración de tipo fijo (<b>Denture, Guía</b>) → su workType fijo</li>
+      <li><b>Corona sobre implante</b> → por cantidad de piezas</li>
+      <li><b>¿Tiene pónticos?</b> → puente (corto/largo según piezas)</li>
+      <li><b>Carilla</b> → carillas (simple/múltiple)</li>
+      <li><b>Inlay/Onlay</b> → inlays</li>
+      <li><b>Corona sin pónticos</b> → corona (unitaria/múltiple según piezas)</li>
+    </ol>
+  </div>
+  <table>
+    <thead><tr><th>Restauración</th><th>Piezas</th><th>Pónticos</th><th>→ <code>workType</code></th></tr></thead>
+    <tbody>
+      <tr><td>Denture</td><td>cualquiera</td><td>—</td><td><code>protesis_total</code></td></tr>
+      <tr><td>Guía Quirúrgica</td><td>cualquiera</td><td>—</td><td><code>guia_quirurgica_simple</code></td></tr>
+      <tr><td>Inlay / Onlay</td><td>cualquiera</td><td>No</td><td><code>inlay_onlay</code></td></tr>
+      <tr><td>Carilla</td><td>1–3</td><td>No</td><td><code>carilla_simple</code></td></tr>
+      <tr><td>Carilla</td><td>≥4</td><td>No</td><td><code>carilla_multiple</code></td></tr>
+      <tr><td>Corona</td><td>1</td><td>No</td><td><code>corona_unitaria</code></td></tr>
+      <tr><td>Corona</td><td>2–3</td><td>No</td><td><code>corona_multiple_corta</code></td></tr>
+      <tr><td>Corona</td><td>4–9</td><td>No</td><td><code>corona_multiple_larga</code></td></tr>
+      <tr><td>Corona</td><td>≥10</td><td>No</td><td><code>full_arch_corona</code></td></tr>
+      <tr><td>Corona sobre implante</td><td>1</td><td>No</td><td><code>corona_implante</code></td></tr>
+      <tr style="background:#0f766e22"><td><b>Cualquiera</b></td><td>≤6</td><td><b>Sí</b></td><td><code>puente_corto</code></td></tr>
+      <tr style="background:#0f766e22"><td><b>Cualquiera</b></td><td>7–9</td><td><b>Sí</b></td><td><code>puente_largo</code></td></tr>
+      <tr><td>Cualquiera</td><td>≥10</td><td>Sí / mixto</td><td><code>full_arch</code></td></tr>
+    </tbody>
+  </table>
+  <p class="src">resolveWorkType() en lib/fauchard/caseWorkType.ts · campos del caso: restorationType, teeth[], replacesMissingTeeth</p>
+
+  <h3>B · Cómo se determina la liga (y el nivel mínimo exigido)</h3>
+  <p>En paralelo, el caso se clasifica por <strong>complejidad</strong>, y la complejidad define la <strong>liga</strong>. La liga hace <b>dos trabajos en el filtro duro</b>: (1) exige que el técnico pertenezca a esa liga —con expansión de 1 nivel si el pool queda vacío— y (2) fija el <b>nivel mínimo de skill</b> (<code>designLevel</code>) para entrar al pool. <em>La complejidad puede derivarse automáticamente o fijarla manualmente el dentista/admin en el wizard.</em></p>
+  <table>
+    <thead><tr><th>Complejidad</th><th>Cuándo (regla)</th><th>→ Liga</th><th>Nivel mínimo de skill</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Básico</strong></td><td>1–3 piezas, trabajo simple (el resto)</td><td>bronce</td><td><strong>1</strong></td></tr>
+      <tr><td><strong>Intermedio</strong></td><td>≥4 piezas · o puente largo / carilla múltiple / corona múltiple larga</td><td>plata</td><td><strong>3</strong></td></tr>
+      <tr><td><strong>Avanzado</strong></td><td>≥10 piezas · prótesis (Denture) · arcada completa (full arch)</td><td>oro</td><td><strong>5</strong></td></tr>
+      <tr><td><strong>Crítico</strong></td><td>Guía Quirúrgica (siempre)</td><td>élite</td><td><strong>7</strong></td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <strong>Importante:</strong> la liga influye en el <b>filtro</b> (quién entra al pool), <b>no</b> es un término del score. El «nivel mínimo» de esta tabla es el umbral que se compara contra el <code>designLevel</code> del técnico en el <code>workType</code> del caso; quien no llega, queda fuera y nunca se puntúa. Una vez dentro, el factor <b>E</b> mide su nivel de forma absoluta (nivel ÷ 7), sin volver a comparar contra este mínimo.
+  </div>
+  <p class="src">resolveCaseComplexity() + COMPLEXITY_TO_LEAGUE + MIN_SKILL_FOR_CATEGORY en lib/fauchard/caseWorkType.ts</p>
+
+  <h2 id="formula">3 · La fórmula del score</h2>
+  <div class="formula">
+    score = max(0,&nbsp;
+    <span class="add">α<sub>Q</sub>·Q + α<sub>P</sub>·P + α<sub>E</sub>·E + α<sub>B</sub>·B</span>
+    &nbsp;<span class="sub">− α<sub>L</sub>·L − α<sub>N</sub>·N</span>&nbsp;)
+    <small>Calidad, Puntualidad, Experiencia y Bono <b>suman</b>; Carga y No-respuesta <b>restan</b>. El score nunca baja de 0.</small>
+  </div>
+  <p>Cada factor (Q, P, E, B, L, N) se normaliza a un valor entre <strong>0 y 1</strong>. Cada peso <strong>α</strong> (alpha) decide cuánto influye su factor; los pesos los configura el admin y, por regla, suman 1.000.</p>
+  <div class="callout teal">
+    <strong>Dónde verlo en código:</strong> la fórmula vive en <code>computeAssignmentScore()</code> (<code>lib/fauchard/assignmentScore.ts</code>). Los insumos crudos de cada técnico se obtienen en <code>bulkAssignmentData()</code> y se ensamblan en <code>rankPool()</code> (<code>lib/db/actions/assignment.ts</code>).
+  </div>
+
+  <h2 id="filtros">4 · Fase 1 — Filtros duros</h2>
+  <p>Estos filtros se aplican <strong>antes</strong> del score. Un técnico que no los cumple ni siquiera entra al ranking (no recibe un score bajo: queda fuera).</p>
+  <table>
+    <thead><tr><th>Filtro</th><th>Excluye a…</th><th>Parámetro</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Disponible</strong></td><td>técnico con switch de disponibilidad apagado (<code>isAvailable=false</code>)</td><td>—</td></tr>
+      <tr><td><strong>Liga</strong></td><td>técnico cuya liga no calza con la del caso (con expansión de 1 nivel si el pool queda vacío)</td><td>liga del caso</td></tr>
+      <tr><td><strong>Suspensión</strong></td><td>técnico con <code>suspendedUntil</code> en el futuro</td><td>—</td></tr>
+      <tr><td><strong>Inactividad</strong></td><td>técnico sin login desde hace más de N días</td><td><code>dInactivityDays</code> · <strong>vigente: 15 días</strong></td></tr>
+      <tr><td><strong>Cooldown</strong></td><td>técnico con una asignación reciente del <em>mismo workType</em></td><td><code>tCooldownMinutes</code> · N°9 · <strong>vigente: 2 min</strong> (default esquema 720)</td></tr>
+      <tr><td><strong>Skill mínimo</strong></td><td>técnico sin nivel de diseño suficiente para la liga del caso</td><td><code>MIN_SKILL_FOR_CATEGORY</code></td></tr>
+      <tr><td><strong>AND-triple (v5.0)</strong></td><td>técnico que no declaró disponibilidad global ∧ CAD ∧ categoría <em>(<code>AVAILABILITY_MODEL_ENABLED</code> = ON → <b>este filtro está activo</b>)</em></td><td><code>computeEligibleAction</code></td></tr>
+    </tbody>
+  </table>
+  <p class="src">checkTechnicianPassesFilters() en lib/db/actions/assignment.ts</p>
+
+  <div class="callout">
+    <strong>¿Por qué el Cooldown no aparece en la fórmula (sección 3)?</strong> Porque el cooldown <b>no es un peso del score</b>, es un <b>filtro de exclusión</b> que actúa <em>antes</em> de puntuar. La sección 3 solo lista los seis pesos α (Q/P/E/B/L/N). Tras una asignación del mismo tipo de trabajo, el técnico queda fuera del pool durante ese lapso.
+  </div>
+  <div class="callout teal">
+    <strong>Valor que realmente gobierna el filtro:</strong> el que tenga la <b>config activa</b> en <code>fauchard_config</code>, no el default del esquema. En el panel admin (parámetro <b>N°9 · «Cooldown Invitaciones»</b>) el valor <b>vigente es 2 minutos</b>. El <code>720</code> (=12 h) es solo el <em>default</em> que trae el esquema y que aplicaría si se sembrara una config nueva sin editar; aquí ya está ajustado a 2 min. Rango editable: 1 a 1440 min (1 min a 24 h). <em>La misma regla aplica a todos los parámetros: lo que rige es la fila activa de config, no los defaults de este documento.</em>
+  </div>
+
+  <h2 id="factores">5 · Fase 2 — Los seis factores del score</h2>
+  <p>Para cada técnico que pasó los filtros, se calculan estos seis factores. Junto a cada uno indico <strong>qué mide</strong>, <strong>de dónde sale el dato</strong>, la <strong>fórmula de normalización</strong> y el <strong>valor por defecto</strong> cuando no hay historial.</p>
+
+  <!-- Q -->
+  <div class="factor">
+    <div class="factor-head">
+      <div class="badge add">Q</div>
+      <h3>Calidad histórica</h3>
+      <span class="sign add">SUMA</span>
+    </div>
+    <div class="factor-body">
+      <p><strong>Qué mide:</strong> la reputación del técnico según las calificaciones de diseño que ha recibido.</p>
+      <div class="callout">
+        <strong>Respondiendo tu pregunta exacta:</strong> Q <em>casi</em> es lo que describías, con un matiz clave. <b>No</b> es la calidad que dio «ese dentista» a «ese técnico». Es el <b>promedio de TODAS las calificaciones de diseño</b> (<code>dimension='design'</code>) que el técnico recibió <b>de cualquier dentista</b>, dentro de la ventana de calidad. La calificación del dentista actual aún no existe en el momento de asignar (el caso recién se publica), así que Q refleja el track record agregado del técnico.
+      </div>
+      <table>
+        <tr><th>Dato crudo</th><td><code>avgRating</code> = promedio de <code>review.rating</code> (escala 1–5)</td></tr>
+        <tr><th>Filtro del dato</th><td><code>revieweeId</code> = técnico · <code>dimension</code> = <code>'design'</code> · <code>createdAt</code> dentro de la ventana de calidad</td></tr>
+        <tr><th>Ventana</th><td>últimos <code>wQualityDays</code> días — <strong>la misma ventana histórica que gobierna P</strong> &nbsp;<span class="pill">Parámetro N°7</span><span class="pill">vigente: 90 días (config activa v33)</span></td></tr>
+        <tr><th>Normalización</th><td><span class="eq">Q = avgRating / 5</span></td></tr>
+        <tr><th>Sin calificaciones</th><td><strong>Q = 0.5</strong> (valor neutro, no penaliza al técnico nuevo)</td></tr>
+      </table>
+      <p style="margin-top:12px">Ejemplo: un técnico con promedio 4.8/5 en sus diseños del último trimestre tiene <code>Q = 0.96</code>; uno con 4.0/5 tiene <code>Q = 0.80</code>. Esa diferencia, multiplicada por α<sub>Q</sub>, decide cuánto «pesa» la reputación en el ranking.</p>
+      <div class="callout teal"><strong>Valor real vigente de la ventana:</strong> <b>90 días</b> (config activa v33, parámetro N°7 <code>w_quality_days</code>). Es decir, Q promedia las calificaciones de diseño de los <b>últimos 90 días</b>.</div>
+      <p class="src">normalizeQuality() en assignmentScore.ts · query de ratings en bulkAssignmentData()</p>
+    </div>
+  </div>
+
+  <!-- P -->
+  <div class="factor">
+    <div class="factor-head">
+      <div class="badge add">P</div>
+      <h3>Puntualidad</h3>
+      <span class="sign add">SUMA</span>
+    </div>
+    <div class="factor-body">
+      <p><strong>Qué mide:</strong> con qué frecuencia el técnico entrega dentro del plazo comprometido.</p>
+      <table>
+        <tr><th>Dato crudo</th><td><code>onTimeRate</code> = (casos completados a tiempo) ÷ (casos completados)</td></tr>
+        <tr><th>Universo</th><td>asignaciones <code>accepted</code> cuyo caso tiene <code>completedAt</code> (caso cerrado) <strong>dentro de la ventana histórica</strong></td></tr>
+        <tr><th>Ventana</th><td>últimos <code>wQualityDays</code> días — <strong>la misma ventana histórica que gobierna Q</strong> &nbsp;<span class="pill">Parámetro N°7</span><span class="pill">vigente: 90 días</span></td></tr>
+        <tr><th>Criterio «a tiempo»</th><td><code>isCompletedOnTime(completedAt, desiredDeliveryAt, publishedAt, deadlineDays)</code> — comparado contra la fecha de entrega comprometida</td></tr>
+        <tr><th>Normalización</th><td><span class="eq">P = onTimeRate</span> (ya es 0–1)</td></tr>
+        <tr><th>Sin casos completados</th><td><strong>P = 0.8</strong> (valor neutro favorable al técnico nuevo)</td></tr>
+      </table>
+      <div class="callout teal">
+        <strong>Ventana histórica unificada (implementado).</strong> P usa <b>la misma ventana que Q</b>: el parámetro <code>wQualityDays</code> (N°7, "Ventana histórica (días)", vigente 90 d). Solo cuentan los casos completados dentro de esa ventana, igual que las calificaciones de Q. Así el técnico se evalúa por su desempeño <em>reciente</em> de forma coherente en ambos ejes; un pasado lejano (bueno o malo) ya no distorsiona un factor sí y el otro no. Si un técnico no tiene casos completados dentro de la ventana → <code>onTimeRate = null</code> → P = 0.8 (neutro), igual que Q cuando no hay calificaciones recientes.
+      </div>
+      <p class="src">normalizePunctuality() en assignmentScore.ts · isCompletedOnTime() en lib/cases/workDeadline.ts</p>
+    </div>
+  </div>
+
+  <!-- E -->
+  <div class="factor">
+    <div class="factor-head">
+      <div class="badge add">E</div>
+      <h3>Experiencia especializada</h3>
+      <span class="sign add">SUMA</span>
+    </div>
+    <div class="factor-body">
+      <p><strong>Qué mide:</strong> el nivel de habilidad declarado/verificado del técnico <em>para el tipo de trabajo específico de este caso</em>.</p>
+      <table>
+        <tr><th>Dato crudo</th><td><code>designLevel</code> (0–7) de <code>technician_skill</code></td></tr>
+        <tr><th>Filtro del dato</th><td><code>workType</code> = el tipo de trabajo del caso (no un nivel global, sino el de esa especialidad)</td></tr>
+        <tr><th>Normalización</th><td><span class="eq">E = clamp(designLevel, 0, 7) / 7</span></td></tr>
+        <tr><th>Sin skill declarado</th><td><strong>E = 0</strong></td></tr>
+      </table>
+      <p style="margin-top:12px">Para una guía quirúrgica, un técnico con nivel 7/7 en guías tiene <code>E = 1.0</code>; uno con 3/7 tiene <code>E ≈ 0.43</code>. El mismo técnico podría tener un E distinto en otro tipo de caso.</p>
+      <div class="callout">
+        <strong>¿E usa lo que requiere el caso?</strong> Hay que separar dos cosas:
+        <ul class="clean" style="margin-top:8px">
+          <li><strong>El requerimiento del caso (skill mínimo)</strong> se aplica en el <b>filtro</b> (sección 4): si el técnico no alcanza el nivel mínimo que pide la liga del caso, queda <em>fuera del pool</em> y no se puntúa. <em>Ver cómo se deriva la liga y su nivel mínimo en la sección 2.</em></li>
+          <li><strong>E (el factor del score)</strong> sí es relativo al caso —toma el <code>designLevel</code> del técnico <em>para el workType de ese caso</em>—, pero mide <b>cuánta</b> experiencia tiene, no si cumple el mínimo. Premia al más especializado entre los que ya pasaron el filtro.</li>
+        </ul>
+        <strong>Y la fórmula <code>clamp(designLevel, 0, 7) / 7</code>:</strong> <code>clamp(x,0,7)</code> acota el valor entre 0 y 7 (defensa ante un valor fuera de rango); <code>/7</code> lo reescala a 0–1 porque el score trabaja en esa escala. Así nivel 7 → <code>E=1.0</code>, nivel 0 → <code>E=0</code>.
+      </div>
+      <p class="src">normalizeExperience() en assignmentScore.ts · skill mínimo: MIN_SKILL_FOR_CATEGORY (filtro)</p>
+    </div>
+  </div>
+
+  <!-- B -->
+  <div class="factor">
+    <div class="factor-head">
+      <div class="badge add">B</div>
+      <h3>Bono de infrautilización</h3>
+      <span class="sign add">SUMA</span>
+    </div>
+    <div class="factor-body">
+      <p><strong>Qué mide:</strong> un empujón temporal para técnicos que llevan tiempo sin recibir asignaciones, para mantener activo a todo el pool.</p>
+      <table>
+        <tr><th>Dato crudo</th><td><code>daysSinceAssignment</code> = días desde <code>user.lastInvitedAt</code></td></tr>
+        <tr><th>Tope</th><td>el bono llega a 1.0 a los <code>dBonusMaxDays</code> días &nbsp;<span class="pill">valor real: 30 días</span></td></tr>
+        <tr><th>Normalización</th><td><span class="eq">B = min(daysSinceAssignment / dBonusMaxDays, 1.0)</span></td></tr>
+        <tr><th>Nunca asignado</th><td><strong>B = 1.0</strong> (máximo empujón)</td></tr>
+      </table>
+      <p style="margin-top:12px">Con <code>dBonusMaxDays = 30</code>: un técnico que lleva 15 días sin asignación tiene <code>B = 0.5</code>; a los 30+ días llega al tope <code>B = 1.0</code>.</p>
+      <p class="src">normalizeUnderutilization() en assignmentScore.ts</p>
+    </div>
+  </div>
+
+  <!-- L -->
+  <div class="factor">
+    <div class="factor-head">
+      <div class="badge sub">L</div>
+      <h3>Penalización por carga</h3>
+      <span class="sign sub">RESTA</span>
+    </div>
+    <div class="factor-body">
+      <p><strong>Qué mide:</strong> cuánto trabajo activo tiene ya el técnico, para repartir la carga y evitar cuellos de botella.</p>
+      <table>
+        <tr><th>Dato crudo</th><td><code>activeLoad</code> = conteo de casos del técnico en estado activo</td></tr>
+        <tr><th>Estados que cuentan</th><td><code>aceptadaPendienteInicio</code>, <code>enEjecucion</code>, <code>enRevision</code>, <code>cambiosEnProceso</code></td></tr>
+        <tr><th>Divisor</th><td><code>maxActiveLoad</code> = max(<b>Carga de Trabajo (Min)</b>, mayor carga del pool) — normalizador dinámico con piso configurable</td></tr>
+        <tr><th>Piso configurable</th><td><code>loadReferenceMin</code> &nbsp;<span class="pill">parámetro admin · default 5 · rango 5–50</span> — cuántos casos se consideran "carga llena" de referencia</td></tr>
+        <tr><th>Normalización</th><td><span class="eq">L = min(activeLoad / maxActiveLoad, 1)</span></td></tr>
+      </table>
+      <div class="callout teal">
+        <strong>Aclaración: L SÍ interviene en el score.</strong> El factor L es el término <code>−α<sub>L</sub>·L</code> de la fórmula y <b>resta</b> al score a medida que el técnico acumula casos activos. El cálculo real usa <code>activeLoad ÷ máximo dinámico</code> (carga activa actual normalizada por la mayor carga del pool), <b>sin ventana temporal</b> — porque "carga activa" es un estado presente, no un histórico. Los parámetros legacy <code>cMax</code> y <code>wLoadDays</code> describían un modelo conceptual distinto (índice de carga vs. promedio del pool) que <b>nunca se implementó</b>: eran controles muertos y se retiraron del panel.
+      </div>
+      <div class="callout teal">
+        <strong>Piso configurable (nuevo).</strong> El piso del divisor (antes una constante <code>5</code> incrustada en el código) ahora es un parámetro de <code>fauchard_config</code>: <b>«Carga de Trabajo (Min)»</b> (<code>loadReferenceMin</code>), default <b>5</b>, editable en el panel admin (rango 5–50). Define cuántos casos activos se consideran "carga llena": subirlo suaviza la penalización por carga (cuesta más "llenarse"), bajarlo la endurece.
+      </div>
+      <div class="callout">
+        <strong>¿Por qué penaliza pero no bloquea?</strong> Tu intuición coincide con el diseño actual. La carga <b>no excluye</b> a nadie: un técnico <em>puede</em> recibir varios casos a la vez. L solo <b>reduce su probabilidad</b> de salir elegido conforme se satura, repartiendo el trabajo. La decisión final de <b>aceptar o rechazar es del técnico</b>; y si simplemente <b>no responde, eso se castiga por separado</b> vía el factor N (no-respuesta). Es decir, el sistema ya separa «cuánta carga tiene» (L, suave) de «cómo se comporta ante la asignación» (aceptar / rechazar / ignorar → N).
+      </div>
+      <p class="src">normalizeLoad() en assignmentScore.ts · activeLoads en bulkAssignmentData()</p>
+    </div>
+  </div>
+
+  <!-- N -->
+  <div class="factor">
+    <div class="factor-head">
+      <div class="badge sub">N</div>
+      <h3>Penalización por no-respuesta</h3>
+      <span class="sign sub">RESTA</span>
+    </div>
+    <div class="factor-body">
+      <p><strong>Qué mide:</strong> castigo a quien ignora asignaciones, según su nivel de sanción rolling acumulada.</p>
+      <table>
+        <tr><th>Dato crudo</th><td><code>sanctionLevel</code> (0–3) de <code>computeLevelForTechnicianAction</code></td></tr>
+        <tr><th>Conversión a número</th><td>
+          Nivel 0 → <code>N = 0.0</code> &nbsp;·&nbsp;
+          Nivel 1 → <code>N = 0.0</code> &nbsp;·&nbsp;
+          Nivel 2 → <code>N = 0.5</code> &nbsp;·&nbsp;
+          Nivel 3 → <code>N = 1.0</code>
+        </td></tr>
+        <tr><th>Gating</th><td><code>AVAILABILITY_MODEL_ENABLED</code> = <strong>ON</strong> en local · dev · prod → <strong>este factor está activo y operando</strong></td></tr>
+        <tr><th>Umbrales reales</th><td>Nivel 1 = <b>1</b> no-respuesta · Nivel 2 = <b>2</b> · Nivel 3 = <b>3</b> &nbsp;·&nbsp; ventana rolling <b>14 días</b> · rehabilitación <b>30 días</b></td></tr>
+        <tr><th>Peso real</th><td>α<sub>N</sub> = <b>0.250</b> (el peso más alto del modelo hoy)</td></tr>
+      </table>
+      <div class="callout">Un técnico sin sanción (Nivel 0–1) tiene <strong>N = 0</strong>: este término no le resta nada. Solo «muerde» a partir del Nivel 2 (media penalización) y Nivel 3 (penalización completa + auto-OFF de su disponibilidad).</div>
+      <div class="callout teal">
+        <strong>Estado operativo: ACTIVO.</strong> En tus entornos el flag <code>AVAILABILITY_MODEL_ENABLED</code> está <b>encendido</b>, por lo que la escalación completa opera de punta a punta: <b>Nivel 1</b> (1 no-respuesta → aviso) → <b>Nivel 2</b> (2 → penaliza el score con <code>N=0.5</code>) → <b>Nivel 3</b> (3 → <code>N=1.0</code> + apaga la disponibilidad global del técnico y rechaza sus asignaciones pendientes). La ventana rolling de <b>14 días</b> «perdona» sola al salir las no-respuestas viejas; la rehabilitación plena son <b>30 días</b> sin nuevas faltas. Requiere que corra el cron horario <code>/api/cron/process-availability</code> (expira faltas fuera de ventana + auto-OFF preventivo).
+      </div>
+      <p class="src">levelToScoreN() en lib/availabilityScore.ts · sanción rolling en lib/db/actions/noResponseEvents.ts · gating en lib/constants/availabilityFlags.ts</p>
+    </div>
+  </div>
+
+  <h2 id="pesos">6 · Pesos α y la regla de la suma 1.000</h2>
+  <p>Los pesos los configura el admin en <em>Configuración Fauchard → Pesos del Score</em>. Determinan la importancia relativa de cada factor. Estos son los <strong>valores reales vigentes</strong> (config activa v33):</p>
+  <table>
+    <thead><tr><th>Peso</th><th>Factor</th><th>Valor real</th><th>Efecto</th></tr></thead>
+    <tbody>
+      <tr><td><code>alphaQuality</code> (α<sub>Q</sub>)</td><td>Calidad (Q)</td><td><strong>0.200</strong></td><td>suma</td></tr>
+      <tr><td><code>alphaNoResponse</code> (α<sub>N</sub>)</td><td>No-respuesta (N)</td><td><strong>0.250</strong></td><td>resta</td></tr>
+      <tr><td><code>alphaPunctuality</code> (α<sub>P</sub>)</td><td>Puntualidad (P)</td><td><strong>0.150</strong></td><td>suma</td></tr>
+      <tr><td><code>alphaExperience</code> (α<sub>E</sub>)</td><td>Experiencia (E)</td><td><strong>0.150</strong></td><td>suma</td></tr>
+      <tr><td><code>alphaLoad</code> (α<sub>L</sub>)</td><td>Carga (L)</td><td><strong>0.150</strong></td><td>resta</td></tr>
+      <tr><td><code>alphaBonus</code> (α<sub>B</sub>)</td><td>Bono infrautilización (B)</td><td><strong>0.100</strong></td><td>suma</td></tr>
+      <tr><td colspan="2" style="text-align:right;color:var(--faint)">Suma</td><td><strong style="color:var(--green)">1.000 ✓</strong></td><td></td></tr>
+    </tbody>
+  </table>
+  <p style="color:var(--muted);font-size:14px">Hoy el factor que <strong>más pesa es la No-respuesta (α<sub>N</sub>=0.250)</strong>, seguido de la Calidad (0.200). La penalización por no responder es, en este momento, el componente de mayor influencia del modelo.</p>
+  <div class="callout teal"><strong>Regla de la suma:</strong> el panel admin exige que los seis pesos sumen exactamente <strong>1.000</strong> (tolerancia 0.001) y bloquea el guardado si no se cumple; al editar, los renormaliza proporcionalmente (<code>renormalizeActiveAlphas</code> en <code>lib/fauchard/alphaWeightNormalize.ts</code>). Subir un peso obliga a bajar otro. Cada peso se mueve entre 0 y 0.50.</div>
+
+  <h2 id="empates">7 · Orden final y desempates</h2>
+  <p>Tras calcular el score de cada técnico elegible, se ordenan con estos criterios en cascada:</p>
+  <ol class="clean">
+    <li><strong>Score</strong> de mayor a menor (criterio principal).</li>
+    <li>Si empatan en score → <strong>menor carga activa</strong> primero (reparte trabajo).</li>
+    <li>Si siguen empatados → <strong>quien lleva más tiempo sin asignación</strong> (<code>lastInvitedAt</code> más antiguo).</li>
+  </ol>
+  <p class="src">ranked.sort() en rankPool(), lib/db/actions/assignment.ts</p>
+
+  <h2 id="cadena">8 · De score a asignación: la cadena de respaldo</h2>
+  <p>El ranking no genera una sola asignación, sino una <strong>cadena</strong>: el #1 recibe la asignación pendiente y tiene un plazo (<code>tQuoteMinutes</code>, <strong>vigente: 240 min = 4 h</strong>) para aceptar. Si rechaza o deja vencer, se asigna automáticamente al siguiente del ranking, hasta <code>maxAssignmentAttempts</code> intentos (<strong>vigente: 3</strong>), respetando el margen de reemplazo (<code>replacementCutoffMinutes</code> = 10 min).</p>
+  <div class="grid2">
+    <div class="mini"><h4>Top-1 acepta</h4><p>El caso pasa a <code>aceptadaPendienteInicio</code> con precio y plazo de catálogo. (<code>acceptAssignmentAction</code>)</p></div>
+    <div class="mini"><h4>Top-1 rechaza / vence</h4><p>Se intenta el siguiente del ranking. (<code>tryReplaceAfterRejectAction</code>)</p></div>
+    <div class="mini"><h4>Se agotan los intentos</h4><p>El caso entra a <code>pendiente_pool</code> (cola de espera) o falla, según los flags.</p></div>
+    <div class="mini"><h4>Sin elegibles desde el inicio</h4><p>Va directo a <code>pendiente_pool</code> con un evento <code>CASO_EN_COLA</code> para el dentista.</p></div>
+  </div>
+  <div class="callout teal">
+    <strong>¿Podría funcionar como Uber, buscando hasta que el dentista cancele?</strong> Hoy <b>ya está muy cerca</b>. El sistema no se detiene en 3 intentos: al agotar la cadena (<code>maxAssignmentAttempts</code>=3), el caso entra a <code>pendiente_pool</code>, donde:
+    <ul class="clean" style="margin-top:8px">
+      <li><strong>Reintenta por ciclos</strong> (<code>maxPoolCycles</code> vigente = <b>2</b>) reevaluando el pool cada vez que un técnico se activa (cron <code>process-pool-queue</code> cada 2 min).</li>
+      <li>Tiene un <strong>TTL</strong> por ciclo (<code>tNoEligiblePoolHours</code> vigente = <b>24 h</b>) y hace un <strong>check-in al dentista al 50%</strong> del tiempo («seguimos buscando…»).</li>
+      <li>El <strong>dentista puede cancelar</strong> la búsqueda en cualquier momento (<code>cancelPendingPoolAction</code>, botón «Cancelar publicación»).</li>
+    </ul>
+    La única diferencia con un «Uber infinito» es que hoy la espera está <b>acotada</b> por <code>maxPoolCycles</code> (= 2; tras agotarse, el caso pasa a <code>sin_asignacion_fallo</code> y el dentista republica). Para que busque <b>indefinidamente hasta que el dentista cancele</b>, bastaría subir mucho ese tope (o hacerlo ilimitado) — es un ajuste de configuración/lógica acotado, no un rediseño. <em>Los flags <code>AVAILABILITY_MODEL_ENABLED</code> + <code>POOL_PENDIENTE_ENABLED</code> están <b>ON</b>, así que la cola pool está operativa.</em>
+  </div>
+
+  <div class="callout">El <strong>simulador admin</strong> (<code>/dashboard/admin/fauchard/simulate</code>) reproduce todo esto sin escribir en la base: arma un caso virtual, muestra el funnel de filtros, el ranking Q/P/E/B/L/N con cada componente, y la cadena de respaldo coloreada. Permite probar overrides de α sin tocar la config de producción.</p></div>
+
+  <h2 id="ejemplo">9 · Ejemplo numérico paso a paso</h2>
+  <p>Un recorrido completo desde los datos crudos hasta el técnico ganador, usando los <strong>pesos reales vigentes (v33)</strong>: α<sub>Q</sub>=0.200 · α<sub>P</sub>=0.150 · α<sub>E</sub>=0.150 · α<sub>B</sub>=0.100 · α<sub>L</sub>=0.150 · α<sub>N</sub>=0.250.</p>
+
+  <div class="callout teal"><strong>El caso:</strong> el Dr. Soto publica una <b>corona de zirconio, 1 pieza</b>. Tres técnicos pasan los filtros duros y entran al ranking. Veamos cómo se decide cuál recibe la asignación.</div>
+
+  <h3>Paso 1 — Datos crudos de cada técnico</h3>
+  <table>
+    <thead><tr><th>Dato</th><th>Lab. Andes (A)</th><th>Lab. Roble (B)</th><th>Lab. Pino (C)</th></tr></thead>
+    <tbody>
+      <tr><td>Rating de diseño (últ. 90 d)</td><td>4.8 / 5</td><td>4.2 / 5</td><td>4.6 / 5</td></tr>
+      <tr><td>% entregas a tiempo</td><td>95%</td><td>80%</td><td>90%</td></tr>
+      <tr><td>Nivel skill coronas (0–7)</td><td>6</td><td>4</td><td>5</td></tr>
+      <tr><td>Días sin asignación</td><td>2</td><td>20</td><td>nunca</td></tr>
+      <tr><td>Casos activos ahora</td><td><strong>8</strong></td><td>1</td><td>0</td></tr>
+      <tr><td>Sanción no-respuesta</td><td>Nivel 0</td><td>Nivel 0</td><td><strong style="color:var(--rose)">Nivel 2</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h3>Paso 2 — Normalizar cada factor a 0–1</h3>
+  <p style="color:var(--muted);font-size:14px">El divisor de carga es dinámico: <code>maxActiveLoad = max(5, 8, 1, 0) = 8</code>.</p>
+  <table>
+    <thead><tr><th>Factor</th><th>Andes</th><th>Roble</th><th>Pino</th><th>Cómo</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Q</strong></td><td>0.960</td><td>0.840</td><td>0.920</td><td>rating ÷ 5</td></tr>
+      <tr><td><strong>P</strong></td><td>0.950</td><td>0.800</td><td>0.900</td><td>= % a tiempo</td></tr>
+      <tr><td><strong>E</strong></td><td>0.857</td><td>0.571</td><td>0.714</td><td>nivel ÷ 7</td></tr>
+      <tr><td><strong>B</strong></td><td>0.067</td><td>0.667</td><td><strong>1.000</strong></td><td>días ÷ 30 (tope 1)</td></tr>
+      <tr><td><strong>L</strong> <span style="color:var(--rose)">(resta)</span></td><td><strong>1.000</strong></td><td>0.125</td><td>0.000</td><td>activos ÷ 8</td></tr>
+      <tr><td><strong>N</strong> <span style="color:var(--rose)">(resta)</span></td><td>0.000</td><td>0.000</td><td><strong>0.500</strong></td><td>nivel → 0/0/0.5/1</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Paso 3 — Aplicar la fórmula</h3>
+  <div class="grid2">
+    <div class="mini">
+      <h4>Lab. Andes</h4>
+      <p style="font-family:'SF Mono',Menlo,monospace;font-size:12.5px;color:var(--text)">
+        <span class="add" style="color:var(--green)">0.200·0.960 = 0.192</span><br>
+        <span class="add" style="color:var(--green)">0.150·0.950 = 0.143</span><br>
+        <span class="add" style="color:var(--green)">0.150·0.857 = 0.129</span><br>
+        <span class="add" style="color:var(--green)">0.100·0.067 = 0.007</span><br>
+        <span class="sub" style="color:var(--rose)">−0.150·1.000 = −0.150</span><br>
+        <span class="sub" style="color:var(--rose)">−0.250·0.000 = 0.000</span><br>
+        <b style="color:var(--text)">= 0.320</b>
+      </p>
+    </div>
+    <div class="mini" style="border-color:var(--teal)">
+      <h4 style="color:var(--green)">Lab. Roble 🥇</h4>
+      <p style="font-family:'SF Mono',Menlo,monospace;font-size:12.5px;color:var(--text)">
+        <span style="color:var(--green)">0.200·0.840 = 0.168</span><br>
+        <span style="color:var(--green)">0.150·0.800 = 0.120</span><br>
+        <span style="color:var(--green)">0.150·0.571 = 0.086</span><br>
+        <span style="color:var(--green)">0.100·0.667 = 0.067</span><br>
+        <span style="color:var(--rose)">−0.150·0.125 = −0.019</span><br>
+        <span style="color:var(--rose)">−0.250·0.000 = 0.000</span><br>
+        <b style="color:var(--green)">= 0.422</b>
+      </p>
+    </div>
+    <div class="mini">
+      <h4>Lab. Pino</h4>
+      <p style="font-family:'SF Mono',Menlo,monospace;font-size:12.5px;color:var(--text)">
+        <span style="color:var(--green)">0.200·0.920 = 0.184</span><br>
+        <span style="color:var(--green)">0.150·0.900 = 0.135</span><br>
+        <span style="color:var(--green)">0.150·0.714 = 0.107</span><br>
+        <span style="color:var(--green)">0.100·1.000 = 0.100</span><br>
+        <span style="color:var(--rose)">−0.150·0.000 = 0.000</span><br>
+        <span style="color:var(--rose)">−0.250·0.500 = −0.125</span><br>
+        <b style="color:var(--text)">= 0.401</b>
+      </p>
+    </div>
+  </div>
+
+  <h3>Paso 4 — Ranking y asignación</h3>
+  <table>
+    <thead><tr><th>Puesto</th><th>Técnico</th><th>Score</th><th>Rol</th></tr></thead>
+    <tbody>
+      <tr style="background:#14532d22"><td>🥇 #1</td><td><strong>Lab. Roble</strong></td><td><strong style="color:var(--green)">0.422</strong></td><td><strong>Recibe la asignación</strong></td></tr>
+      <tr><td>🥈 #2</td><td>Lab. Pino</td><td>0.401</td><td>Respaldo (si #1 no responde)</td></tr>
+      <tr><td>🥉 #3</td><td>Lab. Andes</td><td>0.320</td><td>Respaldo</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Por qué gana Roble (y no el de mejor calidad):</strong> el ejemplo es contraintuitivo a propósito.
+    <ul class="clean" style="margin-top:8px">
+      <li><strong>Andes</strong> tenía la mejor calidad (4.8), pero estaba <b>saturado</b> (8 casos activos → L=1.0). La penalización de carga <code>−0.150</code> lo mandó al último puesto.</li>
+      <li><strong>Pino</strong> también es muy bueno (4.6) y el bono por inactividad lo ayudó (B=1.0), pero su <b>sanción Nivel 2</b> le restó <code>−0.125</code> y quedó 2º.</li>
+      <li><strong>Roble</strong>, sin destacar en ningún eje, está <b>equilibrado, con poca carga y sin sanciones</b> → gana.</li>
+    </ul>
+    Esto ilustra el espíritu del modelo: no premia solo al «mejor», sino al <b>mejor disponible y mejor comportado en este momento</b>. Roble recibe la asignación con <b>240 min (4 h)</b> para aceptar; si no responde, pasa a Pino y luego a Andes.
+  </div>
+
+  <div class="footer">
+    <p>Documento generado a partir del código fuente de la rama <code>v2</code>. Refleja el modelo de <strong>asignación directa</strong>; el flujo legacy de cotización/comparativo de ofertas usaba otro mecanismo y no aplica aquí.</p>
+    <p>Archivos canónicos: <code>frontend/lib/fauchard/assignmentScore.ts</code> · <code>frontend/lib/db/actions/assignment.ts</code> · <code>frontend/lib/constants/fauchardHelp.ts</code> · <code>frontend/lib/db/schema.ts</code></p>
+  </div>
+
+</div>
+</body>
+</html>

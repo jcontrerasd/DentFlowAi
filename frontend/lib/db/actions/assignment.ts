@@ -531,7 +531,8 @@ async function bulkAssignmentData(techIds: string[], config: FauchardConfigRow, 
   }
 
   const now = new Date();
-  const qualityWindow = new Date(now.getTime() - config.wQualityDays * 86400000);
+  // Ventana histórica unificada: gobierna Calidad (Q) y Puntualidad (P).
+  const historyWindow = new Date(now.getTime() - config.wQualityDays * 86400000);
 
   const [ratings, completed, skills, activeRows] = await Promise.all([
     db
@@ -540,7 +541,7 @@ async function bulkAssignmentData(techIds: string[], config: FauchardConfigRow, 
       .where(
         and(
           inArray(review.revieweeId, techIds),
-          gt(review.createdAt, qualityWindow),
+          gt(review.createdAt, historyWindow),
           eq(review.dimension, 'design'),
         ),
       ),
@@ -559,6 +560,7 @@ async function bulkAssignmentData(techIds: string[], config: FauchardConfigRow, 
           inArray(caseAssignment.technicianId, techIds),
           eq(caseAssignment.status, 'accepted'),
           sql`${clinicalCase.completedAt} IS NOT NULL`,
+          gt(clinicalCase.completedAt, historyWindow),
         ),
       ),
     db
@@ -598,7 +600,9 @@ async function rankPool(
   const data = await bulkAssignmentData(techIds, config, workType);
   const weights = parseAssignmentWeights(config);
   const availabilityOn = isAvailabilityEnabled();
-  const maxLoad = Math.max(5, ...Array.from(data.activeLoads.values()), 1);
+  // Piso del divisor de carga: configurable vía fauchard_config.loadReferenceMin (default 5).
+  const loadBaseline = config.loadReferenceMin ?? 5;
+  const maxLoad = Math.max(loadBaseline, ...Array.from(data.activeLoads.values()), 1);
 
   const ranked: RankedCandidate[] = [];
   const now = Date.now();
