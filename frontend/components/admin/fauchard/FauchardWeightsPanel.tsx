@@ -44,7 +44,7 @@ export default function FauchardWeightsPanel({ initialFocusKey = null }: { initi
         <FauchardHelpButton onClick={() => openHelp()} label="Pesos del Score" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-x-6 gap-y-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-x-5 gap-y-3">
         <Slider label="Calidad Histórica (Q)" value={draft.alphaQuality} onChange={(e) => setParam('alphaQuality', parseFloat(e.target.value))} min={0} max={0.5} step={0.01} valueSuffix=" (w)" tooltip={fauchardParamTooltip('alphaQuality')} onHelp={() => openHelp('alphaQuality')} paramNumber={fauchardParamNumber('alphaQuality')} flash={flashed.has('alphaQuality')} />
         <Slider label="Puntualidad (P)" value={draft.alphaPunctuality} onChange={(e) => setParam('alphaPunctuality', parseFloat(e.target.value))} min={0} max={0.5} step={0.01} valueSuffix=" (w)" tooltip={fauchardParamTooltip('alphaPunctuality')} onHelp={() => openHelp('alphaPunctuality')} paramNumber={fauchardParamNumber('alphaPunctuality')} flash={flashed.has('alphaPunctuality')} />
         <Slider label="Experiencia Especializada (E)" value={draft.alphaExperience} onChange={(e) => setParam('alphaExperience', parseFloat(e.target.value))} min={0} max={0.5} step={0.01} valueSuffix=" (w)" tooltip={fauchardParamTooltip('alphaExperience')} onHelp={() => openHelp('alphaExperience')} paramNumber={fauchardParamNumber('alphaExperience')} flash={flashed.has('alphaExperience')} />

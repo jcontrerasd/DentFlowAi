@@ -66,7 +66,7 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
   return (
     <section className="space-y-3">
       <h3 className="text-[10px] font-black uppercase tracking-wider text-primary">{title}</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">{children}</div>
+      <div className="space-y-3">{children}</div>
     </section>
   );
 }
@@ -83,7 +83,7 @@ export default function PlazosYSancionesPanel({ initialFocusKey = null }: { init
   const set = (k: DraftKey, val: number) => setParam(k, val);
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-xs font-bold text-foreground">Disponibilidad y Sanciones</h3>
@@ -94,6 +94,7 @@ export default function PlazosYSancionesPanel({ initialFocusKey = null }: { init
 
       <FauchardHelpWindow isOpen={showHelp} onClose={() => setShowHelp(false)} section={PLAZOS_HELP} focusKey={helpFocus} />
 
+      <div className="columns-1 md:columns-2 xl:columns-3 gap-4 [&>*]:break-inside-avoid [&>*]:mb-4">
       <Block title="1 · Revisión del dentista">
         <NumberField label="Revisión del dentista" value={draft.tDentistReviewHours} onChange={(x) => set('tDentistReviewHours', x)} min={1} max={336} suffix="h" tooltip={fauchardParamTooltip('tDentistReviewHours')} onHelp={() => openHelp('tDentistReviewHours')} paramNumber={fauchardParamNumber('tDentistReviewHours')} />
       </Block>
@@ -119,6 +120,7 @@ export default function PlazosYSancionesPanel({ initialFocusKey = null }: { init
         <NumberField label="Umbral Nivel 2" value={draft.level2Threshold} onChange={(x) => set('level2Threshold', x)} min={1} max={50} tooltip={fauchardParamTooltip('level2Threshold')} onHelp={() => openHelp('level2Threshold')} paramNumber={fauchardParamNumber('level2Threshold')} />
         <NumberField label="Umbral Nivel 3" value={draft.level3Threshold} onChange={(x) => set('level3Threshold', x)} min={1} max={50} tooltip={fauchardParamTooltip('level3Threshold')} onHelp={() => openHelp('level3Threshold')} paramNumber={fauchardParamNumber('level3Threshold')} />
       </Block>
+      </div>
 
       <div className="rounded-xl border border-divider/70 bg-surface-2/30 p-3 text-[10px] text-muted leading-snug">
         Los <strong>pesos del score</strong> (incluida la Penalización por No-respuesta, αN) se

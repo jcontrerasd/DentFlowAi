@@ -8,7 +8,8 @@ import {
   ShoppingBag,
   FileText,
   LogOut,
-  Menu,
+  ChevronLeft,
+  ChevronRight,
   Activity,
   Shield,
   Users,
@@ -241,16 +242,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {isSidebarOpen && <span className="font-medium">Cerrar Sesión</span>}
           </button>
         </div>
+
+        {/* Toggle de colapso sobre la línea divisoria, centrado verticalmente */}
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="absolute top-1/2 -translate-y-1/2 -right-3 z-50 w-6 h-6 rounded-full bg-surface border border-divider flex items-center justify-center text-muted shadow-sm transition-colors hover:text-foreground hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          aria-label={isSidebarOpen ? 'Colapsar menú lateral' : 'Expandir menú lateral'}
+          title={isSidebarOpen ? 'Colapsar menú' : 'Expandir menú'}
+        >
+          {isSidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+        </button>
       </aside>
 
       {/* Main Content */}
       <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'pl-64' : 'pl-20'}`}>
         <header className="h-20 border-b border-divider/50 flex items-center justify-between px-10 bg-surface shadow-sm border border-divider sticky top-0 z-40">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-muted hover:text-foreground transition-colors">
-              <Menu className="w-6 h-6" />
-            </button>
-          </div>
+          <div className="flex items-center gap-4" />
 
           <div className="flex items-center gap-4">
             {(userProfile?.role === 'dentista' || userProfile?.role === 'tecnico') && (

@@ -35,7 +35,7 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
 
       <FauchardHelpWindow isOpen={showHelp} onClose={() => setShowHelp(false)} section={FILTERS_HELP} focusKey={helpFocus} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="columns-1 md:columns-2 xl:columns-3 gap-4 [&>*]:break-inside-avoid [&>*]:mb-4">
 
         {/* Ventanas de medición */}
         <Section title="Ventanas de medición" icon={<Clock className="w-4 h-4" />}>
@@ -65,7 +65,7 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
 
         {/* Filtros de elegibilidad */}
         <Section title="Filtros de elegibilidad" icon={<ShieldAlert className="w-4 h-4" />}>
-          <div className="rounded-2xl border border-warning/25 bg-warning-hl/20 p-5 space-y-8">
+          <div className="rounded-2xl border border-warning/25 bg-warning-hl/20 p-4 space-y-4">
             <Slider
               label="Cooldown asignación"
               value={draft.tCooldownMinutes}
