@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import FocusTrap from '@/components/ui/FocusTrap';
 import { REGIONS_BY_COUNTRY, SUPPORTED_COUNTRIES } from '@/lib/constants/addressData';
+import { formatPhone } from '@/lib/formatPhone';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -35,6 +36,11 @@ import {
   createOrganizationAction,
   updateOrganizationDetailsAction,
 } from '@/lib/db/actions/organization';
+import {
+  hydrateOnboardingFormData,
+  mapOnboardingStepToUiStep,
+  resolveOnboardingRole,
+} from '@/lib/auth/onboardingHydration';
 
 type AppRole = 'dentista' | 'tecnico';
 
@@ -146,7 +152,6 @@ export default function RegisterPage() {
   });
 
   const [consent, setConsent] = useState(false);
-  const [isDesigner, setIsDesigner] = useState(false);
 
   // Cancelar / descartar inscripción a medio terminar
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -166,30 +171,21 @@ export default function RegisterPage() {
         const profile = await getUserProfileDirect(sUser.id);
         if (profile) {
           const stepValue = profile.onboardingStep || 0;
-          if (profile.role === 'tecnico' || profile.role === 'diseñador') {
-            setRole('tecnico');
-          } else {
-            setRole('dentista');
-          }
           if (stepValue === 100) { router.replace('/dashboard'); return; }
-          
+
+          const resolvedRole = resolveOnboardingRole(profile.role);
+          setRole(resolvedRole);
+
+          if (profile.fullName) setFullName(profile.fullName);
+          if (profile.email) setEmail(profile.email);
+
+          setFormData(prev => hydrateOnboardingFormData(profile, prev, sUser.id || ''));
+
           if (profile.organization?.id) {
-            setFormData(prev => ({ ...prev, orgId: profile.organization!.id }));
             window.localStorage.setItem('onboardingOrgId', profile.organization.id);
           }
 
-          if (role === 'tecnico') {
-            if (stepValue >= 80)      setStep(5); // Legal
-            else if (stepValue >= 65) setStep(4); // Habilidades
-            else if (stepValue >= 50) setStep(3); // Laboratorio
-            else if (stepValue >= 20) setStep(2); // Tu Perfil
-            else                      setStep(1); // Rol
-          } else {
-            if (stepValue >= 75)      setStep(4); // Legal
-            else if (stepValue >= 50) setStep(3); // Tu Clínica
-            else if (stepValue >= 20) setStep(2); // Tu Perfil
-            else                      setStep(1); // Rol
-          }
+          setStep(mapOnboardingStepToUiStep(stepValue, resolvedRole));
           setHasSyncLoaded(true);
         } else {
           setStep(1);
@@ -211,14 +207,7 @@ export default function RegisterPage() {
     if (error) setError(null);
   };
 
-  const formatPhone = (val: string) => {
-    const d = val.replace(/\D/g, '');
-    if (!d) return '';
-    if (d.length <= 2) return `+${d}`;
-    if (d.length <= 3) return `+${d.slice(0, 2)} ${d.slice(2)}`;
-    if (d.length <= 7) return `+${d.slice(0, 2)} ${d.slice(2, 3)} ${d.slice(3)}`;
-    return `+${d.slice(0, 2)} ${d.slice(2, 3)} ${d.slice(3, 7)} ${d.slice(7, 11)}`;
-  };
+  const formatPhoneInput = (val: string) => formatPhone(val);
 
   const formatRut = (val: string): string => {
     const clean = val.replace(/[^0-9kK]/g, '').toUpperCase();
@@ -240,7 +229,8 @@ export default function RegisterPage() {
       const newUser = await createUserAction({ 
         email, 
         password, 
-        role,
+        // Rol provisional hasta paso 1 (handleSetupRole lo sobrescribe).
+        role: 'dentista',
         fullName 
       });
       
@@ -390,14 +380,6 @@ export default function RegisterPage() {
         legalAddress: formData.legalAddress,
       });
       if (!orgResult.success) throw new Error(orgResult.error || 'Error al actualizar organización.');
-      // Para técnico: guardar capacidad CAD en este paso
-      if (role === 'tecnico') {
-        const caps = [];
-        if (isDesigner) caps.push('CAD');
-        if (targetOrgId) {
-          await updateOrganizationDetailsAction(targetOrgId, { technicalCapabilities: caps });
-        }
-      }
       const nextOnboardingStep = role === 'tecnico' ? 65 : 75;
       const userResult = await updateUserAction(userId, { onboardingStep: nextOnboardingStep });
       if (!userResult.success) throw new Error(userResult.error || 'Error al vincular paso de facturación.');
@@ -703,7 +685,7 @@ export default function RegisterPage() {
                   <input
                     required
                     value={formData.phone}
-                    onChange={e => updateField('phone', formatPhone(e.target.value))}
+                    onChange={e => updateField('phone', formatPhoneInput(e.target.value))}
                     className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
                     placeholder="+56 9..."
                   />
@@ -930,7 +912,6 @@ export default function RegisterPage() {
                 </div>
                 <SkillMatrixForm
                   compact={false}
-                  initialCad={isDesigner}
                   onSaveSuccess={() => {
                     const userId = formData.userId || window.localStorage.getItem('onboardingUserId') || (session?.user as any)?.id;
                     if (userId) {

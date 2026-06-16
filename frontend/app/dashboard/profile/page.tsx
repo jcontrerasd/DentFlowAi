@@ -25,6 +25,7 @@ import { updateUserAction } from '@/lib/db/actions/user';
 import { updateOrganizationDetailsAction } from '@/lib/db/actions/organization';
 import { getUploadUrlAction, getSignedUrlAction } from '@/lib/db/actions/cases';
 import Image from 'next/image';
+import { formatPhone } from '@/lib/formatPhone';
 import SkillMatrixForm, { type SkillMatrixFormHandle } from '@/components/profile/SkillMatrixForm';
 import AvailabilityToggle from '@/components/profile/AvailabilityToggle';
 import ThemeSelector from '@/components/profile/ThemeSelector';
@@ -263,9 +264,10 @@ export default function ProfilePage() {
                 <div className="relative">
                   <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
                   <input 
+                    type="tel"
                     className="w-full bg-surface border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-foreground focus:border-primary/30 focus:outline-none transition-all"
                     value={formData.phone}
-                    onChange={e => setFormData({...formData, phone: e.target.value})}
+                    onChange={e => setFormData({...formData, phone: formatPhone(e.target.value)})}
                   />
                 </div>
               </div>
@@ -302,6 +304,7 @@ export default function ProfilePage() {
                 </>
               )}
 
+              {userProfile?.role === 'tecnico' && (
               <div className="space-y-2">
                 <label className="text-[10px] font-bold uppercase tracking-wider text-faint ml-1">Años de experiencia</label>
                 <div className="relative">
@@ -314,6 +317,7 @@ export default function ProfilePage() {
                   />
                 </div>
               </div>
+              )}
 
               {/* País — ambos roles */}
               <div className="col-span-full space-y-2">
@@ -550,7 +554,6 @@ export default function ProfilePage() {
             <SkillMatrixForm
               ref={skillFormRef}
               hideButton
-              initialCad={(userProfile as any)?.organization?.technicalCapabilities?.includes?.('CAD')}
             />
           </div>
         </div>
