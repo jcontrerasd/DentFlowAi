@@ -154,6 +154,11 @@ export const clinicalCase = pgTable("clinical_case", {
   listPriceCost: numeric("list_price_cost", { precision: 12, scale: 2 }),
   listPriceFeePercent: numeric("list_price_fee_percent", { precision: 5, scale: 4 }),
   listPriceSale: numeric("list_price_sale", { precision: 12, scale: 2 }),
+  /** v5.13 — ¿El caso reemplaza dientes ausentes (pónticos)? NULL = legacy. */
+  replacesMissingTeeth: boolean("replaces_missing_teeth"),
+  /** v5.13 — workType y categoría derivados en classify/reclassify (auditoría UI). */
+  derivedWorkType: text("derived_work_type"),
+  derivedCategory: text("derived_category"),
 }, (table) => [
 	uniqueIndex("clinical_case_case_number_uidx").on(table.caseNumber),
 	index("clinical_case_assignedTechnicianId_idx").on(table.assignedTechnicianId),
@@ -792,6 +797,12 @@ export const technicianAvailability = pgTable("technician_availability", {
   catProtesisCam: boolean("cat_protesis_cam").default(true).notNull(),
   catGuiasCad: boolean("cat_guias_cad").default(true).notNull(),
   catGuiasCam: boolean("cat_guias_cam").default(true).notNull(),
+  /** v5.13 — Carillas separadas de inlays (backfill desde cat_inlays_cad). */
+  catCarillasCad: boolean("cat_carillas_cad").default(true).notNull(),
+  catCarillasCam: boolean("cat_carillas_cam").default(true).notNull(),
+  /** v5.13 — Full arch separado de puentes (backfill desde cat_puentes_cad). */
+  catFullArchCad: boolean("cat_full_arch_cad").default(true).notNull(),
+  catFullArchCam: boolean("cat_full_arch_cam").default(true).notNull(),
   inactivityReminderSentAt: timestamp("inactivity_reminder_sent_at", { withTimezone: true, mode: 'date' }),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (table) => [

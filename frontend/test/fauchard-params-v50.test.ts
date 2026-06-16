@@ -26,10 +26,19 @@ describe.runIf(runIntegration)('updateFauchardParamsAction — validaciones v5.0
     if (!res.success) expect(res.error).toMatch(/recordatorio/i);
   });
 
-  it('rechaza los 6 α si no suman 1.0', async () => {
+  it('rechaza los 6 α activos si no suman 1.0', async () => {
     const res = await updateFauchardParamsAction({
       alphaQuality: 0.2, alphaPunctuality: 0.2, alphaExperience: 0.2,
-      alphaLoad: 0.2, alphaBonus: 0.2, alphaNoResponse: 0.2,
+      alphaBonus: 0.2, alphaLoad: 0.2, alphaNoResponse: 0.2,
+    }, 'test');
+    expect(res.success).toBe(false);
+    if (!res.success) expect(res.error).toMatch(/suma de los pesos/i);
+  });
+
+  it('incluye alphaBonus en validación Σ6', async () => {
+    const res = await updateFauchardParamsAction({
+      alphaQuality: 0.25, alphaPunctuality: 0.2, alphaExperience: 0.2,
+      alphaLoad: 0.15, alphaNoResponse: 0.2, alphaBonus: 0.5,
     }, 'test');
     expect(res.success).toBe(false);
     if (!res.success) expect(res.error).toMatch(/suma de los pesos/i);

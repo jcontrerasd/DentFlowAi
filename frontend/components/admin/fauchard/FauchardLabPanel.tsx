@@ -5,13 +5,14 @@ import { simulateFauchardAction } from '@/lib/db/actions/fauchard';
 import { AlertCircle, Sparkles, RefreshCcw, FlaskConical, AlertTriangle, ChevronDown, Users } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useFauchardDraft } from './FauchardDraftContext';
+import { ACTIVE_ALPHA_KEYS } from '@/lib/fauchard/alphaWeightNormalize';
 import { flashParams } from '@/lib/hooks/useParamFlash';
 
 /** Parámetros del borrador que alimentan cada KPI (espeja las fórmulas de abajo).
  *  Al pulsar un KPI se resaltan estos controles en los paneles editores. */
 const KPI_PARAMS = {
   quality: ['alphaQuality', 'alphaExperience'],
-  equity: ['alphaLoad'],
+  equity: ['alphaBonus', 'alphaLoad'],
   agility: ['tQuoteMinutes', 'maxAssignmentAttempts'],
   emptyPool: ['tCooldownMinutes', 'dInactivityDays', 'alphaNoResponse'],
 } as const;
@@ -29,6 +30,7 @@ const PARAMETER_HELP_MAP: Record<string, { label: string; symbol: string; descri
   alphaQuality: { label: 'Calidad Histórica (αQ)', symbol: 'αQ', description: 'Prioriza a los técnicos con mejores calificaciones en trabajos anteriores de la misma dimensión.', example: 'Si αQ = 0.40, la reputación manda: Lab Andes (4.8⭐) será invitado antes que Lab Roble (4.0⭐).' },
   alphaPunctuality: { label: 'Puntualidad (αP)', symbol: 'αP', description: 'Favorece a los laboratorios que entregan dentro del plazo prometido.', example: 'Si αP = 0.30 y un técnico se retrasa seguido, su score cae en casos urgentes.' },
   alphaExperience: { label: 'Experiencia Especializada (αE)', symbol: 'αE', description: 'Prioriza a técnicos con mayor nivel de habilidad en el tipo de trabajo específico.', example: 'Para una Guía Quirúrgica, un especialista 7/7 supera al generalista si αE está alto.' },
+  alphaBonus: { label: 'Bono de Infrautilización (αB)', symbol: 'αB', description: 'Aumento temporal de score para técnicos sin asignaciones recientes (días desde lastInvitedAt).', example: 'Si αB = 0.10 y el Lab. Sur lleva semanas sin asignación, su B=1.0 le empuja en el ranking frente a labs saturados.' },
   alphaLoad: { label: 'Carga activa (αL)', symbol: 'αL', description: 'Resta score a técnicos saturados para evitar cuellos de botella.', example: 'Si αL = 0.20, un lab excelente pero con 8 casos cede el turno a otro más libre.' },
   alphaNoResponse: { label: 'Penalización por No-respuesta (αN)', symbol: 'αN', description: 'Resta score al técnico que ignora asignaciones repetidamente.', example: 'Si αN = 0.25 y Lab Pino ignoró 2 asignaciones (Nivel 2), su score cae fuerte.' },
 };
@@ -42,9 +44,7 @@ export default function FauchardLabPanel() {
   const [isPending, startTransition] = useTransition();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const sumWeights =
-    draft.alphaQuality + draft.alphaPunctuality + draft.alphaExperience +
-    draft.alphaLoad + draft.alphaNoResponse;
+  const sumWeights = ACTIVE_ALPHA_KEYS.reduce((acc, k) => acc + draft[k as keyof typeof draft], 0);
   const isWeightsSumValid = Math.abs(sumWeights - 1.0) < 0.001;
 
   // Simulación reactiva (debounced) sobre el pool real, con el borrador completo.
@@ -72,7 +72,7 @@ export default function FauchardLabPanel() {
 
   // Indicadores de salud (derivados del borrador).
   const qualityFocus = Math.min(100, Math.round(((draft.alphaQuality + draft.alphaExperience) / 0.8) * 100));
-  const equityScore = Math.min(100, Math.round((draft.alphaLoad / 0.35) * 100));
+  const equityScore = Math.min(100, Math.round(((draft.alphaBonus + draft.alphaLoad) / 0.35) * 100));
   const emptyPoolRisk = Math.min(100, Math.round(
     (draft.tCooldownMinutes / 1440) * 30 +
     Math.max(0, (15 - draft.dInactivityDays) / 14) * 40 +
@@ -92,6 +92,7 @@ export default function FauchardLabPanel() {
     { key: 'alphaQuality', label: 'Calidad', color: 'var(--color-primary)' },
     { key: 'alphaPunctuality', label: 'Puntual.', color: 'var(--color-jade)' },
     { key: 'alphaExperience', label: 'Exp.', color: '#a78bfa' },
+    { key: 'alphaBonus', label: 'Bono', color: '#38bdf8' },
     { key: 'alphaLoad', label: 'Carga', color: '#fb923c' },
     { key: 'alphaNoResponse', label: 'No-Resp', color: 'var(--color-error)' },
   ];
@@ -105,20 +106,18 @@ export default function FauchardLabPanel() {
   const dataPolygon = dataPoints.map((p) => `${p.x},${p.y}`).join(' ');
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <FlaskConical className="w-4 h-4 text-primary" />
-          <h3 className="text-sm font-black uppercase tracking-wider text-foreground">Impacto en Score de Laboratorio</h3>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <FlaskConical className="w-3.5 h-3.5 text-primary shrink-0" />
+          <h3 className="text-[11px] font-black uppercase tracking-wider text-foreground truncate">Laboratorio</h3>
         </div>
-        {isPending && <RefreshCcw className="w-4 h-4 text-primary animate-spin" />}
+        {isPending && <RefreshCcw className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />}
       </div>
-      <p className="text-[11px] text-faint -mt-3">Impacto en vivo del borrador sobre el pool real. No edita nada; los cambios se hacen en los controles y se guardan con la barra global.</p>
 
-      {/* Radar */}
-      <div className="p-4 rounded-2xl bg-surface/30 border border-divider">
-        <h4 className="text-xs font-bold text-foreground mb-2">Radar de pesos α</h4>
-        <svg viewBox="0 0 300 300" className="w-full max-w-[260px] mx-auto h-auto">
+      <div className="p-2.5 rounded-xl bg-surface/30 border border-divider">
+        <h4 className="text-[10px] font-bold text-foreground mb-1">Radar α</h4>
+        <svg viewBox="0 0 300 300" className="w-full max-w-[180px] mx-auto h-auto">
           <defs>
             <radialGradient id="labRadarFill" cx="50%" cy="50%" r="50%">
               <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.35" />
@@ -145,18 +144,16 @@ export default function FauchardLabPanel() {
       </div>
 
       {/* Detalle del parámetro */}
-      <motion.div key={selectedParam.key} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="p-4 rounded-2xl bg-surface/50 border border-divider space-y-2">
-        <div className="flex items-center gap-2 text-primary">
-          <Sparkles className="w-4 h-4 shrink-0" />
-          <h4 className="text-xs font-black uppercase tracking-wider text-foreground">{selectedParam.label}</h4>
-          <span className="text-[9px] font-mono font-bold bg-surface-2 border border-divider px-1.5 py-0.5 rounded text-faint ml-auto">{selectedParam.symbol}</span>
+      <motion.div key={selectedParam.key} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="p-2.5 rounded-xl bg-surface/50 border border-divider space-y-1.5">
+        <div className="flex items-center gap-1.5 text-primary">
+          <Sparkles className="w-3.5 h-3.5 shrink-0" />
+          <h4 className="text-[10px] font-black uppercase tracking-wider text-foreground truncate">{selectedParam.label}</h4>
+          <span className="text-[8px] font-mono font-bold bg-surface-2 border border-divider px-1 py-0.5 rounded text-faint ml-auto shrink-0">{selectedParam.symbol}</span>
         </div>
-        <p className="text-[11px] text-muted leading-relaxed">{selectedParam.description}</p>
-        <p className="text-[11px] text-faint leading-relaxed italic border-t border-divider/40 pt-2">&quot;{selectedParam.example}&quot;</p>
+        <p className="text-[10px] text-muted leading-snug line-clamp-2">{selectedParam.description}</p>
       </motion.div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         <Kpi label="Foco en Calidad" value={qualityFocus} good={qualityFocus > 60} goodLabel="Exigente" badLabel="Balanceado" bar="bg-primary" onClick={() => flashParams([...KPI_PARAMS.quality])} />
         <Kpi label="Equidad / Rotación" value={equityScore} good={equityScore > 50} goodLabel="Estable" badLabel="Concentrado" bar="bg-jade" onClick={() => flashParams([...KPI_PARAMS.equity])} />
         <Kpi label="Agilidad" value={agilityScore} good={agilityScore > 70} goodLabel="Rápida" badLabel="Lenta" bar="bg-warning" onClick={() => flashParams([...KPI_PARAMS.agility])} />
@@ -174,10 +171,10 @@ export default function FauchardLabPanel() {
       )}
 
       {/* Distribución de técnicos reales (expander secundario) */}
-      <div className="rounded-2xl bg-surface/20 border border-divider overflow-hidden">
+      <div className="rounded-xl bg-surface/20 border border-divider overflow-hidden">
         <button
           onClick={() => setShowDist((v) => !v)}
-          className="w-full flex items-center gap-2 p-4 text-left transition-colors hover:bg-surface-2/30 focus-visible:outline-none focus-visible:bg-surface-2/40"
+          className="w-full flex items-center gap-2 p-2.5 text-left transition-colors hover:bg-surface-2/30 focus-visible:outline-none focus-visible:bg-surface-2/40"
           aria-expanded={showDist}
         >
           <Users className="w-4 h-4 text-faint shrink-0" />
@@ -209,7 +206,7 @@ export default function FauchardLabPanel() {
                     </div>
                     <span className="text-[11px] font-mono font-bold text-primary shrink-0">{(d.score as number).toFixed(3)}</span>
                     <div className="flex gap-0.5 shrink-0">
-                      {['Q', 'P', 'E', 'L', 'N'].map((k) => (
+                      {['Q', 'P', 'E', 'B', 'L', 'N'].map((k) => (
                         <span key={k} className="text-[7px] font-mono text-faint">{(d.components as Record<string, number>)?.[k]?.toFixed(1)}</span>
                       ))}
                     </div>
@@ -233,7 +230,7 @@ function Kpi({ label, value, good, goodLabel, badLabel, bar, onClick }: { label:
       onClick={onClick}
       title="Resaltar los parámetros que afectan este indicador"
       aria-label={`Resaltar parámetros de ${label}`}
-      className="p-3 rounded-xl bg-surface/40 border border-divider flex flex-col gap-1.5 text-left transition-colors duration-150 hover:bg-white/5 hover:border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="p-2 rounded-lg bg-surface/40 border border-divider flex flex-col gap-1 text-left transition-colors duration-150 hover:bg-white/5 hover:border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       <span className="text-[8px] font-black text-faint uppercase tracking-widest">{label}</span>
       <div className="flex items-baseline gap-1.5">

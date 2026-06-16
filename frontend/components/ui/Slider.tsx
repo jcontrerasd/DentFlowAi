@@ -32,7 +32,7 @@ const Slider = forwardRef<HTMLInputElement, SliderProps>(
     return (
       <div
         ref={containerRef}
-        className={`flex flex-col gap-2 w-full group rounded-xl transition-all duration-300 ${flash ? 'ring-2 ring-primary/70 bg-primary-hl/15 shadow-lg shadow-primary/20' : ''}`}
+        className={`flex flex-col gap-1.5 w-full group rounded-lg transition-all duration-300 ${flash ? 'ring-2 ring-primary/70 bg-primary-hl/15 shadow-lg shadow-primary/20' : ''}`}
       >
         <div className="flex justify-between items-center px-1">
           {label && (

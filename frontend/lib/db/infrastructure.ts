@@ -3,7 +3,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-export const INFRA_VERSION = 'v5.11';
+/** v5.15 — Bono de infrautilización (αB) reactivo en score; Σ6=1.0. */
+export const INFRA_VERSION = 'v5.15';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -1278,12 +1279,8 @@ export async function ensureInfrastructure(db: any) {
         ON review (clinical_case_id, reviewer_id, dimension);
     `);
 
-    // v5.4 — Unifica los pesos del score a un solo esquema de 6 (Σ6=1.0 con αN).
-    // Antes coexistían dos convenciones: "Pesos del Score" (Σ5=1) y el motor con
-    // constantes hardcodeadas (RENORMALIZED_ALPHAS). Ahora el motor lee la config,
-    // así que las filas deben sumar 1.0 con los 6 pesos. Normaliza a los valores
-    // renormalizados las filas que no cumplan. Idempotente: tras correr, Σ6=1.0 y
-    // el WHERE deja de coincidir.
+    // v5.4 — Unifica los pesos del score (Σ6=1.0 con αB).
+    // Normaliza filas cuyos 6 α no suman 1.0. Idempotente tras correr.
     await db.execute(sql`
       UPDATE fauchard_config
       SET alpha_quality = 0.200, alpha_punctuality = 0.150, alpha_experience = 0.150,
@@ -1426,6 +1423,61 @@ export async function ensureInfrastructure(db: any) {
 
     // v5.11 — Código opaco por regla de precio (prc_NNN)
     await migratePriceRuleCode(db);
+
+    // v5.13 — Taxonomía worktypes expandida: pónticos, derived_*, 7 categorías disponibilidad
+    await db.execute(sql`
+      ALTER TABLE clinical_case
+        ADD COLUMN IF NOT EXISTS replaces_missing_teeth BOOLEAN DEFAULT NULL,
+        ADD COLUMN IF NOT EXISTS derived_work_type TEXT,
+        ADD COLUMN IF NOT EXISTS derived_category TEXT;
+    `);
+    await db.execute(sql`
+      ALTER TABLE technician_availability
+        ADD COLUMN IF NOT EXISTS cat_carillas_cad BOOLEAN NOT NULL DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS cat_carillas_cam BOOLEAN NOT NULL DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS cat_full_arch_cad BOOLEAN NOT NULL DEFAULT TRUE,
+        ADD COLUMN IF NOT EXISTS cat_full_arch_cam BOOLEAN NOT NULL DEFAULT TRUE;
+    `);
+    // Backfill: carillas ← inlays; full_arch ← puentes (idempotente)
+    await db.execute(sql`
+      UPDATE technician_availability
+      SET
+        cat_carillas_cad = cat_inlays_cad,
+        cat_carillas_cam = cat_inlays_cam,
+        cat_full_arch_cad = cat_puentes_cad,
+        cat_full_arch_cam = cat_puentes_cam
+      WHERE cat_carillas_cad IS TRUE AND cat_carillas_cad = cat_inlays_cad;
+    `);
+    await db.execute(sql`
+      UPDATE technician_availability
+      SET
+        cat_carillas_cad = cat_inlays_cad,
+        cat_carillas_cam = cat_inlays_cam
+      WHERE cat_carillas_cad IS DISTINCT FROM cat_inlays_cad
+         OR cat_carillas_cam IS DISTINCT FROM cat_inlays_cam;
+    `);
+    await db.execute(sql`
+      UPDATE technician_availability
+      SET
+        cat_full_arch_cad = cat_puentes_cad,
+        cat_full_arch_cam = cat_puentes_cam
+      WHERE cat_full_arch_cad IS DISTINCT FROM cat_puentes_cad
+         OR cat_full_arch_cam IS DISTINCT FROM cat_puentes_cam;
+    `);
+    console.log('[DB] v5.13 taxonomía worktypes: columnas clinical_case + technician_availability.');
+
+    // v5.15 — Restaura αB en config activa: Σ6=1.0 (corrige estado post-v5.14).
+    await db.execute(sql`
+      UPDATE fauchard_config
+      SET alpha_quality = 0.200, alpha_punctuality = 0.150, alpha_experience = 0.150,
+          alpha_load = 0.150, alpha_bonus = 0.100, alpha_no_response = 0.250
+      WHERE ABS(
+        COALESCE(alpha_quality,0) + COALESCE(alpha_punctuality,0) + COALESCE(alpha_experience,0)
+        + COALESCE(alpha_load,0) + COALESCE(alpha_bonus,0) + COALESCE(alpha_no_response,0) - 1.0
+      ) > 0.001
+         OR COALESCE(alpha_bonus, 0) < 0.001;
+    `);
+    console.log('[DB] v5.15 pesos α: Σ6=1.0 con alpha_bonus=0.100 en fauchard_config.');
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
     console.log("[DB] Infraestructura verificada con éxito.");

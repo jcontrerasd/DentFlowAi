@@ -8,18 +8,32 @@
  *   cd frontend && npx tsx scripts/seed-price-rules.ts          # solo inserta faltantes
  *   cd frontend && npx tsx scripts/seed-price-rules.ts --reset  # borra todo y re-seed
  *
+ * Para backfill incremental con herencia de precios y auditoría, preferir:
+ *   npx tsx scripts/backfill-price-rule-gaps.ts --apply --reason "..."
+ *
  * Requisitos: DATABASE_URL en .env.local, infra v5.8+ (tabla price_rule).
  */
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 
-import { computeSalePrice } from '../lib/pricing/resolveListPrice';
+import { eq } from 'drizzle-orm';
+import {
+  dentalMaterial,
+  priceRule,
+  restorationType,
+  urgencyLevel,
+  vitaShade,
+} from '../lib/db/schema';
+import { computeSalePrice, type PriceRuleRow } from '../lib/pricing/resolveListPrice';
+import {
+  findMissingBaseRules,
+  findUnresolvedWizardCombinations,
+  PRICE_RULE_SEED_DEFAULTS,
+  proposeBaseRulePricing,
+  type PriceCatalogs,
+} from '../lib/pricing/priceRuleCoverage';
+import { nextPriceRuleCode } from '../lib/pricing/priceRuleCode';
 import { isLegacyInvalidRule } from '../lib/pricing/priceRuleDimensions';
-
-const SEED_COST = 5000;
-const SEED_FEE_PERCENT = 0.15;
-const SEED_SALE_PRICE = computeSalePrice(SEED_COST, SEED_FEE_PERCENT);
-const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
 const RESET = process.argv.includes('--reset');
 
@@ -38,12 +52,40 @@ async function resetPriceRules(db: { execute: (q: string | import('drizzle-orm')
   console.log(`Reglas eliminadas: ${deleted.rowCount ?? 'todas'}`);
 }
 
+async function loadCatalogs(db: typeof import('../lib/db').db): Promise<PriceCatalogs> {
+  const [restorations, materials, shades, urgencies] = await Promise.all([
+    db.select({ id: restorationType.id, label: restorationType.label }).from(restorationType).where(eq(restorationType.isActive, true)),
+    db.select({ id: dentalMaterial.id, label: dentalMaterial.label }).from(dentalMaterial).where(eq(dentalMaterial.isActive, true)),
+    db.select({ id: vitaShade.id, label: vitaShade.label }).from(vitaShade).where(eq(vitaShade.isActive, true)),
+    db.select({ id: urgencyLevel.id, label: urgencyLevel.label }).from(urgencyLevel).where(eq(urgencyLevel.isActive, true)),
+  ]);
+  return { restorations, materials, shades, urgencies };
+}
+
+function toPriceRuleRows(rows: (typeof priceRule.$inferSelect)[]): PriceRuleRow[] {
+  return rows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    restorationTypeId: r.restorationTypeId,
+    materialId: r.materialId,
+    shadeId: r.shadeId,
+    urgencyId: r.urgencyId,
+    cost: r.cost,
+    feePercent: r.feePercent,
+    salePrice: r.salePrice,
+    sortOrder: r.sortOrder,
+    isActive: r.isActive,
+  }));
+}
+
 async function seedPriceRules() {
   const { db } = await import('../lib/db');
   const { sql } = await import('drizzle-orm');
 
   console.log('--- Seed de price_rule (R·U·*·* — rest × urg, cascada sin huecos) ---');
-  console.log(`Costo: ${SEED_COST} | Fee: ${SEED_FEE_PERCENT * 100}% | Venta: ${SEED_SALE_PRICE}`);
+  console.log(
+    `Costo fallback: ${PRICE_RULE_SEED_DEFAULTS.cost} | Fee: ${PRICE_RULE_SEED_DEFAULTS.feePercent * 100}% | Venta: ${PRICE_RULE_SEED_DEFAULTS.salePrice}`,
+  );
 
   const legacyRows = await db.execute(sql`
     SELECT id, restoration_type_id, urgency_id, material_id, shade_id
@@ -71,56 +113,63 @@ async function seedPriceRules() {
     await resetPriceRules(db, sql);
   }
 
-  const catalogCounts = await db.execute(sql`
-    SELECT
-      (SELECT COUNT(*)::int FROM restoration_type WHERE is_active) AS restorations,
-      (SELECT COUNT(*)::int FROM urgency_level WHERE is_active) AS urgencies
-  `) as Array<{ restorations: number; urgencies: number }>;
+  const catalogs = await loadCatalogs(db);
+  const rules = toPriceRuleRows(await db.select().from(priceRule));
+  const missing = findMissingBaseRules(catalogs, rules);
+  const expectedTotal = catalogs.restorations.length * catalogs.urgencies.length;
 
-  const row = catalogCounts[0];
-  const expectedTotal = row.restorations * row.urgencies;
   console.log(
-    `Catálogos activos: ${row.restorations} rest × ${row.urgencies} urg = ${expectedTotal} reglas esperadas (mat/color = *)`,
+    `Catálogos activos: ${catalogs.restorations.length} rest × ${catalogs.urgencies.length} urg = ${expectedTotal} reglas base esperadas`,
   );
+  console.log(`Combinaciones base faltantes: ${missing.length}`);
 
-  const beforeCount = await db.execute(sql`
-    SELECT COUNT(*)::int AS n FROM price_rule WHERE is_active = TRUE
-  `) as Array<{ n: number }>;
-  const countBefore = beforeCount[0]?.n ?? 0;
+  if (missing.length === 0) {
+    const unresolved = findUnresolvedWizardCombinations(catalogs, rules);
+    console.log(`Combinaciones wizard sin resolver: ${unresolved.length}`);
+    console.log('--- Seed: nada que insertar ---');
+    process.exit(unresolved.length > 0 ? 1 : 0);
+  }
 
-  await db.execute(sql`
-    INSERT INTO price_rule (
-      restoration_type_id, material_id, shade_id, urgency_id,
-      cost, fee_percent, sale_price, sort_order, is_active, updated_at
-    )
-    SELECT r.id, NULL, NULL, u.id,
-           ${SEED_COST}, ${SEED_FEE_PERCENT}, ${SEED_SALE_PRICE}, 0, TRUE, NOW()
-    FROM restoration_type r
-    CROSS JOIN urgency_level u
-    WHERE r.is_active AND u.is_active
-      AND NOT EXISTS (
-        SELECT 1 FROM price_rule pr
-        WHERE pr.is_active
-          AND COALESCE(pr.restoration_type_id, ${NIL_UUID}::uuid) = r.id
-          AND COALESCE(pr.material_id, ${NIL_UUID}::uuid) = ${NIL_UUID}::uuid
-          AND COALESCE(pr.shade_id, ${NIL_UUID}::uuid) = ${NIL_UUID}::uuid
-          AND COALESCE(pr.urgency_id, ${NIL_UUID}::uuid) = u.id
-      )
-  `);
+  let inserted = 0;
+  await db.transaction(async (tx) => {
+    const existingCodes = (await tx.select({ code: priceRule.code }).from(priceRule)).map((r) => r.code);
+    let codeSeq = existingCodes;
 
-  const afterCount = await db.execute(sql`
-    SELECT COUNT(*)::int AS n FROM price_rule WHERE is_active = TRUE
-  `) as Array<{ n: number }>;
-  const countAfter = afterCount[0]?.n ?? 0;
-  const inserted = countAfter - countBefore;
-  const skipped = expectedTotal - inserted;
+    for (const m of missing) {
+      const pricing = proposeBaseRulePricing(m, catalogs, rules);
+      const cost = pricing.cost;
+      const feePercent = pricing.feePercent;
+      const salePrice = pricing.salePrice || computeSalePrice(cost, feePercent);
+      const code = nextPriceRuleCode(codeSeq);
+      codeSeq = [...codeSeq, code];
+
+      await tx.insert(priceRule).values({
+        code,
+        restorationTypeId: m.restorationTypeId,
+        materialId: null,
+        shadeId: null,
+        urgencyId: m.urgencyId,
+        cost: String(cost),
+        feePercent: String(feePercent),
+        salePrice: String(salePrice),
+        sortOrder: 0,
+        isActive: true,
+        updatedAt: new Date(),
+      });
+      inserted++;
+    }
+  });
+
+  const rulesAfter = toPriceRuleRows(await db.select().from(priceRule));
+  const activeAfter = rulesAfter.filter((r) => r.isActive).length;
+  const unresolvedAfter = findUnresolvedWizardCombinations(catalogs, rulesAfter);
 
   console.log(`Insertadas: ${inserted}`);
-  console.log(`Omitidas (ya existían): ${skipped}`);
-  console.log(`Total activas en BD: ${countAfter} (esperado: ${expectedTotal})`);
+  console.log(`Total activas en BD: ${activeAfter} (esperado base: ${expectedTotal})`);
+  console.log(`Combinaciones wizard sin resolver: ${unresolvedAfter.length}`);
 
-  if (countAfter < expectedTotal) {
-    console.warn(`⚠ Faltan ${expectedTotal - countAfter} reglas — revisa catálogos o reglas inactivas duplicadas.`);
+  if (unresolvedAfter.length > 0) {
+    console.warn('⚠ Quedan combinaciones wizard sin resolver tras el seed.');
     process.exit(1);
   }
 

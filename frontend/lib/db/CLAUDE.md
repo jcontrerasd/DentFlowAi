@@ -2,7 +2,7 @@
 
 ## Archivos clave
 - `schema.ts` — Definición de todas las tablas. Fuente de verdad del modelo.
-- `infrastructure.ts` — Conexión DB + runtime migrations (NO usar drizzle-kit push en producción). `INFRA_VERSION` actual: **v5.8**.
+- `infrastructure.ts` — Conexión DB + runtime migrations (NO usar drizzle-kit push en producción). `INFRA_VERSION` actual: **v5.13**.
 - `index.ts` — Exporta instancia `db`
 - `catalogResolver.ts` — resuelve `code`/`label` de catálogos UI → `*_id` antes de persistir.
 
@@ -68,7 +68,8 @@ Archivo por usuario y caso (`case_user_archive`). Usado por `archiveCaseForUserA
 ### Modelo de disponibilidad y sanción (v5.0)
 Tablas y columnas detrás del flag `AVAILABILITY_MODEL_ENABLED` (inertes con el flag off). Ver `Doc Servicio Orquestado/`.
 
-- **`technicianAvailability`** (`technician_availability`) — disponibilidad declarada, **modelo aplanado** (1 fila por técnico, unique en `user_id`). Columna `inactivity_reminder_sent_at` (v5.1) da idempotencia al recordatorio de inactividad del cron `process-availability`. Regla de elegibilidad **AND triple**: `levelGlobal ∧ level<Cad|Cam> ∧ cat<Categoria><Cad|Cam>`. 10 columnas hijas `cat_<categoria>_<cap>` para las 5 categorías canónicas (`coronas`, `inlays`, `puentes`, `protesis`, `guias` — ver `WORK_CATEGORIES` / `WORK_TYPE_TO_CATEGORY` en `lib/constants/dental.ts`). Los hijos se preservan aunque el padre esté OFF. Backfill condicional al flag: infiere CAD/CAM desde `technicianSkill` (design/fab level > 0).
+- **`technicianAvailability`** (`technician_availability`) — disponibilidad declarada, **modelo aplanado** (1 fila por técnico, unique en `user_id`). Columna `inactivity_reminder_sent_at` (v5.1) da idempotencia al recordatorio de inactividad del cron `process-availability`. Regla de elegibilidad **AND triple**: `levelGlobal ∧ level<Cad|Cam> ∧ cat<Categoria><Cad|Cam>`. 14 columnas hijas `cat_<categoria>_<cap>` para las **7 categorías canónicas** v5.13 (`coronas`, `inlays`, `carillas`, `puentes`, `full_arch`, `protesis`, `guias` — ver `WORK_CATEGORIES` / `WORK_TYPE_TO_CATEGORY` en `lib/constants/dental.ts`). Los hijos se preservan aunque el padre esté OFF. Backfill condicional al flag: infiere CAD/CAM desde `technicianSkill` (design/fab level > 0).
+- **`clinical_case` v5.13**: `replaces_missing_teeth` (boolean, NULL legacy), `derived_work_type`, `derived_category` (poblados en `classifyCaseAction` / `reclassifyCaseDraftAction`).
 - **`technicianNoResponseEvent`** (`technician_no_response_event`) — timestamps individuales de no-respuesta para la ventana rolling. `status`: `active | expired_window | pardoned`. FK `caseInvitationId` ON DELETE SET NULL. Sustituye al modelo binario `user.consecutiveNoResponse` cuando el flag está on.
 - **`clinicalCase`** nuevas columnas: `pendingPoolCycleCount`, `pendingPoolStartedAt`, `pendingPoolCheckinSentAt` (cola `pendiente_pool` cuando Fauchard no halla elegibles) + `lastRevisionSubmittedAt` (reinicia el countdown `tDentistReviewHours` en cada entrega) + `reviewReminderSentAt`/`reviewOverdueNotifiedAt` (v5.2, idempotencia de la escalación de revisión; se reinician en cada entrega).
 - **`caseInvitation`** nuevas columnas: `rejectionReasonId`/`rejectionComment`/`rejectedAt` (rechazo individual), `bulkRejectionReasonId`/`bulkRejectionComment` (rechazo masivo / auto-OFF), `isReplacement` (invitación de reemplazo automático). FKs a catálogos con ON DELETE RESTRICT.
@@ -103,7 +104,7 @@ Tablas administrables (v4.0, dos identificadores: opaco + label):
 **Reglas de acceso** (ver `catalogResolver.ts`):
 - Form/wizard → envía `code` opaco para material/restoration/shade; **`label`** para urgency (la lógica de negocio compara contra labels estándar).
 - Resolver → convierte code→id (mat/rest/shade) o label→id (urgency) antes de persistir.
-- App code referencia **label** (`urgency === 'Alta'`, `RESTORATION_TO_WORK_TYPE[label]`). Nunca el code opaco.
+- App code referencia **label** (`urgency === 'Alta'`, `resolveWorkType` / `resolveScenario` en `lib/fauchard/caseWorkType.ts`). Nunca el code opaco.
 - Reads (JOIN) aplanan: `material/restorationType/shade/urgency` = label. Los `*Code` opacos solo se exponen para selects que necesitan persistir code.
 
 **Admin CRUD**: admin solo edita `label`. `code` se genera automáticamente como `${prefix}_${NNN}` (siguiente disponible).
@@ -175,23 +176,15 @@ Los eventos de calificación (`action === 'CALIFICACION_ENVIADA'`) tienen visibi
 
 ## Modelo de disponibilidad (v5.0) en Fauchard — gated por `AVAILABILITY_MODEL_ENABLED`
 - **Elegibilidad**: antes del scoring, `runFauchardAction` aplica el AND triple (`computeEligibleAction(tech, categoría, capacidad)`) en cada `runFauchard` (sin caché del estado efectivo). La categoría se deriva del `workType` (`WORK_TYPE_TO_CATEGORY`); las capacidades del `serviceType` (solo_diseno→CAD, solo_fabricacion→CAM, integral→CAD∧CAM). Con el flag **off**, se mantiene el filtro legacy `consecutiveNoResponse >= 3`.
-- **Score**: con el flag on, los α se re-normalizan (`lib/availabilityScore.ts → RENORMALIZED_ALPHAS`, `0.20·Q + 0.15·P + 0.15·E − 0.15·C + 0.10·B − 0.25·N`) manteniendo `|Σα|=1`. `N ∈ {0, 0.5, 1}` viene de `computeLevelForTechnicianAction`. αN sale de `fauchard_config.alpha_no_response`.
+- **Score (activo)**: `computeAssignmentScore` en `lib/fauchard/assignmentScore.ts` — Q/P/E/L/N con pesos de `fauchard_config` vía `parseAssignmentWeights`. `RENORMALIZED_ALPHAS` es referencia histórica (@deprecated).
 - **0 elegibles**: con el modelo on **y `POOL_PENDIENTE_ENABLED` on**, el caso entra a la cola `pendiente_pool` (`enterPendingPoolAction`) en vez de fallar; `runFauchardAction` retorna `{ pooled: true }` y el caller (publish/republish) deja el caso en `enEvaluacion`. `POOL_PENDIENTE_ENABLED` es el kill-switch secundario: apagado, Fauchard ignora la cola y falla directo a `sin_cotizaciones_fallo` aunque el modelo esté on.
 - **Sanción**: `penalizeNoResponseAction(techId, invitationId)` — con el flag on registra un evento rolling, recalcula nivel y aplica Nivel 2 (email) / Nivel 3 (auto-OFF de `level_global` + `autoRejectOnAutoOffAction` + email). Con el flag off, mantiene `consecutiveNoResponse` + suspensión a las 3.
 - Helpers expuestos para reemplazo/cola: `selectReplacementCandidateAction`, `isTechnicianEligibleForCaseAction`, `reevaluatePendingPoolCaseAction`.
 
-## Fauchard selección por tipo de servicio
-- `classifyCaseAction`: si el caso tiene `serviceType` poblado (wizard v3) lo respeta como fuente de verdad; si no, lo deriva de `needsFabrication`.
-- `runFauchardAction` filtra `technicianSkill` según el tipo:
-  - `solo_diseno`, `integral` → `designLevel >= minSkillLevel`
-  - `solo_fabricacion` → `fabricationLevel >= minSkillLevel` (design ignorado)
-  - `integral` además exige `fabricationLevel >= minSkillLevel`
-- `calculateTechnicianScore` (componente E, experiencia):
-  - `integral` → `min(designLevel, fabLevel)`
-  - `solo_fabricacion` → `fabricationLevel`
-  - `solo_diseno` → `designLevel`
+## Fauchard asignación directa (activo)
+- `classifyCaseAction` + `runAssignmentAction` / `rankAssignmentCandidates`: filtro `designLevel` y score Q/P/E/L/N (`assignmentScore.ts`). Simulador comparte `buildEligiblePoolForScenario` con liga strict-first.
 
-## submitQuoteAction
+## submitQuoteAction (legacy)
 - Firma nueva: `submitQuoteAction(invitationId, input: QuoteInput)` con `kind: 'flat' | 'split'`.
 - Firma legacy `(invitationId, price, deliveryDays, notes?)` se mantiene como flat por retrocompatibilidad (tests, integraciones internas); no aplica validación estricta de coherencia con `serviceType`.
 - Cuando el caller usa el objeto `QuoteInput`:

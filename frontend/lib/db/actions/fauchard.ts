@@ -26,7 +26,8 @@ import { getServerIdentity } from './impersonation';
 import { logCaseEvent } from './cases';
 import { notifyUser } from '../../services/notifications';
 import { subDays } from 'date-fns';
-import { CASE_COMPLEXITY, CASE_STATUSES, INTERNAL_CASE_STATUSES, SERVICE_TYPES, WORK_TYPE_LABELS, WORK_TYPE_TO_CATEGORY, type CaseComplexity, type WorkType, type WorkCategory } from '@/lib/constants/dental';
+import { CASE_COMPLEXITY, CASE_STATUSES, INTERNAL_CASE_STATUSES, SERVICE_TYPES, WORK_TYPE_LABELS, WORK_CATEGORY_LABELS, type CaseComplexity } from '@/lib/constants/dental';
+import { resolveScenario, categoryForWorkType, MIN_SKILL_FOR_CATEGORY } from '@/lib/fauchard/caseWorkType';
 import type { ActionResult } from '@/lib/types/actions';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
@@ -38,7 +39,7 @@ import { applyLeagueTransitionPenalty } from '@/lib/leagueScore';
 import { levelToScoreN, POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { computeEligibleAction, ensureTechnicianAvailabilityAction, type Capacity } from './availability';
 import { computeLevelForTechnicianAction, recordNoResponseEventAction } from './noResponseEvents';
-import { enterPendingPoolAction } from './poolQueue';
+import { configValuesDiffer, roundAlphaWeight, ACTIVE_ALPHA_KEYS } from '@/lib/fauchard/alphaWeightNormalize';
 
 // ─── Tipos internos ────────────────────────────────────────────────────────────
 
@@ -95,43 +96,6 @@ function capacitiesForServiceType(_serviceType: string): Capacity[] {
   return ['cad'];
 }
 
-/** Categoría de disponibilidad (5) del caso a partir de su work_type (15). */
-function categoryForWorkType(workType: string): WorkCategory {
-  return WORK_TYPE_TO_CATEGORY[workType as WorkType] ?? 'coronas';
-}
-
-// Nivel mínimo de designLevel requerido según la categoría del caso
-const MIN_SKILL_FOR_CATEGORY: Record<string, number> = {
-  bronce: 1,
-  plata: 3,
-  oro: 5,
-  elite: 7,
-};
-
-// ─── Mapeo de restoration_type → work_type (para el algoritmo) ────────────────
-
-// Mapea restoration_type.label → work_type. Las labels son estándares clínicos
-// estables (no se renombran). Si el admin las modifica, el mapeo cae al default.
-const RESTORATION_TO_WORK_TYPE: Record<string, string> = {
-  'Corona Unitaria':       'corona_posterior',
-  'Inlay':                 'inlay_onlay',
-  'Onlay':                 'inlay_onlay',
-  'Carilla':               'carilla_unitaria',
-  'Puente':                'puente_3u',
-  'Corona sobre implante': 'corona_implante',
-  'Denture':               'protesis_total',
-  'Guía Quirúrgica':       'guia_quirurgica_simple',
-  'Otro':                  'corona_posterior',
-};
-
-function getWorkTypeForCase(restorationLabel: string, teeth: number[] = []): string {
-  if (teeth.length >= 4 && restorationLabel === 'Carilla') return 'carillas_multiples';
-  if (teeth.length >= 4 && restorationLabel === 'Puente') return 'puente_4mas';
-  if (teeth.length >= 10) return 'full_arch';
-
-  return RESTORATION_TO_WORK_TYPE[restorationLabel] || 'corona_posterior';
-}
-
 // ─── Helpers: configuración activa global / anclada por caso / por id ─────────
 
 export async function getActiveConfig(): Promise<FauchardConfigRow> {
@@ -185,269 +149,6 @@ function dimensionsForServiceType(_serviceType: string): string[] {
   return ['design'];
 }
 
-// ─── Bulk data loader for pool scoring (avoids N×5 DB queries in runFauchard) ─
-
-type BulkScoringData = {
-  reviews: { revieweeId: string; rating: number; dimension: string }[];
-  completedInvs: {
-    technicianId: string;
-    completedAt: Date | null;
-    publishedAt: Date | null;
-    desiredDeliveryAt: Date | null;
-    deadlineDays: number | null;
-    deadlineHours: number | null;
-  }[];
-  skills: { userId: string; workType: string; designLevel: number }[];
-  recentInvs: { technicianId: string }[];
-  techUsers: { id: string; lastInvitedAt: Date | null; leagueTransitionStartedAt: Date | null }[];
-};
-
-async function bulkLoadTechnicianData(
-  techIds: string[],
-  config: FauchardConfigRow,
-  workType: string
-): Promise<BulkScoringData> {
-  if (!techIds.length) return { reviews: [], completedInvs: [], skills: [], recentInvs: [], techUsers: [] };
-
-  const now = new Date();
-  const qualityWindow = new Date(now.getTime() - config.wQualityDays * 86400000);
-  const loadWindow = new Date(now.getTime() - config.wLoadDays * 86400000);
-
-  const [reviews, completedInvs, skills, recentInvs, techUsers] = await Promise.all([
-    db.select({ revieweeId: review.revieweeId, rating: review.rating, dimension: review.dimension })
-      .from(review)
-      .where(and(inArray(review.revieweeId, techIds), gt(review.createdAt, qualityWindow))),
-
-    db.select({
-      technicianId: caseAssignment.technicianId,
-      completedAt: clinicalCase.completedAt,
-      publishedAt: clinicalCase.publishedAt,
-      desiredDeliveryAt: clinicalCase.desiredDeliveryAt,
-      deadlineDays: caseAssignment.deadlineDays,
-      deadlineHours: caseAssignment.deadlineHours,
-    })
-    .from(caseAssignment)
-    .innerJoin(clinicalCase, eq(caseAssignment.clinicalCaseId, clinicalCase.id))
-    .where(and(
-      inArray(caseAssignment.technicianId, techIds),
-      eq(caseAssignment.status, 'accepted'),
-      isNotNull(clinicalCase.completedAt),
-    )),
-
-    db.select({
-      userId: technicianSkill.userId,
-      workType: technicianSkill.workType,
-      designLevel: technicianSkill.designLevel,
-    })
-    .from(technicianSkill)
-    .where(and(inArray(technicianSkill.userId, techIds), eq(technicianSkill.workType, workType))),
-
-    db.select({ technicianId: caseAssignment.technicianId })
-      .from(caseAssignment)
-      .where(and(inArray(caseAssignment.technicianId, techIds), gt(caseAssignment.assignedAt, loadWindow))),
-
-    db.select({ id: user.id, lastInvitedAt: user.lastInvitedAt, leagueTransitionStartedAt: user.leagueTransitionStartedAt })
-      .from(user)
-      .where(inArray(user.id, techIds)),
-  ]);
-
-  return { reviews, completedInvs, skills, recentInvs, techUsers };
-}
-
-/** @deprecated Usar rankAssignmentCandidates / computeAssignmentScore (Q/P/E/L/N). */
-function calculateScoreFromBulkData(
-  technicianId: string,
-  data: BulkScoringData,
-  config: FauchardConfigRow,
-  avgPoolLoad: number,
-  serviceType: string,
-  sanction?: { n: number }
-): { score: number; components: { Q: number; P: number; E: number; C: number; B: number } } {
-  // Pesos del score: ÚNICA fuente de verdad = la config (6 pesos, Σ6=1.0,
-  // editables en "Pesos del Score"). El término −αN·N solo penaliza cuando hay
-  // sanción (N>0, modelo de disponibilidad on); con N=0 se anula solo.
-  const α1 = parseFloat(config.alphaQuality);
-  const α2 = parseFloat(config.alphaPunctuality);
-  const α3 = parseFloat(config.alphaExperience);
-  const α4 = parseFloat(config.alphaLoad);
-  const α5 = parseFloat(config.alphaBonus);
-  const αN = parseFloat(config.alphaNoResponse ?? '0.250');
-  const N = sanction?.n ?? 0;
-  const cMax = parseFloat(config.cMax);
-  const now = new Date();
-
-  // Q — filtrado por dimensión (CAD/CAM) según la capacidad del caso.
-  const qualityDims = dimensionsForServiceType(serviceType);
-  const techRatings = data.reviews
-    .filter(r => r.revieweeId === technicianId && qualityDims.includes(r.dimension))
-    .map(r => r.rating);
-  const avgRating = techRatings.length > 0 ? techRatings.reduce((a, b) => a + b, 0) / techRatings.length : null;
-  const Q = avgRating !== null ? avgRating / 5 : 0.5;
-
-  // P
-  const techInvs = data.completedInvs.filter(i => i.technicianId === technicianId);
-  let onTimeCases = 0;
-  for (const inv of techInvs) {
-    if (inv.completedAt && isCompletedOnTime(inv.completedAt, inv.desiredDeliveryAt, inv.publishedAt, inv.deadlineDays)) {
-      onTimeCases++;
-    }
-  }
-  const P = techInvs.length > 0 ? onTimeCases / techInvs.length : 0.80;
-
-  // E
-  const skillRow = data.skills.find(s => s.userId === technicianId);
-  let skillLevel = 0;
-  if (skillRow) {
-    skillLevel = skillRow.designLevel ?? 0;
-  }
-  const E = skillLevel / 7;
-
-  // C
-  const invitationCount = data.recentInvs.filter(i => i.technicianId === technicianId).length;
-  const C = Math.min(invitationCount / (avgPoolLoad > 0 ? avgPoolLoad : 1), cMax);
-
-  // B
-  const techUser = data.techUsers.find(u => u.id === technicianId);
-  const lastInvited = techUser?.lastInvitedAt;
-  const daysSince = lastInvited
-    ? (now.getTime() - new Date(lastInvited).getTime()) / 86400000
-    : config.dBonusMaxDays;
-  const B = Math.min(daysSince / config.dBonusMaxDays, 1.0);
-
-  const baseScore = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B - αN * N;
-
-  // Penalización de transición de liga (Fase 2): mientras el técnico está en su
-  // período de prueba en la liga superior, su score se reduce por (1 - lPenaltyTransition).
-  const inTransition = isLeagueEngineEnabled() && !!techUser?.leagueTransitionStartedAt;
-  const score = applyLeagueTransitionPenalty(baseScore, inTransition, parseFloat(config.lPenaltyTransition));
-
-  return { score: Math.max(0, score), components: { Q, P, E, C, B } };
-}
-
-// ─── S2-02: Calcular score de un técnico para un caso ────────────────────────
-
-/** @deprecated Usar rankAssignmentCandidates / computeAssignmentScore (Q/P/E/L/N). */
-async function calculateTechnicianScore(
-  technicianId: string,
-  workType: string,
-  serviceType: string,
-  config: FauchardConfigRow,
-  avgPoolLoad: number = 5
-): Promise<{ score: number; components: { Q: number; P: number; E: number; C: number; B: number; N: number } }> {
-  const α1 = parseFloat(config.alphaQuality);
-  const α2 = parseFloat(config.alphaPunctuality);
-  const α3 = parseFloat(config.alphaExperience);
-  const α4 = parseFloat(config.alphaLoad);
-  const α5 = parseFloat(config.alphaBonus);
-  const αN = parseFloat(config.alphaNoResponse ?? '0.250');
-  const cMax = parseFloat(config.cMax);
-
-  const now = new Date();
-  const qualityWindow = new Date(now.getTime() - config.wQualityDays * 86400000);
-  const loadWindow = new Date(now.getTime() - config.wLoadDays * 86400000);
-
-  // Q — Calidad histórica: promedio de ratings en la ventana de calidad,
-  // filtrado por la(s) dimensión(es) que corresponden a la capacidad evaluada
-  // (CAD→design, CAM→fabrication, integral→ambas).
-  const qualityDims = dimensionsForServiceType(serviceType);
-  const qualityRows = await db
-    .select({ rating: review.rating })
-    .from(review)
-    .where(
-      and(
-        eq(review.revieweeId, technicianId),
-        inArray(review.dimension, qualityDims),
-        gt(review.createdAt, qualityWindow)
-      )
-    );
-
-  const ratings = qualityRows.map(r => r.rating);
-  const avgRating = ratings.length > 0 ? ratings.reduce((a, b) => a + b, 0) / ratings.length : null;
-  const Q = avgRating !== null ? avgRating / 5 : 0.5; // Default neutro para técnicos nuevos
-
-  // P — Puntualidad: casos entregados en plazo / total completados
-  const completedInvs = await db
-    .select({
-      completedAt: clinicalCase.completedAt,
-      assignedAt: clinicalCase.assignedAt,
-      deadlineDays: caseAssignment.deadlineDays,
-      deadlineHours: caseAssignment.deadlineHours,
-    })
-    .from(caseAssignment)
-    .innerJoin(clinicalCase, eq(caseAssignment.clinicalCaseId, clinicalCase.id))
-    .where(and(
-      eq(caseAssignment.technicianId, technicianId),
-      eq(caseAssignment.status, 'confirmed'),
-      isNotNull(clinicalCase.completedAt),
-      isNotNull(clinicalCase.assignedAt),
-    ));
-
-  const totalCompleted = completedInvs.length;
-  let onTimeCases = 0;
-  for (const inv of completedInvs) {
-    if (inv.completedAt && inv.assignedAt && (inv.deadlineDays || inv.deadlineHours)) {
-      // Aproximación de scoring: no respeta horario laboral ni feriados.
-      // Si hay horas, se suman como ventana 24/7; si hay días, se cuentan calendario.
-      const ms =
-        (inv.deadlineDays ?? 0) * 86_400_000 + (inv.deadlineHours ?? 0) * 3_600_000;
-      const deadline = new Date(new Date(inv.assignedAt).getTime() + ms);
-      if (new Date(inv.completedAt) <= deadline) onTimeCases++;
-    }
-  }
-  const P = totalCompleted > 0 ? onTimeCases / totalCompleted : 0.80;
-
-  // E — Experiencia en el tipo de trabajo
-  const [skillRow] = await db
-    .select()
-    .from(technicianSkill)
-    .where(and(eq(technicianSkill.userId, technicianId), eq(technicianSkill.workType, workType)))
-    .limit(1);
-
-  let skillLevel = 0;
-  if (skillRow) {
-    skillLevel = skillRow.designLevel ?? 0;
-  }
-  const E = skillLevel / 7;
-
-  // C — Índice de carga reciente
-  const recentInvs = await db
-    .select({ id: caseAssignment.id })
-    .from(caseAssignment)
-    .where(and(eq(caseAssignment.technicianId, technicianId), gt(caseAssignment.assignedAt, loadWindow)));
-  const invitationCount = recentInvs.length;
-
-  const C = Math.min(invitationCount / (avgPoolLoad > 0 ? avgPoolLoad : 1), cMax);
-
-  // B — Bono de infrautilización
-  const [techRow] = await db
-    .select({ lastInvitedAt: user.lastInvitedAt, leagueTransitionStartedAt: user.leagueTransitionStartedAt })
-    .from(user)
-    .where(eq(user.id, technicianId))
-    .limit(1);
-
-  const lastInvited = techRow?.lastInvitedAt;
-  const daysSince = lastInvited
-    ? (now.getTime() - new Date(lastInvited).getTime()) / 86400000
-    : config.dBonusMaxDays; // Si nunca fue invitado, bono máximo
-  const B = Math.min(daysSince / config.dBonusMaxDays, 1.0);
-
-  // N — Sanción por no-respuesta (término −αN·N). Solo penaliza con el modelo de
-  // disponibilidad on y cuando el técnico tiene sanción acumulada (N>0); si no, N=0.
-  let N = 0;
-  if (isAvailabilityEnabled()) {
-    const lvl = await computeLevelForTechnicianAction(technicianId);
-    N = levelToScoreN(lvl.level);
-  }
-
-  const baseScore = α1 * Q + α2 * P + α3 * E - α4 * C + α5 * B - αN * N;
-
-  // Penalización de transición de liga (Fase 2) — ver calculateScoreFromBulkData.
-  const inTransition = isLeagueEngineEnabled() && !!techRow?.leagueTransitionStartedAt;
-  const score = applyLeagueTransitionPenalty(baseScore, inTransition, parseFloat(config.lPenaltyTransition));
-
-  return { score: Math.max(0, score), components: { Q, P, E, C, B, N } };
-}
-
 // ─── S2-01: Clasificar un caso ────────────────────────────────────────────────
 
 export async function classifyCaseAction(caseId: string) {
@@ -470,40 +171,17 @@ export async function classifyCaseAction(caseId: string) {
     const teeth = (cCase.cc.teeth as number[]) || [];
     const restorationType = cCase.restorationCode || '';
 
-    // Determinar complejidad
-    let complexity: CaseComplexity = CASE_COMPLEXITY.BASICO;
-    if (
-      teeth.length >= 10 ||
-      ['full_arch', 'protesis_parcial_removible', 'protesis_total', 'sobredentadura', 'barra_implantes'].includes(
-        RESTORATION_TO_WORK_TYPE[restorationType] || ''
-      )
-    ) {
-      complexity = CASE_COMPLEXITY.AVANZADO;
-    } else if (
-      teeth.length >= 4 ||
-      ['puente_4mas', 'carillas_multiples'].includes(RESTORATION_TO_WORK_TYPE[restorationType] || '')
-    ) {
-      complexity = CASE_COMPLEXITY.INTERMEDIO;
-    } else if (
-      restorationType === 'Guía Quirúrgica' ||
-      (cCase.cc.notesEsthetic && cCase.cc.notesEsthetic.length > 100)
-    ) {
-      complexity = CASE_COMPLEXITY.CRITICO;
-    }
+    const resolved = resolveScenario({
+      restorationLabel: restorationType,
+      teeth,
+      replacesMissingTeeth: cCase.cc.replacesMissingTeeth,
+    });
 
-    // Siempre solo_diseno — la app ya no admite fabricación.
+    const { workType, caseComplexity: complexity, caseLeague, category } = resolved;
     const serviceType: string = SERVICE_TYPES.SOLO_DISENO;
 
-    // Determinar work_type para el algoritmo
-    const workType = getWorkTypeForCase(restorationType, teeth);
-
-    const complexityToLeague: Record<string, string> = {
-      [CASE_COMPLEXITY.BASICO]: 'bronce',
-      [CASE_COMPLEXITY.INTERMEDIO]: 'plata',
-      [CASE_COMPLEXITY.AVANZADO]: 'oro',
-      [CASE_COMPLEXITY.CRITICO]: 'elite',
-    };
-    const caseLeague = complexityToLeague[complexity] ?? 'bronce';
+    const categoryLabel = WORK_CATEGORY_LABELS[category];
+    const workTypeLabel = WORK_TYPE_LABELS[workType] ?? workType;
 
     await db
       .update(clinicalCase)
@@ -511,6 +189,8 @@ export async function classifyCaseAction(caseId: string) {
         caseComplexity: complexity,
         serviceType,
         caseLeague,
+        derivedWorkType: workType,
+        derivedCategory: category,
         internalStatus: INTERNAL_CASE_STATUSES.CLASIFICANDO,
         updatedAt: new Date(),
       })
@@ -521,11 +201,19 @@ export async function classifyCaseAction(caseId: string) {
       userId: identity.id as string,
       type: 'sistema',
       action: 'CASO_CLASIFICADO',
-      content: `Caso clasificado: ${complexity} / ${serviceType}`,
-      payload: { complexity, serviceType, workType, visibleTo: 'sistema' },
+      content: `Caso clasificado: ${complexity} · ${categoryLabel} · ${workTypeLabel}`,
+      payload: {
+        complexity,
+        serviceType,
+        workType,
+        workTypeLabel,
+        category,
+        categoryLabel,
+        visibleTo: 'dentista',
+      },
     });
 
-    return { success: true, data: { complexity, serviceType, workType } };
+    return { success: true, data: { complexity, serviceType, workType, category } };
   } catch (error) {
     console.error('[classifyCaseAction] Error:', error);
     return { success: false, error: String(error) };
@@ -569,9 +257,16 @@ export async function isTechnicianEligibleForCaseAction(caseId: string, technici
     .where(eq(clinicalCase.id, caseId))
     .limit(1) as any;
   if (!cRow) return false;
-  const workType = getWorkTypeForCase(cRow.restorationCode || '', (cRow.cc.teeth as number[]) || []);
+  const workType = cRow.cc.derivedWorkType
+    ?? resolveScenario({
+      restorationLabel: cRow.restorationCode || '',
+      teeth: (cRow.cc.teeth as number[]) || [],
+      replacesMissingTeeth: cRow.cc.replacesMissingTeeth,
+    }).workType;
   const serviceType = cRow.cc.serviceType || SERVICE_TYPES.SOLO_DISENO;
-  const category = categoryForWorkType(workType);
+  const category = cRow.cc.derivedCategory
+    ? (cRow.cc.derivedCategory as import('@/lib/constants/dental').WorkCategory)
+    : categoryForWorkType(workType);
   // Self-heal: garantizar la fila antes de evaluar (computeEligibleAction excluye sin fila).
   await ensureTechnicianAvailabilityAction(technicianId);
   for (const cap of capacitiesForServiceType(serviceType)) {
@@ -1042,7 +737,10 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
 
 // ─── S6-02: Actualizar parámetros del algoritmo (Admin) ──────────────────────
 
-export async function updateFauchardParamsAction(params: Record<string, any>, reason?: string): Promise<ActionResult<{ newVersion: number }>> {
+export async function updateFauchardParamsAction(
+  params: Record<string, any>,
+  reason?: string,
+): Promise<ActionResult<{ newVersion: number; persisted?: boolean }>> {
   const identity = await getServerIdentity();
   if (!identity?.isSystemAdmin) return { success: false, error: 'No autorizado' };
 
@@ -1057,9 +755,8 @@ export async function updateFauchardParamsAction(params: Record<string, any>, re
 
       if (!current) throw new Error('No hay configuración activa');
 
-      // 1. Validaciones de pesos (α) — suma SOLO los α presentes en params (5 factores).
-      const ALL_ALPHA_KEYS = ['alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaNoResponse'];
-      const presentAlphaKeys = ALL_ALPHA_KEYS.filter((k) => params[k] !== undefined);
+      // 1. Validaciones de pesos (α) — suma SOLO los 6 α activos presentes en params.
+      const presentAlphaKeys = ACTIVE_ALPHA_KEYS.filter((k) => params[k] !== undefined);
       if (presentAlphaKeys.length > 0) {
         let αSum = 0;
         for (const key of presentAlphaKeys) {
@@ -1073,6 +770,8 @@ export async function updateFauchardParamsAction(params: Record<string, any>, re
           throw new Error(`La suma de los pesos debe ser exactamente 1.0 (suma actual: ${αSum.toFixed(3)})`);
         }
       }
+
+      const effectiveParams = { ...params };
 
       // 2. Otras validaciones
       if (params.maxAssignmentAttempts !== undefined) {
@@ -1132,25 +831,23 @@ export async function updateFauchardParamsAction(params: Record<string, any>, re
 
       const metadataKeys = ['id', 'version', 'isActive', 'updatedBy', 'createdAt', 'updatedAt'];
 
-      for (const [key, newValue] of Object.entries(params)) {
+      for (const [key, rawValue] of Object.entries(effectiveParams)) {
         if (key in current && !metadataKeys.includes(key)) {
           const oldValue = current[key as keyof typeof current];
+          const newValue = (ACTIVE_ALPHA_KEYS as readonly string[]).includes(key)
+            ? roundAlphaWeight(Number(rawValue))
+            : rawValue;
 
-          let isDifferent = false;
-          if (typeof oldValue === 'string' && typeof newValue === 'number') {
-            isDifferent = Math.abs(parseFloat(oldValue) - newValue) > 0.0001;
-          } else if (oldValue !== newValue) {
-            isDifferent = true;
-          }
-
-          if (isDifferent) {
+          if (configValuesDiffer(oldValue, newValue)) {
             changes.push({ key, old: String(oldValue), new: String(newValue) });
             updatedFields[key] = newValue;
           }
         }
       }
 
-      if (changes.length === 0) return { success: true, newVersion: current.version };
+      if (changes.length === 0) {
+        return { success: true, persisted: false, newVersion: current.version };
+      }
 
       const oldId = current.id;
       const merged = {
@@ -1181,7 +878,7 @@ export async function updateFauchardParamsAction(params: Record<string, any>, re
         });
       }
 
-      return { success: true, newVersion: updatedFields.version as number };
+      return { success: true, persisted: true, newVersion: updatedFields.version as number };
     });
   } catch (error) {
     console.error('[updateFauchardParamsAction] Error:', error);
@@ -1450,7 +1147,8 @@ export async function simulateFauchardAction(params: {
   materialCode?: string;
   shadeCode?: string;
   urgencyLabel?: string;
-  notesEstheticLength?: number;
+  replacesMissingTeeth?: boolean | null;
+  fauchardConfigId?: string;
 }): Promise<ActionResult<{ simulation: import('@/lib/fauchard/simulationTypes').SimulationResult }>> {
   const identity = await getServerIdentity();
   if (!identity?.isSystemAdmin && identity?.role !== 'admin') {
@@ -1472,7 +1170,8 @@ export async function simulateFauchardAction(params: {
     materialCode: params.materialCode,
     shadeCode: params.shadeCode,
     urgencyLabel: params.urgencyLabel,
-    notesEstheticLength: params.notesEstheticLength,
+    replacesMissingTeeth: params.replacesMissingTeeth,
+    fauchardConfigId: params.fauchardConfigId,
   });
 }
 

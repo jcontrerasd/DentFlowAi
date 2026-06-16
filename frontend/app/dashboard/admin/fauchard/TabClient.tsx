@@ -49,9 +49,9 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
   ];
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-3">
       {/* Nav de espacios (pill) */}
-      <nav className="flex items-center flex-wrap gap-1 p-1 bg-surface/60 border border-divider/80 rounded-[2.5rem] self-start backdrop-blur-md">
+      <nav className="flex items-center flex-wrap gap-0.5 p-0.5 bg-surface/60 border border-divider/80 rounded-2xl self-start backdrop-blur-md">
         {spaces.map((s) => {
           const Icon = s.icon;
           const isActive = space === s.id;
@@ -59,7 +59,7 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
             <button
               key={s.id}
               onClick={() => setSpace(s.id as Space)}
-              className={`flex items-center gap-3 px-6 py-3 rounded-full transition-all duration-300 relative ${isActive ? 'text-foreground' : 'text-faint hover:text-muted'}`}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-300 relative ${isActive ? 'text-foreground' : 'text-faint hover:text-muted'}`}
             >
               {isActive && (
                 <motion.div
@@ -68,8 +68,8 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
                   transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                 />
               )}
-              <Icon className={`w-4 h-4 shrink-0 relative z-10 ${isActive ? 'text-primary' : ''}`} />
-              <span className="text-[10px] font-bold uppercase tracking-wider relative z-10 whitespace-nowrap">{s.label}</span>
+              <Icon className={`w-3.5 h-3.5 shrink-0 relative z-10 ${isActive ? 'text-primary' : ''}`} />
+              <span className="text-[9px] font-bold uppercase tracking-wider relative z-10 whitespace-nowrap">{s.label}</span>
             </button>
           );
         })}
@@ -86,25 +86,23 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
           {/* ── Espacio PARÁMETROS: estudio con laboratorio ── */}
           {space === 'parametros' && (
             <FauchardDraftProvider initialConfig={config}>
-              <div className="flex flex-col xl:flex-row gap-8 items-start">
-                {/* Controles del modelo (vista compacta apilada) */}
-                <div className="flex flex-col gap-6 flex-1 min-w-0 w-full">
-                  <div className="bg-surface/20 border border-divider rounded-[2.5rem] p-7 md:p-9 shadow-inner">
+              <div className="flex flex-col xl:flex-row gap-3 items-start">
+                <div className="flex flex-col gap-3 flex-1 min-w-0 w-full">
+                  <div className="bg-surface/20 border border-divider rounded-2xl p-4 md:p-5 shadow-inner">
                     <FauchardWeightsPanel initialFocusKey={focusPanel === 'weights' ? focusKey : null} />
                   </div>
-                  <div className="bg-surface/20 border border-divider rounded-[2.5rem] p-7 md:p-9 shadow-inner">
+                  <div className="bg-surface/20 border border-divider rounded-2xl p-4 md:p-5 shadow-inner">
                     <FauchardFiltersPanel initialFocusKey={focusPanel === 'filters' ? focusKey : null} />
                   </div>
                   {showAvailabilityPanel && (
-                    <div className="bg-surface/20 border border-divider rounded-[2.5rem] p-7 md:p-9 shadow-inner">
+                    <div className="bg-surface/20 border border-divider rounded-2xl p-4 md:p-5 shadow-inner">
                       <PlazosYSancionesPanel initialFocusKey={focusPanel === 'plazos' ? focusKey : null} />
                     </div>
                   )}
                 </div>
 
-                {/* Laboratorio sticky */}
-                <aside className="w-full xl:w-[420px] xl:shrink-0 xl:sticky xl:top-6 self-stretch xl:self-start">
-                  <div className="bg-surface/30 border border-divider rounded-[2rem] p-5">
+                <aside className="w-full xl:w-[min(360px,32%)] xl:shrink-0 xl:sticky xl:top-3 self-stretch xl:self-start">
+                  <div className="bg-surface/30 border border-divider rounded-xl p-3">
                     <FauchardLabPanel />
                   </div>
                 </aside>
@@ -114,14 +112,13 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
             </FauchardDraftProvider>
           )}
 
-          {/* ── Espacios independientes ── */}
           {space === 'categorias' && (
-            <div className="bg-surface/20 border border-divider rounded-[3rem] p-8 md:p-10 shadow-inner">
+            <div className="bg-surface/20 border border-divider rounded-2xl p-4 md:p-5 shadow-inner">
               <LeagueConfigPanel initialConfig={config} />
             </div>
           )}
           {space === 'historial' && (
-            <div className="bg-surface/20 border border-divider rounded-[3rem] p-8 md:p-10 shadow-inner">
+            <div className="bg-surface/20 border border-divider rounded-2xl p-4 md:p-5 shadow-inner">
               <ConfigChangeLog />
             </div>
           )}

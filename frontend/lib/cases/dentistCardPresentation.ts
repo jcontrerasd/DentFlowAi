@@ -57,13 +57,11 @@ export function getDentistCardZone(input: DentistCardInput): DentistCardZone {
       };
     }
     case 'enEvaluacion': {
-      const n = countPendingOffers(input.bids);
-      const offers = n > 0 ? `${n} ${n === 1 ? 'oferta recibida' : 'ofertas recibidas'}` : 'Aún sin ofertas';
       return {
         icon: Clock,
         iconClass: 'text-warning',
-        primary: 'Evaluando',
-        secondary: offers,
+        primary: 'Esperando asignación',
+        secondary: 'Fauchard busca o asigna técnico',
         ctaLabel: 'Ver caso',
         ctaVariant: 'neutral',
       };

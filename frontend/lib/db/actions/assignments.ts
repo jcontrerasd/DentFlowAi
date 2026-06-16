@@ -15,6 +15,7 @@ import { eq, and, desc, ne, inArray } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { getSignedUrl } from '@/lib/gcs';
 import { getArchivedCaseIdsForUser } from '@/lib/db/caseUserArchiveHelpers';
+import { WORK_CATEGORY_LABELS } from '@/lib/constants/dental';
 import { applyAssignmentArchiveFlags } from '@/lib/assignments/assignmentArchiveFlags';
 
 export type AssignmentStatus = 'pending' | 'accepted' | 'rejected' | 'expired';
@@ -44,6 +45,8 @@ export type AssignmentItem = {
   createdAt?: Date;
   files?: unknown[];
   archivedByCurrentUser: boolean;
+  /** v5.13 — Categoría operativa derivada (label legible). */
+  workCategoryLabel?: string | null;
 };
 
 /** @deprecated */
@@ -75,6 +78,7 @@ function mapRow(
     organizationName: string | null;
     createdAt: Date;
     patientIdAnon: string | null;
+    derivedCategory: string | null;
   },
   technicianId: string,
   files: unknown[],
@@ -104,6 +108,9 @@ function mapRow(
     patientIdAnon: r.patientIdAnon,
     files: (files as { clinicalCaseId?: string }[]).filter((f) => f.clinicalCaseId === r.caseId),
     archivedByCurrentUser: false,
+    workCategoryLabel: r.derivedCategory
+      ? (WORK_CATEGORY_LABELS[r.derivedCategory as keyof typeof WORK_CATEGORY_LABELS] ?? r.derivedCategory)
+      : null,
   };
 }
 
@@ -130,6 +137,7 @@ const assignmentSelect = {
   organizationName: organization.name,
   createdAt: clinicalCase.createdAt,
   patientIdAnon: clinicalCase.patientIdAnon,
+  derivedCategory: clinicalCase.derivedCategory,
 };
 
 export async function getMyAssignmentsAction(): Promise<AssignmentItem[]> {

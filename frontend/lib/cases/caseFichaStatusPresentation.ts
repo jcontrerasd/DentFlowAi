@@ -15,14 +15,14 @@ import type { TechKpiId } from '@/lib/dashboard/classifyCaseForDashboardKpi';
 
 /** Textos e iconos de franja inferior en `MarketplaceCaseCard` (técnico / pre-adjudicación). */
 export const TECH_FICHA_STRIPE = {
-  solicitudOferta: { label: 'Solicitud de oferta', icon: CheckCircle2 },
-  cotizacionEnviada: { label: 'Cotización enviada', icon: CheckCircle2 },
-  cotizacionEnEvaluacion: { label: 'Cotización enviada · en evaluación', icon: CheckCircle2 },
-  ofertaNoSeleccionada: { label: 'Oferta no seleccionada', icon: X },
+  solicitudOferta: { label: 'Asignación pendiente', icon: CheckCircle2 },
+  cotizacionEnviada: { label: 'Asignación enviada', icon: CheckCircle2 },
+  cotizacionEnEvaluacion: { label: 'Asignación enviada · en evaluación', icon: CheckCircle2 },
+  ofertaNoSeleccionada: { label: 'Asignación no seleccionada', icon: X },
   invitacionPendiente: { label: 'Invitación pendiente', icon: Activity },
   seleccionadaPendiente: { label: 'Seleccionada (pendiente)', icon: CheckCircle2 },
   confirmada: { label: 'Confirmada', icon: CheckCircle2 },
-  esperandoOfertas: { label: 'Esperando ofertas', icon: Activity },
+  esperandoOfertas: { label: 'Esperando asignación', icon: Activity },
 } as const;
 
 /** Franjas con countdown del dentista en ficha (no sustituyen `STATUS_MAP` en KPI agregado). */

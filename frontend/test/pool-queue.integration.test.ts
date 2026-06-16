@@ -21,6 +21,7 @@ import { sql } from 'drizzle-orm';
 import {
   processPendingPoolCheckInAction,
   processPendingPoolExpirationAction,
+  processPendingPoolReevaluationAction,
   enterPendingPoolAction,
 } from '@/lib/db/actions/poolQueue';
 import { republicarCaseAction } from '@/lib/db/actions/cases';
@@ -130,5 +131,16 @@ describe.runIf(runIntegration)('cola pendiente_pool (auditoría Fase 2/6)', () =
     expect(after.status).not.toBe('sin_cotizaciones_fallo');
     const [evt]: any = await db.execute(sql`SELECT count(*)::int AS n FROM clinical_case_event WHERE clinical_case_id=${CASE} AND action='CASO_REPUBLICADO'`);
     expect(evt.n).toBeGreaterThanOrEqual(1);
+  });
+
+  it('processPendingPoolReevaluationAction devuelve contadores assigned/stillWaiting', async () => {
+    await seedPooled(1, 1, false);
+    const res = await processPendingPoolReevaluationAction();
+    expect(res.success).toBe(true);
+    if (res.success) {
+      expect(typeof res.assigned).toBe('number');
+      expect(typeof res.stillWaiting).toBe('number');
+      expect(res.assigned + res.stillWaiting).toBeGreaterThanOrEqual(1);
+    }
   });
 });

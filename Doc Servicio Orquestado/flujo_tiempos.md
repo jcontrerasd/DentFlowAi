@@ -10,15 +10,17 @@
 
 - **Nivel 1 — Global**: switch maestro del técnico. OFF = no recibe ninguna invitación, sin importar niveles inferiores.
 - **Nivel 2 — Capacidad**: dos switches independientes, **CAD** (diseño) y **CAM** (fabricación). Un técnico puede tener cualquier combinación: solo CAD, solo CAM o ambos.
-- **Nivel 3 — Categoría**: switch por cada una de las cinco categorías de trabajo, **en CAD y en CAM por separado**. Hasta 10 switches de nivel 3 por técnico (5 categorías × 2 capacidades).
+- **Nivel 3 — Categoría**: switch por cada una de las **siete categorías canónicas** (v5.13), **en CAD y en CAM por separado**. Hasta 14 switches de nivel 3 por técnico (7 categorías × 2 capacidades).
 
-### 1.2 Las cinco categorías canónicas
+### 1.2 Las siete categorías canónicas (v5.13)
 
 1. Coronas
-2. Inlays, Onlays y Carillas
-3. Puentes y Full Arch
-4. Prótesis Removible
-5. Guías Quirúrgicas
+2. Inlays y Onlays
+3. Carillas
+4. Puentes
+5. Full Arch
+6. Prótesis Removible
+7. Guías Quirúrgicas
 
 ### 1.3 Regla de elegibilidad (AND triple)
 
@@ -32,20 +34,21 @@ elegible(técnico, categoría, capacidad) =
 - Padre pisa hijo. Cualquier OFF arriba anula el efecto de los hijos.
 - **Sin caché del estado efectivo**: se calcula en tiempo real al evaluar Fauchard. Evita inconsistencias por updates parciales.
 
-### 1.4 Mapeo `WORK_TYPES` (15) → 5 categorías
+### 1.4 Mapeo `WORK_TYPES` → 7 categorías (v5.13)
 
-| Categoría | `work_type` cubiertos |
+| Categoría | `work_type` canónicos (derivación) |
 |---|---|
-| **Coronas** | `corona_anterior`, `corona_posterior`, `corona_implante` |
-| **Inlays, Onlays y Carillas** | `inlay_onlay`, `carilla_unitaria`, `carillas_multiples` |
-| **Puentes y Full Arch** | `puente_3u`, `puente_4mas`, `full_arch` |
+| **Coronas** | `corona_unitaria`, `corona_multiple_corta`, `corona_multiple_larga` (+ legacy `corona_*`) |
+| **Inlays y Onlays** | `inlay_onlay` |
+| **Carillas** | `carilla_simple`, `carilla_multiple` (+ legacy `carilla_*`) |
+| **Puentes** | `puente_corto`, `puente_largo` (+ legacy `puente_*`) |
+| **Full Arch** | `full_arch`, `full_arch_corona` |
 | **Prótesis Removible** | `protesis_parcial_removible`, `protesis_total`, `sobredentadura`, `barra_implantes` |
 | **Guías Quirúrgicas** | `guia_quirurgica_simple`, `guia_quirurgica_compleja` |
 
-- Se conserva `WORK_TYPES` (15) sin cambios — Fauchard sigue scoreando experiencia con esa granularidad.
-- Se agrega `WORK_CATEGORIES` (5) + constante `WORK_TYPE_TO_CATEGORY` para traducir caso → categoría → switch.
-- El técnico declara disponibilidad **por categoría**, no por `work_type`. La granularidad de 5 es clínicamente coherente y reduce fricción de UI.
-- **Caveat**: el grupo "Inlays, Onlays y Carillas" agrupa restauraciones que algunos técnicos podrían diferenciar. Si emergen casos reales, se puede dividir más adelante sin migración disruptiva (agregar una 6ª categoría).
+- Derivación en `lib/fauchard/caseWorkType.ts`: árbol póntico + escala + tipo restauración. Campo `replaces_missing_teeth` en `clinical_case`.
+- `WORK_CATEGORIES` (7) + `WORK_TYPE_TO_CATEGORY` traducen caso → categoría → switch.
+- Skills legacy (15) conviven con workTypes nuevos hasta migración validada (`LEGACY_WORK_TYPE_ALIASES`).
 
 ### 1.5 UI del panel de disponibilidad
 

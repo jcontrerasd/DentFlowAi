@@ -42,6 +42,32 @@ export type SimulationFunnel = {
   universe: number;
   eligible: number;
   excluded: Record<ExclusionReason, number>;
+  stages: FunnelStage[];
+};
+
+export type FunnelStageId =
+  | 'universe'
+  | 'excluded_manually'
+  | 'not_available'
+  | 'league'
+  | 'suspended'
+  | 'inactive'
+  | 'cooldown'
+  | 'insufficient_skill'
+  | 'availability_filter'
+  | 'eligible';
+
+export type FunnelStage = {
+  id: FunnelStageId;
+  label: string;
+  countAfter: number;
+  dropped: number;
+  reason?: ExclusionReason;
+  fixHint: string;
+  isBottleneck?: boolean;
+  skipped?: boolean;
+  /** Modo de liga aplicado en la etapa league (strict-first, alineado a producción). */
+  leagueModeApplied?: 'strict' | 'expand';
 };
 
 export type AssignmentPreview = {
@@ -68,9 +94,10 @@ export type SimulateAssignmentParams = {
   caseComplexity?: CaseComplexity;
   complexityMode?: 'auto' | 'manual';
   excludeTechnicianIds?: string[];
+  fauchardConfigId?: string;
   configOverride?: Record<string, unknown>;
   materialCode?: string;
   shadeCode?: string;
   urgencyLabel?: string;
-  notesEstheticLength?: number;
+  replacesMissingTeeth?: boolean | null;
 };

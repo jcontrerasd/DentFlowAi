@@ -16,6 +16,8 @@ interface ConfirmSaveModalProps {
   requireReason?: boolean;
   reasonValue?: string;
   onReasonChange?: (value: string) => void;
+  /** Deshabilita confirmar aunque el motivo esté presente (p. ej. borrador inválido). */
+  confirmDisabled?: boolean;
 }
 
 export default function ConfirmSaveModal({
@@ -28,8 +30,10 @@ export default function ConfirmSaveModal({
   requireReason = false,
   reasonValue = '',
   onReasonChange,
+  confirmDisabled = false,
 }: ConfirmSaveModalProps) {
   const reasonMissing = requireReason && !reasonValue.trim();
+  const cannotConfirm = reasonMissing || confirmDisabled || isLoading;
   return (
     <AnimatePresence>
       {isOpen && (
@@ -92,7 +96,7 @@ export default function ConfirmSaveModal({
                   <Button
                     onClick={onConfirm}
                     loading={isLoading}
-                    disabled={reasonMissing}
+                    disabled={cannotConfirm}
                     variant="primary"
                     className="w-full bg-primary hover:opacity-90 text-inverse font-bold uppercase tracking-wider text-[10px] h-12 rounded-2xl"
                     icon={<Save className="w-4 h-4" />}

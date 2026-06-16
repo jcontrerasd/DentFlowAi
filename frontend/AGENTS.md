@@ -27,7 +27,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ### UCH — reglas específicas
 - No crear overlays `fixed inset-0` dentro del UCH para acciones del caso.
 - Las acciones van embebidas en el hilo como filas expandibles (`buildUchTimelineRows`).
-- El countdown de propuesta va **solo** en el header del UCH, no en el header de la página ni dentro de `ComparativeOffersPanel`.
+- El countdown de propuesta va **solo** en el header del UCH, no en el header de la página del caso.
 - No desmontar el UCH al cerrar el panel — usar `uchPanelMounted` + animación `framer-motion`.
 - Para el carril de burbujas: usar `resolveUchThreadLane()` de `lib/uchThreadLane.ts`, no implementar lógica propia.
 - El split de `CASO_PUBLICADO` para dentistas está en `lib/uchCasoPublicadoSplit.ts` — aplicar en `filteredEvents` del UCH, no en el servidor.
@@ -37,15 +37,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Migraciones: solo vía `infrastructure.ts` en runtime. NO usar `drizzle-kit push` en producción.
 - `logCaseEvent()` de `cases.ts` para registrar cualquier evento en el hilo UCH.
 
-### Tipos de servicio y cotización
-- `SERVICE_TYPES` (`frontend/lib/constants/dental.ts`) define `solo_diseno`, `solo_fabricacion`, `integral`. `needsFabrication` se conserva para retrocompatibilidad y se deriva del tipo (`true` para `integral` y `solo_fabricacion`).
-- Wizard de creación (`CaseCreationWizard`): radio de tres opciones. Si el dentista elige `solo_fabricacion`, el paso de archivos pide un único `designFile` (no scans).
-- `submitQuoteAction`:
-  - `integral` debe enviarse con `{ kind: 'split', designPrice, designDays, fabricationPrice, fabricationDays, notes? }`.
-  - `solo_diseno` y `solo_fabricacion` con `{ kind: 'flat', price, deliveryDays, notes? }`.
-  - El total (`quotedPrice`, `quotedDays`) sigue siendo la fuente canónica para ordenamiento; el desglose es complementario y nullable.
-- Stepper: solo el `serviceType` decide qué pasos se renderizan. Para `solo_fabricacion` se omiten `enEjecucion`, `enRevision`, `disenoAprobado`.
-- Fauchard: `runFauchardAction` y `calculateTechnicianScore` filtran y puntúan por `designLevel` o `fabricationLevel` según `serviceType`. NO mezclar lógicas.
+### Tipos de servicio y asignación (producto activo)
+- `SERVICE_TYPES` en `dental.ts` expone solo `solo_diseno`. Asignación directa: `runAssignmentAction` → `rankAssignmentCandidates` con score **Q/P/E/L/N** (`assignmentScore.ts`).
+- Wizard (`CaseCreationWizard`): solo diseño + scans; sin radio de 3 tipos. Publicar requiere regla de precio (`listPriceSale`).
+- Legacy en schema/UCH: `integral`/`solo_fabricacion`, `submitQuoteAction`, comparativo — no usar en flujos nuevos.
 
 ### Tests
 - Vitest + Testing Library. Archivos en `frontend/test/`.

@@ -358,7 +358,7 @@ El técnico seleccionado queda en estado **"preseleccionado"**: su disponibilida
 ### 4.1 Panel de Parámetros del Algoritmo
 - Sliders en tiempo real para todos los parámetros `α` y ventanas temporales
 - Validación en tiempo real: el sistema verifica que `α₁ + α₂ + α₃ + α₄ + α₅ = 1` antes de guardar
-- **Simulador:** dado el estado actual del pool y un caso hipotético de tipo/complejidad configurables, muestra cómo quedaría la distribución de probabilidades y qué técnicos serían invitados con los parámetros actuales vs. los nuevos — sin ejecutar el proceso real
+- **Simulador:** dado un caso hipotético (catálogos de precio + escenario configurable), muestra el embudo de filtros duros, el ranking Q/P/E/L/N y la cadena de asignación directa (top-1 + respaldos hasta `maxAssignmentAttempts`) con los parámetros activos vs. un override α opcional en sandbox — sin ejecutar el proceso real ni crear casos en BD
 - **Log de cambios:** registro inmutable con timestamp, autor y valores anteriores/nuevos de cada modificación de parámetro
 
 ### 4.2 Panel de Equidad y Distribución

@@ -5,13 +5,11 @@ import { usePathname } from 'next/navigation';
 import { Settings2, Activity, FlaskConical } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export default function FauchardNav() {
+export default function FauchardNav({ className }: { className?: string }) {
   const pathname = usePathname();
 
-  // Demo guiada (guided-demo) y Esquema vivo (sandbox-diagram) quedan descolgados
-  // del menú: las rutas siguen existiendo y son accesibles por URL directa, pero
-  // no se exponen en la navegación. El Radar de Pesos del sandbox se adoptó como
-  // tab "Radar y Simulación" dentro de Configuración (vinculado a BD).
+  // Demo guiada (guided-demo) queda descolgada del menú: accesible por URL directa.
+  // sandbox-diagram redirige a /simulate (eliminado en favor del funnel workspace).
   const links = [
     { href: '/dashboard/admin/fauchard', label: 'Configuración', icon: Settings2 },
     { href: '/dashboard/admin/fauchard/monitor', label: 'Monitoreo y Equidad', icon: Activity },
@@ -19,14 +17,16 @@ export default function FauchardNav() {
   ];
 
   return (
-    <nav className="flex items-center gap-1 p-1 bg-surface/60 border border-divider/80 rounded-[2.5rem] self-start overflow-hidden backdrop-blur-md mb-8">
+    <nav
+      className={`flex items-center gap-0.5 p-0.5 bg-surface/60 border border-divider/80 rounded-2xl self-start overflow-hidden backdrop-blur-md ${className ?? ''}`}
+    >
       {links.map((link) => {
         const Icon = link.icon;
         const isActive = pathname === link.href;
         return (
           <Link key={link.href} href={link.href}>
             <div className={`
-              flex items-center gap-3 px-6 py-3 rounded-full transition-all duration-300 relative
+              flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-300 relative
               ${isActive ? 'text-foreground' : 'text-faint hover:text-muted'}
             `}>
               {isActive && (
@@ -36,8 +36,8 @@ export default function FauchardNav() {
                   transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                 />
               )}
-              <Icon className={`w-4 h-4 shrink-0 relative z-10 ${isActive ? 'text-primary' : ''}`} />
-              <span className="text-[10px] font-bold uppercase tracking-wider relative z-10 whitespace-nowrap">
+              <Icon className={`w-3.5 h-3.5 shrink-0 relative z-10 ${isActive ? 'text-primary' : ''}`} />
+              <span className="text-[9px] font-bold uppercase tracking-wider relative z-10 whitespace-nowrap">
                 {link.label}
               </span>
             </div>

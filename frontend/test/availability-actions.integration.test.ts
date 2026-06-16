@@ -31,6 +31,12 @@ async function setAvailability(cols: Record<string, boolean>) {
 describe.runIf(runIntegration)('availability + sanción (Fase 2)', () => {
   beforeAll(async () => {
     await ensureInfrastructure(db);
+    // Umbrales fijos para que la curva de niveles no dependa del estado de fauchard_config local.
+    await db.execute(sql`
+      UPDATE fauchard_config
+      SET level_1_threshold = 1, level_2_threshold = 2, level_3_threshold = 3
+      WHERE is_active = true
+    `);
     await db.execute(sql`INSERT INTO organization (id, name, rut, type, is_active) VALUES (${ORG}, 'F2 Org', 'rut-f2-av', 'clinica', true) ON CONFLICT (id) DO NOTHING`);
     await db.execute(sql`INSERT INTO "user" (id, email, role, organization_id, is_active) VALUES (${TECH}, ${TECH + '@t.local'}, 'tecnico', ${ORG}, true) ON CONFLICT (id) DO NOTHING`);
     await db.execute(sql`INSERT INTO "user" (id, email, role, organization_id, is_active) VALUES (${ADMIN}, ${ADMIN + '@t.local'}, 'admin', ${ORG}, true) ON CONFLICT (id) DO NOTHING`);

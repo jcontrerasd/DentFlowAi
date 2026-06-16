@@ -20,10 +20,9 @@ export function levelToScoreN(level: SanctionLevel): number {
 }
 
 /**
- * Coeficientes re-normalizados del score cuando el modelo de disponibilidad está
- * activo (|Σα| = 1.00 incluyendo αN). Ver tabla §2.5 / §6.1.
+ * @deprecated Solo referencia histórica del modelo de invitaciones. El motor activo
+ * usa pesos de `fauchard_config` vía `parseAssignmentWeights` (Q/P/E/L/N en assignmentScore.ts).
  */
-/** Pesos por defecto del score de asignación (Σ = 1.0): Q/P/E/L/N. */
 export const RENORMALIZED_ALPHAS = {
   quality: 0.25,
   punctuality: 0.20,

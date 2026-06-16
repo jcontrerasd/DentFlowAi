@@ -90,8 +90,8 @@ export default function UchDealSummary({
       >
         <p className="text-[10px] text-faint leading-snug">
           {(actingAsDentista || viewingAsAdmin) && caseStatus === 'propuestaLista'
-            ? 'El comparativo de ofertas está en el hilo. Al elegir una, el total pactado se mostrará aquí.'
-            : 'La oferta y la fecha de entrega se mostrarán aquí cuando el caso avance en el flujo.'}
+            ? 'El resumen del acuerdo se mostrará aquí cuando el técnico acepte la asignación.'
+            : 'La compensación y la fecha de entrega se mostrarán aquí cuando el caso avance en el flujo.'}
         </p>
       </div>
     );
@@ -104,7 +104,7 @@ export default function UchDealSummary({
   const deliveryFallback = showPactada && ['aceptadaPendienteInicio'].includes(caseStatus)
     ? 'Se definirá al iniciar el trabajo.'
     : actingAsDentista && caseStatus === 'propuestaLista'
-      ? 'Se definirá al aceptar una oferta.'
+      ? 'Se definirá al aceptar la asignación.'
       : 'Sin fecha aún.';
 
   return (

@@ -35,7 +35,7 @@ interface Technician {
   load: number;         // active cases
   noResp: number;       // sanction level
   score: number;
-  components: { Q: number; P: number; E: number; L: number; N: number };
+  components: { Q: number; P: number; E: number; B: number; L: number; N: number };
   excluded: boolean;
   exclusionReason?: string;
   invited?: boolean;
@@ -49,49 +49,49 @@ const TECHNICIANS: Technician[] = [
   {
     id: 't1', name: 'Carlos Vega', lab: 'Lab Andes Pro', league: 'Platino', leagueColor: 'text-violet-400',
     quality: 4.8, punctuality: 94, experience: 7, load: 2, noResp: 0,
-    score: 0.847, components: { Q: 0.35, P: 0.22, E: 0.18, L: 0.08, N: 0.02 },
+    score: 0.847, components: { Q: 0.35, P: 0.22, E: 0.18, B: 0.06, L: 0.08, N: 0.02 },
     excluded: false, invited: true, responded: true,
   },
   {
     id: 't2', name: 'Andrea Rojas', lab: 'Lab Costa Digital', league: 'Oro', leagueColor: 'text-yellow-400',
     quality: 4.5, punctuality: 89, experience: 6, load: 1, noResp: 0,
-    score: 0.791, components: { Q: 0.30, P: 0.20, E: 0.16, L: 0.10, N: 0.03 },
+    score: 0.791, components: { Q: 0.30, P: 0.20, E: 0.16, B: 0.10, L: 0.10, N: 0.03 },
     excluded: false, invited: false, responded: false,
   },
   {
     id: 't3', name: 'Matías Herrera', lab: 'Lab Roble CAD', league: 'Oro', leagueColor: 'text-yellow-400',
     quality: 4.3, punctuality: 96, experience: 6, load: 3, noResp: 0,
-    score: 0.743, components: { Q: 0.28, P: 0.21, E: 0.15, L: 0.12, N: 0.04 },
+    score: 0.743, components: { Q: 0.28, P: 0.21, E: 0.15, B: 0.04, L: 0.12, N: 0.04 },
     excluded: false, invited: false,
   },
   {
     id: 't4', name: 'Sofía Pinto', lab: 'Lab Norte Studio', league: 'Plata', leagueColor: 'text-slate-300',
     quality: 4.1, punctuality: 82, experience: 5, load: 0, noResp: 0,
-    score: 0.698, components: { Q: 0.26, P: 0.18, E: 0.14, L: 0.09, N: 0.02 },
+    score: 0.698, components: { Q: 0.26, P: 0.18, E: 0.14, B: 0.12, L: 0.09, N: 0.02 },
     excluded: false, invited: false,
   },
   {
     id: 't5', name: 'Diego Farías', lab: 'Lab Pino Tech', league: 'Plata', leagueColor: 'text-slate-300',
     quality: 3.9, punctuality: 88, experience: 5, load: 1, noResp: 1,
-    score: 0.651, components: { Q: 0.24, P: 0.17, E: 0.13, L: 0.08, N: 0.05 },
+    score: 0.651, components: { Q: 0.24, P: 0.17, E: 0.13, B: 0.08, L: 0.08, N: 0.05 },
     excluded: false, invited: false,
   },
   {
     id: 't6', name: 'Ignacio Salas', lab: 'Lab Sur CAM', league: 'Bronce', leagueColor: 'text-orange-400',
     quality: 3.7, punctuality: 91, experience: 3, load: 0, noResp: 0,
-    score: 0.512, components: { Q: 0.20, P: 0.15, E: 0.10, L: 0.06, N: 0.01 },
+    score: 0.512, components: { Q: 0.20, P: 0.15, E: 0.10, B: 0.10, L: 0.06, N: 0.01 },
     excluded: true, exclusionReason: 'Liga insuficiente para Zirconia COMPLEJO',
   },
   {
     id: 't7', name: 'Paula Mendoza', lab: 'Lab Río Studio', league: 'Bronce', leagueColor: 'text-orange-400',
     quality: 3.5, punctuality: 78, experience: 3, load: 7, noResp: 2,
-    score: 0.381, components: { Q: 0.15, P: 0.12, E: 0.08, L: 0.03, N: 0.02 },
+    score: 0.381, components: { Q: 0.15, P: 0.12, E: 0.08, B: 0.02, L: 0.03, N: 0.02 },
     excluded: true, exclusionReason: 'Cooldown activo (ignoró invitación hace 1h)',
   },
   {
     id: 't8', name: 'Roberto Calvo', lab: 'Lab Valle Design', league: 'Bronce', leagueColor: 'text-orange-400',
     quality: 3.6, punctuality: 85, experience: 2, load: 2, noResp: 0,
-    score: 0.422, components: { Q: 0.16, P: 0.13, E: 0.07, L: 0.05, N: 0.00 },
+    score: 0.422, components: { Q: 0.16, P: 0.13, E: 0.07, B: 0.06, L: 0.05, N: 0.00 },
     excluded: true, exclusionReason: 'Liga insuficiente para Zirconia COMPLEJO',
   },
 ];
@@ -114,7 +114,7 @@ const PHASES = [
     color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20',
   },
   {
-    id: 2, title: 'Ranking Q/P/E/L/N',
+    id: 2, title: 'Ranking Q/P/E/B/L/N',
     subtitle: 'Fauchard puntúa y ordena el pool elegible (determinístico)',
     icon: <Microscope className="w-5 h-5" />,
     color: 'text-primary', bg: 'bg-primary-hl', border: 'border-primary/20',
@@ -415,7 +415,7 @@ export default function GuidedDemoClient() {
         {/* FASE 2 — Ranking + exclusiones */}
         {phase === 2 && (
           <motion.div key="p2rank" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
-            <p className="text-xs text-faint">Score <strong className="text-foreground">αQ·Q + αP·P + αE·E − αL·L − αN·N</strong> (asignación directa, sin sorteo).</p>
+            <p className="text-xs text-faint">Score <strong className="text-foreground">αQ·Q + αP·P + αE·E + αB·B − αL·L − αN·N</strong> (asignación directa, sin sorteo).</p>
 
             <div className="space-y-3">
               {TECHNICIANS.map((t, i) => {
@@ -451,7 +451,7 @@ export default function GuidedDemoClient() {
                     </span>
 
                     <div className="flex gap-1 shrink-0">
-                      {(['Q','P','E','L','N'] as const).map(k => (
+                      {(['Q','P','E','B','L','N'] as const).map(k => (
                         <div key={k} className="flex flex-col items-center">
                           <span className="text-[6px] text-faint font-black">{k}</span>
                           <span className="text-[8px] font-mono text-muted">{t.components[k].toFixed(2)}</span>

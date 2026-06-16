@@ -19,6 +19,8 @@ import type { InvitationItem } from '@/lib/db/actions/invitations';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { dispatchDashboardMetricsRefresh } from '@/lib/dashboard/dashboardRefresh';
 import { CaseDesiredDeliveryChip } from '@/components/cases/CaseDesiredDeliveryChip';
+import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
+import { INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
 
 export type UchFauchardActionsPanelProps = {
   caseId: string;
@@ -40,8 +42,6 @@ export type UchFauchardActionsPanelProps = {
   isSubmittingQuote?: boolean;
   isStartingWork: boolean;
   setIsStartingWork: (v: boolean) => void;
-  setQuoteConfirmChecked?: (v: boolean) => void;
-  setShowQuoteConfirm?: (v: boolean) => void;
   showSuccess: (msg: string) => void;
   showError: (msg: string) => void;
   onInvitationUpdate?: () => void | Promise<void>;
@@ -119,12 +119,16 @@ export default function UchFauchardActionsPanel({
   };
 
   if (actingAsDentista && caseStatus === 'enEvaluacion') {
+    if (clinicalCase?.internalStatus === POOL_INTERNAL_STATUS) {
+      return null;
+    }
+    const awaitingAccept = clinicalCase?.internalStatus === INTERNAL_CASE_STATUSES.ASIGNACION_PENDIENTE;
     return (
       <div className="rounded-xl border border-primary/20 bg-primary-hl p-4 space-y-2">
         <div className="flex items-center gap-2">
           <Clock className="w-4 h-4 text-primary flex-shrink-0" />
           <span className="text-[10px] font-black text-primary uppercase tracking-widest">
-            Fauchard está asignando tu caso
+            {awaitingAccept ? 'Esperando aceptación del técnico' : 'Fauchard está asignando tu caso'}
           </span>
         </div>
         <p className="text-[11px] text-muted leading-relaxed">

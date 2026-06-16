@@ -520,7 +520,8 @@ Refactor de las 1.428 ocurrencias. Mapeo dirigido para cubrir el 80% con codemod
 - [components/admin/fauchard/InvitationDistributionChart.tsx](../frontend/components/admin/fauchard/InvitationDistributionChart.tsx)
 - [components/admin/fauchard/LeagueConfigPanel.tsx](../frontend/components/admin/fauchard/LeagueConfigPanel.tsx)
 - [components/admin/fauchard/QuotationMetricsPanel.tsx](../frontend/components/admin/fauchard/QuotationMetricsPanel.tsx)
-- [components/admin/fauchard/SimulatorPanel.tsx](../frontend/components/admin/fauchard/SimulatorPanel.tsx)
+- [components/admin/fauchard/simulator/SimulatorWorkspace.tsx](../frontend/components/admin/fauchard/simulator/SimulatorWorkspace.tsx)
+- [components/admin/fauchard/simulator/SimulatorFunnelStepper.tsx](../frontend/components/admin/fauchard/simulator/SimulatorFunnelStepper.tsx)
 - [components/admin/fauchard/TechnicianRankingTable.tsx](../frontend/components/admin/fauchard/TechnicianRankingTable.tsx)
 
 ### 8.12 UI primitives (4)

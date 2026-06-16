@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Activity, AlertCircle, Clock, X, Send, CheckCircle2, XCircle, ArrowUp } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Activity, AlertCircle, Clock, X, XCircle, ArrowUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getSignedUrlAction } from '@/lib/db/actions/cases';
@@ -27,6 +27,7 @@ import { shouldShowDesiredDeliveryInUch } from '@/lib/cases/caseDeliveryPresenta
 import UchRatingPanel from '@/components/cases/uch/UchRatingPanel';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { useRemainingMsUntil, formatCountdownHMS } from '@/lib/hooks/useRemainingUntil';
+import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { splitCasoPublicadoForDentista } from '@/lib/uchCasoPublicadoSplit';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
 
@@ -239,8 +240,6 @@ export default function UnifiedCaseHub({
   const [quoteFlatUnit, setQuoteFlatUnit] = useState<'dias' | 'horas'>('dias');
   const [quoteNotes, setQuoteNotes] = useState('');
   const [isSubmittingQuote, setIsSubmittingQuote] = useState(false);
-  const [showQuoteConfirm, setShowQuoteConfirm] = useState(false);
-  const [quoteConfirmChecked, setQuoteConfirmChecked] = useState(false);
   const [isStartingWork, setIsStartingWork] = useState(false);
   const [elapsedLabel, setElapsedLabel] = useState('');
 
@@ -330,7 +329,10 @@ export default function UnifiedCaseHub({
   const showTechRevisionFromDeliveryBanner =
     uchViewerIsAssignedTechnician && caseStatus === 'cambiosEnProceso' && !!techLatestRevisionComment;
 
-  const showDentistEvalBanner = (actingAsDentista || viewingAsAdmin) && caseStatus === 'enEvaluacion';
+  const showDentistEvalBanner =
+    (actingAsDentista || viewingAsAdmin) &&
+    caseStatus === 'enEvaluacion' &&
+    clinicalCase?.internalStatus !== POOL_INTERNAL_STATUS;
   const showDentistPendingStartBanner =
     (actingAsDentista || viewingAsAdmin) && caseStatus === 'aceptadaPendienteInicio';
 
@@ -1043,8 +1045,6 @@ export default function UnifiedCaseHub({
                         isSubmittingQuote={isSubmittingQuote}
                         isStartingWork={isStartingWork}
                         setIsStartingWork={setIsStartingWork}
-                        setQuoteConfirmChecked={setQuoteConfirmChecked}
-                        setShowQuoteConfirm={setShowQuoteConfirm}
                         showSuccess={showSuccess}
                         showError={showError}
                         onInvitationUpdate={onInvitationUpdate}
@@ -1112,104 +1112,13 @@ export default function UnifiedCaseHub({
                   <XCircle className="w-4 h-4 text-error" />
                 </div>
                 <div>
-                  <p className="text-xs font-black text-error leading-tight">Caso ya fue Asignado, Gracias por tu Oferta</p>
-                  <p className="text-[10px] text-faint mt-0.5">Solo lectura — puedes consultar tu historial de cotizaciones.</p>
+                  <p className="text-xs font-black text-error leading-tight">Caso ya asignado a otro técnico</p>
+                  <p className="text-[10px] text-faint mt-0.5">Solo lectura — puedes consultar el historial de asignaciones.</p>
                 </div>
               </div>
             </div>
           )}
       </div>
-
-      {/* Confirmación envío oferta: sheet inferior (no modal centrado) */}
-      <AnimatePresence>
-        {showQuoteConfirm && (
-          <div className="fixed inset-0 z-[300] flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4 bg-background/80 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, y: 40 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 40 }}
-              className="bg-surface border border-primary/30 border-b-0 sm:border-b rounded-t-2xl sm:rounded-[2rem] p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6 sm:mx-auto"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="uch-quote-confirm-title"
-            >
-              <div className="text-center space-y-2">
-                <div className="w-14 h-14 bg-primary-hl rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Send className="w-6 h-6 text-primary" />
-                </div>
-                <h3 id="uch-quote-confirm-title" className="text-xl font-bold text-foreground">Confirmar envío de oferta</h3>
-                <p className="text-sm text-muted">Estás a punto de enviar esta oferta:</p>
-              </div>
-
-              <div className="bg-surface-2 rounded-2xl p-4 space-y-2">
-                {(() => {
-                  const fmt = (n: number) => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n);
-                  const slot = (value: number, unit: 'dias' | 'horas') => {
-                    if (!value || value <= 0) return '—';
-                    if (unit === 'horas') return `${value} ${value === 1 ? 'hora' : 'horas'}`;
-                    return `${value} ${value === 1 ? 'día hábil' : 'días hábiles'}`;
-                  };
-                  const flat = Number((quotePrice || '').replace(/\D/g, '')) || 0;
-                  return (
-                    <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-faint">Precio</span>
-                        <span className="text-foreground font-bold">{fmt(flat)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-faint">Plazo</span>
-                        <span className="text-foreground font-bold">{slot(quoteDays, quoteFlatUnit)}</span>
-                      </div>
-                    </>
-                  );
-                })()}
-                {quoteNotes && (
-                  <div className="text-xs pt-1 border-t border-divider mt-2">
-                    <p className="text-faint mb-1">Nota</p>
-                    <p className="text-muted italic">"{quoteNotes}"</p>
-                  </div>
-                )}
-              </div>
-
-              <label className="flex items-start gap-3 cursor-pointer select-none">
-                <div
-                  onClick={() => setQuoteConfirmChecked(v => !v)}
-                  className={`mt-0.5 w-5 h-5 rounded-lg border-2 flex-shrink-0 flex items-center justify-center transition-all ${quoteConfirmChecked ? 'bg-primary border-primary/30' : 'border-divider'}`}
-                >
-                  {quoteConfirmChecked && <CheckCircle2 className="w-3 h-3 text-inverse" />}
-                </div>
-                <p className="text-xs text-muted leading-relaxed">
-                  Entiendo que, una vez enviada, podré <strong className="text-foreground">retirarla desde este centro de control</strong> antes de que el dentista acepte una propuesta, y luego cotizar de nuevo si el plazo lo permite.
-                </p>
-              </label>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setShowQuoteConfirm(false); setQuoteConfirmChecked(false); }}
-                  disabled={isSubmittingQuote}
-                  className="flex-1 py-3 bg-surface-2 text-muted text-[10px] font-black uppercase rounded-2xl hover:bg-surface-off transition-all disabled:opacity-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={async () => {
-                    await handleQuoteSubmit();
-                    setShowQuoteConfirm(false);
-                    setQuoteConfirmChecked(false);
-                  }}
-                  disabled={!quoteConfirmChecked || isSubmittingQuote}
-                  className="flex-[2] py-3 bg-primary hover:opacity-90 text-inverse text-[10px] font-black uppercase rounded-2xl shadow-lg shadow-sm disabled:opacity-40 transition-all flex items-center justify-center gap-2"
-                >
-                  {isSubmittingQuote
-                    ? <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" />
-                    : <Send className="w-4 h-4" />}
-                  Confirmar y enviar
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

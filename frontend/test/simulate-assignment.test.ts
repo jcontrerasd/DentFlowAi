@@ -13,15 +13,17 @@ import type { RankedCandidate } from '@/lib/db/actions/assignment';
 
 describe('deriveScenarioFromInputs', () => {
   it('mapea corona unitaria básica a bronce', () => {
-    const s = deriveScenarioFromInputs('Corona Unitaria', [36]);
-    expect(s.workType).toBe('corona_posterior');
+    const s = deriveScenarioFromInputs('Corona Unitaria', [36], undefined, false);
+    expect(s.workType).toBe('corona_unitaria');
+    expect(s.category).toBe('coronas');
     expect(s.caseComplexity).toBe(CASE_COMPLEXITY.BASICO);
     expect(s.caseLeague).toBe(COMPLEXITY_TO_LEAGUE[CASE_COMPLEXITY.BASICO]);
   });
 
   it('mapea 4 carillas a intermedio', () => {
-    const s = deriveScenarioFromInputs('Carilla', [11, 12, 13, 14]);
-    expect(s.workType).toBe('carillas_multiples');
+    const s = deriveScenarioFromInputs('Carilla', [11, 12, 13, 14], undefined, false);
+    expect(s.workType).toBe('carilla_multiple');
+    expect(s.category).toBe('carillas');
     expect(s.caseComplexity).toBe(CASE_COMPLEXITY.INTERMEDIO);
   });
 
@@ -36,10 +38,10 @@ describe('deriveScenarioFromInputs', () => {
     expect(s.caseLeague).toBe('plata');
   });
 
-  it('notas estéticas >100 fuerzan crítico en modo auto', () => {
-    const s = deriveScenarioFromInputs('Corona Unitaria', [], undefined, 150);
-    expect(s.caseComplexity).toBe(CASE_COMPLEXITY.CRITICO);
-    expect(s.caseLeague).toBe('elite');
+  it('notas estéticas largas no alteran complejidad en modo auto', () => {
+    const s = deriveScenarioFromInputs('Corona Unitaria', [11, 12, 13, 14]);
+    expect(s.caseComplexity).toBe(CASE_COMPLEXITY.INTERMEDIO);
+    expect(s.caseLeague).toBe('plata');
   });
 });
 
@@ -63,8 +65,8 @@ describe('buildChainPositionMap', () => {
 describe('buildRetryChainDetails', () => {
   it('enriquece cadena con nombres y scores', () => {
     const rankedCore: RankedCandidate[] = [
-      { technicianId: 't1', score: 0.9, components: { Q: 1, P: 1, E: 1, L: 0, N: 0 }, activeLoad: 2 },
-      { technicianId: 't2', score: 0.7, components: { Q: 0.8, P: 0.8, E: 0.8, L: 0, N: 0 }, activeLoad: 1 },
+      { technicianId: 't1', score: 0.9, components: { Q: 1, P: 1, E: 1, B: 0.5, L: 0, N: 0 }, activeLoad: 2 },
+      { technicianId: 't2', score: 0.7, components: { Q: 0.8, P: 0.8, E: 0.8, B: 0, L: 0, N: 0 }, activeLoad: 1 },
     ];
     const techById = new Map([
       ['t1', { fullName: 'Ana Tech', leagueLevel: 'oro' }],
@@ -89,7 +91,7 @@ describe('simulateAssignmentAction contract (shape)', () => {
     const legacyKeys = ['invitedCount', 'alphaBonus', 'distribution', 'eligiblePool'];
     const modernShape = {
       scenario: {},
-      funnel: { universe: 0, excluded: {}, eligible: 0 },
+      funnel: { universe: 0, excluded: {}, eligible: 0, stages: [] },
       ranked: [],
       assignmentPreview: {
         selectedTechnicianId: null,
@@ -105,12 +107,12 @@ describe('simulateAssignmentAction contract (shape)', () => {
     }
   });
 
-  it('ranked incluye chainPosition en contrato moderno', () => {
+  it('ranked incluye componente B y chainPosition en contrato moderno', () => {
     const row = {
       technicianId: 't1',
       rank: 1,
       score: 0.9,
-      components: { Q: 1, P: 1, E: 1, L: 0, N: 0 },
+      components: { Q: 1, P: 1, E: 1, B: 0.8, L: 0, N: 0 },
       activeLoad: 0,
       fullName: 'Test',
       leagueLevel: 'oro',
@@ -119,5 +121,6 @@ describe('simulateAssignmentAction contract (shape)', () => {
       chainPosition: 1 as number | null,
     };
     expect(row.chainPosition).toBe(1);
+    expect(row.components.B).toBe(0.8);
   });
 });

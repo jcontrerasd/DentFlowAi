@@ -12,13 +12,14 @@ import { HISTORY_HELP } from '@/lib/constants/fauchardHelp';
 const HIDDEN_KEYS = new Set([
   'id', 'version', 'isActive', 'updatedBy', 'createdAt', 'updatedAt', 'changeReason',
   'businessHoursStart', 'businessHoursEnd', 'businessDaysMask',
-  'nInvited', 'tProposalHours', 'qMinSelection', 'platformFee', 'alphaBonus',
+  'nInvited', 'tProposalHours', 'qMinSelection', 'platformFee',
 ]);
 
 const KEY_LABELS: Record<string, string> = {
   alphaQuality: 'Calidad Histórica (Q)',
   alphaPunctuality: 'Puntualidad (P)',
   alphaExperience: 'Experiencia Especializada (E)',
+  alphaBonus: 'Bono de Infrautilización (B)',
   alphaLoad: 'Carga activa (L)',
   alphaNoResponse: 'Penalización por No-respuesta (N)',
   wQualityDays: 'Calidad Histórica (días)',

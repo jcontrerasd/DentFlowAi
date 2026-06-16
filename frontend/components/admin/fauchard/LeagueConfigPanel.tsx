@@ -68,11 +68,13 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
     setMessage(null);
     try {
       const res = await updateFauchardParamsAction(v, reason.trim());
-      if (res.success) {
+      if (res.success && res.persisted !== false) {
         setMessage({ type: 'success', text: 'Parámetros de categorías actualizados' });
         setShowConfirm(false);
         setReason('');
-      } else {
+      } else if (res.success && res.persisted === false) {
+        setMessage({ type: 'error', text: 'No hay cambios que guardar respecto a la configuración activa.' });
+      } else if (!res.success) {
         setMessage({ type: 'error', text: res.error });
       }
     } catch {
@@ -83,50 +85,44 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
   };
 
   return (
-    <div className="flex flex-col gap-12">
-      {/* Banner — estado del motor (depende de LEAGUE_ENGINE_ENABLED) */}
+    <div className="flex flex-col gap-5">
       {engineEnabled ? (
-        <div className="p-5 rounded-2xl bg-primary-hl border border-primary/30 flex gap-3 items-start">
-          <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="text-sm font-bold text-primary">Motor de categorías activo</p>
-            <p className="text-xs text-primary/80 leading-relaxed">
-              El motor de ascenso, transición y descenso está <strong>operativo</strong>: el cron diario
-              aplica estos umbrales para mover a los técnicos entre categorías.
+        <div className="p-3 rounded-xl bg-primary-hl border border-primary/30 flex gap-2 items-start">
+          <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-bold text-primary">Motor de categorías activo</p>
+            <p className="text-[10px] text-primary/80 leading-snug hidden sm:block">
+              El cron diario aplica estos umbrales para mover técnicos entre categorías.
             </p>
           </div>
         </div>
       ) : (
-        <div className="p-5 rounded-2xl bg-warning-hl border border-warning/30 flex gap-3 items-start">
-          <Construction className="w-5 h-5 text-warning shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <p className="text-sm font-bold text-warning">Motor de categorías apagado</p>
-            <p className="text-xs text-warning/80 leading-relaxed">
-              Estos umbrales <strong>se guardan</strong> en la configuración, pero el motor automático está
-              desactivado (<code>LEAGUE_ENGINE_ENABLED=false</code>): por ahora <strong>no tienen efecto</strong>.
-              La selección por liga sí opera con la categoría actual de cada técnico.
+        <div className="p-3 rounded-xl bg-warning-hl border border-warning/30 flex gap-2 items-start">
+          <Construction className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-bold text-warning">Motor de categorías apagado</p>
+            <p className="text-[10px] text-warning/80 leading-snug hidden sm:block">
+              Umbrales guardados; motor automático inactivo (<code>LEAGUE_ENGINE_ENABLED=false</code>).
             </p>
           </div>
         </div>
       )}
 
-      {/* Header con botón de ayuda (mismo patrón que los demás paneles) */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-foreground">Sistema de Categorías</h3>
-          <p className="text-xs text-faint">Umbrales de ascenso, transición y descenso entre Bronce, Plata, Oro y Élite.</p>
+          <h3 className="text-xs font-bold text-foreground">Sistema de Categorías</h3>
+          <p className="text-[10px] text-faint hidden md:block">Ascenso, transición y descenso entre ligas.</p>
         </div>
         <FauchardHelpButton onClick={() => openHelp()} label="Sistema de Categorías" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-        {/* Requisitos de Ascenso */}
-        <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-primary" />
-            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Requisitos de Ascenso</h3>
+            <TrendingUp className="w-4 h-4 text-primary" />
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-foreground">Requisitos de Ascenso</h3>
           </div>
-          <div className="space-y-8 pl-1">
+          <div className="space-y-4 pl-1">
             <Slider label="Calificación Mínima" value={v.lMinRating} min={3.5} max={5.0} step={0.1} onChange={(e) => set('lMinRating', parseFloat(e.target.value))} valueSuffix=" ⭐" tooltip={fauchardParamTooltip('lMinRating')} onHelp={() => openHelp('lMinRating')} paramNumber={fauchardParamNumber('lMinRating')} />
             <Slider label="Ventana de Evaluación (Casos)" value={v.lCasesEvaluated} min={5} max={20} step={1} onChange={(e) => set('lCasesEvaluated', parseInt(e.target.value))} valueSuffix=" casos" tooltip={fauchardParamTooltip('lCasesEvaluated')} onHelp={() => openHelp('lCasesEvaluated')} paramNumber={fauchardParamNumber('lCasesEvaluated')} />
             <Slider label="Puntualidad Mínima (%)" value={v.lMinPunctuality * 100} min={70} max={100} step={1} onChange={(e) => set('lMinPunctuality', parseFloat(e.target.value) / 100)} valueSuffix=" %" tooltip={fauchardParamTooltip('lMinPunctuality')} onHelp={() => openHelp('lMinPunctuality')} paramNumber={fauchardParamNumber('lMinPunctuality')} />
@@ -135,12 +131,12 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         </div>
 
         {/* Transición y Descenso */}
-        <div className="space-y-8">
+        <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <TrendingDown className="w-5 h-5 text-warning" />
-            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Transición y Descenso</h3>
+            <TrendingDown className="w-4 h-4 text-warning" />
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-foreground">Transición y Descenso</h3>
           </div>
-          <div className="space-y-8 pl-1">
+          <div className="space-y-4 pl-1">
             <Slider label="Casos en Transición" value={v.lCasesTransition} min={1} max={10} step={1} onChange={(e) => set('lCasesTransition', parseInt(e.target.value))} valueSuffix=" casos" tooltip={fauchardParamTooltip('lCasesTransition')} onHelp={() => openHelp('lCasesTransition')} paramNumber={fauchardParamNumber('lCasesTransition')} />
             <Slider label="Penalización Transición (%)" value={v.lPenaltyTransition * 100} min={5} max={50} step={1} onChange={(e) => set('lPenaltyTransition', parseFloat(e.target.value) / 100)} valueSuffix=" %" tooltip={fauchardParamTooltip('lPenaltyTransition')} onHelp={() => openHelp('lPenaltyTransition')} paramNumber={fauchardParamNumber('lPenaltyTransition')} />
             <Slider label="Calificación para Descenso" value={v.lDescentRating} min={2.0} max={3.5} step={0.1} onChange={(e) => set('lDescentRating', parseFloat(e.target.value))} valueSuffix=" ⭐" tooltip={fauchardParamTooltip('lDescentRating')} onHelp={() => openHelp('lDescentRating')} paramNumber={fauchardParamNumber('lDescentRating')} />
@@ -150,19 +146,18 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
       </div>
 
       {/* Info Card */}
-      <div className="p-6 rounded-[2rem] bg-primary-hl border border-primary/10 flex gap-4">
-        <Trophy className="w-8 h-8 text-primary shrink-0" />
-        <div className="space-y-1">
-          <h4 className="text-sm font-bold text-primary">Sobre el sistema de categorías</h4>
-          <p className="text-xs text-primary/70 leading-relaxed">
-            Las categorías (Bronce, Plata, Oro, Élite) determinan el acceso a casos de mayor complejidad.
-            Cuando el motor de ligas se active (Fase 2), estos parámetros automatizarán ascensos y descensos.
+      <div className="p-3 rounded-xl bg-primary-hl border border-primary/10 flex gap-3">
+        <Trophy className="w-5 h-5 text-primary shrink-0" />
+        <div>
+          <h4 className="text-xs font-bold text-primary">Sobre el sistema de categorías</h4>
+          <p className="text-[10px] text-primary/70 leading-snug hidden sm:block">
+            Bronce → Élite determinan acceso a casos de mayor complejidad.
           </p>
         </div>
       </div>
 
       {invariantBroken && (
-        <div className="p-4 rounded-2xl bg-error-hl border border-error/30 text-sm text-error">
+        <div className="p-3 rounded-xl bg-error-hl border border-error/30 text-xs text-error">
           La <strong>calificación para descenso</strong> ({v.lDescentRating.toFixed(1)} ⭐) debe ser menor que la
           <strong> calificación mínima de ascenso</strong> ({v.lMinRating.toFixed(1)} ⭐).
         </div>

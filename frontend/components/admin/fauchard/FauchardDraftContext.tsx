@@ -10,11 +10,12 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { updateFauchardParamsAction } from '@/lib/db/actions/fauchard';
+import { isDraftKeyDirty } from '@/lib/fauchard/alphaWeightNormalize';
 
-// Claves del borrador = parámetros del modelo de asignación directa (5 factores α + ventanas + plazos).
+// Claves del borrador = parámetros del modelo de asignación directa (6 factores α + ventanas + plazos).
 export const EDITABLE_KEYS = [
-  // Pesos del score (Σ5 = 1.0)
-  'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaNoResponse',
+  // Pesos del score (Σ6 = 1.0)
+  'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaBonus', 'alphaLoad', 'alphaNoResponse',
   // Ventanas del score
   'wQualityDays', 'wLoadDays', 'cMax', 'dBonusMaxDays',
   // Exclusión
@@ -34,7 +35,7 @@ export type Draft = Record<DraftKey, number>;
 
 export type DraftError = { rule: string; message: string };
 
-const ALPHA_KEYS: DraftKey[] = ['alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaNoResponse'];
+const ALPHA_KEYS: DraftKey[] = ['alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaBonus', 'alphaLoad', 'alphaNoResponse'];
 
 /** Defaults cuando el config activo no trae el campo (p. ej. columna recién migrada). */
 const DRAFT_DEFAULTS: Partial<Record<DraftKey, number>> = {
@@ -59,7 +60,7 @@ export function computeDraftErrors(d: Draft): DraftError[] {
   const errs: DraftError[] = [];
   const sum = ALPHA_KEYS.reduce((acc, k) => acc + d[k], 0);
   if (Math.abs(sum - 1.0) > 0.001) {
-    errs.push({ rule: 'weights', message: `Los 5 pesos del score deben sumar 1.000 (suma actual: ${sum.toFixed(3)}).` });
+    errs.push({ rule: 'weights', message: `Los 6 pesos del score deben sumar 1.000 (suma actual: ${sum.toFixed(3)}).` });
   }
   if (!(d.level1Threshold < d.level2Threshold && d.level2Threshold < d.level3Threshold)) {
     errs.push({ rule: 'thresholds', message: 'Los umbrales de sanción deben cumplir Nivel 1 < Nivel 2 < Nivel 3.' });
@@ -116,7 +117,7 @@ export function FauchardDraftProvider({
   const reset = useCallback(() => setDraft(initial), [initial]);
 
   const dirtyKeys = useMemo(
-    () => EDITABLE_KEYS.filter((k) => draft[k] !== initial[k]),
+    () => EDITABLE_KEYS.filter((k) => isDraftKeyDirty(k, draft[k], initial[k])),
     [draft, initial],
   );
 
@@ -128,15 +129,18 @@ export function FauchardDraftProvider({
       setSaving(true);
       try {
         const keysToSave = new Set<DraftKey>(dirtyKeys);
-        // Si cambió un α, el servidor exige Σ5 = 1.0 → enviar los cinco.
+        // Si cambió un α, el servidor exige Σ6 = 1.0 → enviar los seis.
         if (dirtyKeys.some((k) => ALPHA_KEYS.includes(k))) {
           for (const k of ALPHA_KEYS) keysToSave.add(k);
         }
         const payload = Object.fromEntries([...keysToSave].map((k) => [k, draft[k]]));
         const res = await updateFauchardParamsAction(payload, reason);
-        if (res.success) {
+        if (res.success && res.persisted !== false) {
           setInitial(draft);
           return { success: true };
+        }
+        if (res.success && res.persisted === false) {
+          return { success: false, error: 'No hay cambios que guardar respecto a la configuración activa.' };
         }
         return { success: false, error: 'error' in res ? res.error : 'Error al guardar.' };
       } catch {

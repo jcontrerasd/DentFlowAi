@@ -81,7 +81,7 @@ export const WEIGHTS_HELP: FauchardHelpSection = {
       description:
         'Aumento temporal de score para técnicos que llevan tiempo sin recibir casos. Mantiene activo a todo el pool de laboratorios.',
       example:
-        'El Lab. Sur lleva 3 semanas sin recibir un solo caso. Cuando el Dr. Soto publica uno nuevo, si el peso de Bono está alto (αB = 0.10) ese tiempo de espera lo impulsa y Fauchard lo incluye en la ronda de invitaciones para mantenerlo activo. Si lo pones en cero (αB = 0), la inactividad deja de sumar y laboratorios nuevos o poco activos como el Lab. Sur rara vez asomarían: el trabajo se concentraría en los de siempre.',
+        'El Lab. Sur lleva 3 semanas sin recibir una asignación. Cuando el Dr. Soto publica uno nuevo, si el peso de Bono está alto (αB = 0.10) ese tiempo de espera lo impulsa y Fauchard lo incluye en la cadena de asignación para mantenerlo activo. Si lo pones en cero (αB = 0), la inactividad deja de sumar y laboratorios nuevos o poco activos como el Lab. Sur rara vez asomarían: el trabajo se concentraría en los de siempre.',
       links: [{ key: 'dBonusMaxDays' }],
     },
     {
@@ -463,6 +463,179 @@ export const LEAGUE_HELP: FauchardHelpSection = {
   ],
 };
 
+export const SIMULATOR_HELP: FauchardHelpSection = {
+  title: 'Simulador Sandbox',
+  intro:
+    'Arma un caso virtual y recorre el funnel del motor (Caso → Clasificación → Filtros → Ranking → Asignación) sin escribir en la base de datos. Navegación libre entre pasos — no es un wizard secuencial. Usa el pool real de técnicos activos y la configuración Fauchard activa. Modelo: asignación directa (top-1 + cadena de respaldo); no simula invitaciones masivas ni nInvited.',
+  params: [
+    {
+      label: 'Restauración',
+      symbol: 'sim-restoration',
+      description:
+        'Tipo de trabajo clínico del caso virtual. Junto con piezas y complejidad, determina el workType que Fauchard usa para filtrar skills y categoría de disponibilidad.',
+      example:
+        'Si eliges Corona, el motor busca técnicos con skill en coronas y aplica la categoría canónica Coronas en el filtro AND-triple (con el flag v5.0 activo).',
+    },
+    {
+      label: 'Material',
+      symbol: 'sim-material',
+      description:
+        'Segunda dimensión del lookup de precio de lista. Debe existir una regla en Admin → Precios que combine restauración + material + shade + urgencia.',
+      example:
+        'Corona + Zirconio multilayer + A2 + Normal resuelve a una regla con código prc_NNN y muestra compensación, fee y precio dentista en el preview.',
+    },
+    {
+      label: 'Shade VITA',
+      symbol: 'sim-shade',
+      description: 'Tercera dimensión del precio de lista. El code opaco del catálogo se envía al resolver de reglas igual que al publicar un caso.',
+      example: 'Cambiar de A2 a BL1 puede cambiar la regla aplicada y por tanto el precio mostrado en el bloque de preview.',
+    },
+    {
+      label: 'Urgencia',
+      symbol: 'sim-urgency',
+      description:
+        'Cuarta dimensión del precio. Se persiste y compara por label (Normal, Alta, etc.), no por code opaco.',
+      example: 'Urgencia Alta puede activar una regla distinta con mayor compensación técnico si existe en el mantenedor de precios.',
+    },
+    {
+      label: 'Piezas (cantidad)',
+      symbol: 'sim-teeth',
+      description:
+        'Número de piezas del caso virtual. Con más de 1, genera un arreglo de dientes simulado que influye en la complejidad y la liga del escenario.',
+      example: '3 piezas en una corona puede elevar la complejidad respecto a 1 pieza y cambiar qué técnicos pasan el filtro de skill mínimo por liga.',
+    },
+    {
+      label: 'Pónticos (reemplaza ausentes)',
+      symbol: 'sim-pontic',
+      description:
+        'Indica si el caso reemplaza dientes ausentes (Sí / No, igual que el wizard). Separa coronas múltiples de puentes.',
+      example:
+        'Corona con 4 piezas y póntico «No» → categoría Coronas. Las mismas 4 piezas con póntico «Sí» → Puente corto en categoría Puentes.',
+    },
+    {
+      label: 'Complejidad',
+      symbol: 'sim-complexity',
+      description:
+        'Modo Auto deriva la complejidad desde restauración y piezas. Modo Manual fija Básico / Intermedio / Crítico explícitamente, igual que en el wizard de casos.',
+      example: 'Manual → Crítico fuerza liga Élite y workType exigente aunque la restauración sea simple, para probar un escenario extremo.',
+    },
+    {
+      label: 'Clasificación derivada',
+      symbol: 'sim-classify',
+      description:
+        'Badges de solo lectura: tipo de trabajo, liga, categoría de disponibilidad (7 canónicas v5.13) y complejidad. Se calculan con la misma lógica que classifyCase al publicar.',
+      example:
+        'Una corona intermedia en Plata muestra tipo «Coronas Múltiples (4–9)», liga plata y categoría Coronas. Verifícalos antes de pulsar Simular asignación.',
+    },
+    {
+      label: 'Override α (sandbox)',
+      symbol: 'sim-override',
+      description:
+        'Activa sliders locales Q/P/E/B/L/N que reemplazan los pesos de la config activa solo para esta corrida. No guarda en Configuración; la suma debe ser exactamente 1.0.',
+      example:
+        'Enciendes el toggle, subes αN y bajas αQ, y vuelves a simular sin tocar la config de producción. Al apagar el toggle vuelves a los α guardados.',
+    },
+    {
+      label: 'Calidad Histórica (Q) — override',
+      symbol: 'alphaQuality',
+      description:
+        'Peso del factor Q en el score de esta corrida (si el override está activo) o valor activo en Configuración (panel Parámetros activos). Influye en el ranking de técnicos elegibles.',
+      example: 'Con αQ alto, un técnico con rating 4.8/5 sube en el ranking frente a uno con 3.5/5, a igualdad de otros factores.',
+      links: [{ key: 'alphaQuality' }],
+    },
+    {
+      label: 'Puntualidad (P) — override',
+      symbol: 'alphaPunctuality',
+      description: 'Peso del factor P: historial de entregas a tiempo del técnico en la ventana de casos completados.',
+      example: 'Subir αP favorece al laboratorio que cumple el 95% de plazos frente al que suele atrasarse.',
+      links: [{ key: 'alphaPunctuality' }],
+    },
+    {
+      label: 'Experiencia (E) — override',
+      symbol: 'alphaExperience',
+      description: 'Peso del factor E: nivel de skill declarado para el workType del escenario virtual.',
+      example: 'En una guía quirúrgica, αE alto prioriza al técnico con designLevel 7/7 sobre uno generalista.',
+      links: [{ key: 'alphaExperience' }],
+    },
+    {
+      label: 'Carga activa (L) — override',
+      symbol: 'alphaLoad',
+      description: 'Peso de penalización por carga: resta score a técnicos con muchos casos activos en curso.',
+      example: 'Con αL alto, un técnico saturado con 8 casos abiertos cae en el ranking aunque tenga buena calidad.',
+      links: [{ key: 'alphaLoad' }],
+    },
+    {
+      label: 'No-respuesta (N) — override',
+      symbol: 'alphaNoResponse',
+      description:
+        'Peso de penalización por sanción rolling de no-respuesta (−αN·N). Solo resta si el técnico tiene sanción activa (flag v5.0).',
+      example: 'Un técnico en Nivel 2 de sanción pierde posiciones en el ranking si αN está alto.',
+      links: [{ key: 'alphaNoResponse' }],
+    },
+    {
+      label: 'Ventana de calidad (Q)',
+      symbol: 'wQualityDays',
+      description:
+        'Días hacia atrás con los que se promedian las calificaciones para el factor Q en esta simulación. Valor de la config activa.',
+      example: 'Con 30 días, solo cuentan ratings del último mes; con 180, la reputación es más estable y perdona rachas viejas.',
+      links: [{ key: 'wQualityDays' }],
+    },
+    {
+      label: 'Cooldown',
+      symbol: 'tCooldownMinutes',
+      description:
+        'Minutos que un técnico queda excluido tras una asignación reciente del mismo workType. Filtro duro previo al score.',
+      example: 'Con 120 min, si el Lab. Pino recibió una asignación de coronas hace 1 hora, no entra al pool aunque esté disponible.',
+      links: [{ key: 'tCooldownMinutes' }],
+    },
+    {
+      label: 'Inactividad',
+      symbol: 'dInactivityDays',
+      description: 'Días sin login tras los cuales el técnico queda excluido del pool por inactividad.',
+      example: 'Con 15 días, un técnico que no entra hace dos semanas aparece en el embudo como inactive.',
+      links: [{ key: 'dInactivityDays' }],
+    },
+    {
+      label: 'Intentos máximos de asignación',
+      symbol: 'maxAssignmentAttempts',
+      description:
+        'Cuántos técnicos forman la cadena de respaldo en asignación directa (ganador + respaldos). No es nInvited ni invitaciones masivas.',
+      example: 'Con 3 intentos, la cadena coloreada muestra hasta 3 posiciones: verde al #1 y ámbar a #2 y #3.',
+      links: [{ key: 'maxAssignmentAttempts' }],
+    },
+    {
+      label: 'Plazo de respuesta',
+      symbol: 'tQuoteMinutes',
+      description:
+        'Plazo de referencia mostrado en la cadena de asignación. En asignación directa marca cuánto tiempo tiene el técnico para aceptar antes de pasar al respaldo.',
+      example: 'Con 30 min, la UI de resultados muestra "Plazo 30 min" junto a la cadena de respaldo.',
+      links: [{ key: 'tQuoteMinutes' }],
+    },
+    {
+      label: 'Filtros duros (resumen)',
+      symbol: 'sim-filters',
+      description:
+        'Conjunto de exclusiones previas al score: disponibilidad global, suspensión, inactividad, cooldown, liga (con expansión), skill mínimo y AND-triple v5.0 (gated).',
+      example:
+        'El embudo de resultados desglosa cuántos técnicos cayeron en cada motivo. availability_filter solo aplica con AVAILABILITY_MODEL_ENABLED activo.',
+      links: [{ key: 'tCooldownMinutes' }, { key: 'dInactivityDays' }],
+    },
+    {
+      label: 'Embudo y pool vacío',
+      symbol: 'sim-funnel',
+      description:
+        'Embudo secuencial en barras: parte del universo de técnicos activos y muestra cuántos quedan tras cada filtro en el mismo orden que el motor (exclusión manual → disponible global → liga → suspensión → inactividad → cooldown → skill → disponibilidad CAD). La etapa que vacía el pool (bottleneck) se resalta con orientación para resolverlo.',
+      example:
+        'Si 18 técnicos caen todos en «Disponibilidad CAD · Coronas», verás la barra bajar a 0 en esa etapa con el hint de activar switches en Perfil → Disponibilidad. Los chips colapsables muestran el desglose legacy por primer fallo.',
+    },
+  ],
+  notes: [
+    'Parámetros de Configuración que no influyen en esta simulación: wLoadDays, cMax, nInvited, tProposalHours, platformFee y plazos post-asignación (revisión dentista, cola pool, sanción rolling).',
+    'Para cambiar valores persistentes, usa Configuración Fauchard (/dashboard/admin/fauchard). El panel "Parámetros activos" muestra solo los que afectan el motor de asignación directa.',
+    'El filtro AND-triple de disponibilidad v5.0 solo aplica con AVAILABILITY_MODEL_ENABLED activo en el entorno.',
+  ],
+};
+
 // ─── Mapa: clave de parámetro de config → descripción ────────────────────────
 // Fuente única: los tooltips de los paneles reutilizan EXACTAMENTE la misma
 // descripción que la ayuda (sin el ejemplo), sin duplicar el texto.
@@ -476,6 +649,7 @@ export const FAUCHARD_PARAM_TOOLTIP: Record<string, string> = {
   alphaPunctuality: descByLabel(WEIGHTS_HELP, 'Puntualidad'),
   alphaExperience: descByLabel(WEIGHTS_HELP, 'Experiencia Especializada'),
   alphaLoad: descByLabel(WEIGHTS_HELP, 'Penalización por Carga'),
+  alphaBonus: descByLabel(WEIGHTS_HELP, 'Bono de Infrautilización'),
   alphaNoResponse: descByLabel(WEIGHTS_HELP, 'Penalización por No-respuesta'),
   // Selección y Ronda / Asignación
   wQualityDays: descByLabel(FILTERS_HELP, 'Calidad Histórica (días)'),
@@ -526,6 +700,7 @@ export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
   alphaQuality: 'Calidad Histórica (Q)',
   alphaPunctuality: 'Puntualidad (P)',
   alphaExperience: 'Experiencia Especializada (E)',
+  alphaBonus: 'Bono de Infrautilización (B)',
   alphaLoad: 'Carga activa (L)',
   alphaNoResponse: 'Penalización por No-respuesta (N)',
   // Asignación
@@ -563,7 +738,7 @@ export const FAUCHARD_PARAM_LABEL: Record<string, string> = {
 /** Panel (y por ende espacio de TabClient) que contiene cada parámetro. */
 export const FAUCHARD_PARAM_PANEL: Record<string, FauchardParamPanel> = {
   alphaQuality: 'weights', alphaPunctuality: 'weights', alphaExperience: 'weights',
-  alphaLoad: 'weights', alphaNoResponse: 'weights',
+  alphaBonus: 'weights', alphaLoad: 'weights', alphaNoResponse: 'weights',
   wQualityDays: 'filters', wLoadDays: 'filters', cMax: 'filters', dBonusMaxDays: 'filters',
   tCooldownMinutes: 'filters', dInactivityDays: 'filters', maxAssignmentAttempts: 'filters',
   tQuoteMinutes: 'filters',
@@ -605,8 +780,8 @@ export function fauchardParamSpace(key: string): 'parametros' | 'categorias' {
  * el orden de las pestañas, reordenar aquí para que la numeración siga siendo correlativa.
  */
 const FAUCHARD_PARAM_ORDER: string[] = [
-  // Pesos del Score (5 factores)
-  'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaLoad', 'alphaNoResponse',
+  // Pesos del Score (6 factores)
+  'alphaQuality', 'alphaPunctuality', 'alphaExperience', 'alphaBonus', 'alphaLoad', 'alphaNoResponse',
   // Selección y asignación
   'wQualityDays', 'wLoadDays', 'cMax', 'dBonusMaxDays', 'tCooldownMinutes', 'dInactivityDays',
   'maxAssignmentAttempts', 'tQuoteMinutes',
@@ -632,7 +807,7 @@ export function fauchardParamNumber(key: string): number | undefined {
  *  el `symbol` ya es la clave; los pesos usan letra y algunas tarjetas agrupan
  *  varias claves (umbrales / horario) bajo una representativa. */
 const HELP_SYMBOL_TO_KEY: Record<string, string> = {
-  Q: 'alphaQuality', P: 'alphaPunctuality', E: 'alphaExperience',
+  Q: 'alphaQuality', P: 'alphaPunctuality', E: 'alphaExperience', B: 'alphaBonus',
   L: 'alphaLoad', C: 'alphaLoad', N: 'alphaNoResponse',
   'level1-3': 'level1Threshold',
 };

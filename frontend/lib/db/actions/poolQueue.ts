@@ -6,8 +6,8 @@
  * una cola con TTL + check-in al dentista en vez de fallar de inmediato.
  *
  * El caso permanece en `enEvaluacion` con marca interna `pendiente_pool`. La
- * reactivación es event-driven al encender un técnico (no cron); el cron (Fase 6)
- * gestiona check-in y expiración.
+ * reactivación es event-driven al encender un técnico y periódica vía cron
+ * (`processPendingPoolReevaluationAction`); el cron también gestiona check-in y expiración.
  *
  * Importa Fauchard de forma dinámica para evitar el ciclo (fauchard.ts importa
  * `enterPendingPoolAction` de este módulo).
@@ -203,6 +203,43 @@ export async function processPendingPoolExpirationAction(): Promise<ActionResult
       }
     }
     return { success: true, requeued, failed };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Reevaluación periódica (cron): intenta asignar casos en cola si ya hay elegibles.
+ * Idempotente — si sigue sin candidatos, el caso permanece en pool.
+ */
+export async function processPendingPoolReevaluationAction(): Promise<ActionResult<{ assigned: number; stillWaiting: number }>> {
+  try {
+    const cases = await db
+      .select({ id: clinicalCase.id })
+      .from(clinicalCase)
+      .where(
+        and(
+          eq(clinicalCase.internalStatus, POOL_INTERNAL_STATUS),
+          eq(clinicalCase.status, CASE_STATUSES.EN_EVALUACION),
+        ),
+      );
+
+    if (!cases.length) return { success: true, assigned: 0, stillWaiting: 0 };
+
+    const fauchard = await import('./fauchard');
+    let assigned = 0;
+    let stillWaiting = 0;
+
+    for (const c of cases) {
+      const res = await fauchard.reevaluatePendingPoolCaseAction(c.id);
+      if (res.success && res.reactivated) {
+        assigned++;
+      } else {
+        stillWaiting++;
+      }
+    }
+
+    return { success: true, assigned, stillWaiting };
   } catch (error) {
     return { success: false, error: String(error) };
   }

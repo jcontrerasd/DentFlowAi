@@ -11,6 +11,8 @@
  */
 
 import { processLeagueMaintenanceAction } from '@/lib/db/actions/leagueCron';
+import { processPendingPoolReevaluationAction } from '@/lib/db/actions/poolQueue';
+import { isAvailabilityEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
 
 declare global {
   var __localCronStarted: boolean | undefined;
@@ -21,6 +23,7 @@ export function startLocalCronScheduler(): void {
   globalThis.__localCronStarted = true;
 
   const leagueIntervalMs = Number(process.env.LOCAL_LEAGUE_CRON_INTERVAL_MS ?? 3_600_000);
+  const poolIntervalMs = Number(process.env.LOCAL_POOL_CRON_INTERVAL_MS ?? 120_000);
 
   const runLeague = async () => {
     try {
@@ -33,9 +36,26 @@ export function startLocalCronScheduler(): void {
     }
   };
 
+  const runPoolReevaluation = async () => {
+    if (!isAvailabilityEnabled() || !isPoolPendienteEnabled()) return;
+    try {
+      const res = await processPendingPoolReevaluationAction();
+      if (res.success && (res.assigned ?? 0) > 0) {
+        console.log('[local-cron] process-pool-queue (reevaluation):', JSON.stringify(res));
+      }
+    } catch (e) {
+      console.error('[local-cron] process-pool-queue error:', e);
+    }
+  };
+
   // Primera corrida poco después del arranque (deja levantar la DB) + intervalo.
   setTimeout(runLeague, 15_000);
   setInterval(runLeague, leagueIntervalMs);
 
-  console.log(`[local-cron] scheduler iniciado (process-league cada ${leagueIntervalMs}ms).`);
+  setTimeout(runPoolReevaluation, 20_000);
+  setInterval(runPoolReevaluation, poolIntervalMs);
+
+  console.log(
+    `[local-cron] scheduler iniciado (process-league cada ${leagueIntervalMs}ms; pool reevaluation cada ${poolIntervalMs}ms).`,
+  );
 }

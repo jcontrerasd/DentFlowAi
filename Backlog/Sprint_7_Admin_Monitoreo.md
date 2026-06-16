@@ -1,5 +1,7 @@
 # Sprint 7 — Panel Admin: Monitoreo, Equidad y Simulador
 
+> **Nota histórica:** este sprint describe el modelo legacy de probabilidades e invitaciones (`/dashboard/admin/algorithm/simulate`). La implementación actual es asignación directa en `/dashboard/admin/fauchard/simulate` (funnel workspace Q/P/E/L/N).
+
 **Duración estimada:** 2 semanas  
 **Objetivo:** El administrador puede monitorear la salud del algoritmo: distribución de invitaciones, concentración por técnico, alertas automáticas, ranking de técnicos y simulador de selección.  
 **Prerrequisito:** Sprint 6 (panel de configuración), Sprint 2 (invitaciones en DB).

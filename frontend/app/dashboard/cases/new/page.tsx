@@ -54,6 +54,7 @@ export default function NewCasePage() {
         notesEsthetic: formData.notesEsthetic,
         notesOclusal: formData.notesOclusal,
         desiredDeliveryAt: new Date(formData.desiredDeliveryAt).toISOString(),
+        replacesMissingTeeth: formData.replacesMissingTeeth,
       });
 
       // 2. Subir archivos a GCS vía Signed URLs.

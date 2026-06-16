@@ -364,10 +364,10 @@ gcloud scheduler jobs create http process-availability-prod \
   --attempt-deadline=120s \
   --project=dentflowai-cbcf2
 
-# process-pool-queue: cada 10 min (check-in dentista 50% TTL + expiración/re-encole de la cola)
+# process-pool-queue: cada 2 min (reevaluación asignación + check-in 50% TTL + expiración/re-encole)
 gcloud scheduler jobs create http process-pool-queue-prod \
   --location=southamerica-west1 \
-  --schedule="*/10 * * * *" \
+  --schedule="*/2 * * * *" \
   --uri="https://dentflowai.com/api/cron/process-pool-queue" \
   --http-method=POST \
   --headers="Authorization=Bearer ${CRON_SECRET_PROD}" \

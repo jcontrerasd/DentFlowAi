@@ -45,6 +45,9 @@ scripts/               CLI Python legacy (toolkit.py — sync claims Firebase/ad
 - `admin` — panel Fauchard, impersonación, métricas
 
 ## Tipos de servicio (`clinicalCase.serviceType`)
+
+> **Producto activo (v2):** el wizard y los casos nuevos usan solo `solo_diseno` con **asignación directa** (`runAssignmentAction`, score Q/P/E/L/N). Los tipos `integral`/`solo_fabricacion` y el flujo de cotización/comparativo quedan como **legacy** en schema y UCH.
+
 Definidos en `frontend/lib/constants/dental.ts → SERVICE_TYPES`:
 - `solo_diseno` — el dentista sube scans. Flujo: **Borrador → En evaluación → Propuesta lista → Esperando inicio → En ejecución → En revisión → Completado**.
 - `solo_fabricacion` — el dentista sube **un único archivo de diseño** (STL/PLY/OBJ). El laboratorio solo fabrica. Flujo: **Borrador → En evaluación → Propuesta lista → Esperando inicio → En fabricación → Enviado → Completado** (sin pasos de diseño/revisión).
@@ -242,7 +245,7 @@ El motor Fauchard es el núcleo de orquestación. Flujo de vida de un caso:
 
 ### Modelo de disponibilidad del técnico (v5.0, detrás de `AVAILABILITY_MODEL_ENABLED`)
 Reemplaza la exclusión binaria `consecutiveNoResponse >= 3` por un sistema gradual (todo inerte hasta encender el flag). Ver `Doc Servicio Orquestado/`:
-- **Elegibilidad AND triple**: el técnico declara disponibilidad en 3 niveles (global · CAD/CAM · 5 categorías). Fauchard filtra por `computeEligibleAction` en cada corrida (sin caché).
+- **Elegibilidad AND triple**: el técnico declara disponibilidad en 3 niveles (global · CAD/CAM · **7 categorías**). Fauchard filtra por `computeEligibleAction` en cada corrida (sin caché). Campo clínico `replacesMissingTeeth` (pónticos) + árbol de decisión en `lib/fauchard/caseWorkType.ts` (v5.13).
 - **Sanción rolling 14d**: las no-respuestas suman a un nivel 1/2/3 (warning · penalización al score `−αN·N` · auto-OFF del switch global). Decae sola al salir de la ventana. Tablas `technician_availability` / `technician_no_response_event`.
 - **Cola `pendiente_pool`**: si no hay elegibles, el caso espera técnicos (TTL + check-in al dentista) en vez de fallar; `runFauchardAction` retorna `{ pooled: true }`. Reactivación event-driven al encender un técnico.
 - **Rechazo explícito** (individual/masivo) + **reemplazo automático** del siguiente del pool. Notificaciones vía EmailJS (`lib/services/notifications.ts`); reglas de canal por tipo en `channelsForNotification` (§9.5). **Envío real gated por `NOTIFICATIONS_LIVE`** (interruptor maestro de seguridad por ambiente: si no es `true`, `notifyUser` loguea sin enviar aunque haya credenciales — evita correos reales desde staging con datos clonados). Actions en `lib/db/actions/{availability,availabilityCron,noResponseEvents,rejection,replacement,poolQueue}.ts`.
@@ -278,7 +281,7 @@ Helpers: `frontend/lib/db/caseDeadlines.ts`. Evaluación/cierre de comparativo: 
 - **Publicar / republicar:** `runFauchardAction` devuelve `fauchardConfigId`; `sendInvitationsAction` recibe el mismo id.
 
 ### Simulador y monitor (asignación directa)
-- **Simulador admin** (`simulateAssignmentAction` en `assignment.ts`, alias `simulateFauchardAction`): caso virtual con **4 catálogos de precio** (restauración, material, shade, urgencia → `pricePreview`) + **escenario de asignación** (piezas, complejidad auto/manual, notas estéticas simuladas) → mismos filtros que `buildEligiblePoolForScenario` + ranking `rankCandidatesForScenario` (Q/P/E/L/N). Salida: `retryChainDetails`, `chainPosition` por fila, cadena coloreada hasta `maxAssignmentAttempts`. Sin `nInvited` ni probabilidades.
+- **Simulador admin** (`/dashboard/admin/fauchard/simulate`): **funnel workspace** con stepper navegable (Caso · Clasificación · Filtros · Ranking · Asignación) — no wizard obligatorio. Panel activo izquierda + resultado persistente derecha. Motor: `simulateAssignmentAction` (alias `simulateFauchardAction`): caso virtual con **4 catálogos de precio** (`pricePreview`) + escenario (piezas, complejidad, notas) → `buildEligiblePoolForScenario` + `rankCandidatesForScenario` (Q/P/E/L/N). Salida: `retryChainDetails`, `chainPosition`, cadena coloreada hasta `maxAssignmentAttempts`. Override α solo en paso Ranking (sandbox, no persiste). Componentes en `components/admin/fauchard/simulator/`. Ruta legacy `sandbox-diagram` redirige a `/simulate`.
 - **Monitor** (`getFauchardMetricsAction`): agregados sobre `case_assignment` (`assignmentsCount`, tasas respuesta/aceptación, fallos vía `sin_asignacion_fallo` / `sin_cotizaciones_fallo`).
 
 ## UCH — Reglas de Diseño DentFlowAi

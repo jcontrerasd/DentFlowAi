@@ -9,10 +9,13 @@ import { db } from '@/lib/db';
 import {
   caseAssignment,
   clinicalCase,
+  dentalMaterial,
   restorationType as restorationTypeTable,
   review,
   technicianSkill,
+  urgencyLevel,
   user,
+  vitaShade,
 } from '@/lib/db/schema';
 import { and, eq, gt, gte, inArray, sql } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
@@ -27,11 +30,9 @@ import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
 import type { ActionResult } from '@/lib/types/actions';
 import {
-  categoryForWorkType,
-  getWorkTypeForCase,
-  LEAGUE_ORDER,
   MIN_SKILL_FOR_CATEGORY,
 } from '@/lib/fauchard/caseWorkType';
+import { leagueMatches, type LeagueMatchMode } from '@/lib/fauchard/leagueMatch';
 import {
   computeAssignmentScore,
   parseAssignmentWeights,
@@ -77,14 +78,13 @@ function maxAttempts(config: FauchardConfigRow): number {
   return m && m > 0 ? m : 3;
 }
 
-function leagueMatches(techLeague: string, caseLeague: string, mode: 'strict' | 'expand'): boolean {
-  const t = (techLeague ?? 'bronce').toLowerCase();
-  const c = caseLeague.toLowerCase();
-  if (mode === 'strict') return t === c;
-  const idx = LEAGUE_ORDER.indexOf(c as (typeof LEAGUE_ORDER)[number]);
-  const expanded = LEAGUE_ORDER.slice(Math.max(0, idx - 1));
-  return expanded.includes(t as (typeof LEAGUE_ORDER)[number]);
-}
+export type EligiblePoolResult = {
+  pool: typeof user.$inferSelect[];
+  leagueMode: LeagueMatchMode | null;
+  workType: string;
+  caseLeague: string;
+  config: FauchardConfigRow;
+};
 
 export type ExclusionReason =
   | 'not_available'
@@ -99,7 +99,7 @@ export type ExclusionReason =
 export type RankedCandidate = {
   technicianId: string;
   score: number;
-  components: { Q: number; P: number; E: number; L: number; N: number };
+  components: { Q: number; P: number; E: number; B: number; L: number; N: number };
   activeLoad: number;
 };
 
@@ -124,9 +124,20 @@ export async function deriveScenarioFromCase(caseId: string): Promise<ResolvedSc
 
   if (!cRow) throw new Error('Caso no encontrado');
   const teeth = (cRow.cc.teeth as number[]) || [];
-  const notesLen = cRow.cc.notesEsthetic?.length ?? 0;
   const complexity = (cRow.cc.caseComplexity as import('@/lib/constants/dental').CaseComplexity | null) ?? undefined;
-  const scenario = deriveScenarioFromInputs(cRow.restorationLabel || '', teeth, complexity, notesLen);
+  const scenario = deriveScenarioFromInputs(
+    cRow.restorationLabel || '',
+    teeth,
+    complexity,
+    cRow.cc.replacesMissingTeeth,
+  );
+  if (cRow.cc.derivedWorkType && cRow.cc.derivedCategory) {
+    return {
+      ...scenario,
+      workType: cRow.cc.derivedWorkType as typeof scenario.workType,
+      category: cRow.cc.derivedCategory as typeof scenario.category,
+    };
+  }
   if (cRow.cc.caseLeague) {
     return { ...scenario, caseLeague: cRow.cc.caseLeague };
   }
@@ -197,7 +208,7 @@ export async function buildEligiblePoolForScenario(
   scenario: ResolvedScenario,
   config: FauchardConfigRow,
   excludeTechIds: string[] = [],
-): Promise<{ pool: typeof user.$inferSelect[]; workType: string; caseLeague: string; config: FauchardConfigRow }> {
+): Promise<EligiblePoolResult> {
   const now = new Date();
   const inactivityThreshold = new Date(now.getTime() - config.dInactivityDays * 86400000);
   const cooldownThreshold = new Date(now.getTime() - config.tCooldownMinutes * 60000);
@@ -217,14 +228,14 @@ export async function buildEligiblePoolForScenario(
       if (ok) pool.push(tech);
     }
     if (pool.length > 0) {
-      return { pool, workType: scenario.workType, caseLeague: scenario.caseLeague, config };
+      return { pool, leagueMode: mode, workType: scenario.workType, caseLeague: scenario.caseLeague, config };
     }
   }
 
-  return { pool: [], workType: scenario.workType, caseLeague: scenario.caseLeague, config };
+  return { pool: [], leagueMode: null, workType: scenario.workType, caseLeague: scenario.caseLeague, config };
 }
 
-/** Evalúa todos los técnicos activos para embudo de simulación. */
+/** Evalúa técnicos para embudo de simulación — eligible = pool de ranking (liga strict-first). */
 export async function evaluateTechniciansForScenario(
   scenario: ResolvedScenario,
   config: FauchardConfigRow,
@@ -234,11 +245,15 @@ export async function evaluateTechniciansForScenario(
   eligible: typeof user.$inferSelect[];
   excluded: Record<ExclusionReason, number>;
   exclusionByTech: Map<string, ExclusionReason>;
+  leagueMode: LeagueMatchMode | null;
 }> {
   const now = new Date();
   const inactivityThreshold = new Date(now.getTime() - config.dInactivityDays * 86400000);
   const cooldownThreshold = new Date(now.getTime() - config.tCooldownMinutes * 60000);
   const exclude = new Set(excludeTechIds);
+
+  const { pool, leagueMode } = await buildEligiblePoolForScenario(scenario, config, excludeTechIds);
+  const poolIds = new Set(pool.map(t => t.id));
 
   const universe = await db
     .select()
@@ -256,30 +271,237 @@ export async function evaluateTechniciansForScenario(
     excluded_manually: 0,
   };
   const exclusionByTech = new Map<string, ExclusionReason>();
-  const eligible: typeof user.$inferSelect[] = [];
+  const modeForExclusion = leagueMode ?? 'strict';
 
   for (const tech of universe) {
-    let passed = false;
-    let reason: ExclusionReason | undefined;
-    for (const mode of ['strict', 'expand'] as const) {
-      const result = await checkTechnicianPassesFilters(
-        tech, scenario, config, exclude, mode, now, inactivityThreshold, cooldownThreshold,
-      );
-      if (result.ok) {
-        passed = true;
-        break;
-      }
-      reason = result.reason;
-    }
-    if (passed) {
-      eligible.push(tech);
-    } else if (reason) {
-      excluded[reason]++;
-      exclusionByTech.set(tech.id, reason);
+    if (poolIds.has(tech.id)) continue;
+    const result = await checkTechnicianPassesFilters(
+      tech, scenario, config, exclude, modeForExclusion, now, inactivityThreshold, cooldownThreshold,
+    );
+    if (!result.ok && result.reason) {
+      excluded[result.reason]++;
+      exclusionByTech.set(tech.id, result.reason);
     }
   }
 
-  return { universe, eligible, excluded, exclusionByTech };
+  return { universe, eligible: pool, excluded, exclusionByTech, leagueMode };
+}
+
+type TechRow = typeof user.$inferSelect;
+
+function scenarioToSimulationScenario(scenario: ResolvedScenario): import('@/lib/fauchard/simulationTypes').SimulationScenario {
+  return {
+    workType: scenario.workType,
+    caseLeague: scenario.caseLeague,
+    caseComplexity: scenario.caseComplexity,
+    category: scenario.category,
+  };
+}
+
+/** Embudo secuencial: aplica filtros en orden canónico y registra conteos por etapa. */
+export async function buildFunnelStagesForScenario(
+  scenario: ResolvedScenario,
+  config: FauchardConfigRow,
+  excludeTechIds: string[] = [],
+): Promise<import('@/lib/fauchard/simulationTypes').FunnelStage[]> {
+  const { getFunnelStageMeta, markFunnelBottlenecks } = await import('@/lib/fauchard/simulationHelpers');
+  const {
+    passesCooldown,
+    passesExcludedManually,
+    passesInactive,
+    passesLeagueForMode,
+    passesNotAvailable,
+    passesSkill,
+    passesSuspended,
+  } = await import('@/lib/fauchard/funnelStagePredicates');
+
+  const { leagueMode } = await buildEligiblePoolForScenario(scenario, config, excludeTechIds);
+  const leagueFilterMode = leagueMode ?? 'strict';
+
+  const simScenario = scenarioToSimulationScenario(scenario);
+  const availabilityOn = isAvailabilityEnabled();
+  const now = new Date();
+  const inactivityThreshold = new Date(now.getTime() - config.dInactivityDays * 86400000);
+  const cooldownThreshold = new Date(now.getTime() - config.tCooldownMinutes * 60000);
+  const exclude = new Set(excludeTechIds);
+  const minSkill = MIN_SKILL_FOR_CATEGORY[scenario.caseLeague] ?? 1;
+
+  const universe = await db
+    .select()
+    .from(user)
+    .where(and(eq(user.role, 'tecnico'), eq(user.isActive, true)));
+
+  const universeIds = universe.map((t) => t.id);
+
+  const [skillRows, cooldownRows] = await Promise.all([
+    universeIds.length
+      ? db
+          .select({ userId: technicianSkill.userId, designLevel: technicianSkill.designLevel })
+          .from(technicianSkill)
+          .where(
+            and(
+              inArray(technicianSkill.userId, universeIds),
+              eq(technicianSkill.workType, scenario.workType),
+            ),
+          )
+      : Promise.resolve([] as { userId: string; designLevel: number }[]),
+    universeIds.length
+      ? db
+          .select({ technicianId: caseAssignment.technicianId })
+          .from(caseAssignment)
+          .where(
+            and(
+              inArray(caseAssignment.technicianId, universeIds),
+              gt(caseAssignment.assignedAt, cooldownThreshold),
+              eq(caseAssignment.workType, scenario.workType),
+            ),
+          )
+      : Promise.resolve([] as { technicianId: string }[]),
+  ]);
+
+  const skillByUser = new Map<string, number>();
+  for (const row of skillRows) {
+    const prev = skillByUser.get(row.userId);
+    if (prev == null || row.designLevel > prev) {
+      skillByUser.set(row.userId, row.designLevel);
+    }
+  }
+  const cooldownTechIds = new Set(cooldownRows.map((r) => r.technicianId));
+
+  type StageDef = {
+    id: import('@/lib/fauchard/simulationTypes').FunnelStageId;
+    filter: (tech: TechRow) => boolean;
+    skipped?: boolean;
+  };
+
+  const stageDefs: StageDef[] = [
+    {
+      id: 'universe',
+      filter: () => true,
+    },
+    {
+      id: 'excluded_manually',
+      filter: (tech) => passesExcludedManually(tech.id, exclude),
+    },
+    {
+      id: 'not_available',
+      filter: (tech) => passesNotAvailable(tech.isAvailable),
+    },
+    {
+      id: 'league',
+      filter: (tech) => passesLeagueForMode(tech.leagueLevel, scenario.caseLeague, leagueFilterMode),
+    },
+    {
+      id: 'suspended',
+      filter: (tech) => passesSuspended(tech.suspendedUntil, now),
+    },
+    {
+      id: 'inactive',
+      filter: (tech) => passesInactive(tech.lastLoginAt, inactivityThreshold),
+    },
+    {
+      id: 'cooldown',
+      filter: (tech) => passesCooldown(tech.id, cooldownTechIds),
+    },
+    {
+      id: 'insufficient_skill',
+      filter: (tech) => passesSkill(tech.id, skillByUser, minSkill),
+    },
+  ];
+
+  if (availabilityOn) {
+    stageDefs.push({
+      id: 'availability_filter',
+      filter: () => true,
+    });
+  } else {
+    stageDefs.push({
+      id: 'availability_filter',
+      filter: () => true,
+      skipped: true,
+    });
+  }
+
+  stageDefs.push({ id: 'eligible', filter: () => true });
+
+  const stages: import('@/lib/fauchard/simulationTypes').FunnelStage[] = [];
+  let remaining: TechRow[] = [...universe];
+
+  for (const def of stageDefs) {
+    const meta = getFunnelStageMeta(def.id, simScenario, availabilityOn);
+
+    if (def.id === 'universe') {
+      stages.push({
+        id: 'universe',
+        label: meta.label,
+        countAfter: remaining.length,
+        dropped: 0,
+        fixHint: meta.fixHint,
+      });
+      continue;
+    }
+
+    if (def.id === 'availability_filter' && def.skipped) {
+      stages.push({
+        id: 'availability_filter',
+        label: `${meta.label} (inactiva)`,
+        countAfter: remaining.length,
+        dropped: 0,
+        fixHint: meta.fixHint,
+        reason: meta.reason,
+        skipped: true,
+      });
+      continue;
+    }
+
+    if (def.id === 'availability_filter' && availabilityOn) {
+      const next: TechRow[] = [];
+      for (const tech of remaining) {
+        await ensureTechnicianAvailabilityAction(tech.id);
+        if (await computeEligibleAction(tech.id, scenario.category, 'cad')) {
+          next.push(tech);
+        }
+      }
+      const dropped = remaining.length - next.length;
+      stages.push({
+        id: 'availability_filter',
+        label: meta.label,
+        countAfter: next.length,
+        dropped,
+        fixHint: meta.fixHint,
+        reason: meta.reason,
+      });
+      remaining = next;
+      continue;
+    }
+
+    if (def.id === 'eligible') {
+      stages.push({
+        id: 'eligible',
+        label: meta.label,
+        countAfter: remaining.length,
+        dropped: 0,
+        fixHint: meta.fixHint,
+      });
+      continue;
+    }
+
+    const next = remaining.filter(def.filter);
+    const dropped = remaining.length - next.length;
+    stages.push({
+      id: def.id,
+      label: meta.label,
+      countAfter: next.length,
+      dropped,
+      fixHint: meta.fixHint,
+      reason: meta.reason,
+      ...(def.id === 'league' && leagueMode ? { leagueModeApplied: leagueMode } : {}),
+    });
+    remaining = next;
+  }
+
+  const poolEmpty = remaining.length === 0;
+  return markFunnelBottlenecks(stages, poolEmpty);
 }
 
 /** Filtros duros + expansión de liga (máx 2 intentos). */
@@ -379,6 +601,7 @@ async function rankPool(
   const maxLoad = Math.max(5, ...Array.from(data.activeLoads.values()), 1);
 
   const ranked: RankedCandidate[] = [];
+  const now = Date.now();
 
   for (const tech of pool) {
     const techRatings = data.ratings.filter((r) => r.revieweeId === tech.id).map((r) => r.rating);
@@ -404,6 +627,10 @@ async function rankPool(
       sanctionLevel = lvl.level;
     }
 
+    const daysSinceAssignment = tech.lastInvitedAt
+      ? Math.floor((now - new Date(tech.lastInvitedAt).getTime()) / 86400000)
+      : Number.MAX_SAFE_INTEGER;
+
     const { score, components } = computeAssignmentScore(
       {
         avgRating,
@@ -412,6 +639,8 @@ async function rankPool(
         activeLoad,
         maxActiveLoad: maxLoad,
         sanctionLevel,
+        daysSinceAssignment,
+        dBonusMaxDays: config.dBonusMaxDays,
       },
       weights,
     );
@@ -449,6 +678,54 @@ export async function rankAssignmentCandidates(
   return rankPool(pool, workType, config);
 }
 
+/** Embudo resumido al entrar en pendiente_pool (mismo motor que simulador). */
+async function buildPoolEntryDiagnostics(caseId: string, config: FauchardConfigRow) {
+  const scenario = await deriveScenarioFromCase(caseId);
+  const { universe, eligible, excluded } = await evaluateTechniciansForScenario(scenario, config);
+  const topExclusions = Object.fromEntries(
+    Object.entries(excluded)
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5),
+  );
+  return {
+    eligible: eligible.length,
+    universe: universe.length,
+    topExclusions,
+    workType: scenario.workType,
+    category: scenario.category,
+  };
+}
+
+async function logCaseEnteredPoolEvent(
+  caseId: string,
+  actorId: string,
+  diagnostics: Awaited<ReturnType<typeof buildPoolEntryDiagnostics>>,
+) {
+  const parts = Object.entries(diagnostics.topExclusions)
+    .map(([k, n]) => `${k}: ${n}`)
+    .join(', ');
+  const summary = parts
+    ? `Principales filtros: ${parts}.`
+    : 'Ningún técnico activo pasó los filtros de elegibilidad.';
+  await logCaseEvent({
+    caseId,
+    userId: actorId,
+    type: 'sistema',
+    action: CASE_EVENTS.CASO_EN_COLA,
+    content: `No hay técnicos elegibles ahora. El caso entra en cola de espera. ${summary}`,
+    payload: {
+      visibleTo: 'dentista',
+      ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
+      eligible: diagnostics.eligible,
+      universe: diagnostics.universe,
+      topExclusions: diagnostics.topExclusions,
+      workType: diagnostics.workType,
+      category: diagnostics.category,
+    },
+  });
+}
+
 /** Selección + asignación top-1 o cola pool. */
 export async function runAssignmentAction(caseId: string): Promise<{
   success: boolean;
@@ -472,8 +749,15 @@ export async function runAssignmentAction(caseId: string): Promise<{
     if (!ranked.length) {
       if (isAvailabilityEnabled() && isPoolPendienteEnabled()) {
         const [cCase] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
-        if (cCase?.internalStatus !== POOL_INTERNAL_STATUS) {
+        const wasAlreadyInPool = cCase?.internalStatus === POOL_INTERNAL_STATUS;
+        if (!wasAlreadyInPool) {
           await enterPendingPoolAction(caseId);
+          try {
+            const diagnostics = await buildPoolEntryDiagnostics(caseId, config);
+            await logCaseEnteredPoolEvent(caseId, identity.id as string, diagnostics);
+          } catch (e) {
+            console.warn('[runAssignmentAction] log CASO_EN_COLA falló:', e);
+          }
         }
         return { success: false, pooled: true, error: 'pendiente_pool', fauchardConfigId: config.id };
       }
@@ -528,14 +812,7 @@ export async function assignCaseAction(
       return { success: false, error: 'Se alcanzó el máximo de intentos de asignación' };
     }
 
-    const [cRow] = await db
-      .select({ restorationLabel: restorationTypeTable.label })
-      .from(clinicalCase)
-      .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
-      .where(eq(clinicalCase.id, caseId))
-      .limit(1) as { restorationLabel: string | null }[];
-
-    const workType = getWorkTypeForCase(cRow?.restorationLabel || '', (cCase.teeth as number[]) || []);
+    const { workType } = await deriveScenarioFromCase(caseId);
     const expiresAt = new Date(Date.now() + assignmentResponseMinutes(config) * 60000);
     const compensation = cCase.listPriceCost ? parseFloat(String(cCase.listPriceCost)) : null;
     const deadlineDays = deriveDeadlineDays(cCase.desiredDeliveryAt);
@@ -734,7 +1011,69 @@ function mergeConfig(base: FauchardConfigRow, override?: Record<string, unknown>
   return { ...base, ...override } as FauchardConfigRow;
 }
 
-/** Simula asignación directa: caso virtual → ranking Q/P/E/L/N (pool real). */
+/** Carga parámetros de un caso publicado para sembrar el simulador admin (paridad con producción). */
+export async function getSimulatorSeedFromCaseAction(caseId: string): Promise<
+  ActionResult<{
+    restorationCode: string;
+    materialCode: string;
+    shadeCode: string;
+    urgencyLabel: string;
+    teethCount: number;
+    teeth: number[];
+    replacesMissingTeeth: boolean | null;
+    complexityMode: 'auto' | 'manual';
+    caseComplexity?: import('@/lib/constants/dental').CaseComplexity;
+  }>
+> {
+  const identity = await getServerIdentity();
+  if (!identity?.isSystemAdmin && identity?.role !== 'admin') {
+    return { success: false, error: 'No autorizado' };
+  }
+
+  try {
+    const [row] = await db
+      .select({
+        teeth: clinicalCase.teeth,
+        replacesMissingTeeth: clinicalCase.replacesMissingTeeth,
+        caseComplexity: clinicalCase.caseComplexity,
+        restorationCode: restorationTypeTable.code,
+        materialCode: dentalMaterial.code,
+        shadeCode: vitaShade.code,
+        urgencyLabel: urgencyLevel.label,
+      })
+      .from(clinicalCase)
+      .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
+      .leftJoin(dentalMaterial, eq(dentalMaterial.id, clinicalCase.materialId))
+      .leftJoin(vitaShade, eq(vitaShade.id, clinicalCase.shadeId))
+      .leftJoin(urgencyLevel, eq(urgencyLevel.id, clinicalCase.urgencyId))
+      .where(eq(clinicalCase.id, caseId))
+      .limit(1);
+
+    if (!row?.restorationCode || !row.materialCode || !row.shadeCode || !row.urgencyLabel) {
+      return { success: false, error: 'Caso no encontrado o catálogos incompletos' };
+    }
+
+    const teeth = (row.teeth as number[]) ?? [];
+    const caseComplexity = row.caseComplexity as import('@/lib/constants/dental').CaseComplexity | null;
+
+    return {
+      success: true,
+      restorationCode: row.restorationCode,
+      materialCode: row.materialCode,
+      shadeCode: row.shadeCode,
+      urgencyLabel: row.urgencyLabel,
+      teethCount: Math.max(1, teeth.length),
+      teeth,
+      replacesMissingTeeth: row.replacesMissingTeeth,
+      complexityMode: caseComplexity ? 'manual' : 'auto',
+      ...(caseComplexity ? { caseComplexity } : {}),
+    };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+/** Simula asignación directa: caso virtual → ranking Q/P/E/B/L/N (pool real). */
 export async function simulateAssignmentAction(
   params: import('@/lib/fauchard/simulationTypes').SimulateAssignmentParams,
 ): Promise<ActionResult<{ simulation: import('@/lib/fauchard/simulationTypes').SimulationResult }>> {
@@ -744,7 +1083,9 @@ export async function simulateAssignmentAction(
   }
 
   try {
-    const baseConfig = await getActiveConfig();
+    const baseConfig = params.fauchardConfigId
+      ? await loadFauchardConfigById(params.fauchardConfigId)
+      : await getActiveConfig();
     const config = mergeConfig(baseConfig, params.configOverride);
     const complexityOverride =
       params.complexityMode === 'auto' ? undefined : params.caseComplexity;
@@ -752,7 +1093,7 @@ export async function simulateAssignmentAction(
       params.restorationLabel,
       params.teeth ?? [],
       complexityOverride,
-      params.notesEstheticLength ?? 0,
+      params.replacesMissingTeeth,
     );
     const exclude = params.excludeTechnicianIds ?? [];
 
@@ -771,6 +1112,7 @@ export async function simulateAssignmentAction(
       config,
       exclude,
     );
+    const stages = await buildFunnelStagesForScenario(scenario, config, exclude);
     const rankedCore = await rankCandidatesForScenario(scenario, config, exclude);
     const eligibleIds = new Set(eligible.map((t) => t.id));
     const techById = new Map(universe.map((t) => [t.id, t]));
@@ -806,7 +1148,7 @@ export async function simulateAssignmentAction(
         fullName: tech.fullName ?? tech.id,
         leagueLevel: tech.leagueLevel ?? 'bronce',
         score: 0,
-        components: { Q: 0, P: 0, E: 0, L: 0, N: 0 },
+        components: { Q: 0, P: 0, E: 0, B: 0, L: 0, N: 0 },
         activeLoad: 0,
         rank: rank++,
         excluded: true,
@@ -837,6 +1179,7 @@ export async function simulateAssignmentAction(
           universe: universe.length,
           excluded,
           eligible: eligible.length,
+          stages,
         },
         ranked,
         assignmentPreview: {

@@ -57,6 +57,7 @@ import RepublicarModal from '@/components/cases/RepublicarModal';
 import PendingPoolBanner from '@/components/cases/PendingPoolBanner';
 import CheckInDentistaModal from '@/components/cases/CheckInDentistaModal';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
+import { INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
 import Link from 'next/link';
 import { startWorkAction } from '@/lib/db/actions/proposal';
 import { createAnnotationAction, deleteAnnotationAction } from '@/lib/db/actions/annotations';
@@ -64,7 +65,7 @@ import { registerFileAction, logFileDownloadAction, deleteCaseFileAction } from 
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { logError } from '@/lib/logger';
-import { SERVICE_TYPE_LABELS, SERVICE_TYPES } from '@/lib/constants/dental';
+import { SERVICE_TYPE_LABELS, SERVICE_TYPES, WORK_CATEGORY_LABELS, WORK_TYPE_LABELS } from '@/lib/constants/dental';
 import {
   listVitaShadesAction,
   listRestorationTypesAction,
@@ -72,6 +73,7 @@ import {
   listUrgencyLevelsAction,
   type CatalogOption,
 } from '@/lib/db/actions/catalogs';
+import { resolveListPriceAction } from '@/lib/db/actions/priceRules';
 import DentalViewer3D from '@/components/DentalViewer3D';
 import { TeethSelector } from '@/components/cases/TeethSelector';
 import UnifiedCaseHub from '@/components/cases/UnifiedCaseHub';
@@ -179,6 +181,18 @@ function buildPublishCaseSummaryRows(c: any | null): { label: string; value: str
   const cxRaw = String(c.caseComplexity ?? '').toLowerCase();
   const complexity = cxRaw ? complexityEs[cxRaw] ?? strField(c.caseComplexity) : '';
 
+  const categoryLabel = c.derivedCategory
+    ? (WORK_CATEGORY_LABELS[c.derivedCategory as keyof typeof WORK_CATEGORY_LABELS] ?? strField(c.derivedCategory))
+    : '';
+  const workTypeLabel = c.derivedWorkType
+    ? (WORK_TYPE_LABELS[c.derivedWorkType] ?? strField(c.derivedWorkType))
+    : '';
+
+  const ponticLabel =
+    c.replacesMissingTeeth === true ? 'Sí'
+      : c.replacesMissingTeeth === false ? 'No'
+        : '';
+
   const files = Array.isArray(c.files) ? c.files : [];
   const fileHint = files.length ? `${files.length} archivo${files.length === 1 ? '' : 's'}` : '';
 
@@ -190,6 +204,9 @@ function buildPublishCaseSummaryRows(c: any | null): { label: string; value: str
     { label: 'Restauración', value: strField(c.restorationType) },
     { label: 'Material', value: strField(c.material) },
     { label: 'Piezas', value: piezas },
+    { label: 'Pónticos (reemplaza ausentes)', value: ponticLabel },
+    { label: 'Categoría operativa', value: categoryLabel },
+    { label: 'Tipo de trabajo', value: workTypeLabel },
     { label: 'Escala color', value: strField(c.shade) },
     { label: 'Complejidad', value: complexity },
     { label: 'Urgencia', value: urgency },
@@ -355,6 +372,8 @@ function CaseDetailPageContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any | null>(null);
   const [savingChanges, setSavingChanges] = useState(false);
+  const [draftListPriceSale, setDraftListPriceSale] = useState<number | null>(null);
+  const [draftListPriceChecked, setDraftListPriceChecked] = useState(false);
 
   const [revisionNotes, setRevisionNotes] = useState('');
   const [isRequestingFlowChange, setIsRequestingFlowChange] = useState(false);
@@ -701,7 +720,8 @@ function CaseDetailPageContent() {
           doctorNotes: (c.specialInstructions ?? c.doctorNotes) || '',
           desiredDeliveryAt: toLocalDatetimeValue(c.desiredDeliveryAt),
           status: c.status,
-          serviceType: c.serviceType
+          serviceType: c.serviceType,
+          replacesMissingTeeth: c.replacesMissingTeeth ?? null,
         });
 
         // 2. Las URLs firmadas se resuelven en un useEffect aparte (no bloquean el spinner).
@@ -1037,7 +1057,15 @@ function CaseDetailPageContent() {
       const updatedCase = await getCaseDetails(id as string);
       if (updatedCase && !(updatedCase as any)._error) ingestCasePayloadFromServer(updatedCase);
       else setClinicalCase((prev: any) => ({ ...prev, status: 'enEvaluacion', publishedAt: new Date() }));
-      showSuccessToastMessage('Caso enviado a evaluación. DentFlowAi está seleccionando el laboratorio.');
+      const inPool = (updatedCase as { internalStatus?: string } | null)?.internalStatus === POOL_INTERNAL_STATUS;
+      const assigned = (updatedCase as { internalStatus?: string } | null)?.internalStatus === INTERNAL_CASE_STATUSES.ASIGNACION_PENDIENTE;
+      showSuccessToastMessage(
+        inPool
+          ? 'Caso publicado. Buscamos técnicos disponibles para asignarlo.'
+          : assigned
+            ? 'Caso publicado. Fauchard asignó un técnico; te avisaremos cuando acepte.'
+            : 'Caso publicado. Fauchard está procesando la asignación.',
+      );
       dispatchDashboardMetricsRefresh();
     } catch (err: any) {
       logError('Error publishing case', err, { caseId: id });
@@ -1567,6 +1595,36 @@ function CaseDetailPageContent() {
   const canEditForm = isEditing && fieldsEditable && !!editForm;
 
   useEffect(() => {
+    if (!canEditForm || !editForm) {
+      setDraftListPriceSale(null);
+      setDraftListPriceChecked(false);
+      return;
+    }
+    const { restorationType, material, shade, urgency } = editForm;
+    if (!restorationType || !material || !shade || !urgency) {
+      setDraftListPriceSale(null);
+      setDraftListPriceChecked(false);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const res = await resolveListPriceAction({
+        restorationType,
+        material,
+        shade,
+        urgency,
+      });
+      if (cancelled) return;
+      setDraftListPriceChecked(true);
+      setDraftListPriceSale(res.success && res.data?.salePrice != null ? res.data.salePrice : null);
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [canEditForm, editForm?.restorationType, editForm?.material, editForm?.shade, editForm?.urgency]);
+
+  useEffect(() => {
     setIsEditing(false);
     setEditForm(null);
   }, [clinicalCase?.id]);
@@ -1583,6 +1641,7 @@ function CaseDetailPageContent() {
       urgency: clinicalCase.urgency ?? '',
       doctorNotes: (clinicalCase.specialInstructions ?? clinicalCase.doctorNotes) || '',
       desiredDeliveryAt: toLocalDatetimeValue(clinicalCase.desiredDeliveryAt),
+      replacesMissingTeeth: clinicalCase.replacesMissingTeeth ?? null,
     });
     setIsEditing(true);
   }, [clinicalCase, fieldsEditable]);
@@ -1601,6 +1660,7 @@ function CaseDetailPageContent() {
       notesOclusal: c.notesOclusal,
       doctorNotes: c.specialInstructions ?? c.doctorNotes,
       desiredDeliveryAt: c.desiredDeliveryAt,
+      replacesMissingTeeth: c.replacesMissingTeeth,
     });
   };
 
@@ -1664,7 +1724,10 @@ function CaseDetailPageContent() {
 
   // v5.0 — caso esperando técnicos en la cola pendiente_pool.
   const isPendingPool = clinicalCase?.internalStatus === POOL_INTERNAL_STATUS;
+  const hasPendingAssignment = clinicalCase?.internalStatus === INTERNAL_CASE_STATUSES.ASIGNACION_PENDIENTE;
   const showPendingPoolBanner = isPendingPool && actingAsDentista && !viewingAsAdmin;
+  const showPageEvalBanner =
+    showCaseToolbar && clinicalCase?.status === 'enEvaluacion' && !isPendingPool;
 
   // Check-in al dentista: el cron marca pendingPoolCheckinSentAt al 50% del TTL;
   // al entrar al caso le mostramos el modal una vez por sesión.
@@ -1808,7 +1871,7 @@ function CaseDetailPageContent() {
               ) : (
                 <StatusBadge status={isEditingStatus} />
               )}
-              {canEditForm ? (
+              {canEditForm && Object.values(SERVICE_TYPES).length > 1 ? (
                 <select 
                   value={editForm?.serviceType} 
                   onChange={e => setEditForm((prev: any) => ({ ...prev, serviceType: e.target.value }))}
@@ -1817,7 +1880,7 @@ function CaseDetailPageContent() {
                   {Object.values(SERVICE_TYPES).map(t => <option key={t} value={t}>{SERVICE_TYPE_LABELS[t] || t}</option>)}
                 </select>
               ) : (
-                <CaseServiceTypeBadge serviceType={clinicalCase?.serviceType} />
+                <CaseServiceTypeBadge serviceType={clinicalCase?.serviceType ?? editForm?.serviceType} />
               )}
               <div className="text-[10px] font-bold uppercase tracking-wider text-faint flex items-center gap-1">
                 {caseNumberLabel(clinicalCase?.caseNumber) ? (
@@ -1909,6 +1972,10 @@ function CaseDetailPageContent() {
                 onCancelEdit={handleCancelEdit}
                 onSave={() => void handleSaveChanges()}
                 onPublishClick={() => {
+                  if (isFormDirty) {
+                    showErrorToast('Guarda los cambios antes de publicar.');
+                    return;
+                  }
                   setIsDeleting(false);
                   setIsPublishing(true);
                 }}
@@ -2134,18 +2201,24 @@ function CaseDetailPageContent() {
         onError={(msg) => showErrorToast(msg)}
       />
 
-      {/* Estado "En Evaluación" para el dentista */}
-      {showCaseToolbar && clinicalCase?.status === 'enEvaluacion' && (
+      {/* Estado en evaluación (asignación directa) — oculto en pendiente_pool */}
+      {showPageEvalBanner && (
         <div className="flex items-center gap-4 bg-sky-500/8 border border-sky-500/20 rounded-2xl px-5 py-4">
           <div className="w-8 h-8 border-2 border-primary/20 border-t-sky-400 rounded-full animate-spin flex-shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-bold text-primary">Tu caso está siendo evaluado</p>
-            <p className="text-[11px] text-faint mt-0.5">Faucard está seleccionando el laboratorio más adecuado. Recibirás una propuesta pronto.</p>
+            <p className="text-sm font-bold text-primary">
+              {hasPendingAssignment ? 'Esperando aceptación del técnico' : 'Fauchard está asignando tu caso'}
+            </p>
+            <p className="text-[11px] text-faint mt-0.5">
+              {hasPendingAssignment
+                ? 'El precio y plazo ya están definidos. Te avisaremos cuando el técnico acepte la asignación.'
+                : 'El precio y plazo ya están definidos. Te avisaremos cuando un técnico acepte la asignación.'}
+            </p>
           </div>
-          {clinicalCase?.evaluationExpiresAt && !evalExpired && (
+          {hasPendingAssignment && clinicalCase?.evaluationExpiresAt && !evalExpired && (
             <div className="flex flex-col items-end">
               <span className="text-[9px] font-black text-sky-500/60 uppercase tracking-widest mb-0.5">
-                Plazo para recibir cotizaciones
+                Plazo para aceptar la asignación
               </span>
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-500/10 border border-sky-500/20 rounded-xl">
                 <Clock className="w-3.5 h-3.5 text-sky-400" />
@@ -2269,7 +2342,8 @@ function CaseDetailPageContent() {
             <h3 className="text-foreground text-sm uppercase tracking-wide mb-4">Odontograma</h3>
             <TeethSelector
               selectedTeeth={canEditForm ? (editForm?.teeth ?? []) : (clinicalCase?.teeth ?? [])}
-              onChange={teeth => canEditForm && setEditForm((p: any) => ({ ...p, teeth }))}
+              onChange={teeth => setEditForm((p: any) => ({ ...p, teeth }))}
+              readOnly={!canEditForm}
             />
           </section>
 
@@ -2450,7 +2524,15 @@ function CaseDetailPageContent() {
                             <select
                               className="w-full bg-surface border border-primary/30 rounded px-3 py-2 text-foreground text-xs outline-none"
                               value={editForm?.restorationType ?? ''}
-                              onChange={e => setEditForm((prev: any) => ({ ...prev, restorationType: e.target.value }))}
+                              onChange={e => {
+                                const code = e.target.value;
+                                const label = restorationTypes.find(t => t.code === code)?.label;
+                                setEditForm((prev: any) => ({
+                                  ...prev,
+                                  restorationType: code,
+                                  replacesMissingTeeth: label === 'Puente' ? true : prev.replacesMissingTeeth,
+                                }));
+                              }}
                             >
                               {restorationTypes.map(t => <option key={t.code} value={t.code}>{t.label}</option>)}
                             </select>
@@ -2504,6 +2586,84 @@ function CaseDetailPageContent() {
                           )}
                         </div>
                         <div className="space-y-1 col-span-2">
+                          <span className="text-[10px] text-faint uppercase font-black tracking-widest block">
+                            ¿Reemplaza dientes ausentes (pónticos)?
+                          </span>
+                          {canEditForm ? (
+                            <>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditForm((prev: any) => ({ ...prev, replacesMissingTeeth: true }))}
+                                  className={`flex-1 py-2 rounded-lg border text-[10px] font-bold uppercase ${
+                                    editForm?.replacesMissingTeeth === true
+                                      ? 'border-primary/40 bg-primary/10 text-primary'
+                                      : 'border-divider text-muted'
+                                  }`}
+                                >
+                                  Sí
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditForm((prev: any) => ({ ...prev, replacesMissingTeeth: false }))}
+                                  className={`flex-1 py-2 rounded-lg border text-[10px] font-bold uppercase ${
+                                    editForm?.replacesMissingTeeth === false
+                                      ? 'border-primary/40 bg-primary/10 text-primary'
+                                      : 'border-divider text-muted'
+                                  }`}
+                                >
+                                  No
+                                </button>
+                              </div>
+                              <p className="text-[10px] text-muted mt-1">
+                                Distingue coronas múltiples de puentes. Se sugiere automáticamente «Sí» para restauración Puente.
+                              </p>
+                            </>
+                          ) : (
+                            <span className="text-xs text-foreground font-medium">
+                              {clinicalCase?.replacesMissingTeeth === true
+                                ? 'Sí'
+                                : clinicalCase?.replacesMissingTeeth === false
+                                  ? 'No'
+                                  : '—'}
+                            </span>
+                          )}
+                        </div>
+                        {(clinicalCase?.derivedCategory || clinicalCase?.derivedWorkType) && (
+                          <>
+                            <div className="space-y-1">
+                              <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Categoría operativa</span>
+                              <span className="text-xs text-foreground font-medium">
+                                {clinicalCase?.derivedCategory
+                                  ? WORK_CATEGORY_LABELS[clinicalCase.derivedCategory as keyof typeof WORK_CATEGORY_LABELS]
+                                  : '—'}
+                              </span>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Tipo de trabajo</span>
+                              <span className="text-xs text-foreground font-medium">
+                                {clinicalCase?.derivedWorkType
+                                  ? (WORK_TYPE_LABELS[clinicalCase.derivedWorkType] ?? clinicalCase.derivedWorkType)
+                                  : '—'}
+                              </span>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Complejidad</span>
+                              <span className="text-xs text-foreground font-medium capitalize">
+                                {clinicalCase?.caseComplexity ?? '—'}
+                              </span>
+                            </div>
+                            {viewingAsAdmin && (
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Liga (Fauchard)</span>
+                                <span className="text-xs text-foreground font-medium capitalize">
+                                  {clinicalCase?.caseLeague ?? '—'}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        <div className="space-y-1 col-span-2">
                           <span className="text-[10px] text-faint uppercase font-black tracking-widest block">Entrega deseada</span>
                           {canEditForm ? (
                             <DesiredDeliveryPicker
@@ -2537,6 +2697,15 @@ function CaseDetailPageContent() {
                           </div>
                         )}
                       </div>
+
+                      {canEditForm && draftListPriceChecked && draftListPriceSale == null && clinicalCase?.listPriceSale == null && (
+                        <div className="rounded-xl border border-warning/30 bg-warning-hl p-4 flex items-start gap-3 text-warning">
+                          <AlertCircle size={18} className="flex-shrink-0 mt-0.5" />
+                          <p className="text-sm leading-snug">
+                            No hay tarifa para esta combinación. Podrás guardar el borrador, pero no podrás publicar hasta que exista una regla de precio.
+                          </p>
+                        </div>
+                      )}
 
                       <div className="pt-4 border-t border-divider space-y-4">
                         <div className="space-y-2">

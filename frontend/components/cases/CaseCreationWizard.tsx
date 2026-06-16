@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FileText, 
@@ -18,8 +18,11 @@ import {
 import { TeethSelector } from './TeethSelector';
 import {
   SERVICE_TYPES,
+  WORK_CATEGORY_LABELS,
+  WORK_TYPE_LABELS,
   type ServiceType,
 } from '@/lib/constants/dental';
+import { resolveScenario } from '@/lib/fauchard/caseWorkType';
 import {
   listVitaShadesAction,
   listRestorationTypesAction,
@@ -49,6 +52,8 @@ export interface CaseFormData {
   desiredDeliveryAt: string;
   /** Tipo de servicio del caso (siempre solo_diseno). */
   serviceType: ServiceType;
+  /** v5.13 — ¿El caso reemplaza dientes ausentes (pónticos)? */
+  replacesMissingTeeth: boolean | null;
 }
 
 export interface CaseFiles {
@@ -105,6 +110,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
       doctorNotes: initialData?.doctorNotes || '',
       desiredDeliveryAt: initialData?.desiredDeliveryAt || defaultDesiredDeliveryLocal(),
       serviceType: initialServiceType,
+      replacesMissingTeeth: initialData?.replacesMissingTeeth ?? null,
     };
   };
 
@@ -232,13 +238,36 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
   const nextStep = () => setStep(s => s + 1);
   const prevStep = () => setStep(s => s - 1);
 
+  const restorationLabel = useMemo(
+    () => restorationTypes.find((r) => r.code === formData.restorationType)?.label ?? '',
+    [restorationTypes, formData.restorationType],
+  );
+
+  const draftClassification = useMemo(() => {
+    if (!restorationLabel || formData.teeth.length === 0) return null;
+    const resolved = resolveScenario({
+      restorationLabel,
+      teeth: formData.teeth,
+      replacesMissingTeeth: formData.replacesMissingTeeth,
+    });
+    return {
+      ...resolved,
+      categoryLabel: WORK_CATEGORY_LABELS[resolved.category],
+      workTypeLabel: WORK_TYPE_LABELS[resolved.workType] ?? resolved.workType,
+    };
+  }, [restorationLabel, formData.teeth, formData.replacesMissingTeeth]);
+
   const isStepValid = () => {
     if (step === 1) {
       return formData.internalName.trim().length > 0
         && formData.patientIdAnon.trim().length > 0
         && isDesiredDeliveryValid(formData.desiredDeliveryAt);
     }
-    if (step === 2) return formData.teeth.length > 0 && formData.restorationType.length > 0;
+    if (step === 2) {
+      return formData.teeth.length > 0
+        && formData.restorationType.length > 0
+        && formData.replacesMissingTeeth !== null;
+    }
     if (step === 3) return formData.material.length > 0;
     if (step === 4) {
       return files.superior !== null;
@@ -376,12 +405,67 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                 <select
                   className="w-full bg-surface dark:bg-surface border border-slate-200 dark:border-divider rounded-xl px-4 py-2.5 appearance-none"
                   value={formData.restorationType}
-                  onChange={e => setFormData({ ...formData, restorationType: e.target.value })}
+                  onChange={e => {
+                    const code = e.target.value;
+                    const label = restorationTypes.find((r) => r.code === code)?.label ?? '';
+                    setFormData({
+                      ...formData,
+                      restorationType: code,
+                      replacesMissingTeeth: label === 'Puente' ? true : formData.replacesMissingTeeth,
+                    });
+                  }}
                 >
                   {restorationTypes.map(t => <option key={t.code} value={t.code}>{t.label}</option>)}
                 </select>
               </div>
             </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">
+                ¿El caso reemplaza dientes ausentes (pónticos)?
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, replacesMissingTeeth: true })}
+                  className={`flex-1 py-2.5 rounded-xl border text-xs font-bold uppercase tracking-wider transition-colors ${
+                    formData.replacesMissingTeeth === true
+                      ? 'bg-primary/10 border-primary/30 text-primary'
+                      : 'bg-surface border-divider text-muted'
+                  }`}
+                >
+                  Sí
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, replacesMissingTeeth: false })}
+                  className={`flex-1 py-2.5 rounded-xl border text-xs font-bold uppercase tracking-wider transition-colors ${
+                    formData.replacesMissingTeeth === false
+                      ? 'bg-primary/10 border-primary/30 text-primary'
+                      : 'bg-surface border-divider text-muted'
+                  }`}
+                >
+                  No
+                </button>
+              </div>
+              <p className="text-[10px] text-faint px-1">
+                Distingue coronas múltiples de puentes. Se sugiere automáticamente «Sí» para restauración Puente.
+              </p>
+            </div>
+
+            {draftClassification && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Clasificación prevista</p>
+                <div className="grid grid-cols-2 gap-2 text-xs text-foreground">
+                  <span className="text-faint">Categoría</span>
+                  <span className="font-medium">{draftClassification.categoryLabel}</span>
+                  <span className="text-faint">Tipo de trabajo</span>
+                  <span className="font-medium">{draftClassification.workTypeLabel}</span>
+                  <span className="text-faint">Complejidad</span>
+                  <span className="font-medium capitalize">{draftClassification.caseComplexity}</span>
+                </div>
+              </div>
+            )}
 
             <div className="pt-3 flex justify-between">
               <button onClick={prevStep} className="flex items-center gap-2 text-faint font-bold hover:text-primary transition-colors">
@@ -461,7 +545,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                   <div className="flex items-start gap-3 text-warning">
                     <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
                     <p className="text-sm leading-snug">
-                      Precio no disponible para esta combinación. Podrás crear el caso; el equipo revisará la tarifa.
+                      No hay tarifa para esta combinación. Podrás guardar el borrador, pero no podrás publicar hasta que exista una regla de precio.
                     </p>
                   </div>
                 )}
@@ -551,7 +635,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                         type="file"
                         className="hidden"
                         id={`file-${key}`}
-                        accept=".stl,.ply,.obj"
+                        accept=".stl,.ply,.obj,.jpg,.jpeg,.png"
                         onChange={e => handleFileChange(key, e)}
                       />
                       <label htmlFor={`file-${key}`} className="cursor-pointer flex flex-col items-center">

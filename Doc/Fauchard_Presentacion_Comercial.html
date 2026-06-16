@@ -756,7 +756,7 @@ flowchart TD
       <span class="here">Pesos del Score</span>
       <span class="tabchip">N°1 – N°6</span>
     </div>
-    <div class="group-h"><span class="gn">⚖</span><div><h3>Quién entra primero a cada caso</h3><span>Seis factores deciden el orden de invitación. Su importancia debe sumar 1.000.</span></div></div>
+    <div class="group-h"><span class="gn">⚖</span><div><h3>Quién entra primero a cada caso</h3><span>Seis factores deciden el orden de asignación. Su importancia debe sumar 1.000.</span></div></div>
     <div class="pstack">
       <div class="pcard">
         <div class="pcard-head"><span class="pn">1</span><span class="pname">Calidad Histórica (Q)</span><span class="pdef">0,20</span></div>
@@ -776,7 +776,7 @@ flowchart TD
         <p class="pdesc">Mide con qué frecuencia el técnico entrega dentro del plazo que prometió. Subirlo prioriza a quienes no se atrasan.</p>
         <div class="pf-grid">
           <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto pesa el historial de <b>entregas dentro del plazo</b>.</span></div>
-          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién asignar, antes de cotizar.</span></div>
           <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>suma</b>: prioriza a quienes no se atrasan.</span></div>
           <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Cada técnico candidato.</span></div>
         </div>
@@ -787,7 +787,7 @@ flowchart TD
         <p class="pdesc">Nivel de habilidad declarado/verificado para el tipo de trabajo específico del caso. Subirlo favorece a los especialistas.</p>
         <div class="pf-grid">
           <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto pesa la <b>habilidad declarada</b> para ese tipo de trabajo.</span></div>
-          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién asignar, antes de cotizar.</span></div>
           <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>suma</b>: favorece a los especialistas.</span></div>
           <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Cada técnico candidato.</span></div>
         </div>
@@ -798,7 +798,7 @@ flowchart TD
         <p class="pdesc">Resta score a los técnicos que ya acumulan muchos casos o invitaciones recientes. Reparte el trabajo y evita cuellos de botella.</p>
         <div class="pf-grid">
           <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto <b>resta</b> tener muchos casos recientes. Reparte el trabajo.</span></div>
-          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién asignar, antes de cotizar.</span></div>
           <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>resta</b>: frena al saturado, no lo descalifica.</span></div>
           <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Técnicos ya ocupados.</span></div>
         </div>
@@ -811,11 +811,11 @@ flowchart TD
         <p class="pdesc">Aumento temporal de score para técnicos que llevan tiempo sin recibir casos. Mantiene activo a todo el pool de laboratorios.</p>
         <div class="pf-grid">
           <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v"><b>Empuje temporal</b> a quienes llevan tiempo sin recibir casos.</span></div>
-          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién asignar, antes de cotizar.</span></div>
           <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>suma</b>: mantiene activo a todo el pool.</span></div>
           <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Técnicos infrautilizados.</span></div>
         </div>
-        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>El Lab. Sur lleva 3 semanas sin recibir un solo caso. Cuando el Dr. Soto publica uno nuevo, si el peso de Bono está alto (αB = 0.10) ese tiempo de espera lo impulsa y Fauchard lo incluye en la ronda de invitaciones para mantenerlo activo. Si lo pones en cero (αB = 0), la inactividad deja de sumar y laboratorios nuevos o poco activos como el Lab. Sur rara vez asomarían: el trabajo se concentraría en los de siempre.</p>
+        <div class="pcard-ej"><span class="pf-l">Ejemplo</span><p>El Lab. Sur lleva 3 semanas sin recibir una asignación. Cuando el Dr. Soto publica uno nuevo, si el peso de Bono está alto (αB = 0.10) ese tiempo de espera lo impulsa y Fauchard lo sube en el ranking de asignación para mantenerlo activo. Si lo pones en cero (αB = 0), la inactividad deja de sumar y laboratorios nuevos o poco activos como el Lab. Sur rara vez asomarían: el trabajo se concentraría en los de siempre.</p>
           <div class="pcard-rel"><span class="pf-l">Relacionados</span><span class="relchip">N°10 · Bono Infrautilización (días máx)</span></div>
         </div>
       </div>
@@ -824,7 +824,7 @@ flowchart TD
         <p class="pdesc">Resta score al técnico que ignora invitaciones (término −αN·N, según su nivel de sanción acumulada). Solo penaliza a quien tiene sanción; un técnico sin sanción no se ve afectado.</p>
         <div class="pf-grid">
           <div class="pf"><span class="pf-l">Qué es</span><span class="pf-v">Cuánto <b>resta</b> ignorar invitaciones.</span></div>
-          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién invitar, antes de cotizar.</span></div>
+          <div class="pf"><span class="pf-l">Cuándo actúa</span><span class="pf-v">Al elegir a quién asignar, antes de cotizar.</span></div>
           <div class="pf"><span class="pf-l">Cómo actúa</span><span class="pf-v">Peso que <b>resta</b>: solo si hay sanción acumulada.</span></div>
           <div class="pf"><span class="pf-l">Sobre quién</span><span class="pf-v">Técnicos con sanción activa.</span></div>
         </div>

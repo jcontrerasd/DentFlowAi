@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 interface TeethSelectorProps {
   selectedTeeth: number[];
   onChange: (teeth: number[]) => void;
+  readOnly?: boolean;
 }
 
 interface QuadrantProps {
@@ -46,8 +47,9 @@ const Quadrant: React.FC<QuadrantProps> = ({ start, end, step, reverse = false, 
   );
 };
 
-export const TeethSelector: React.FC<TeethSelectorProps> = ({ selectedTeeth, onChange }) => {
+export const TeethSelector: React.FC<TeethSelectorProps> = ({ selectedTeeth, onChange, readOnly = false }) => {
   const toggleTooth = (id: number) => {
+    if (readOnly) return;
     if (selectedTeeth.includes(id)) {
       onChange(selectedTeeth.filter(t => t !== id));
     } else {
@@ -56,7 +58,7 @@ export const TeethSelector: React.FC<TeethSelectorProps> = ({ selectedTeeth, onC
   };
 
   return (
-    <div className="flex flex-col gap-2 p-2 border border-slate-200 dark:border-divider rounded-3xl bg-surface shadow-sm border border-divider overflow-x-auto">
+    <div className={`flex flex-col gap-2 p-2 border border-slate-200 dark:border-divider rounded-3xl bg-surface shadow-sm border border-divider overflow-x-auto ${readOnly ? 'opacity-90' : ''}`}>
       <div className="min-w-fit">
         <div className="text-[10px] font-bold text-muted mb-3 text-center uppercase tracking-widest">Arcada Superior (Maxilar)</div>
         <div className="flex justify-center gap-4 md:gap-8">

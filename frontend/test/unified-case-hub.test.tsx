@@ -176,6 +176,31 @@ describe('UnifiedCaseHub', () => {
     expect(ordered).toEqual(['uch-activity-event-ev-ctx-new', 'uch-activity-event-ev-ctx-old']);
   });
 
+  it('dentista en pendiente_pool: no muestra aviso «Estamos analizando tu caso»', () => {
+    render(
+      <ToastProvider>
+        <UnifiedCaseHub
+          caseId="case-pool"
+          initialEvents={[]}
+          currentUser={{ id: 'u-dent', fullName: 'Dra. Prueba' }}
+          actingAsDentista
+          actingAsTecnico={false}
+          onClose={() => {}}
+          caseStatus="enEvaluacion"
+          clinicalCase={{
+            status: 'enEvaluacion',
+            internalStatus: 'pendiente_pool',
+            organizationId: 'org-1',
+            doctorId: 'u-dent',
+            caseNumber: 'POOL-1',
+            publishedAt: '2025-01-01T10:00:00.000Z',
+          }}
+        />
+      </ToastProvider>,
+    );
+    expect(screen.queryByText(/Estamos analizando tu caso/i)).not.toBeInTheDocument();
+  });
+
   it('técnico en evaluación con asignación pendiente: resumen y botón aceptar', async () => {
     const pendingAssignment: InvitationItem = {
       id: 'inv-q-1',
@@ -227,60 +252,6 @@ describe('UnifiedCaseHub', () => {
     const summary = screen.getByTestId('uch-deal-summary');
     expect(within(summary).getByText(/\$99\.999/)).toBeInTheDocument();
     expect(screen.getByTestId('uch-accept-assignment')).toBeInTheDocument();
-  });
-
-  it.skip('técnico en propuesta lista — flujo comparativo eliminado', async () => {
-    const quotedInvitation: InvitationItem = {
-      id: 'inv-q-pl',
-      caseId: 'case-1',
-      caseNumber: 'PL-1',
-      internalName: null,
-      restorationType: 'CORONA UNITARIA',
-      material: null,
-      urgency: 'normal',
-      caseComplexity: 'BASICO',
-      serviceType: null,
-      status: 'pending',
-      assignedAt: new Date(),
-      expiresAt: null,
-      compensation: 45_555,
-      deadlineDays: 2,
-      deadlineHours: null,
-      isAssigned: false,
-
-      respondedAt: new Date('2026-05-12T15:03:00.000Z'),
-      caseStatus: 'propuestaLista',
-      teeth: [],
-      archivedByCurrentUser: false,
-    };
-    render(
-      <ToastProvider>
-        <UnifiedCaseHub
-          caseId="case-1"
-          initialEvents={[]}
-          currentUser={{ id: 'u-tech', fullName: 'Téc. Prueba' }}
-          actingAsDentista={false}
-          actingAsTecnico
-          onClose={() => {}}
-          caseStatus="propuestaLista"
-          clinicalCase={{
-            status: 'propuestaLista',
-            organizationId: 'org-1',
-            doctorId: 'u-dent',
-            assignedTechnicianId: null,
-            caseNumber: 'PL-1',
-          }}
-          myInvitation={quotedInvitation}
-        />
-      </ToastProvider>,
-    );
-    await waitFor(() => {
-      expect(screen.getByTestId('uch-case-actions-inline')).toBeInTheDocument();
-    });
-    expect(screen.getByTestId('uch-deal-summary')).toBeInTheDocument();
-    const summary = screen.getByTestId('uch-deal-summary');
-    expect(within(summary).getByText(/\$45\.555/)).toBeInTheDocument();
-    expect(screen.getByTestId('uch-withdraw-quote-open')).toBeInTheDocument();
   });
 
   it('el hilo ordena eventos del más reciente al más antiguo', () => {

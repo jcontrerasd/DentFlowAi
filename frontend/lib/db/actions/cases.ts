@@ -28,7 +28,8 @@ import { validateDesiredDeliveryAt } from '@/lib/pricing/resolveListPrice';
 import { resolveClonedDesiredDeliveryAt } from '@/lib/cases/caseDeliveryPresentation';
 import { dentalMaterial, restorationType as restorationTypeTable, vitaShade, urgencyLevel } from "@/lib/db/schema";
 import type { ActionResult } from "@/lib/types/actions";
-import { CASE_STATUSES, INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
+import { CASE_STATUSES, INTERNAL_CASE_STATUSES, WORK_CATEGORY_LABELS, WORK_TYPE_LABELS } from '@/lib/constants/dental';
+import { resolveScenario } from '@/lib/fauchard/caseWorkType';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { UCH_CASE_EVENTS_DEFAULT_PAGE_SIZE } from '@/lib/constants/uchCaseEvents';
 import {
@@ -1669,6 +1670,66 @@ export async function resumeWorkAction(caseId: string, comment: string, isRevisi
 }
 
 /**
+ * Reclasifica un borrador sin publicar (caseComplexity, caseLeague, derived_*).
+ */
+export async function reclassifyCaseDraftAction(
+  caseId: string,
+): Promise<ActionResult<{ data: Record<string, unknown> }>> {
+  const identity = await getServerIdentity();
+  if (!identity?.orgId) return { success: false, error: 'No autorizado' };
+
+  try {
+    const [row] = await db
+      .select({
+        cc: clinicalCase,
+        restorationLabel: restorationTypeTable.label,
+      })
+      .from(clinicalCase)
+      .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
+      .where(and(eq(clinicalCase.id, caseId), eq(clinicalCase.organizationId, identity.orgId)))
+      .limit(1);
+
+    if (!row) return { success: false, error: 'Caso no encontrado' };
+    if (row.cc.status !== CASE_STATUSES.BORRADOR) {
+      return { success: false, error: 'Solo borradores pueden reclasificarse' };
+    }
+
+    const teeth = (row.cc.teeth as number[]) || [];
+    const resolved = resolveScenario({
+      restorationLabel: row.restorationLabel || '',
+      teeth,
+      replacesMissingTeeth: row.cc.replacesMissingTeeth,
+    });
+
+    await db
+      .update(clinicalCase)
+      .set({
+        caseComplexity: resolved.caseComplexity,
+        caseLeague: resolved.caseLeague,
+        derivedWorkType: resolved.workType,
+        derivedCategory: resolved.category,
+        updatedAt: new Date(),
+      })
+      .where(eq(clinicalCase.id, caseId));
+
+    return {
+      success: true,
+      data: {
+        caseComplexity: resolved.caseComplexity,
+        caseLeague: resolved.caseLeague,
+        derivedWorkType: resolved.workType,
+        derivedCategory: resolved.category,
+        categoryLabel: WORK_CATEGORY_LABELS[resolved.category],
+        workTypeLabel: WORK_TYPE_LABELS[resolved.workType] ?? resolved.workType,
+      },
+    };
+  } catch (error) {
+    console.error('[reclassifyCaseDraftAction] Error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
  * Actualiza los datos de un caso garantizando la propiedad.
  */
 export async function updateClinicalCaseAction(caseId: string, data: any) {
@@ -1739,6 +1800,10 @@ export async function updateClinicalCaseAction(caseId: string, data: any) {
       setPayload.doctorNotes = null;
     }
 
+    if (Object.prototype.hasOwnProperty.call(data, 'replacesMissingTeeth')) {
+      setPayload.replacesMissingTeeth = data.replacesMissingTeeth;
+    }
+
     const [updated] = await db
       .update(clinicalCase)
       .set(setPayload as any)
@@ -1762,6 +1827,15 @@ export async function updateClinicalCaseAction(caseId: string, data: any) {
       payload: { updatedFields: Object.keys(data), visibleTo: 'dentista' },
       stateChange: isPublication ? { from: 'borrador', to: 'publicado' } : undefined
     });
+
+    const draftFieldsChanged =
+      'teeth' in data ||
+      'restorationType' in data ||
+      'replacesMissingTeeth' in data ||
+      'notesEsthetic' in data;
+    if (draftFieldsChanged && updated?.status === CASE_STATUSES.BORRADOR) {
+      await reclassifyCaseDraftAction(caseId);
+    }
 
     return updated;
   } catch (error) {
@@ -1812,6 +1886,7 @@ export async function createClinicalCaseAction(data: any) {
         ...resolved,
         ...priceSnapshot,
         desiredDeliveryAt: desiredAt,
+        replacesMissingTeeth: data.replacesMissingTeeth ?? null,
         specialInstructions: data.specialInstructions ?? data.doctorNotes ?? null,
         doctorNotes: null,
         caseNumber,
@@ -1829,6 +1904,8 @@ export async function createClinicalCaseAction(data: any) {
     if (!priceSnapshot.listPriceRuleId && dimIds.restorationTypeId && dimIds.materialId && dimIds.shadeId && dimIds.urgencyId) {
       await enqueuePriceRuleRequestIfNeeded(newCase.id, dimIds);
     }
+
+    await reclassifyCaseDraftAction(newCase.id);
 
     await logCaseEvent({
       caseId: newCase.id,
@@ -2344,8 +2421,11 @@ export async function cloneCaseFromTerminalAction(
         shadeId: source.shadeId,
         teeth: source.teeth,
         urgencyId: source.urgencyId,
+        replacesMissingTeeth: source.replacesMissingTeeth,
         serviceType: 'solo_diseno',
-        caseComplexity: source.caseComplexity,
+        caseComplexity: null,
+        derivedWorkType: null,
+        derivedCategory: null,
         specialInstructions: source.specialInstructions,
         doctorNotes: null,
         desiredDeliveryAt: clonedDesiredAt,
@@ -2360,7 +2440,7 @@ export async function cloneCaseFromTerminalAction(
         copiedFromCaseId: sourceCaseId,
         currentResponsibility: 'dentista',
         dispatchInfo: { courier: '', trackingId: '', status: 'pending', photos: [] },
-        caseLeague: source.caseLeague,
+        caseLeague: 'bronce',
         createdAt: new Date(),
         updatedAt: new Date(),
         lastActivityAt: new Date(),
@@ -2387,6 +2467,8 @@ export async function cloneCaseFromTerminalAction(
         tx,
       );
     });
+
+    await reclassifyCaseDraftAction(newCaseId);
 
     return { success: true, newCaseId, caseNumber };
   } catch (error) {

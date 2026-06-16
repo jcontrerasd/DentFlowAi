@@ -24,18 +24,18 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
   useEffect(() => { if (initialFocusKey) openHelp(initialFocusKey); }, [initialFocusKey]);
 
   return (
-    <div className="flex flex-col gap-12">
-      <div className="flex items-center justify-between gap-4">
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-foreground">Selección y Ronda</h3>
-          <p className="text-xs text-faint">Cómo Fauchard mide, filtra y asigna técnicos, y los plazos de respuesta.</p>
+          <h3 className="text-xs font-bold text-foreground">Selección y Ronda</h3>
+          <p className="text-[10px] text-faint hidden md:block">Filtros, plazos y reglas de asignación.</p>
         </div>
         <FauchardHelpButton onClick={() => openHelp()} label="Selección y Ronda" />
       </div>
 
       <FauchardHelpWindow isOpen={showHelp} onClose={() => setShowHelp(false)} section={FILTERS_HELP} focusKey={helpFocus} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
 
         {/* Ventanas de medición */}
         <Section title="Ventanas de medición" icon={<Clock className="w-4 h-4" />}>
@@ -165,14 +165,14 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
 
 function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="flex items-center gap-2 px-1">
-        <div className="w-8 h-8 rounded-xl bg-surface-2 flex items-center justify-center text-muted border border-divider">
+        <div className="w-6 h-6 rounded-lg bg-surface-2 flex items-center justify-center text-muted border border-divider [&>svg]:w-3.5 [&>svg]:h-3.5">
           {icon}
         </div>
-        <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">{title}</h3>
+        <h3 className="text-[11px] font-bold uppercase tracking-wider text-foreground">{title}</h3>
       </div>
-      <div className="space-y-8 pl-1">
+      <div className="space-y-4 pl-1">
         {children}
       </div>
     </div>

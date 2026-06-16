@@ -54,7 +54,7 @@ function NumberField({
           min={min}
           max={max}
           onChange={(e) => onChange(parseInt(e.target.value))}
-          className="w-full rounded-2xl bg-surface-2 border border-divider px-4 py-2.5 text-sm font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          className="w-full rounded-xl bg-surface-2 border border-divider px-3 py-2 text-sm font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         />
         {suffix && <span className="text-[10px] font-bold uppercase text-faint shrink-0">{suffix}</span>}
       </div>
@@ -64,9 +64,9 @@ function NumberField({
 
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-5">
-      <h3 className="text-[11px] font-black uppercase tracking-wider text-primary">{title}</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-5">{children}</div>
+    <section className="space-y-3">
+      <h3 className="text-[10px] font-black uppercase tracking-wider text-primary">{title}</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3">{children}</div>
     </section>
   );
 }
@@ -83,11 +83,11 @@ export default function PlazosYSancionesPanel({ initialFocusKey = null }: { init
   const set = (k: DraftKey, val: number) => setParam(k, val);
 
   return (
-    <div className="flex flex-col gap-10">
-      <div className="flex items-center justify-between gap-4">
+    <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-bold text-foreground">Disponibilidad y Sanciones</h3>
-          <p className="text-xs text-faint">Revisión del dentista, espera de técnicos, reemplazo, inactividad y sanción por no responder.</p>
+          <h3 className="text-xs font-bold text-foreground">Disponibilidad y Sanciones</h3>
+          <p className="text-[10px] text-faint hidden md:block">Revisión, pool, reemplazo e inactividad.</p>
         </div>
         <FauchardHelpButton onClick={() => openHelp()} label="Disponibilidad y Sanciones" />
       </div>
@@ -120,7 +120,7 @@ export default function PlazosYSancionesPanel({ initialFocusKey = null }: { init
         <NumberField label="Umbral Nivel 3" value={draft.level3Threshold} onChange={(x) => set('level3Threshold', x)} min={1} max={50} tooltip={fauchardParamTooltip('level3Threshold')} onHelp={() => openHelp('level3Threshold')} paramNumber={fauchardParamNumber('level3Threshold')} />
       </Block>
 
-      <div className="rounded-2xl border border-divider/70 bg-surface-2/30 p-4 text-xs text-muted leading-relaxed">
+      <div className="rounded-xl border border-divider/70 bg-surface-2/30 p-3 text-[10px] text-muted leading-snug">
         Los <strong>pesos del score</strong> (incluida la Penalización por No-respuesta, αN) se
         configuran en la pestaña <strong>Pesos del Score</strong>, única fuente de verdad (los 6
         pesos suman 1.000).

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Save, AlertCircle, RotateCcw, CheckCircle2 } from 'lucide-react';
 import Button from '@/components/ui/Button';
@@ -10,7 +11,7 @@ import { useFauchardDraft, type DraftKey } from './FauchardDraftContext';
 /** Etiquetas legibles para el diff de cambios. */
 const KEY_LABELS: Record<DraftKey, string> = {
   alphaQuality: 'Peso Calidad (αQ)', alphaPunctuality: 'Peso Puntualidad (αP)', alphaExperience: 'Peso Experiencia (αE)',
-  alphaLoad: 'Peso Carga (αL)', alphaNoResponse: 'Peso No-resp (αN)',
+  alphaBonus: 'Peso Bono (αB)', alphaLoad: 'Peso Carga (αL)', alphaNoResponse: 'Peso No-resp (αN)',
   wQualityDays: 'Ventana Calidad (días)', wLoadDays: 'Ventana Carga (días)', cMax: 'Techo de Carga', dBonusMaxDays: 'Bono máx (días)',
   tCooldownMinutes: 'Cooldown (min)', dInactivityDays: 'Inactividad (días)',
   maxAssignmentAttempts: 'Intentos máx. asignación', tQuoteMinutes: 'Tiempo respuesta asignación (min)',
@@ -21,6 +22,7 @@ const KEY_LABELS: Record<DraftKey, string> = {
 };
 
 export default function GlobalSaveBar() {
+  const router = useRouter();
   const { draft, initial, dirtyKeys, isDirty, errors, isValid, saving, save, reset } = useFauchardDraft();
   const [showConfirm, setShowConfirm] = useState(false);
   const [reason, setReason] = useState('');
@@ -34,6 +36,7 @@ export default function GlobalSaveBar() {
       setMessage({ type: 'success', text: 'Configuración guardada correctamente.' });
       setShowConfirm(false);
       setReason('');
+      router.refresh();
     } else {
       setMessage({ type: 'error', text: res.error || 'Error al guardar.' });
     }
@@ -62,9 +65,9 @@ export default function GlobalSaveBar() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 30 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[80] w-[min(92vw,720px)]"
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[80] w-[min(96vw,680px)]"
           >
-            <div className="flex items-center gap-4 p-3 pl-5 rounded-[2rem] bg-surface border border-divider shadow-2xl backdrop-blur-md">
+            <div className="flex items-center gap-3 p-2 pl-4 rounded-2xl bg-surface border border-divider shadow-2xl backdrop-blur-md">
               <div className="flex items-center gap-2 min-w-0">
                 {isValid ? (
                   <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
@@ -106,6 +109,7 @@ export default function GlobalSaveBar() {
         onClose={() => setShowConfirm(false)}
         onConfirm={handleConfirm}
         isLoading={saving}
+        confirmDisabled={!isValid}
         requireReason
         reasonValue={reason}
         onReasonChange={setReason}

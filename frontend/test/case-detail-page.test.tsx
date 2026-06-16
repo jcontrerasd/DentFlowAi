@@ -87,10 +87,12 @@ vi.mock('@/components/cases/TeethSelector', () => ({
 }));
 
 vi.mock('@/components/cases/STLThumbnail', () => ({ default: () => null }));
+vi.mock('@/lib/db/actions/poolQueue', () => ({
+  cancelPendingPoolAction: vi.fn().mockResolvedValue({ success: true }),
+}));
+
 vi.mock('@/components/cases/UnifiedCaseHub', () => ({ default: () => null }));
 vi.mock('@/components/cases/CaseWorkflowStepper', () => ({ default: () => null }));
-vi.mock('@/components/cases/ComparativeOffersPanel', () => ({ default: () => null }));
-
 import CaseDetailPage from '@/app/dashboard/cases/[id]/page';
 
 describe('CaseDetailPage', () => {
@@ -184,5 +186,42 @@ describe('CaseDetailPage', () => {
     await waitFor(() => {
       expect(getCaseEventsActionMock).toHaveBeenCalledWith('case-1');
     });
+  });
+
+  it('en pendiente_pool muestra banner de cola y oculta el aviso legacy de evaluación', async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: 'dent-1' },
+      userProfile: {
+        id: 'dent-1',
+        role: 'dentista',
+        fullName: 'Dra. Prueba',
+        organization: { id: 'org-1', name: 'Clinica Demo', type: 'clinica' },
+      },
+    });
+
+    getCaseDetailsMock.mockResolvedValue({
+      id: 'case-1',
+      internalName: 'Caso en cola',
+      patientIdAnon: 'PAT-POOL',
+      urgency: 'normal',
+      status: 'enEvaluacion',
+      internalStatus: 'pendiente_pool',
+      pendingPoolStartedAt: '2026-06-15T10:00:00.000Z',
+      createdAt: '2026-06-15T10:00:00.000Z',
+      teeth: [16],
+      restorationType: 'Corona',
+      material: 'Zirconia',
+      shade: 'A2',
+      organizationId: 'org-1',
+      doctorId: 'dent-1',
+      files: [],
+      annotations: [],
+    });
+
+    render(<CaseDetailPage />);
+
+    expect(await screen.findByTestId('pending-pool-banner')).toBeInTheDocument();
+    expect(screen.queryByText(/Fauchard está asignando tu caso/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Esperando aceptación del técnico/i)).not.toBeInTheDocument();
   });
 });

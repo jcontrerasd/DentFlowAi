@@ -2,9 +2,10 @@
 
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { motion } from 'framer-motion';
-import { Save, ChevronDown, ChevronUp, Star } from 'lucide-react';
+import { Save, ChevronDown, ChevronUp, Star, Undo2 } from 'lucide-react';
 import { getMySkillsAction, updateSkillsAction, type SkillRow } from '@/lib/db/actions/skills';
-import { WORK_TYPES, WORK_TYPE_LABELS } from '@/lib/constants/dental';
+import { WORK_TYPES, WORK_TYPE_LABELS, WORK_CATEGORY_LABELS } from '@/lib/constants/dental';
+import { computeGroupDisplayLevel, snapshotGroupLevels } from '@/lib/profile/skillGroupLevel';
 import { useToast } from '@/context/ToastContext';
 
 const LEVEL_LABELS: Record<number, { label: string; color: string }> = {
@@ -18,28 +19,44 @@ const LEVEL_LABELS: Record<number, { label: string; color: string }> = {
   7: { label: 'Experto 7',  color: 'text-jade' },
 };
 
+/** 7 categorías canónicas v5.13 — incluye workTypes nuevos y legacy (hist.). */
 const WORK_TYPE_GROUPS: { label: string; types: string[] }[] = [
   {
-    label: 'Coronas',
-    types: ['corona_anterior', 'corona_posterior', 'corona_implante'],
+    label: WORK_CATEGORY_LABELS.coronas,
+    types: [
+      'corona_unitaria', 'corona_multiple_corta', 'corona_multiple_larga', 'full_arch_corona',
+      'corona_anterior', 'corona_posterior', 'corona_implante',
+    ],
   },
   {
-    label: 'Inlays, Onlays y Carillas',
-    types: ['inlay_onlay', 'carilla_unitaria', 'carillas_multiples'],
+    label: WORK_CATEGORY_LABELS.inlays,
+    types: ['inlay_onlay'],
   },
   {
-    label: 'Puentes y Full Arch',
-    types: ['puente_3u', 'puente_4mas', 'full_arch'],
+    label: WORK_CATEGORY_LABELS.carillas,
+    types: ['carilla_simple', 'carilla_multiple', 'carilla_unitaria', 'carillas_multiples'],
   },
   {
-    label: 'Prótesis Removible',
+    label: WORK_CATEGORY_LABELS.puentes,
+    types: ['puente_corto', 'puente_largo', 'puente_3u', 'puente_4mas'],
+  },
+  {
+    label: WORK_CATEGORY_LABELS.full_arch,
+    types: ['full_arch'],
+  },
+  {
+    label: WORK_CATEGORY_LABELS.protesis,
     types: ['protesis_parcial_removible', 'protesis_total', 'sobredentadura', 'barra_implantes'],
   },
   {
-    label: 'Guías Quirúrgicas',
+    label: WORK_CATEGORY_LABELS.guias,
     types: ['guia_quirurgica_simple', 'guia_quirurgica_compleja'],
   },
 ];
+
+function findGroupLabelForWorkType(workType: string): string | undefined {
+  return WORK_TYPE_GROUPS.find(g => g.types.includes(workType))?.label;
+}
 
 function LevelSelector({
   value,
@@ -116,6 +133,9 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
   }, {});
 
   const [skills, setSkills] = useState<Record<string, number>>(blankSkills);
+  const [groupUndoSnapshots, setGroupUndoSnapshots] = useState<
+    Record<string, Record<string, number>>
+  >({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasCad, setHasCad] = useState(initialCad);
@@ -142,19 +162,40 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
     load();
   }, [initialCad]);
 
+  const clearGroupUndo = (groupLabel: string) => {
+    setGroupUndoSnapshots(prev => {
+      if (!(groupLabel in prev)) return prev;
+      const next = { ...prev };
+      delete next[groupLabel];
+      return next;
+    });
+  };
+
   const setSkill = (workType: string, value: number) => {
+    const groupLabel = findGroupLabelForWorkType(workType);
+    if (groupLabel) clearGroupUndo(groupLabel);
     setSkills(prev => ({ ...prev, [workType]: value }));
   };
 
   const getGroupLevel = (types: string[]): number =>
-    Math.min(...types.map(wt => skills[wt] ?? 0));
+    computeGroupDisplayLevel(types.map(wt => skills[wt] ?? 0));
 
-  const setGroupLevel = (types: string[], value: number) => {
+  const setGroupLevel = (groupLabel: string, types: string[], value: number) => {
+    let snapshot: Record<string, number> = {};
     setSkills(prev => {
+      snapshot = snapshotGroupLevels(prev, types);
       const next = { ...prev };
       types.forEach(wt => { next[wt] = value; });
       return next;
     });
+    setGroupUndoSnapshots(snapshots => ({ ...snapshots, [groupLabel]: snapshot }));
+  };
+
+  const undoGroupLevel = (groupLabel: string) => {
+    const snapshot = groupUndoSnapshots[groupLabel];
+    if (!snapshot) return;
+    setSkills(prev => ({ ...prev, ...snapshot }));
+    clearGroupUndo(groupLabel);
   };
 
   const saveSkills = async (): Promise<{ success: boolean; error?: string }> => {
@@ -250,16 +291,32 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
 
       {WORK_TYPE_GROUPS.map(group => {
         const groupDesign = getGroupLevel(group.types);
+        const hasGroupUndo = Boolean(groupUndoSnapshots[group.label]);
         return (
           <div key={group.label} className="bg-surface/40 border border-divider rounded-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-divider bg-surface-off/40 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
               <p className="text-[10px] font-black text-muted uppercase tracking-widest">{group.label}</p>
-              <LevelSelector
-                label="Diseño (grupo)"
-                value={hasCad ? groupDesign : 0}
-                onChange={v => setGroupLevel(group.types, v)}
-                disabled={!hasCad}
-              />
+              <div className="flex items-end gap-2">
+                {hasGroupUndo && (
+                  <button
+                    type="button"
+                    onClick={() => undoGroupLevel(group.label)}
+                    title="Restaurar niveles individuales anteriores"
+                    aria-label={`Deshacer cambio grupal en ${group.label}`}
+                    className="mb-0.5 w-8 h-8 rounded-lg bg-surface-2 border border-divider flex items-center justify-center text-muted hover:bg-surface-off transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40 flex-shrink-0"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <div className="flex-1 min-w-0">
+                  <LevelSelector
+                    label="Diseño (grupo)"
+                    value={hasCad ? groupDesign : 0}
+                    onChange={v => setGroupLevel(group.label, group.types, v)}
+                    disabled={!hasCad}
+                  />
+                </div>
+              </div>
             </div>
             <div className="divide-y divide-white/5">
               {group.types.map(wt => (

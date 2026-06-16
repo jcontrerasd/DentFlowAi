@@ -26,7 +26,9 @@ export type AvailabilityRow = typeof technicianAvailability.$inferSelect;
 const CATEGORY_COL = {
   coronas: { cad: technicianAvailability.catCoronasCad },
   inlays: { cad: technicianAvailability.catInlaysCad },
+  carillas: { cad: technicianAvailability.catCarillasCad },
   puentes: { cad: technicianAvailability.catPuentesCad },
+  full_arch: { cad: technicianAvailability.catFullArchCad },
   protesis: { cad: technicianAvailability.catProtesisCad },
   guias: { cad: technicianAvailability.catGuiasCad },
 } as const satisfies Record<WorkCategory, Record<Capacity, unknown>>;
@@ -35,7 +37,9 @@ const CATEGORY_COL = {
 const CATEGORY_SET_KEY: Record<WorkCategory, Record<Capacity, keyof AvailabilityRow>> = {
   coronas: { cad: 'catCoronasCad' },
   inlays: { cad: 'catInlaysCad' },
+  carillas: { cad: 'catCarillasCad' },
   puentes: { cad: 'catPuentesCad' },
+  full_arch: { cad: 'catFullArchCad' },
   protesis: { cad: 'catProtesisCad' },
   guias: { cad: 'catGuiasCad' },
 };

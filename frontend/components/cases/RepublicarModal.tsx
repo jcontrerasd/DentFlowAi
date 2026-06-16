@@ -95,7 +95,7 @@ export default function RepublicarModal({
                   Republicar caso
                 </h3>
                 <p className="text-sm text-muted font-medium mb-6">
-                  El caso {caseLabel ? <span className="font-bold text-foreground">{caseLabel}</span> : 'seleccionado'} no recibió cotizaciones. Al republicar, Fauchard reinicia la búsqueda de técnicos disponibles desde cero.
+                  El caso {caseLabel ? <span className="font-bold text-foreground">{caseLabel}</span> : 'seleccionado'} no recibió asignación. Al republicar, Fauchard reinicia la búsqueda de técnicos disponibles desde cero.
                 </p>
 
                 <label className="flex items-start gap-3 mb-6 cursor-pointer select-none">

@@ -45,65 +45,92 @@ export const INTERNAL_CASE_STATUSES = {
   RECHAZADO_TODAS_OFERTAS: 'rechazadoTodasOfertas',
 } as const;
 
-/** Tipos de trabajo que pueden declarar los técnicos (15 valores canónicos) */
+/** WorkTypes canónicos v5.13 (derivación de casos) + legacy (skills históricos). */
 export const WORK_TYPES = [
+  // Coronas (canónicos v5.13)
+  'corona_unitaria',
+  'corona_multiple_corta',
+  'corona_multiple_larga',
+  'full_arch_corona',
+  // Coronas (legacy skills)
   'corona_anterior',
   'corona_posterior',
   'corona_implante',
+  // Inlays / onlays
   'inlay_onlay',
+  // Carillas (canónicos v5.13)
+  'carilla_simple',
+  'carilla_multiple',
+  // Carillas (legacy)
   'carilla_unitaria',
   'carillas_multiples',
+  // Puentes (canónicos v5.13)
+  'puente_corto',
+  'puente_largo',
+  // Puentes (legacy)
   'puente_3u',
   'puente_4mas',
+  // Full arch
   'full_arch',
+  // Prótesis removible
   'protesis_parcial_removible',
   'protesis_total',
   'sobredentadura',
   'barra_implantes',
+  // Guías
   'guia_quirurgica_simple',
   'guia_quirurgica_compleja',
 ] as const;
 
 /**
- * Categorías canónicas de disponibilidad del técnico (v5.0).
- * El técnico declara disponibilidad por categoría (5), no por work_type (15).
- * Estos slugs son la fuente de verdad para las columnas de `technician_availability`
- * (`cat_<categoria>_cad` / `cat_<categoria>_cam`). NO renombrar sin migración.
- * Ver Doc Servicio Orquestado/flujo_tiempos.md §1.2.
+ * Categorías canónicas de disponibilidad del técnico (v5.13 — 7 categorías).
+ * El técnico declara disponibilidad por categoría, no por work_type individual.
+ * Columnas `technician_availability`: `cat_<categoria>_cad` / `cat_<categoria>_cam`.
  */
 export const WORK_CATEGORIES = [
   'coronas',
   'inlays',
+  'carillas',
   'puentes',
+  'full_arch',
   'protesis',
   'guias',
 ] as const;
 
 export type WorkCategory = typeof WORK_CATEGORIES[number];
 
-/** Labels legibles de las 5 categorías. */
+/** Labels legibles de las 7 categorías. */
 export const WORK_CATEGORY_LABELS: Record<WorkCategory, string> = {
   coronas: 'Coronas',
-  inlays: 'Inlays, Onlays y Carillas',
-  puentes: 'Puentes y Full Arch',
+  inlays: 'Inlays y Onlays',
+  carillas: 'Carillas',
+  puentes: 'Puentes',
+  full_arch: 'Full Arch',
   protesis: 'Prótesis Removible',
   guias: 'Guías Quirúrgicas',
 };
 
 /**
- * Mapeo work_type (15) → categoría (5). Traduce un caso a la categoría cuyo switch
- * de disponibilidad consulta Fauchard (regla AND triple, §1.3).
+ * Mapeo work_type → categoría (7). Incluye canónicos v5.13 y legacy para lectura dual.
  */
 export const WORK_TYPE_TO_CATEGORY: Record<WorkType, WorkCategory> = {
+  corona_unitaria: 'coronas',
+  corona_multiple_corta: 'coronas',
+  corona_multiple_larga: 'coronas',
+  full_arch_corona: 'full_arch',
   corona_anterior: 'coronas',
   corona_posterior: 'coronas',
   corona_implante: 'coronas',
   inlay_onlay: 'inlays',
-  carilla_unitaria: 'inlays',
-  carillas_multiples: 'inlays',
+  carilla_simple: 'carillas',
+  carilla_multiple: 'carillas',
+  carilla_unitaria: 'carillas',
+  carillas_multiples: 'carillas',
+  puente_corto: 'puentes',
+  puente_largo: 'puentes',
   puente_3u: 'puentes',
   puente_4mas: 'puentes',
-  full_arch: 'puentes',
+  full_arch: 'full_arch',
   protesis_parcial_removible: 'protesis',
   protesis_total: 'protesis',
   sobredentadura: 'protesis',
@@ -114,14 +141,22 @@ export const WORK_TYPE_TO_CATEGORY: Record<WorkType, WorkCategory> = {
 
 /** Labels legibles para los tipos de trabajo */
 export const WORK_TYPE_LABELS: Record<string, string> = {
-  corona_anterior: 'Corona Anterior',
-  corona_posterior: 'Corona Posterior',
+  corona_unitaria: 'Corona Unitaria',
+  corona_multiple_corta: 'Coronas Múltiples (2–3)',
+  corona_multiple_larga: 'Coronas Múltiples (4–9)',
+  full_arch_corona: 'Full Arch (coronas)',
+  corona_anterior: 'Corona Anterior (hist.)',
+  corona_posterior: 'Corona Posterior (hist.)',
   corona_implante: 'Corona sobre Implante',
   inlay_onlay: 'Inlay / Onlay',
-  carilla_unitaria: 'Carilla Unitaria',
-  carillas_multiples: 'Carillas Múltiples (2+)',
-  puente_3u: 'Puente 3 Unidades',
-  puente_4mas: 'Puente 4+ Unidades',
+  carilla_simple: 'Carilla (1–3)',
+  carilla_multiple: 'Carillas Múltiples (4+)',
+  carilla_unitaria: 'Carilla Unitaria (hist.)',
+  carillas_multiples: 'Carillas Múltiples (hist.)',
+  puente_corto: 'Puente Corto (3–6)',
+  puente_largo: 'Puente Largo (7–9)',
+  puente_3u: 'Puente 3 Unidades (hist.)',
+  puente_4mas: 'Puente 4+ Unidades (hist.)',
   full_arch: 'Full Arch',
   protesis_parcial_removible: 'Prótesis Parcial Removible',
   protesis_total: 'Prótesis Total',

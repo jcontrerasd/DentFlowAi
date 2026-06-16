@@ -14,7 +14,9 @@ type Status = Extract<Awaited<ReturnType<typeof getMyAvailabilityStatusAction>>,
 const CAT_KEY: Record<WorkCategory, Record<Capacity, keyof AvailabilityRow>> = {
   coronas: { cad: 'catCoronasCad' },
   inlays: { cad: 'catInlaysCad' },
+  carillas: { cad: 'catCarillasCad' },
   puentes: { cad: 'catPuentesCad' },
+  full_arch: { cad: 'catFullArchCad' },
   protesis: { cad: 'catProtesisCad' },
   guias: { cad: 'catGuiasCad' },
 };

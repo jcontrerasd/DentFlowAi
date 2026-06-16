@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  processPendingPoolReevaluationAction,
   processPendingPoolCheckInAction,
   processPendingPoolExpirationAction,
 } from '@/lib/db/actions/poolQueue';
@@ -7,12 +8,13 @@ import {
 export const dynamic = 'force-dynamic';
 
 /**
- * Cron de la cola `pendiente_pool` (v5.0). Frecuencia: cada 10 minutos.
+ * Cron de la cola `pendiente_pool` (v5.0). Frecuencia recomendada: cada 2 minutos.
  * Cloud Scheduler lo invoca por POST con `Authorization: Bearer ${CRON_SECRET}`.
  * GET se acepta para pruebas manuales.
  *
- * 1. Check-in al dentista al 50% del TTL del ciclo.
- * 2. Expiración del ciclo: re-encola o falla a `sin_cotizaciones_fallo`.
+ * 1. Reevaluación: intenta asignar si ya hay técnicos elegibles.
+ * 2. Check-in al dentista al 50% del TTL del ciclo.
+ * 3. Expiración del ciclo: re-encola o falla a `sin_cotizaciones_fallo`.
  * Inerte si `AVAILABILITY_MODEL_ENABLED` está apagado (las actions no encuentran
  * casos en pool porque Fauchard no encola con el flag off).
  */
@@ -21,6 +23,12 @@ async function handle(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const reevaluation = await processPendingPoolReevaluationAction();
+  if (!reevaluation.success) {
+    console.error('[cron/process-pool-queue] Error (reevaluation):', reevaluation.error);
+    return NextResponse.json({ error: reevaluation.error }, { status: 500 });
   }
 
   const checkIn = await processPendingPoolCheckInAction();
@@ -37,6 +45,8 @@ async function handle(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
+    assigned: reevaluation.assigned,
+    stillWaiting: reevaluation.stillWaiting,
     checkInsSent: checkIn.notified,
     requeued: expiration.requeued,
     failed: expiration.failed,
