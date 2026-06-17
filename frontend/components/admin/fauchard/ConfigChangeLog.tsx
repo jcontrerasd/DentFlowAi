@@ -11,7 +11,6 @@ import { HISTORY_HELP } from '@/lib/constants/fauchardHelp';
 
 const HIDDEN_KEYS = new Set([
   'id', 'version', 'isActive', 'updatedBy', 'createdAt', 'updatedAt', 'changeReason',
-  'businessHoursStart', 'businessHoursEnd', 'businessDaysMask',
   'nInvited', 'tProposalHours', 'qMinSelection', 'platformFee',
 ]);
 

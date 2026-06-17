@@ -4,7 +4,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
 /** v5.15 — Bono de infrautilización (αB) reactivo en score; Σ6=1.0. */
-export const INFRA_VERSION = 'v5.16';
+export const INFRA_VERSION = 'v5.17';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -640,14 +640,6 @@ export async function ensureInfrastructure(db: any) {
         -- S0-04b: work_type en case_invitation (cooldown por tipo de trabajo)
         ALTER TABLE case_invitation ADD COLUMN IF NOT EXISTS work_type TEXT;
         ALTER TABLE case_invitation ADD COLUMN IF NOT EXISTS dentist_rejection_feedback TEXT;
-        -- v3 Oferta desglosada (diseño + fabricación) para casos integrales.
-        -- Las cuatro columnas son nullable: solo se llenan en serviceType=integral.
-        -- quoted_price y quoted_days siguen siendo los totales canónicos.
-        ALTER TABLE case_invitation ADD COLUMN IF NOT EXISTS quoted_design_price DOUBLE PRECISION;
-        ALTER TABLE case_invitation ADD COLUMN IF NOT EXISTS quoted_design_days INTEGER;
-        ALTER TABLE case_invitation ADD COLUMN IF NOT EXISTS quoted_fabrication_price DOUBLE PRECISION;
-        ALTER TABLE case_invitation ADD COLUMN IF NOT EXISTS quoted_fabrication_days INTEGER;
-
         -- S0-07: Migración de technicalCapabilities → technician_skill
         -- Inserta nivel base (3 = intermedio) para técnicos con capabilities existentes
         INSERT INTO technician_skill (user_id, work_type, design_level, fabrication_level)
@@ -1093,18 +1085,6 @@ export async function ensureInfrastructure(db: any) {
         ADD COLUMN IF NOT EXISTS proposed_design_hours integer,
         ADD COLUMN IF NOT EXISTS proposed_fabrication_hours integer,
         ADD COLUMN IF NOT EXISTS proposed_shipping_hours integer;
-      ALTER TABLE "fauchard_config"
-        ADD COLUMN IF NOT EXISTS business_hours_start integer NOT NULL DEFAULT 8,
-        ADD COLUMN IF NOT EXISTS business_hours_end   integer NOT NULL DEFAULT 20,
-        ADD COLUMN IF NOT EXISTS business_days_mask   integer NOT NULL DEFAULT 31;
-      CREATE TABLE IF NOT EXISTS "fauchard_holiday" (
-        id uuid NOT NULL DEFAULT uuid_generate_v4() PRIMARY KEY,
-        holiday_date date NOT NULL,
-        label text NOT NULL,
-        created_by text REFERENCES "user"(id) ON DELETE SET NULL,
-        created_at timestamptz NOT NULL DEFAULT now()
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS fauchard_holiday_date_uidx ON "fauchard_holiday"(holiday_date);
     `);
 
     // v4.7 — Índices de rendimiento: status, doctor_id, last_activity_at, delivery, ci composite
@@ -1481,6 +1461,22 @@ export async function ensureInfrastructure(db: any) {
          OR COALESCE(alpha_bonus, 0) < 0.001;
     `);
     console.log('[DB] v5.15 pesos α: Σ6=1.0 con alpha_bonus=0.100 en fauchard_config.');
+
+    // v5.17 — Limpieza legacy: retira calendario laboral (v4.6) y desglose de cotización
+    // integral (v3). La app v2 (asignación directa) no usa ninguno. DROP idempotente.
+    await db.execute(sql`
+      ALTER TABLE fauchard_config
+        DROP COLUMN IF EXISTS business_hours_start,
+        DROP COLUMN IF EXISTS business_hours_end,
+        DROP COLUMN IF EXISTS business_days_mask;
+      ALTER TABLE case_assignment
+        DROP COLUMN IF EXISTS quoted_design_price,
+        DROP COLUMN IF EXISTS quoted_design_days,
+        DROP COLUMN IF EXISTS quoted_fabrication_price,
+        DROP COLUMN IF EXISTS quoted_fabrication_days;
+      DROP TABLE IF EXISTS fauchard_holiday CASCADE;
+    `);
+    console.log('[DB] v5.17 limpieza legacy: business_*, quoted_design/fabrication_*, fauchard_holiday.');
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
     console.log("[DB] Infraestructura verificada con éxito.");

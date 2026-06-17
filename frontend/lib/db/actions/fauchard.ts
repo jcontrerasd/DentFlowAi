@@ -72,10 +72,6 @@ export interface FauchardConfigRow {
   lPenaltyTransition: string;
   lDescentRating: string;
   lDescentDays: number;
-  /** v4.6 — Calendario laboral (usado para computar workDeadline). */
-  businessHoursStart: number;
-  businessHoursEnd: number;
-  businessDaysMask: number;
   /** v5.0 — Plazos, sanción rolling, cola pool y score αN (ver Fase 1). */
   tDentistReviewHours: number;
   tNoEligiblePoolHours: number;
@@ -628,9 +624,6 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
         lPenaltyTransition: fauchardConfig.lPenaltyTransition,
         lDescentRating: fauchardConfig.lDescentRating,
         lDescentDays: fauchardConfig.lDescentDays,
-        businessHoursStart: fauchardConfig.businessHoursStart,
-        businessHoursEnd: fauchardConfig.businessHoursEnd,
-        businessDaysMask: fauchardConfig.businessDaysMask,
         // v5.0 — Plazos, sanción rolling, cola pool y score αN.
         tDentistReviewHours: fauchardConfig.tDentistReviewHours,
         tNoEligiblePoolHours: fauchardConfig.tNoEligiblePoolHours,
