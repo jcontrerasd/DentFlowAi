@@ -50,6 +50,21 @@ export const CASE_EVENTS = {
   REVISION_ENVIADA: 'REVISION_ENVIADA',
   REVISION_SOLICITADA: 'REVISION_SOLICITADA',
   TRABAJO_APROBADO: 'TRABAJO_APROBADO',
+
+  // Etapa de Calidad (gated por QUALITY_GATE_ENABLED) — invisible al dentista
+  /** Técnico envió una entrega a revisión de Calidad (visibleTo tecnico; Calidad lo ve por acceso amplio) */
+  REVISION_ENVIADA_CALIDAD: 'REVISION_ENVIADA_CALIDAD',
+  /** Calidad pidió ajustes al técnico (visibleTo tecnico, enmascarado Fauchard) */
+  REVISION_SOLICITADA_CALIDAD: 'REVISION_SOLICITADA_CALIDAD',
+  /** Calidad certificó la entrega: queda lista para que el técnico la envíe (visibleTo tecnico) */
+  CALIDAD_CERTIFICADA: 'CALIDAD_CERTIFICADA',
+  /** Caso asignado a un revisor de Calidad (visibleTo calidad/sistema) */
+  ASIGNACION_CALIDAD: 'ASIGNACION_CALIDAD',
+  /** Calidad derivó el caso a otro revisor de Calidad con motivo + comentario (visibleTo calidad) */
+  CASO_DERIVADO_CALIDAD: 'CASO_DERIVADO_CALIDAD',
+  /** SLA de Calidad por vencer / vencido (escalación por cron, sin auto-acción) */
+  QUALITY_PLAZO_POR_VENCER: 'QUALITY_PLAZO_POR_VENCER',
+  QUALITY_PLAZO_VENCIDO: 'QUALITY_PLAZO_VENCIDO',
   /** Calificación (CAD/CAM) que el dentista deja al técnico; queda reflejada en el UCH de ambos (técnico la ve enmascarada/anónima) y la ve el admin para arbitrar. */
   CALIFICACION_ENVIADA: 'CALIFICACION_ENVIADA',
   REANUDADO: 'REANUDADO',

@@ -199,7 +199,7 @@ export async function createCoAdminAction(password: string) {
 /**
  * Permite al admin actual cambiar su propio rol para simular la experiencia de otros usuarios.
  */
-export async function switchMyRoleAdmin(newRole: 'dentista' | 'tecnico' | 'admin') {
+export async function switchMyRoleAdmin(newRole: 'dentista' | 'tecnico' | 'admin' | 'calidad') {
   const session = await auth();
   if (!session?.user?.id) throw new Error("No hay sesión activa");
   
