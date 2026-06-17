@@ -39,7 +39,7 @@ export default function DashboardHome() {
   const { userProfile, loading: authLoading } = useAuth();
   const [metrics, setMetrics] = useState<Record<string, number>>({});
   const [totalCases, setTotalCases] = useState(0);
-  const [metricsRole, setMetricsRole] = useState<'dentista' | 'tecnico'>('dentista');
+  const [metricsRole, setMetricsRole] = useState<'dentista' | 'tecnico' | 'calidad'>('dentista');
   const [rawCases, setRawCases] = useState<any[]>([]);
   const [myBidsMap, setMyBidsMap] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -54,12 +54,14 @@ export default function DashboardHome() {
   const [featuredFilters, setFeaturedFilters] =
     useState<CaseListQueryFilters>(DEFAULT_CASE_LIST_FILTERS);
   const debouncedFeaturedQ = useDebouncedValue(featuredFilters.q ?? '', 300);
-  const dashboardRole: 'dentista' | 'tecnico' =
+  const dashboardRole: 'dentista' | 'tecnico' | 'calidad' =
     userProfile?.role === 'tecnico'
       ? 'tecnico'
       : userProfile?.role === 'dentista'
         ? 'dentista'
-        : metricsRole;
+        : String(userProfile?.role) === 'calidad'
+          ? 'calidad'
+          : metricsRole;
 
   const featuredFiltersForFetch = useMemo(
     () =>

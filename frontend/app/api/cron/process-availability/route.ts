@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processAvailabilityMaintenanceAction } from '@/lib/db/actions/availabilityCron';
 import { processDentistReviewDeadlinesAction } from '@/lib/db/actions/dentistReviewCron';
+import { processQualityReviewDeadlinesAction } from '@/lib/db/actions/qualityReviewCron';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,6 +33,13 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: review.error }, { status: 500 });
   }
 
+  // v5.19 — escalación del SLA de la etapa de Calidad (inerte con QUALITY_GATE_ENABLED off).
+  const quality = await processQualityReviewDeadlinesAction();
+  if (!quality.success) {
+    console.error('[cron/process-availability] Error (quality):', quality.error);
+    return NextResponse.json({ error: quality.error }, { status: 500 });
+  }
+
   return NextResponse.json({
     ok: true,
     skipped: res.skipped ?? false,
@@ -40,6 +48,8 @@ async function handle(req: NextRequest) {
     remindersSent: res.remindersSent,
     reviewRemindersSent: review.remindersSent,
     reviewOverdueNotified: review.overdueNotified,
+    qualityRemindersSent: quality.remindersSent,
+    qualityOverdueNotified: quality.overdueNotified,
     timestamp: new Date().toISOString(),
   });
 }

@@ -15,11 +15,13 @@ import { buildInvitationStatusByCaseId } from '@/lib/cases/technicianInvitationF
 import {
   DENTIST_DASHBOARD_METRICS,
   TECH_DASHBOARD_METRICS,
+  CALIDAD_DASHBOARD_METRICS,
+  classifyCalidadCaseKpi,
   initEmptyMetrics,
 } from '@/lib/dashboard/dashboardMetricsConfig';
 
 export type DashboardMetricsResult = {
-  role: 'dentista' | 'tecnico';
+  role: 'dentista' | 'tecnico' | 'calidad';
   metrics: Record<string, number>;
   totalCases: number;
   serverNowMs: number;
@@ -32,8 +34,9 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
   const role = identity.role as string;
   const isTech = canActAsTecnico(role) && role !== 'admin';
   const isDentist = canActAsDentista(role) && !isTech;
+  const isCalidad = role === 'calidad';
 
-  if (!isDentist && !isTech) {
+  if (!isDentist && !isTech && !isCalidad) {
     return null;
   }
 
@@ -68,6 +71,21 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
     }
 
     return { role: 'dentista', metrics, totalCases, serverNowMs };
+  }
+
+  if (isCalidad) {
+    const rows = await db
+      .select({ status: clinicalCase.status })
+      .from(clinicalCase)
+      .where(whereClause);
+
+    const metrics = initEmptyMetrics(CALIDAD_DASHBOARD_METRICS);
+    for (const row of rows) {
+      const kpiId = classifyCalidadCaseKpi(row.status);
+      metrics[kpiId] = (metrics[kpiId] ?? 0) + 1;
+    }
+
+    return { role: 'calidad', metrics, totalCases, serverNowMs };
   }
 
   const caseRows = await db

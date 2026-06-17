@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { clinicalCase, caseAssignment } from '@/lib/db/schema';
+import { clinicalCase, caseAssignment, caseQualityAssignment } from '@/lib/db/schema';
 import { and, eq, inArray, or, sql } from 'drizzle-orm';
 import { canActAsTecnico } from '@/lib/auth-helpers';
 import {
@@ -51,6 +51,21 @@ export async function userCanAccessClinicalCase(
       )
       .limit(1);
     return !!inv;
+  }
+
+  // Calidad accede a los casos donde es (o fue) el revisor asignado.
+  if (role === 'calidad') {
+    const [row] = await db
+      .select({ id: caseQualityAssignment.id })
+      .from(caseQualityAssignment)
+      .where(
+        and(
+          eq(caseQualityAssignment.clinicalCaseId, caseId),
+          eq(caseQualityAssignment.calidadUserId, userId),
+        ),
+      )
+      .limit(1);
+    return !!row;
   }
 
   if (role === 'admin') {
@@ -126,6 +141,19 @@ export async function buildActiveCaseVisibilityWhere(
         eq(clinicalCase.assignedTechnicianId, userId),
         techCaseIds.length > 0 ? inArray(clinicalCase.id, techCaseIds) : sql`false`,
       ),
+    );
+  }
+
+  // Calidad: casos donde es (o fue) revisor asignado (cross-org, sin filtro de organización).
+  if (role === 'calidad') {
+    const rows = await db
+      .select({ caseId: caseQualityAssignment.clinicalCaseId })
+      .from(caseQualityAssignment)
+      .where(eq(caseQualityAssignment.calidadUserId, userId));
+    const ids = rows.map((r) => r.caseId);
+    return and(
+      archiveFilter,
+      ids.length > 0 ? inArray(clinicalCase.id, ids) : sql`false`,
     );
   }
 

@@ -186,7 +186,7 @@ export function caseStatusFilterLabel(status: string): string {
 }
 
 export function normalizeFiltersForRole(
-  role: 'dentista' | 'tecnico',
+  role: 'dentista' | 'tecnico' | 'calidad',
   filters: CaseListQueryFilters,
 ): CaseListQueryFilters {
   const base = { ...filters };
@@ -310,7 +310,7 @@ export function collapseStaleTechPresetDerivatives(
 
 /** Misma normalización para fetch, URL y SQL (preset → KPI, rol, etc.). */
 export function prepareCaseListFiltersForQuery(
-  role: 'dentista' | 'tecnico',
+  role: 'dentista' | 'tecnico' | 'calidad',
   filters: CaseListQueryFilters,
 ): CaseListQueryFilters {
   const q = normalizeSearchQuery(filters.q);
@@ -343,7 +343,7 @@ export function hasActiveCaseListFilters(filters: CaseListQueryFilters): boolean
 
 /** Filtros de listado al pulsar un KPI del dashboard (carrusel + /dashboard/cases). */
 export function filtersFromDashboardMetricId(
-  role: 'dentista' | 'tecnico',
+  role: 'dentista' | 'tecnico' | 'calidad',
   metricId: string,
 ): CaseListQueryFilters {
   if (metricId === 'total') {
@@ -355,6 +355,17 @@ export function filtersFromDashboardMetricId(
       techKpiStatuses: [metricId as TechKpiId],
       techPreset: null,
     });
+  }
+  if (role === 'calidad') {
+    const calidadKpiToStatuses: Record<string, string[]> = {
+      porCertificar: [CASE_STATUSES.EN_REVISION_CALIDAD],
+      certificadas: [CASE_STATUSES.CERTIFICADO_CALIDAD],
+      enProceso: [CASE_STATUSES.EN_EJECUCION, CASE_STATUSES.CAMBIOS_EN_PROCESO, CASE_STATUSES.EN_REVISION],
+      completado: [CASE_STATUSES.COMPLETADO],
+    };
+    const statuses = calidadKpiToStatuses[metricId];
+    if (!statuses?.length) return { ...DEFAULT_CASE_LIST_FILTERS };
+    return { ...DEFAULT_CASE_LIST_FILTERS, caseStatuses: statuses, techPreset: null };
   }
   const dentistKpiToStatuses: Record<string, string[]> = {
     borrador: [CASE_STATUSES.BORRADOR],

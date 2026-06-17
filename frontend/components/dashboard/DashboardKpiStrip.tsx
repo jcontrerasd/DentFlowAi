@@ -10,7 +10,7 @@ import {
 } from '@/lib/dashboard/dashboardMetricsConfig';
 
 type DashboardKpiStripProps = {
-  role: 'dentista' | 'tecnico';
+  role: 'dentista' | 'tecnico' | 'calidad';
   metrics: Record<string, number>;
   totalCases: number;
   onMetricClick?: (metricId: string) => void;
