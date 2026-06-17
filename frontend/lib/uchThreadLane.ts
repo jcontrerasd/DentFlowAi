@@ -216,6 +216,7 @@ function resolveTecnicoTableB(
     CASE_EVENTS.OFERTA_ENVIADA,
     CASE_EVENTS.OFERTA_RETIRADA,
     CASE_EVENTS.REVISION_ENVIADA,
+    CASE_EVENTS.REVISION_ENVIADA_CALIDAD,
     CASE_EVENTS.COMENTARIO_TECNICO,
   ]);
   if (tecnicoSelfEmitActions.has(action) && samePersistedAuthor) {
@@ -231,12 +232,14 @@ function resolveTecnicoTableB(
     return { lane: 'self', showAsFauchard: false };
   }
 
-  // B — Mensajes del solicitante u orquestación hacia el técnico
+  // B — Mensajes del solicitante, Calidad u orquestación hacia el técnico.
+  // Calidad es anónima para el técnico → voz Fauchard.
   return {
     lane: 'thread',
     showAsFauchard:
       maskedUserIsFauchard ||
       presentationAuthor === 'fauchard' ||
-      authorRole === 'dentista',
+      authorRole === 'dentista' ||
+      authorRole === 'calidad',
   };
 }

@@ -37,6 +37,8 @@ export function filterCaseEventsForUchViewer<T extends UchFilterableEvent>(
 ): T[] {
   return events.filter((event) => {
     if (identity.role === 'admin') return true;
+    // Calidad ve todo el hilo de su caso asignado (el acceso ya está restringido a sus casos).
+    if (identity.role === 'calidad') return true;
 
     const payload = event.payload as Record<string, unknown> | null | undefined;
     const visibleTo = payload?.visibleTo as string | undefined;
@@ -65,6 +67,12 @@ export function filterCaseEventsForUchViewer<T extends UchFilterableEvent>(
     if (visibleTo === 'ambos') return true;
 
     if (visibleTo === 'tecnico') {
+      // Eventos de la etapa de Calidad: el técnico asignado los ve (Calidad es anónima/Fauchard
+      // para él). Autoría = revisor de Calidad, sin invitationId, por eso se gatean por este marker.
+      if (payload?.qualityScoped) {
+        return !!targetCase?.assignedTechnicianId
+          && String(targetCase.assignedTechnicianId) === String(identity.id);
+      }
       return tecnicoSeesVisibleToTecnicoEvent({
         eventUserId: event.userId,
         invitationIdFromPayload: payload?.invitationId as string | undefined,

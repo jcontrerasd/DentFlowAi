@@ -113,6 +113,7 @@ export async function requestQualityRevisionAction(caseId: string, reason: strin
           deliveryVersion: pendingDelivery?.version ?? null,
           files: pendingDelivery?.files ?? [],
           visibleTo: 'tecnico',
+          qualityScoped: true,
         },
         stateChange: { from: CASE_STATUSES.EN_REVISION_CALIDAD, to: CASE_STATUSES.EN_EJECUCION },
       }, tx);
@@ -199,6 +200,7 @@ export async function certifyQualityAction(caseId: string, comment?: string): Pr
           deliveryId: pendingDelivery.id,
           deliveryVersion: pendingDelivery.version,
           visibleTo: 'tecnico',
+          qualityScoped: true,
           ...(note ? { qualityComment: note } : {}),
         },
         stateChange: { from: CASE_STATUSES.EN_REVISION_CALIDAD, to: CASE_STATUSES.CERTIFICADO_CALIDAD },

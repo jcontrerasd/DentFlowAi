@@ -11,6 +11,7 @@ import { db } from '@/lib/db';
 import { caseAssignment, clinicalCase, fauchardConfig } from '@/lib/db/schema';
 import { eq, and, inArray, max } from 'drizzle-orm';
 import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
+import { isQualityGateEnabled } from '@/lib/constants/qualityFlags';
 
 /** Etapa 1 — plazo para que invitados envíen cotización (`enEvaluacion`). */
 export type QuoteWindow = {
@@ -118,6 +119,41 @@ export async function getCaseReviewDeadlineAt(caseId: string): Promise<Date | nu
       .where(eq(fauchardConfig.isActive, true))
       .limit(1);
     hours = active?.hours ?? 48;
+  }
+
+  const deadline = new Date(new Date(row.submittedAt).getTime() + hours * 3_600_000);
+  return Number.isFinite(deadline.getTime()) ? deadline : null;
+}
+
+/**
+ * Etapa de Calidad (v5.19) — plazo de Calidad para certificar una entrega
+ * (`enRevisionCalidad`). Wall-clock: `last_quality_submitted_at + tQualityReviewHours`.
+ * Cada entrega del técnico a Calidad reinicia `last_quality_submitted_at`. Devuelve null
+ * si el flag de Calidad está off o no hay entrega registrada. Lee config anclada o activa.
+ */
+export async function getCaseQualityReviewDeadlineAt(caseId: string): Promise<Date | null> {
+  if (!isQualityGateEnabled()) return null;
+
+  const [row] = await db
+    .select({
+      submittedAt: clinicalCase.lastQualitySubmittedAt,
+      anchoredHours: fauchardConfig.tQualityReviewHours,
+    })
+    .from(clinicalCase)
+    .leftJoin(fauchardConfig, eq(fauchardConfig.id, clinicalCase.fauchardConfigId))
+    .where(eq(clinicalCase.id, caseId))
+    .limit(1);
+
+  if (!row?.submittedAt) return null;
+
+  let hours = row.anchoredHours ?? null;
+  if (hours == null) {
+    const [active] = await db
+      .select({ hours: fauchardConfig.tQualityReviewHours })
+      .from(fauchardConfig)
+      .where(eq(fauchardConfig.isActive, true))
+      .limit(1);
+    hours = active?.hours ?? 24;
   }
 
   const deadline = new Date(new Date(row.submittedAt).getTime() + hours * 3_600_000);

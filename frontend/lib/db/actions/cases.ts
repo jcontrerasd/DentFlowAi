@@ -52,7 +52,7 @@ import {
   buildTechFacetCondition,
 } from '@/lib/db/caseListQueryBuilder';
 import { pickInvitationStatusForKpi } from '@/lib/cases/technicianInvitationForKpi';
-import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt, getCaseReviewDeadlineAt } from '@/lib/db/caseDeadlines';
+import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt, getCaseReviewDeadlineAt, getCaseQualityReviewDeadlineAt } from '@/lib/db/caseDeadlines';
 
 
 /**
@@ -834,6 +834,16 @@ export async function getCaseDetails(caseId: string) {
       reviewDeadlineAt = await getCaseReviewDeadlineAt(caseId);
     }
 
+    // v5.19 — SLA de la etapa de Calidad (solo en enRevisionCalidad, flag on).
+    let qualityReviewDeadlineAt: Date | null = null;
+    if (cCase.status === 'enRevisionCalidad') {
+      qualityReviewDeadlineAt = await getCaseQualityReviewDeadlineAt(caseId);
+    }
+    // Anonimato: la identidad del revisor de Calidad nunca se expone a dentista ni técnico.
+    if (userRole !== 'admin' && userRole !== 'calidad') {
+      (cCase as any).qualityReviewerId = null;
+    }
+
     // Modelo asignación directa: sin comparativo de ofertas.
     const comparativeOffers = undefined;
 
@@ -900,6 +910,7 @@ export async function getCaseDetails(caseId: string) {
       ...cCase,
       evaluationExpiresAt,
       reviewDeadlineAt,
+      qualityReviewDeadlineAt,
       comparativeOffers,
       serverNowMs: Date.now(),
       archivedByCurrentUser,
@@ -1119,7 +1130,7 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
           type: 'tecnico',
           action: CASE_EVENTS.REVISION_ENVIADA_CALIDAD,
           content: notes || `Entrega v${nextVersion} enviada a revisión de Calidad.`,
-          payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'tecnico' },
+          payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'tecnico', qualityScoped: true },
           stateChange: { from: 'enEjecucion', to: 'enRevisionCalidad' }
         }, tx);
         if (caseRow?.quality_reviewer_id) {

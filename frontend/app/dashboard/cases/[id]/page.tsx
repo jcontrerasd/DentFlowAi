@@ -60,6 +60,11 @@ import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
 import Link from 'next/link';
 import { startWorkAction } from '@/lib/db/actions/proposal';
+import {
+  certifyQualityAction,
+  requestQualityRevisionAction,
+  sendToDentistAction,
+} from '@/lib/db/actions/quality';
 import { createAnnotationAction, deleteAnnotationAction } from '@/lib/db/actions/annotations';
 import { registerFileAction, logFileDownloadAction, deleteCaseFileAction } from '@/lib/db/actions/files';
 import { useAuth } from '@/context/AuthContext';
@@ -423,11 +428,32 @@ function CaseDetailPageContent() {
     ],
   );
 
+  // v5.19 — SLA de la etapa de Calidad (lo computa getCaseDetails con la config anclada).
+  const qualityReviewDeadlineMs = useMemo(
+    () => toDeadlineMs(clinicalCase?.qualityReviewDeadlineAt),
+    [
+      clinicalCase?.qualityReviewDeadlineAt == null
+        ? 0
+        : typeof clinicalCase.qualityReviewDeadlineAt === 'string'
+          ? clinicalCase.qualityReviewDeadlineAt
+          : clinicalCase.qualityReviewDeadlineAt instanceof Date
+            ? clinicalCase.qualityReviewDeadlineAt.getTime()
+            : 0,
+    ],
+  );
+
   const assignedTechnicianIdStr = useMemo(
     () => normalizedAssignedTechnicianId(clinicalCase),
     [clinicalCase?.assignedTechnicianId],
   );
   const viewerIdStr = authUserProfile?.id ? String(authUserProfile.id) : null;
+
+  // v5.19 — El viewer es el revisor de Calidad asignado al caso (o admin supervisando).
+  const actingAsCalidad =
+    String(userRole) === 'calidad' &&
+    !!viewerIdStr &&
+    clinicalCase?.qualityReviewerId != null &&
+    String(clinicalCase.qualityReviewerId) === viewerIdStr;
 
   const techOfferRejectedView = useMemo(() => {
     if (viewingAsAdmin || !actingAsTecnico || !viewerIdStr) return false;
@@ -537,6 +563,33 @@ function CaseDetailPageContent() {
           showErrorToast((res as any)?.error || 'Error al solicitar revisión');
           return false;
         }
+      } else if (action === 'certify_quality') {
+        const comment = typeof data?.comment === 'string' ? data.comment : '';
+        const res = await certifyQualityAction(id as string, comment);
+        if (!res?.success) {
+          showErrorToast((res as any)?.error || 'Error al certificar la entrega');
+          return false;
+        }
+        showSuccessToastMessage('Entrega certificada. El técnico ya puede enviarla.');
+      } else if (action === 'request_quality_revision') {
+        const reason = data?.reason || '';
+        if (!reason.trim()) {
+          showErrorToast('Indica qué ajustes necesita la entrega antes de certificar.');
+          return false;
+        }
+        const res = await requestQualityRevisionAction(id as string, reason);
+        if (!res?.success) {
+          showErrorToast((res as any)?.error || 'Error al solicitar ajustes');
+          return false;
+        }
+        showSuccessToastMessage('Ajustes solicitados al técnico');
+      } else if (action === 'send_to_dentist') {
+        const res = await sendToDentistAction(id as string);
+        if (!res?.success) {
+          showErrorToast((res as any)?.error || 'Error al enviar al solicitante');
+          return false;
+        }
+        showSuccessToastMessage('Entrega enviada al solicitante');
       } else if (action === 'rate_work') {
         showSuccessToastMessage("Funcionalidad de valoración en desarrollo.");
       } else if (action === 'resolve_flow') {
@@ -2240,6 +2293,7 @@ function CaseDetailPageContent() {
           currentStatus={isEditingStatus ?? clinicalCase?.status ?? 'borrador'}
           workDeadline={techOfferRejectedView ? undefined : clinicalCase?.workDeadline}
           variant={techOfferRejectedView ? 'techRejected' : 'case'}
+          viewerRole={viewingAsAdmin ? 'admin' : actingAsCalidad ? 'calidad' : actingAsTecnico ? 'tecnico' : 'dentista'}
         />
       </div>
 
@@ -2478,6 +2532,7 @@ function CaseDetailPageContent() {
                   currentUser={viewerSignedImage ? { ...authUserProfile, image: viewerSignedImage } : authUserProfile}
                   actingAsDentista={actingAsDentista}
                   actingAsTecnico={actingAsTecnico}
+                  actingAsCalidad={actingAsCalidad}
                   viewingAsAdmin={viewingAsAdmin}
                   uchPresentationRole={uchPresentationRole}
                   caseStatus={clinicalCase.status}
@@ -2495,6 +2550,7 @@ function CaseDetailPageContent() {
                   onActionTriggered={handleHubAction}
                   proposalDeadlineMs={proposalDeadlineMs}
                   reviewDeadlineMs={reviewDeadlineMs}
+                  qualityReviewDeadlineMs={qualityReviewDeadlineMs}
                   serverClockAnchor={serverClockAnchor}
                   newMessageCount={unreadTechMessages + unreadNegotiationMessages}
                   onAcknowledgeNew={acknowledgeNewHubMessages}
