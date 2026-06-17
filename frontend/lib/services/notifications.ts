@@ -102,6 +102,18 @@ export type NotificationType =
   /** Dentista: plazo de revisión de entrega por vencer / vencido (§4.2, sin auto-acción). */
   | 'REVISION_PLAZO_POR_VENCER'
   | 'REVISION_PLAZO_VENCIDO'
+  // ─── v5.19 — Compuerta de Calidad (gated por QUALITY_GATE_ENABLED) ───
+  /** Calidad: nueva entrega del técnico pendiente de certificar. */
+  | 'REVISION_PENDIENTE_CALIDAD'
+  /** Técnico: Calidad certificó la entrega; ya puede enviarla al dentista. */
+  | 'CALIDAD_CERTIFICO'
+  /** Técnico: Calidad solicitó ajustes antes de certificar. */
+  | 'CALIDAD_SOLICITO_AJUSTES'
+  /** Calidad: un caso le fue derivado por otro revisor de Calidad. */
+  | 'CASO_DERIVADO_CALIDAD'
+  /** Calidad: SLA de revisión por vencer / vencido (sin auto-acción). */
+  | 'QUALITY_PLAZO_POR_VENCER'
+  | 'QUALITY_PLAZO_VENCIDO'
   /** Técnico: comunicación de rollout del modelo de disponibilidad (Fase 7). */
   | 'ROLLOUT_PROXIMO'
   | 'ROLLOUT_ACTIVADO';
@@ -131,6 +143,12 @@ const NOTIFICATION_CHANNELS: Partial<Record<NotificationType, NotificationChanne
   REPUBLICAR_DISPONIBLE: { email: true, inApp: true },
   REVISION_PLAZO_POR_VENCER: { email: true, inApp: true },
   REVISION_PLAZO_VENCIDO: { email: true, inApp: true },
+  REVISION_PENDIENTE_CALIDAD: { email: true, inApp: true },
+  CALIDAD_CERTIFICO: { email: true, inApp: true },
+  CALIDAD_SOLICITO_AJUSTES: { email: true, inApp: true },
+  CASO_DERIVADO_CALIDAD: { email: true, inApp: true },
+  QUALITY_PLAZO_POR_VENCER: { email: true, inApp: true },
+  QUALITY_PLAZO_VENCIDO: { email: true, inApp: true },
   ROLLOUT_PROXIMO: { email: true, inApp: true },
   ROLLOUT_ACTIVADO: { email: true, inApp: true },
 };
@@ -244,6 +262,30 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   REVISION_PLAZO_VENCIDO: {
     subject: 'Fauchard: el plazo para revisar tu entrega venció',
     body: (data) => `Hola,\n\nEl plazo para revisar la entrega de tu caso ${data.caseNumber || data.caseId} venció. No se aprobó ni rechazó nada automáticamente; el técnico sigue esperando tu respuesta. Te recomendamos revisarla cuanto antes.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  REVISION_PENDIENTE_CALIDAD: {
+    subject: 'Calidad: nueva entrega pendiente de certificar',
+    body: (data) => `Hola,\n\nHay una nueva entrega del técnico esperando tu revisión de Calidad en el caso ${data.caseNumber || data.caseId}. Ingresa para certificarla o solicitar ajustes.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  CALIDAD_CERTIFICO: {
+    subject: 'Fauchard: tu entrega fue certificada',
+    body: (data) => `Hola ${data.name || ''},\n\nTu entrega del caso ${data.caseNumber || data.caseId} fue certificada y ya puedes enviarla al solicitante desde el Hub del caso.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  CALIDAD_SOLICITO_AJUSTES: {
+    subject: 'Fauchard: solicitud de ajustes en tu entrega',
+    body: (data) => `Hola ${data.name || ''},\n\nSe solicitaron ajustes a tu entrega del caso ${data.caseNumber || data.caseId} antes de certificarla. Revisa el Hub del caso para ver el detalle.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  CASO_DERIVADO_CALIDAD: {
+    subject: 'Calidad: se te derivó un caso para revisión',
+    body: (data) => `Hola,\n\nUn caso (${data.caseNumber || data.caseId}) fue derivado a ti para revisión de Calidad. Revisa el motivo y el comentario en el Hub del caso.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  QUALITY_PLAZO_POR_VENCER: {
+    subject: 'Calidad: tienes una entrega por certificar',
+    body: (data) => `Hola,\n\nEl caso ${data.caseNumber || data.caseId} tiene una entrega esperando tu revisión de Calidad y el plazo está por vencer. Ingresa para certificar o solicitar ajustes.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  QUALITY_PLAZO_VENCIDO: {
+    subject: 'Calidad: el plazo para certificar venció',
+    body: (data) => `Hola,\n\nEl plazo de revisión de Calidad del caso ${data.caseNumber || data.caseId} venció. No se certificó ni rechazó nada automáticamente; el técnico sigue esperando tu respuesta.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
   ROLLOUT_PROXIMO: {
     subject: 'DentFlowAi: pronto tendrás más control sobre tus invitaciones',

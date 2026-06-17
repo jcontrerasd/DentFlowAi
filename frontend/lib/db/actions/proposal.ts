@@ -5,6 +5,7 @@ import { clinicalCase, caseAssignment, user } from '@/lib/db/schema';
 import { eq, and, inArray, ne } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { logCaseEvent } from './cases';
+import { assignQualityReviewerAction } from './quality';
 import { notifyUser } from '../../services/notifications';
 import { INTERNAL_CASE_STATUSES, CASE_STATUSES } from '@/lib/constants/dental';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
@@ -455,6 +456,13 @@ export async function startWorkAction(caseId: string): Promise<ActionResult> {
         updatedAt: now,
       })
       .where(eq(clinicalCase.id, caseId));
+
+    // Compuerta de Calidad: asignar revisor con reparto equitativo (best-effort, inerte con flag off).
+    try {
+      await assignQualityReviewerAction(caseId);
+    } catch (e) {
+      console.warn('[startWorkAction] No se pudo asignar revisor de Calidad:', e);
+    }
 
     const deadlineLabel = workDeadline.toLocaleDateString('es-CL', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',

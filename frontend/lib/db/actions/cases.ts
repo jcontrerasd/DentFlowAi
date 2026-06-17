@@ -18,6 +18,7 @@ import { archiveCaseFilesBestEffort } from '@/lib/db/archiveCaseFiles';
 import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
 import { getSignedUrl, getUploadUrl } from "@/lib/gcs";
 import { canActAsTecnico, canActAsDentista } from "@/lib/auth-helpers";
+import { isQualityGateEnabled } from "@/lib/constants/qualityFlags";
 import { getServerIdentity } from "./impersonation";
 import { resolveCatalogCodesToIds } from "@/lib/db/catalogResolver";
 import {
@@ -1076,41 +1077,66 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
         whereConditions.push(eq(clinicalCase.assignedTechnicianId, userId as string));
       }
 
+      // ¿La entrega pasa por la compuerta de Calidad antes de llegar al dentista?
+      // Solo cuando el flag está on, el caso es solo_diseno y hay un revisor de Calidad
+      // asignado. Si no hay revisor (pool vacío al iniciar), se degrada al flujo legacy
+      // (entrega directa al dentista) para no atascar el caso.
+      const [caseRow]: any = await tx.execute(sql`
+        SELECT service_type, quality_reviewer_id, doctor_id
+        FROM clinical_case WHERE id = ${caseId} LIMIT 1
+      `);
+      const useQualityGate = isQualityGateEnabled()
+        && caseRow?.service_type === 'solo_diseno'
+        && !!caseRow?.quality_reviewer_id;
+      const targetStatus = useQualityGate ? 'enRevisionCalidad' : 'enRevision';
 
       // 3. Actualizar caso
       const [updatedCase] = await tx.update(clinicalCase)
         .set({
-          status: 'enRevision',
+          status: targetStatus,
           labNotes: notes,
-          currentResponsibility: 'dentista',
+          currentResponsibility: useQualityGate ? 'calidad' : 'dentista',
           lastActivityAt: new Date(),
-          // v5.0: cada entrega reinicia el countdown tDentistReviewHours (§4.2)
-          // y la escalación de notificaciones del cron (v5.2).
-          lastRevisionSubmittedAt: new Date(),
-          reviewReminderSentAt: null,
-          reviewOverdueNotifiedAt: null,
+          // El countdown que se reinicia depende de la etapa de destino: SLA de Calidad
+          // si va a Calidad; countdown de revisión del dentista (tDentistReviewHours) si va al dentista.
+          ...(useQualityGate
+            ? { lastQualitySubmittedAt: new Date(), qualityReminderSentAt: null, qualityOverdueNotifiedAt: null }
+            : { lastRevisionSubmittedAt: new Date(), reviewReminderSentAt: null, reviewOverdueNotifiedAt: null }),
           updatedAt: new Date()
         })
         .where(and(...whereConditions))
         .returning();
 
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'tecnico',
-        action: CASE_EVENTS.REVISION_ENVIADA,
-        content: notes || `Entrega v${nextVersion} lista para revisión.`,
-        payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'ambos' },
-        stateChange: { from: 'enEjecucion', to: 'enRevision' }
-      }, tx);
-
-
-
       if (!updatedCase) {
         throw new Error("No se pudo actualizar el caso. Verifica que eres el técnico asignado.");
       }
 
-      await notifyUser(updatedCase.doctorId as string, 'REVISION_PENDIENTE', { caseId, version: nextVersion });
+      if (useQualityGate) {
+        // Etapa de Calidad: invisible al dentista (visibleTo 'tecnico'); Calidad lo ve por acceso amplio.
+        await logCaseEvent({
+          caseId,
+          userId: identity.id as string,
+          type: 'tecnico',
+          action: CASE_EVENTS.REVISION_ENVIADA_CALIDAD,
+          content: notes || `Entrega v${nextVersion} enviada a revisión de Calidad.`,
+          payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'tecnico' },
+          stateChange: { from: 'enEjecucion', to: 'enRevisionCalidad' }
+        }, tx);
+        if (caseRow?.quality_reviewer_id) {
+          await notifyUser(caseRow.quality_reviewer_id as string, 'REVISION_PENDIENTE_CALIDAD', { caseId, version: nextVersion });
+        }
+      } else {
+        await logCaseEvent({
+          caseId,
+          userId: identity.id as string,
+          type: 'tecnico',
+          action: CASE_EVENTS.REVISION_ENVIADA,
+          content: notes || `Entrega v${nextVersion} lista para revisión.`,
+          payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'ambos' },
+          stateChange: { from: 'enEjecucion', to: 'enRevision' }
+        }, tx);
+        await notifyUser(updatedCase.doctorId as string, 'REVISION_PENDIENTE', { caseId, version: nextVersion });
+      }
 
       return { success: true, version: nextVersion };
     });
