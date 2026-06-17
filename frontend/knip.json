@@ -6,7 +6,6 @@
     "scratch-*.ts",
     "scripts/*.ts",
     "test-*.ts",
-    "components/cases/AcceptedProposalSummary.tsx",
     "components/cases/CaseCardSkeleton.tsx"
   ],
   "ignoreDependencies": [

@@ -72,10 +72,6 @@ export interface FauchardConfigRow {
   lPenaltyTransition: string;
   lDescentRating: string;
   lDescentDays: number;
-  /** v4.6 — Calendario laboral (usado para computar workDeadline). */
-  businessHoursStart: number;
-  businessHoursEnd: number;
-  businessDaysMask: number;
   /** v5.0 — Plazos, sanción rolling, cola pool y score αN (ver Fase 1). */
   tDentistReviewHours: number;
   tNoEligiblePoolHours: number;
@@ -453,80 +449,6 @@ export async function evaluateQuotesAction(_caseId: string) {
   return { success: true, skipped: true };
 }
 
-// ─── S2-08: Publicar vista comparativa (sin asignar laboratorio ni precio pactado)
-
-async function buildProposalAction(caseId: string, _orderedQuotedIds: string[]) {
-  try {
-    const config = await getConfigForCase(caseId);
-    const platformFee = parseFloat(config.platformFee);
-    const proposalExpiresAt = new Date(Date.now() + parseFloat(String(config.tProposalHours)) * 3600000);
-
-    const updated = await db
-      .update(clinicalCase)
-      .set({
-        proposedPrice: null,
-        proposedDeliveryDays: null,
-        platformFee: String(platformFee),
-        proposalExpiresAt,
-        status: CASE_STATUSES.PROPUESTA_LISTA,
-        internalStatus: INTERNAL_CASE_STATUSES.PROPUESTA_PRESENTADA,
-        currentResponsibility: 'dentista',
-        assignedTechnicianId: null,
-        assignedAt: null,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(eq(clinicalCase.id, caseId), eq(clinicalCase.status, CASE_STATUSES.EN_EVALUACION)),
-      )
-      .returning();
-
-    if (!updated.length) {
-      return { success: true, alreadyBuilt: true as const };
-    }
-
-    const [cCase] = updated;
-    const n = _orderedQuotedIds.length;
-    const docId = (cCase as any)?.doctorId as string | undefined;
-
-    if (docId) {
-      await logCaseEvent({
-        caseId,
-        userId: docId,
-        type: 'sistema',
-        action: 'FAUCHARD_PRESENTACION_CERRADA',
-        content: 'Comparativo cerrado.',
-        payload: {
-          offerCount: n,
-          expiresAt: proposalExpiresAt.toISOString(),
-          visibleTo: 'sistema',
-          ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
-        },
-        stateChange: { from: CASE_STATUSES.EN_EVALUACION, to: CASE_STATUSES.PROPUESTA_LISTA },
-      });
-
-      await logCaseEvent({
-        caseId,
-        userId: docId,
-        type: 'sistema',
-        action: CASE_EVENTS.OFERTAS_COMPARATIVAS_LISTAS,
-        content: `Tienes ${n} oferta(s) listas para revisar.`,
-        payload: { visibleTo: 'sistema', offerCount: n },
-        stateChange: { from: CASE_STATUSES.EN_EVALUACION, to: CASE_STATUSES.PROPUESTA_LISTA },
-      });
-
-      await notifyUser(docId, 'PROPUESTA_LISTA' as any, {
-        caseId,
-        expiresAt: proposalExpiresAt.toISOString(),
-      });
-    }
-
-    return { success: true, alreadyBuilt: false as const, proposalExpiresAt, offerCount: n };
-  } catch (error) {
-    console.error('[buildProposalAction] Error:', error);
-    return { success: false, error: String(error) };
-  }
-}
-
 // ─── S8-04: Expiración de Propuestas (Dentista no respondió) ──────────────────
 
 export async function checkAndExpireProposalsAction() {
@@ -702,9 +624,6 @@ export async function getFauchardConfigAction(): Promise<ActionResult<{ config: 
         lPenaltyTransition: fauchardConfig.lPenaltyTransition,
         lDescentRating: fauchardConfig.lDescentRating,
         lDescentDays: fauchardConfig.lDescentDays,
-        businessHoursStart: fauchardConfig.businessHoursStart,
-        businessHoursEnd: fauchardConfig.businessHoursEnd,
-        businessDaysMask: fauchardConfig.businessDaysMask,
         // v5.0 — Plazos, sanción rolling, cola pool y score αN.
         tDentistReviewHours: fauchardConfig.tDentistReviewHours,
         tNoEligiblePoolHours: fauchardConfig.tNoEligiblePoolHours,

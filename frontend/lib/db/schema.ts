@@ -342,12 +342,6 @@ export const fauchardConfig = pgTable("fauchard_config", {
   // Cotización y propuesta
   tQuoteMinutes: integer("t_quote_minutes").default(30).notNull(),
   tProposalHours: integer("t_proposal_hours").default(2).notNull(),
-  // v4.6 — Calendario laboral (usado para calcular workDeadline)
-  businessHoursStart: integer("business_hours_start").default(8).notNull(),
-  businessHoursEnd: integer("business_hours_end").default(20).notNull(),
-  // Bitmask de días laborables: bit 0=Lun, 1=Mar, 2=Mié, 3=Jue, 4=Vie, 5=Sáb, 6=Dom.
-  // Default 31 (0b0011111) = Lunes a Viernes.
-  businessDaysMask: integer("business_days_mask").default(31).notNull(),
   // Fee de plataforma (15% = 0.1500)
   platformFee: numeric("platform_fee", { precision: 5, scale: 4 }).default('0.1500').notNull(),
   // Categoría — ascenso
@@ -399,17 +393,6 @@ export const fauchardConfigLog = pgTable("fauchard_config_log", {
 }, (table) => [
   index("acl_config_idx").on(table.configId),
   index("acl_changed_by_idx").on(table.changedBy),
-]);
-
-// v4.6 — Feriados administrables (lista global, no por config)
-export const fauchardHoliday = pgTable("fauchard_holiday", {
-  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
-  holidayDate: date("holiday_date").notNull(),
-  label: text("label").notNull(),
-  createdBy: text("created_by").references(() => user.id, { onDelete: 'set null' }),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
-}, (table) => [
-  uniqueIndex("fauchard_holiday_date_uidx").on(table.holidayDate),
 ]);
 
 // Asignación directa Fauchard (1 técnico por intento; aceptar/rechazar, sin cotización)
