@@ -669,6 +669,7 @@ export async function getCaseDetails(caseId: string) {
         urgencyLevel: true,
         files: true,
         annotations: {
+          where: (ann, { isNull }) => isNull(ann.deliveryId),
           with: { user: true }
         },
         bids: {
@@ -1050,14 +1051,14 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
       };
 
       // 2. Crear registro de entrega
-      await tx.insert(clinicalCaseDelivery as any).values({
+      const [newDelivery] = await tx.insert(clinicalCaseDelivery as any).values({
         clinicalCaseId: caseId,
         technicianId: userId,
         version: nextVersion,
         notes: notes,
         files: files,
         status: 'pending'
-      });
+      }).returning({ id: (clinicalCaseDelivery as any).id });
 
       const whereConditions = [eq(clinicalCase.id, caseId)];
       if (!identity.isSystemAdmin) {
@@ -1088,7 +1089,7 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
         type: 'tecnico',
         action: CASE_EVENTS.REVISION_ENVIADA,
         content: notes || `Entrega v${nextVersion} lista para revisión.`,
-        payload: { deliveryVersion: nextVersion, files, visibleTo: 'ambos' },
+        payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'ambos' },
         stateChange: { from: 'enEjecucion', to: 'enRevision' }
       }, tx);
 
@@ -1432,9 +1433,18 @@ export async function requestRevisionAction(caseId: string, reason: string): Pro
         comment: reason
       };
 
-      // 1. Marcar la última entrega como rechazada
+      // 1. Capturar la entrega pending antes de rechazarla (para incluirla en el payload del evento)
+      const [pendingDelivery] = await tx
+        .select({ id: (clinicalCaseDelivery as any).id, files: (clinicalCaseDelivery as any).files, version: (clinicalCaseDelivery as any).version })
+        .from(clinicalCaseDelivery as any)
+        .where(and(
+          eq((clinicalCaseDelivery as any).clinicalCaseId, caseId),
+          eq((clinicalCaseDelivery as any).status, 'pending'),
+        ))
+        .limit(1);
+
       await tx.execute(sql`
-        UPDATE clinical_case_delivery 
+        UPDATE clinical_case_delivery
         SET status = 'rejected', reviewed_at = now(), review_comment = ${reason}
         WHERE clinical_case_id = ${caseId} AND status = 'pending'
       `);
@@ -1461,6 +1471,9 @@ export async function requestRevisionAction(caseId: string, reason: string): Pro
         content: `${reason}`,
         payload: {
           reason,
+          deliveryId: pendingDelivery?.id ?? null,
+          deliveryVersion: pendingDelivery?.version ?? null,
+          files: pendingDelivery?.files ?? [],
           /** Bitácora compartida: el solicitante debe ver su propia solicitud en el UCH; el técnico sigue viendo voz Fauchard vía presentationAuthor. */
           visibleTo: 'ambos',
           ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,

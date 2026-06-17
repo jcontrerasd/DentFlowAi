@@ -3,8 +3,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-/** v5.15 — Bono de infrautilización (αB) reactivo en score; Σ6=1.0. */
-export const INFRA_VERSION = 'v5.17';
+/** v5.18 — Visor 3D de revisión: delivery_id en annotation para anotaciones por entrega. */
+export const INFRA_VERSION = 'v5.18';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -1477,6 +1477,15 @@ export async function ensureInfrastructure(db: any) {
       DROP TABLE IF EXISTS fauchard_holiday CASCADE;
     `);
     console.log('[DB] v5.17 limpieza legacy: business_*, quoted_design/fabrication_*, fauchard_holiday.');
+
+    // v5.18 — Visor 3D de revisión: delivery_id en annotation
+    await db.execute(sql`
+      ALTER TABLE annotation
+        ADD COLUMN IF NOT EXISTS delivery_id UUID
+        REFERENCES clinical_case_delivery(id) ON DELETE CASCADE;
+      CREATE INDEX IF NOT EXISTS annotation_delivery_id_idx ON annotation(delivery_id);
+    `);
+    console.log('[DB] v5.18 annotation.delivery_id + índice.');
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
     console.log("[DB] Infraestructura verificada con éxito.");

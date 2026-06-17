@@ -12,23 +12,22 @@ describe('UCH audit matrix', () => {
     expect(actions).toContain(CASE_EVENTS.CASO_CANCELADO);
   });
 
-  it('primaryUchActionId respeta prioridad review > delivery > case_actions', () => {
+  it('primaryUchActionId respeta prioridad delivery > case_actions', () => {
     expect(
-      primaryUchActionId({ includeDentistReview: true, includeDelivery: true, includeCaseActions: true }),
-    ).toBe('dentist_review');
-    expect(
-      primaryUchActionId({ includeDentistReview: false, includeDelivery: true, includeCaseActions: true }),
+      primaryUchActionId({ includeDelivery: true, includeCaseActions: true }),
     ).toBe('delivery');
     expect(
-      primaryUchActionId({ includeDentistReview: false, includeDelivery: false, includeCaseActions: true }),
+      primaryUchActionId({ includeDelivery: false, includeCaseActions: true }),
     ).toBe('case_actions');
+    expect(
+      primaryUchActionId({ includeDelivery: false, includeCaseActions: false }),
+    ).toBe(null);
   });
 
   it('buildUchTimelineRows incluye fila case_actions cuando aplica', () => {
     const rows = buildUchTimelineRows({
       events: [],
       includeContext: false,
-      includeDentistReview: false,
       includeCaseActions: true,
       includeDelivery: false,
       pinActionId: 'case_actions',

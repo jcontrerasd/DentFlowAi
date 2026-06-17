@@ -192,8 +192,12 @@ function resolveTecnicoTableB(
 ): { lane: UchThreadLane; showAsFauchard: boolean } {
   const { visibleTo, presentationAuthor, samePersistedAuthor, maskedUserIsFauchard, authorRole } = ctx;
 
-  // B — Invitación recibida: siempre hilo y voz Fauchard (legacy sin presentationAuthor incluido).
-  if (action === CASE_EVENTS.INVITACION_RECIBIDA) {
+  // B — Asignación/invitación recibida: siempre hilo y voz Fauchard.
+  if (
+    action === CASE_EVENTS.INVITACION_RECIBIDA ||
+    action === CASE_EVENTS.ASIGNACION_RECIBIDA ||
+    action === CASE_EVENTS.ASIGNACION_REASIGNADA
+  ) {
     return { lane: 'thread', showAsFauchard: true };
   }
 

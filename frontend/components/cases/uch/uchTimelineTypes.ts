@@ -1,6 +1,6 @@
 /** Fila unificada del hilo UCH (eventos + contexto + acciones), orden descendente por `sortAt`. */
 
-export type UchActionRowId = 'dentist_review' | 'case_actions' | 'delivery';
+export type UchActionRowId = 'case_actions' | 'delivery';
 
 export type UchCaseEventLite = {
   id: string;

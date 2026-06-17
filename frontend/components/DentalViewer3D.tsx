@@ -164,27 +164,27 @@ function Model({
   return <primitive object={result} onPointerDown={onPointerDown} />;
 }
 
-function Pin({ position, text, user }: { position: [number, number, number], text: string, user: string }) {
+function Pin({ position, text, user, color = '#e11d48' }: { position: [number, number, number], text: string, user: string, color?: string }) {
   const [hovered, setHovered] = useState(false);
-  
+
   return (
     <group position={position}>
-      <mesh 
+      <mesh
         onPointerOver={() => setHovered(true)}
         onPointerOut={() => setHovered(false)}
       >
         <sphereGeometry args={[0.5, 16, 16]} />
-        <meshStandardMaterial 
-          color="#e11d48" 
-          emissive="#e11d48"
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
           emissiveIntensity={hovered ? 5 : 2}
         />
       </mesh>
-      
+
       {/* Halo de pulso */}
       <mesh>
         <sphereGeometry args={[0.7, 16, 16]} />
-        <meshBasicMaterial color="#e11d48" transparent opacity={0.2} />
+        <meshBasicMaterial color={color} transparent opacity={0.2} />
       </mesh>
       
       <Html zIndexRange={[100, 0]} style={{ pointerEvents: 'none' }}>
@@ -209,6 +209,7 @@ interface DentalAnnotation {
   text: string;
   coordinates: { x: number, y: number, z: number };
   user: { fullName: string };
+  color?: string;
 }
 
 interface DentalModel {
@@ -375,6 +376,7 @@ export default function DentalViewer3D({
                     position={[anno.coordinates.x, anno.coordinates.y, anno.coordinates.z]}
                     text={anno.text}
                     user={anno.user?.fullName || 'Usuario'}
+                    color={anno.color}
                   />
                 ))}
               </group>

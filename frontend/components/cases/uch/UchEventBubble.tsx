@@ -58,7 +58,7 @@ function EventOfferQuoteDetail({
 
 type UchEventBubbleProps = {
   event: UchCaseEventLite;
-  currentUser: { id?: string } | null | undefined;
+  currentUser: { id?: string; image?: string } | null | undefined;
   actingAsDentista: boolean;
   /** Permite reglas de carril “propio” simétricas al dentista (comparativo / cierres solo técnico). */
   actingAsTecnico?: boolean;
@@ -69,6 +69,17 @@ type UchEventBubbleProps = {
   /** Descarga ZIP de la entrega asociada al evento REVISION_ENVIADA (misma lógica que el hub). */
   onDownloadRevisionZip?: (zipKey: string, versionLabel: string, files: string[]) => void | Promise<void>;
   downloadingRevisionZipId?: string | null;
+  /** Visor 3D: abre el modal de revisión 3D para una entrega. */
+  onView3D?: (deliveryId: string, version: number, files: string[], dentistNote?: string) => void;
+  /** true cuando esta burbuja corresponde a la entrega pendiente de revisión (dentista). */
+  isPendingDelivery?: boolean;
+  /** Handlers de revisión movidos desde UchDentistReviewPanel */
+  onApproveDelivery?: () => Promise<void>;
+  onRequestRevisionDelivery?: () => Promise<void>;
+  reviewComment?: string;
+  setReviewComment?: (v: string) => void;
+  isSubmittingReview?: boolean;
+  isSubmittingRevision?: boolean;
 };
 
 export default function UchEventBubble({
@@ -82,6 +93,14 @@ export default function UchEventBubble({
   formatActivityTimestamp,
   onDownloadRevisionZip,
   downloadingRevisionZipId,
+  onView3D,
+  isPendingDelivery = false,
+  onApproveDelivery,
+  onRequestRevisionDelivery,
+  reviewComment = '',
+  setReviewComment,
+  isSubmittingReview = false,
+  isSubmittingRevision = false,
 }: UchEventBubbleProps) {
   const payloadVisibleTo = (event.payload as Record<string, unknown> | undefined)?.visibleTo;
   const { lane, showAsFauchard } = resolveUchThreadLane(event, {
@@ -159,11 +178,12 @@ export default function UchEventBubble({
           <div className="w-5 h-5 rounded-full bg-surface-2 border border-divider overflow-hidden flex items-center justify-center flex-shrink-0">
             {showAsFauchard ? (
               <Sparkles className="w-2.5 h-2.5 text-warning" />
-            ) : event.user?.image && (event.user.image.startsWith('http') || event.user.image.startsWith('/')) ? (
-              <Image src={event.user.image} alt="" width={20} height={20} className="w-full h-full object-cover" unoptimized={event.user.image.startsWith('http')} />
-            ) : (
-              <User className="w-2.5 h-2.5 text-faint" />
-            )}
+            ) : (() => {
+              const avatarSrc = event.user?.image || (showHeaderAsYou ? currentUser?.image : undefined);
+              return avatarSrc && (avatarSrc.startsWith('http') || avatarSrc.startsWith('/'))
+                ? <Image src={avatarSrc} alt="" width={20} height={20} className="w-full h-full object-cover" unoptimized={avatarSrc.startsWith('http')} />
+                : <User className="w-2.5 h-2.5 text-faint" />;
+            })()}
           </div>
           <span className="text-[10px] font-semibold text-faint">
             {showHeaderAsYou ? 'Yo' : showAsFauchard ? 'Fauchard' : (event.user?.fullName || 'Usuario')}
@@ -382,12 +402,17 @@ export default function UchEventBubble({
             </div>
           )}
           {event.action === 'REVISION_ENVIADA' && (() => {
-            const payload = (event.payload ?? {}) as { deliveryVersion?: number; files?: string[] };
+            const payload = (event.payload ?? {}) as { deliveryVersion?: number; deliveryId?: string; files?: string[] };
             const deliveryVersion =
               payload.deliveryVersion ?? revisionVersionMap.get(event.id) ?? 1;
+            // deliveryId puede ser null en eventos legacy (antes del payload v5.18)
+            // En ese caso usamos el event.id como identificador del visor
+            const deliveryIdFromPayload = payload.deliveryId ?? event.id;
             const files = Array.isArray(payload.files) ? payload.files.filter(Boolean) : [];
             const zipKey = `rev-${event.id}`;
             const canDownload = !!onDownloadRevisionZip && files.length > 0;
+            const canView3D = !!onView3D && files.length > 0;
+            const [approveStep, setApproveStep] = React.useState<'choose' | 'confirm'>('choose');
             return (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-primary">
@@ -400,7 +425,7 @@ export default function UchEventBubble({
                     <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">{event.content}</p>
                   </div>
                 ) : null}
-                {canDownload ? (
+                {(canDownload || canView3D) ? (
                   <div
                     className={`flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t ${
                       isSelfLane ? 'border-primary/30' : 'border-divider'
@@ -409,25 +434,97 @@ export default function UchEventBubble({
                     <span className={`text-[10px] ${isSelfLane ? 'text-foreground' : 'text-muted'}`}>
                       v{deliveryVersion} · {files.length} archivo{files.length !== 1 ? 's' : ''}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => void onDownloadRevisionZip(zipKey, `v${deliveryVersion}`, files)}
-                      disabled={downloadingRevisionZipId === zipKey}
-                      className={`text-[11px] font-medium whitespace-nowrap disabled:opacity-40 inline-flex items-center gap-1 shrink-0 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 rounded-sm ${
-                        isSelfLane
-                          ? 'text-foreground hover:text-foreground'
-                          : 'text-primary/90 hover:text-primary'
-                      }`}
-                    >
-                      {downloadingRevisionZipId === zipKey ? (
-                        <Activity className="w-3 h-3 animate-spin" aria-hidden />
-                      ) : (
-                        <Download className="w-3 h-3" aria-hidden />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {canDownload && (
+                        <button
+                          type="button"
+                          onClick={() => void onDownloadRevisionZip(zipKey, `v${deliveryVersion}`, files)}
+                          disabled={downloadingRevisionZipId === zipKey}
+                          className={`text-[11px] font-medium whitespace-nowrap disabled:opacity-40 inline-flex items-center gap-1 shrink-0 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 rounded-sm ${
+                            isSelfLane
+                              ? 'text-foreground hover:text-foreground'
+                              : 'text-primary/90 hover:text-primary'
+                          }`}
+                        >
+                          {downloadingRevisionZipId === zipKey ? (
+                            <Activity className="w-3 h-3 animate-spin" aria-hidden />
+                          ) : (
+                            <Download className="w-3 h-3" aria-hidden />
+                          )}
+                          Descargar ZIP
+                        </button>
                       )}
-                      Descargar v{deliveryVersion} (ZIP)
-                    </button>
+                      {canView3D && (
+                        <button
+                          type="button"
+                          onClick={() => onView3D!(deliveryIdFromPayload!, deliveryVersion, files)}
+                          className="text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 shrink-0 text-teal-400 hover:text-teal-300 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/30 rounded-sm"
+                        >
+                          <Sparkles className="w-3 h-3" aria-hidden />
+                          Ver en 3D
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ) : null}
+                {/* Controles de revisión del dentista (solo entrega pendiente) */}
+                {isPendingDelivery && actingAsDentista && (
+                  <div className={`pt-2 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'} space-y-2`}>
+                    {approveStep === 'confirm' ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-muted">¿Confirmas que apruebas esta entrega?</span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setApproveStep('choose')}
+                            className="text-[11px] text-muted hover:text-foreground"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void onApproveDelivery?.()}
+                            disabled={isSubmittingReview}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-green-600 hover:bg-green-700 px-2 py-1 rounded disabled:opacity-40"
+                          >
+                            {isSubmittingReview ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <CheckCircle2 className="w-3 h-3" aria-hidden />}
+                            Confirmar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <textarea
+                          className="w-full text-[11px] bg-background border border-divider rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground"
+                          rows={2}
+                          placeholder="Comentario (requerido para pedir ajustes)…"
+                          value={reviewComment}
+                          onChange={(e) => setReviewComment?.(e.target.value)}
+                        />
+                        <div className="flex flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setApproveStep('confirm')}
+                            disabled={isSubmittingReview}
+                            className="w-full inline-flex items-center justify-center gap-1 text-[11px] font-semibold text-white bg-green-600 hover:bg-green-700 px-2 py-1.5 rounded disabled:opacity-40"
+                          >
+                            {isSubmittingReview ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <CheckCircle2 className="w-3 h-3" aria-hidden />}
+                            Aprobar entrega
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void onRequestRevisionDelivery?.()}
+                            disabled={isSubmittingRevision || !reviewComment.trim()}
+                            className="w-full inline-flex items-center justify-center gap-1 text-[11px] font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-2 py-1 rounded disabled:opacity-40"
+                          >
+                            {isSubmittingRevision ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <AlertCircle className="w-3 h-3" aria-hidden />}
+                            Pedir ajustes
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -436,6 +533,10 @@ export default function UchEventBubble({
             const adjustmentText = [event.content, payload.comentarioDelSolicitante, payload.reason]
               .map((t) => (typeof t === 'string' ? t.trim() : ''))
               .find((t) => t.length > 0) ?? '';
+            const solFiles = Array.isArray(payload.files) ? (payload.files as string[]).filter(Boolean) : [];
+            const solDeliveryId = typeof payload.deliveryId === 'string' ? payload.deliveryId : null;
+            const solVersion = typeof payload.deliveryVersion === 'number' ? payload.deliveryVersion : null;
+            const canView3DSol = !!onView3D && solFiles.length > 0 && (!!solDeliveryId || solVersion !== null);
             return (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-warning">
@@ -447,6 +548,18 @@ export default function UchEventBubble({
                   <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{adjustmentText}</p>
                 ) : (
                   <p className="text-[10px] text-faint italic">Sin descripción de ajuste.</p>
+                )}
+                {canView3DSol && (
+                  <div className={`pt-1.5 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'}`}>
+                    <button
+                      type="button"
+                      onClick={() => onView3D!(solDeliveryId ?? event.id, solVersion ?? 1, solFiles, adjustmentText || undefined)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-teal-400 hover:text-teal-300 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/30 rounded-sm"
+                    >
+                      <Sparkles className="w-3 h-3" aria-hidden />
+                      Ver entrega en 3D
+                    </button>
+                  </div>
                 )}
               </div>
             );

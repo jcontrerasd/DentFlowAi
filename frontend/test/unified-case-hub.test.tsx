@@ -472,7 +472,7 @@ describe('UnifiedCaseHub', () => {
       initialEvents: [entrega],
     });
     const panel = activityScroll();
-    expect(within(panel).getByRole('button', { name: /descargar v1 \(zip\)/i })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /descargar zip/i })).toBeInTheDocument();
     expect(screen.queryByTestId('uch-context-card')).not.toBeInTheDocument();
     expect(within(panel).queryByText(/Más sobre el caso/i)).not.toBeInTheDocument();
   });
@@ -518,12 +518,22 @@ describe('UnifiedCaseHub', () => {
     expect(within(panel).getByText(/Reducir vértice incisal/i)).toBeInTheDocument();
   });
 
-  it('dentista en revisión: no lista «Versiones anteriores» en el hub; el panel de revisión ofrece ZIP de la entrega pendiente', () => {
+  it('dentista en revisión: no lista «Versiones anteriores» en el hub; botones Aprobar/Pedir ajustes en burbuja REVISION_ENVIADA', () => {
+    const revisionEventWithDelivery = {
+      id: 'evt-rev',
+      userId: 'u-tech',
+      type: 'tecnico' as const,
+      action: 'REVISION_ENVIADA',
+      content: 'Entrega v2 lista para revisión.',
+      payload: { deliveryVersion: 2, deliveryId: 'd2', files: ['organizations/org-1/cases/case-1/b.stl'], visibleTo: 'ambos' },
+      stateChange: {},
+      createdAt: new Date().toISOString(),
+    };
     render(
       <ToastProvider>
         <UnifiedCaseHub
           caseId="case-1"
-          initialEvents={[]}
+          initialEvents={[revisionEventWithDelivery]}
           currentUser={{ id: 'u-dent', fullName: 'Dra. Prueba' }}
           actingAsDentista
           actingAsTecnico={false}
@@ -543,8 +553,10 @@ describe('UnifiedCaseHub', () => {
       </ToastProvider>,
     );
     expect(screen.queryByText(/Versiones anteriores/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId('uch-dentist-review-panel')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /v2 zip/i })).toBeInTheDocument();
+    // Panel separado eliminado — los controles de revisión están en la burbuja del evento
+    expect(screen.queryByTestId('uch-dentist-review-panel')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Aprobar/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Pedir ajustes/i })).toBeInTheDocument();
   });
 
   it('muestra banner de instrucciones vía Fauchard en cambiosEnProceso para el técnico asignado', () => {

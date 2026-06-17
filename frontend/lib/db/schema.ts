@@ -256,6 +256,7 @@ export const file = pgTable("file", {
 export const annotation = pgTable("annotation", {
 	id: uuid("id").default(sql`uuid_generate_v4()`).primaryKey().notNull(),
 	clinicalCaseId: uuid("clinical_case_id").notNull().references(() => clinicalCase.id, { onDelete: 'cascade' }),
+	deliveryId: uuid("delivery_id").references(() => clinicalCaseDelivery.id, { onDelete: 'cascade' }),
 	coordinates: jsonb(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 	isResolved: boolean("is_resolved").notNull(),
@@ -265,6 +266,7 @@ export const annotation = pgTable("annotation", {
 	userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
 }, (table) => [
   index("annotation_clinicalCaseId_idx").on(table.clinicalCaseId),
+  index("annotation_delivery_id_idx").on(table.deliveryId),
 ]);
 
 export const clinicalCaseEvent = pgTable("clinical_case_event", {

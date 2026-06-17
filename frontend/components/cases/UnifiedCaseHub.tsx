@@ -20,7 +20,7 @@ import type { UchActionRowId, UchCaseEventLite } from '@/components/cases/uch/uc
 import UchEventBubble from '@/components/cases/uch/UchEventBubble';
 import UchDeliveryPanel, { newDeliveryEntry } from '@/components/cases/uch/UchDeliveryPanel';
 import type { DeliveryFileEntry } from '@/components/cases/uch/UchDeliveryPanel';
-import UchDentistReviewPanel from '@/components/cases/uch/UchDentistReviewPanel';
+import DeliveryViewer3DModal from '@/components/cases/uch/DeliveryViewer3DModal';
 import UchFauchardActionsPanel from '@/components/cases/uch/UchFauchardActionsPanel';
 import { CaseDesiredDeliveryChip } from '@/components/cases/CaseDesiredDeliveryChip';
 import { shouldShowDesiredDeliveryInUch } from '@/lib/cases/caseDeliveryPresentation';
@@ -220,7 +220,7 @@ export default function UnifiedCaseHub({
   };
 
   // Estados del formulario de cotización (técnico invitado)
-  type PhaseTab = 'todos' | 'propuesta' | 'diseno';
+  type PhaseTab = 'todos' | 'asignacion' | 'entrega' | 'calificacion';
   const [phaseTab, setPhaseTab] = useState<PhaseTab>('todos');
 
   useEffect(() => {
@@ -235,6 +235,7 @@ export default function UnifiedCaseHub({
   const [reviewComment, setReviewComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
+  const [viewer3DState, setViewer3DState] = useState<{ deliveryId: string; version: number; files: string[]; dentistNote?: string } | null>(null);
   const [quotePrice, setQuotePrice] = useState('');
   const [quoteDays, setQuoteDays] = useState(0);
   const [quoteFlatUnit, setQuoteFlatUnit] = useState<'dias' | 'horas'>('dias');
@@ -271,38 +272,27 @@ export default function UnifiedCaseHub({
   }, [caseStatus, actingAsDentista, clinicalCase?.publishedAt]);
 
   const PHASE_ACTIONS: Record<string, string[]> = {
-    propuesta: [
-      'CASO_CREADO',
-      /** Alias legacy previo a CASO_CREADO; misma pestaña que borrador. */
-      'CREACION',
-      'COTIZACION_RECIBIDA',
-      'PROPUESTA_ACEPTADA',
-      'PROPUESTA_RECHAZADA',
-      'CASO_PUBLICADO',
-      'OFERTAS_COMPARATIVAS_LISTAS',
-      'PROPUESTA_GENERADA',
-      'OFERTA_ACEPTADA',
-      'OFERTA_RECHAZADA',
-      'OFERTA_GANADORA',
-      'OFERTA_NO_SELECCIONADA',
-      'CASO_OFERTAS_TODAS_RECHAZADAS',
-      'CASO_SIN_OFERTAS_CERRADO',
-      'INVITACION_RECIBIDA',
-      'OFERTA_ENVIADA',
-      'INVITACION_EXPIRADA',
-      'SOLICITUD_CAMBIO_FLUJO',
-      'SOLICITUD_CAMBIO_FLUJO_RECHAZADA',
-      'CASO_PAUSADO',
-      'CASO_CANCELADO',
+    // v2 activo: publicación, asignación directa, inicio de trabajo
+    // Legacy: todo el flujo de cotización múltiple y comparativo
+    asignacion: [
+      'CASO_PUBLICADO', 'CASO_EN_COLA', 'CASO_REPUBLICADO', 'REPUBLICACION',
+      'ASIGNACION_ENVIADA', 'ASIGNACION_RECIBIDA', 'ASIGNACION_ACEPTADA',
+      'ASIGNACION_RECHAZADA', 'ASIGNACION_EXPIRADA', 'ASIGNACION_REASIGNADA',
+      'OFERTA_RECHAZADA_POR_TECNICO', 'TRABAJO_INICIADO',
+      // Legacy cotización/comparativo
+      'INVITACION_RECIBIDA', 'INVITACION_EXPIRADA', 'OFERTA_ENVIADA',
+      'PROPUESTA_ACEPTADA', 'OFERTA_ACEPTADA', 'OFERTA_RECHAZADA',
+      'OFERTA_GANADORA', 'OFERTA_NO_SELECCIONADA', 'CASO_OFERTAS_TODAS_RECHAZADAS',
+      'CASO_SIN_OFERTAS_CERRADO', 'OFERTAS_COMPARATIVAS_LISTAS', 'PROPUESTA_GENERADA',
+      'SOLICITUD_CAMBIO_FLUJO', 'SOLICITUD_CAMBIO_FLUJO_RECHAZADA',
+      'CASO_PAUSADO', 'CASO_CANCELADO', 'CREACION', 'CASO_CREADO', 'CASO_COPIA',
     ],
-    diseno: [
-      'TRABAJO_INICIADO',
-      'REVISION_ENVIADA',
-      'REVISION_SOLICITADA',
-      'TRABAJO_APROBADO',
-      'COMENTARIO_TECNICO',
-      'REANUDADO',
-      // CALIFICACION_ENVIADA se enruta por dimensión en filteredEvents (CAD aquí, CAM en producción).
+    entrega: [
+      'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO',
+      'COMENTARIO_TECNICO', 'REANUDADO',
+    ],
+    calificacion: [
+      'CALIFICACION_ENVIADA',
     ],
   };
 
@@ -499,13 +489,7 @@ export default function UnifiedCaseHub({
     const list =
       allowed === null
         ? [...roleScopedEvents]
-        : roleScopedEvents.filter((e) => {
-            if (e.action === 'CALIFICACION_ENVIADA') {
-              if (phaseTab === 'diseno') return true;
-              return false;
-            }
-            return allowed.includes(e.action);
-          });
+        : roleScopedEvents.filter((e) => allowed.includes(e.action));
     const expanded = presentingAsDentista ? splitCasoPublicadoForDentista(list) : list;
     return expanded.sort(compareCaseEventsNewestFirst);
   }, [roleScopedEvents, phaseTab, presentingAsDentista]);
@@ -605,12 +589,9 @@ export default function UnifiedCaseHub({
     proposalExpiresAt: clinicalCase?.proposalExpiresAt,
   });
 
-  const includeDentistReview =
-    actingAsDentista && caseStatus === 'enRevision' && !!pendingDeliveryForReview;
-
   const primaryAction = useMemo(
-    () => primaryUchActionId({ includeDentistReview, includeDelivery, includeCaseActions }),
-    [includeDentistReview, includeDelivery, includeCaseActions],
+    () => primaryUchActionId({ includeDelivery, includeCaseActions }),
+    [includeDelivery, includeCaseActions],
   );
 
   /**
@@ -624,8 +605,8 @@ export default function UnifiedCaseHub({
     caseStatus === 'enEvaluacion' ||
     caseStatus === 'propuestaLista' ||
     caseStatus === 'publicado'
-      ? 'propuesta'
-      : 'diseno';
+      ? 'asignacion'
+      : 'entrega';
 
   const phaseAllowsAction = (actionPhase: PhaseTab) =>
     phaseTab === 'todos' || phaseTab === actionPhase;
@@ -635,9 +616,8 @@ export default function UnifiedCaseHub({
       buildUchTimelineRows({
         events: filteredEvents as unknown as UchCaseEventLite[],
         includeContext: false,
-        includeDentistReview: includeDentistReview && phaseAllowsAction('diseno'),
         includeCaseActions: includeCaseActions && phaseAllowsAction(caseActionsPhase),
-        includeDelivery: includeDelivery && phaseAllowsAction('diseno'),
+        includeDelivery: includeDelivery && phaseAllowsAction('entrega'),
         proposalExpiresAt: clinicalCase?.proposalExpiresAt,
         clinicalUpdatedAt: clinicalCase?.updatedAt,
         workDeadline: clinicalCase?.workDeadline,
@@ -651,7 +631,6 @@ export default function UnifiedCaseHub({
       actingAsDentista,
       actingAsTecnico,
       currentUser?.id,
-      includeDentistReview,
       includeCaseActions,
       includeDelivery,
       primaryAction,
@@ -672,7 +651,10 @@ export default function UnifiedCaseHub({
     const k = `${caseId}:${primaryAction}`;
     if (primaryInitKeyRef.current === k) return;
     primaryInitKeyRef.current = k;
-    setActionExpanded((prev) => ({ ...prev, [primaryAction]: true }));
+    // El panel de entrega empieza colapsado para que el técnico lo abra explícitamente
+    if (primaryAction !== 'delivery') {
+      setActionExpanded((prev) => ({ ...prev, [primaryAction]: true }));
+    }
   }, [primaryAction, caseId]);
 
   const resetDeliveryForm = () => {
@@ -702,6 +684,7 @@ export default function UnifiedCaseHub({
   };
 
   return (
+    <>
     <div className="flex flex-col h-full min-h-0 bg-surface backdrop-blur-xl border border-divider/30 rounded-3xl shadow-2xl overflow-hidden">
       {/* HEADER */}
       <div className="px-6 pt-4 pb-2 bg-surface-off border-b border-divider">
@@ -823,11 +806,12 @@ export default function UnifiedCaseHub({
               <div className="flex items-center gap-2">
                 <span className="text-[9px] uppercase tracking-wide text-faint flex-shrink-0">Fase</span>
                 <div className="flex flex-1 gap-0.5 bg-surface-2 rounded-md p-0.5">
-                  {(['todos', 'propuesta', 'diseno'] as PhaseTab[]).map((tab) => {
+                  {(['todos', 'asignacion', 'entrega', 'calificacion'] as PhaseTab[]).map((tab) => {
                     const labels: Record<PhaseTab, string> = {
                       todos: 'Todos',
-                      propuesta: 'Propuesta',
-                      diseno: 'Diseño',
+                      asignacion: 'Asignación',
+                      entrega: 'Entrega',
+                      calificacion: 'Calificación',
                     };
                     return (
                       <button
@@ -946,51 +930,6 @@ export default function UnifiedCaseHub({
               className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar bg-background"
             >
               {timelineRows.map((row) => {
-                if (row.kind === 'action' && row.id === 'dentist_review') {
-                  return (
-                    <div key="uch-action-dentist-review" className="space-y-1">
-                      <UchDentistReviewPanel
-                        reviewComment={reviewComment}
-                        setReviewComment={setReviewComment}
-                        isSubmittingReview={isSubmittingReview}
-                        isSubmittingRevision={isSubmittingRevision}
-                        onRequestRevision={async () => {
-                          if (!reviewComment.trim()) return;
-                          setIsSubmittingRevision(true);
-                          try {
-                            const ok = await onActionTriggered?.('request_revision', { reason: reviewComment });
-                            // Solo limpiar/colapsar si la acción tuvo éxito.
-                            // Si ContactGuard u otro server-side la rechazó, conservar el texto
-                            // del dentista y el panel abierto para que pueda corregir.
-                            if (ok) {
-                              setReviewComment('');
-                              setActionExpanded((p) => ({ ...p, dentist_review: false }));
-                            }
-                          } finally {
-                            setIsSubmittingRevision(false);
-                          }
-                        }}
-                        onApprove={async () => {
-                          setIsSubmittingReview(true);
-                          try {
-                            const ok = await onActionTriggered?.('approve_work', { comment: reviewComment });
-                            if (ok) {
-                              setReviewComment('');
-                              setActionExpanded((p) => ({ ...p, dentist_review: false }));
-                            }
-                          } finally {
-                            setIsSubmittingReview(false);
-                          }
-                        }}
-                        onDownloadAll={handleDownloadAll}
-                        downloadingVersionId={downloadingVersionId}
-                        pendingDelivery={pendingDeliveryForReview}
-                        expanded={actionExpanded.dentist_review === true}
-                        onToggleExpanded={() => setActionExpanded((p) => ({ ...p, dentist_review: !p.dentist_review }))}
-                      />
-                    </div>
-                  );
-                }
                 if (row.kind === 'action' && row.id === 'delivery') {
                   return (
                     <div key="uch-action-delivery" className="space-y-1">
@@ -1071,6 +1010,39 @@ export default function UnifiedCaseHub({
                       formatActivityTimestamp={formatActivityTimestamp}
                       onDownloadRevisionZip={handleDownloadAll}
                       downloadingRevisionZipId={downloadingVersionId}
+                      onView3D={(deliveryId, version, files, dentistNote) =>
+                        setViewer3DState({ deliveryId, version, files, dentistNote })
+                      }
+                      isPendingDelivery={(() => {
+                        if (!pendingDeliveryForReview || !actingAsDentista || caseStatus !== 'enRevision') return false;
+                        const p = (row.event.payload as Record<string, unknown> | undefined) ?? {};
+                        // Match por deliveryId (eventos nuevos) o por versión (eventos legacy sin deliveryId)
+                        if (p.deliveryId) return p.deliveryId === pendingDeliveryForReview.id;
+                        return p.deliveryVersion === pendingDeliveryForReview.version;
+                      })()}
+                      onApproveDelivery={async () => {
+                        setIsSubmittingReview(true);
+                        try {
+                          const ok = await onActionTriggered?.('approve_work', { comment: reviewComment });
+                          if (ok) setReviewComment('');
+                        } finally {
+                          setIsSubmittingReview(false);
+                        }
+                      }}
+                      onRequestRevisionDelivery={async () => {
+                        if (!reviewComment.trim()) return;
+                        setIsSubmittingRevision(true);
+                        try {
+                          const ok = await onActionTriggered?.('request_revision', { reason: reviewComment });
+                          if (ok) setReviewComment('');
+                        } finally {
+                          setIsSubmittingRevision(false);
+                        }
+                      }}
+                      reviewComment={reviewComment}
+                      setReviewComment={setReviewComment}
+                      isSubmittingReview={isSubmittingReview}
+                      isSubmittingRevision={isSubmittingRevision}
                     />
                   );
                 }
@@ -1120,5 +1092,46 @@ export default function UnifiedCaseHub({
           )}
       </div>
     </div>
+    {viewer3DState && (
+      <DeliveryViewer3DModal
+        isOpen
+        onClose={() => setViewer3DState(null)}
+        deliveryId={viewer3DState.deliveryId}
+        deliveryVersion={viewer3DState.version}
+        zipFiles={viewer3DState.files}
+        caseId={caseId}
+        caseNumber={clinicalCase?.caseNumber ?? ''}
+        viewerRole={actingAsDentista ? 'dentista' : actingAsTecnico ? 'tecnico' : 'admin'}
+        dentistNote={viewer3DState.dentistNote}
+        canReview={!!(actingAsDentista && caseStatus === 'enRevision' && pendingDeliveryForReview)}
+        canAnnotate={!!(actingAsDentista && caseStatus === 'enRevision' && pendingDeliveryForReview)}
+        onApprove={async () => {
+          setIsSubmittingReview(true);
+          try {
+            const ok = await onActionTriggered?.('approve_work', { comment: reviewComment });
+            if (ok) { setReviewComment(''); setViewer3DState(null); }
+          } finally {
+            setIsSubmittingReview(false);
+          }
+        }}
+        onRequestRevision={async () => {
+          if (!reviewComment.trim()) return;
+          setIsSubmittingRevision(true);
+          try {
+            const ok = await onActionTriggered?.('request_revision', { reason: reviewComment });
+            if (ok) { setReviewComment(''); setViewer3DState(null); }
+          } finally {
+            setIsSubmittingRevision(false);
+          }
+        }}
+        reviewComment={reviewComment}
+        setReviewComment={setReviewComment}
+        isSubmittingReview={isSubmittingReview}
+        isSubmittingRevision={isSubmittingRevision}
+        onDownloadAll={handleDownloadAll}
+        downloadingVersionId={downloadingVersionId}
+      />
+    )}
+    </>
   );
 }

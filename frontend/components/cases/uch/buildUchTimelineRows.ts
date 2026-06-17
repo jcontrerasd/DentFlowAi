@@ -14,7 +14,6 @@ export type BuildUchTimelineRowsInput = {
   events: UchCaseEventLite[];
   /** Tarjeta colapsable con ex-Resumen (acuerdo, plazos, ZIP, avisos). */
   includeContext: boolean;
-  includeDentistReview: boolean;
   includeCaseActions: boolean;
   includeDelivery: boolean;
   proposalExpiresAt?: string | Date | null;
@@ -25,7 +24,7 @@ export type BuildUchTimelineRowsInput = {
 };
 
 export function buildUchTimelineRows(input: BuildUchTimelineRowsInput): UchTimelineRow[] {
-  const { events, includeContext, includeDentistReview, includeCaseActions, includeDelivery, pinActionId } = input;
+  const { events, includeContext, includeCaseActions, includeDelivery, pinActionId } = input;
   const maxEventTs = events.reduce((acc, e) => Math.max(acc, ts(e.createdAt)), 0);
   const minEventTs = events.reduce((acc, e) => Math.min(acc, ts(e.createdAt)), Number.POSITIVE_INFINITY);
   const eventFloor = Number.isFinite(minEventTs) ? minEventTs : 0;
@@ -44,15 +43,6 @@ export function buildUchTimelineRows(input: BuildUchTimelineRowsInput): UchTimel
   const sunkBase = maxEventTs - 500;
   const actionSortAt = (id: UchActionRowId, priority: number) =>
     pinActionId === id ? pinnedTs : sunkBase - priority;
-
-  if (includeDentistReview) {
-    rows.push({
-      kind: 'action',
-      id: 'dentist_review',
-      sortAt: actionSortAt('dentist_review', 100),
-      priority: 100,
-    });
-  }
 
   if (includeDelivery) {
     rows.push({
@@ -85,11 +75,9 @@ export function buildUchTimelineRows(input: BuildUchTimelineRowsInput): UchTimel
 }
 
 export function primaryUchActionId(params: {
-  includeDentistReview: boolean;
   includeDelivery: boolean;
   includeCaseActions: boolean;
 }): UchActionRowId | null {
-  if (params.includeDentistReview) return 'dentist_review';
   if (params.includeDelivery) return 'delivery';
   if (params.includeCaseActions) return 'case_actions';
   return null;
