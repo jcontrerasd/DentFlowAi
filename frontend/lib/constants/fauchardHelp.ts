@@ -517,6 +517,15 @@ export const SIMULATOR_HELP: FauchardHelpSection = {
       links: [{ key: 'alphaExperience' }],
     },
     {
+      label: 'Bono de Infrautilización (B) — override',
+      symbol: 'alphaBonus',
+      description:
+        'Peso del factor B: impulsa a técnicos con poca actividad reciente para evitar que el trabajo se concentre siempre en los mismos laboratorios.',
+      example:
+        'Con αB alto, un laboratorio que lleva semanas sin casos sube posiciones frente a uno que ya recibió varias asignaciones este mes.',
+      links: [{ key: 'alphaBonus' }],
+    },
+    {
       label: 'Carga activa (L) — override',
       symbol: 'alphaLoad',
       description: 'Peso de penalización por carga: resta score a técnicos con muchos casos activos en curso.',
@@ -532,11 +541,19 @@ export const SIMULATOR_HELP: FauchardHelpSection = {
       links: [{ key: 'alphaNoResponse' }],
     },
     {
-      label: 'Ventana histórica (Q y P)',
-      symbol: 'wQualityDays',
+      label: 'Calidad histórica (ventana Q)',
+      symbol: 'wQualityDays-q',
       description:
-        'Días hacia atrás con los que se miden los factores históricos en esta simulación: la Calidad (ratings) y la Puntualidad (% a tiempo). Valor de la config activa.',
-      example: 'Con 30 días, solo cuentan ratings y entregas del último mes; con 180, el desempeño es más estable y perdona rachas viejas.',
+        'Días hacia atrás con los que se miden los ratings del técnico para calcular el factor Q. Un valor menor hace el score más reactivo a calificaciones recientes; uno mayor lo estabiliza.',
+      example: 'Con 30 días, solo cuentan ratings del último mes. Con 180, una racha mala de hace 3 meses aún pesa pero se diluye entre más casos.',
+      links: [{ key: 'wQualityDays' }],
+    },
+    {
+      label: 'Puntualidad histórica (ventana P)',
+      symbol: 'wQualityDays-p',
+      description:
+        'Días hacia atrás con los que se mide el % de entregas a tiempo del técnico para calcular el factor P. Comparte la misma ventana que Calidad — un único parámetro configurable.',
+      example: 'Con 90 días, un técnico que cumplió 9 de 10 plazos en los últimos 3 meses tiene onTimeRate = 0.90. Si amplías a 180, entregas antiguas tardías también cuentan.',
       links: [{ key: 'wQualityDays' }],
     },
     {

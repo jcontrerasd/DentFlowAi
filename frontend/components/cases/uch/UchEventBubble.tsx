@@ -4,7 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import {
-  Activity, AlertCircle, CheckCircle2, Download, FileText, Hammer, Send, Sparkles, Star, Undo2, User, XCircle,
+  Activity, AlertCircle, Box, CheckCircle2, Download, FileText, Hammer, Send, Star, Undo2, User, XCircle,
 } from 'lucide-react';
 import { resolveUchThreadLane } from '@/lib/uchThreadLane';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
@@ -177,7 +177,7 @@ export default function UchEventBubble({
         >
           <div className="w-5 h-5 rounded-full bg-surface-2 border border-divider overflow-hidden flex items-center justify-center flex-shrink-0">
             {showAsFauchard ? (
-              <Sparkles className="w-2.5 h-2.5 text-warning" />
+              <Image src="/images/Fauchard_Original.png" alt="Fauchard" width={20} height={20} className="w-full h-full object-contain" />
             ) : (() => {
               const avatarSrc = event.user?.image || (showHeaderAsYou ? currentUser?.image : undefined);
               return avatarSrc && (avatarSrc.startsWith('http') || avatarSrc.startsWith('/'))
@@ -440,10 +440,10 @@ export default function UchEventBubble({
                           type="button"
                           onClick={() => void onDownloadRevisionZip(zipKey, `v${deliveryVersion}`, files)}
                           disabled={downloadingRevisionZipId === zipKey}
-                          className={`text-[11px] font-medium whitespace-nowrap disabled:opacity-40 inline-flex items-center gap-1 shrink-0 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 rounded-sm ${
+                          className={`text-[11px] font-medium whitespace-nowrap disabled:opacity-40 inline-flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full border focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 transition-colors ${
                             isSelfLane
-                              ? 'text-foreground hover:text-foreground'
-                              : 'text-primary/90 hover:text-primary'
+                              ? 'border-primary/30 text-foreground hover:bg-primary/10'
+                              : 'border-divider text-muted hover:bg-surface-2 hover:text-foreground'
                           }`}
                         >
                           {downloadingRevisionZipId === zipKey ? (
@@ -458,9 +458,9 @@ export default function UchEventBubble({
                         <button
                           type="button"
                           onClick={() => onView3D!(deliveryIdFromPayload!, deliveryVersion, files)}
-                          className="text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 shrink-0 text-teal-400 hover:text-teal-300 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/30 rounded-sm"
+                          className="text-[11px] font-medium whitespace-nowrap inline-flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full border border-jade/30 text-jade hover:bg-jade-hl hover:text-jade-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-jade/30 transition-colors"
                         >
-                          <Sparkles className="w-3 h-3" aria-hidden />
+                          <Box className="w-3 h-3" aria-hidden />
                           Ver en 3D
                         </button>
                       )}
@@ -554,10 +554,10 @@ export default function UchEventBubble({
                     <button
                       type="button"
                       onClick={() => onView3D!(solDeliveryId ?? event.id, solVersion ?? 1, solFiles, adjustmentText || undefined)}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium text-teal-400 hover:text-teal-300 hover:underline underline-offset-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/30 rounded-sm"
+                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border border-jade/30 text-jade hover:bg-jade-hl hover:text-jade-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-jade/30 transition-colors"
                     >
-                      <Sparkles className="w-3 h-3" aria-hidden />
-                      Ver entrega en 3D
+                      <Box className="w-3 h-3" aria-hidden />
+                      Ver en 3D
                     </button>
                   </div>
                 )}

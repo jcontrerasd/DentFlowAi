@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   User,
   Mail,
   Phone,
+  ArrowLeft,
   Award,
   Calendar,
   Save,
@@ -33,6 +35,7 @@ import ThemeSelector from '@/components/profile/ThemeSelector';
 export default function ProfilePage() {
   const { user, userProfile, updateProfileOptimistically } = useAuth();
   const { showSuccess } = useToast();
+  const router = useRouter();
   const skillFormRef = useRef<SkillMatrixFormHandle>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -187,6 +190,14 @@ export default function ProfilePage() {
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <div>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-foreground transition-colors mb-3 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/30 rounded-sm"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Volver
+          </button>
           <h1 className="text-3xl serif-font text-foreground mb-2">Mi Perfil</h1>
           <p className="text-faint text-sm">Gestiona tu información profesional y personal.</p>
         </div>

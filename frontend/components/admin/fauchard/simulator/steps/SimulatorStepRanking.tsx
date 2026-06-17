@@ -96,7 +96,7 @@ export default function SimulatorStepRanking({
             <button
               type="button"
               onClick={() => onUseOverrideChange(!useOverride)}
-              className={`relative w-10 h-5 rounded-full transition-colors ${useOverride ? 'bg-primary' : 'bg-surface-2'}`}
+              className={`relative w-10 h-5 rounded-full transition-colors ${useOverride ? 'bg-primary' : 'bg-divider'}`}
             >
               <motion.div animate={{ x: useOverride ? 22 : 2 }} className="w-4 h-4 bg-white rounded-full shadow-sm mt-0.5" />
             </button>

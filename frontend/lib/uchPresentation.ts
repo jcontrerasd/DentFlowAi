@@ -36,7 +36,30 @@ export function shouldPresentUchEventAsFauchard(
   if (viewer.role === 'admin') return false;
 
   const payload = (event.payload ?? {}) as Record<string, unknown>;
-  if (payload.presentationAuthor === 'fauchard') return true;
+  if (payload.presentationAuthor === 'fauchard') {
+    // Para eventos visibles a ambos roles (ej. REVISION_SOLICITADA), el autor real
+    // no debe verse enmascarado como Fauchard — solo el otro rol lo ve así.
+    // Eventos visibles solo a un rol (ej. ASIGNACION_RECIBIDA visibleTo:'tecnico')
+    // mantienen el enmascarado aunque userId === viewer.id.
+    const persistedActorId = event.userId;
+    const visibleTo = payload.visibleTo as string | undefined;
+    // No enmascarar cuando el viewer ES el autor real del evento.
+    // Cubre 'ambos' (ej. REVISION_SOLICITADA) y eventos cuya visibilidad
+    // coincide con el rol del viewer (ej. CASO_PUBLICADO con visibleTo:'dentista'
+    // visto por el dentista autor, o visibleTo:'tecnico' por el técnico autor).
+    const visibleToMatchesViewer =
+      visibleTo === 'ambos' ||
+      (visibleTo === 'dentista' && viewer.role === 'dentista') ||
+      (visibleTo === 'tecnico' && viewer.role === 'tecnico');
+    if (
+      visibleToMatchesViewer &&
+      persistedActorId &&
+      String(persistedActorId) === String(viewer.id)
+    ) {
+      return false;
+    }
+    return true;
+  }
 
   /** Invitación a cotizar: orquestación; en BD userId puede ser el técnico sin presentationAuthor. */
   if (

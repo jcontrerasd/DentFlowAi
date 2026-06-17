@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await stopSimulationAction();
       localStorage.removeItem('dentflow_simulated_id');
-      window.location.href = '/dashboard';
+      window.location.href = '/dashboard/admin/observability';
     } catch (err) {
       console.error("Stop simulation error:", err);
     }

@@ -111,7 +111,7 @@ export async function getCaseEventsAction(
   caseId: string,
   filter?: 'negociacion' | 'tecnico' | 'sistema',
   options?: { limit?: number; beforeId?: string },
-): Promise<{ events: any[]; hasMoreOlder: boolean }> {
+): Promise<{ events: any[]; hasMoreOlder: boolean; viewerSignedImage: string | null }> {
   const identity = await getServerIdentity();
   if (!identity) throw new Error("No autorizado");
 
@@ -238,14 +238,25 @@ export async function getCaseEventsAction(
       }
     }
 
-    // Firmar URLs de avatares (deduplicado por ruta)
-    const uniquePaths = [...new Set(
-      filteredEvents.map(e => e.user?.image).filter((p): p is string => !!p && !p.startsWith('http'))
-    )];
+    // Firmar URLs de avatares (deduplicado por ruta).
+    // Incluye la imagen del viewer actual (fallback para burbujas self-lane sin user.image).
+    const viewerOwnImagePath = filteredEvents.find(
+      e => e.userId === (identity.id as string) && e.user?.image && !e.user.image.startsWith('http')
+    )?.user?.image ?? null;
+
+    const uniquePaths = [...new Set([
+      ...filteredEvents.map(e => e.user?.image).filter((p): p is string => !!p && !p.startsWith('http')),
+      ...(viewerOwnImagePath ? [viewerOwnImagePath] : []),
+    ])];
     const signedMap = new Map<string, string | null>();
     await Promise.all(uniquePaths.map(async (p) => {
       try { signedMap.set(p, await getSignedUrl(p)); } catch { signedMap.set(p, null); }
     }));
+
+    // URL firmada del avatar del viewer (para fallback en cliente)
+    const viewerSignedImage: string | null = viewerOwnImagePath
+      ? (signedMap.get(viewerOwnImagePath) ?? null)
+      : null;
     const caseDoctorId = targetCase?.doctorId ?? null;
 
     const signedEvents = filteredEvents.map((event) => {
@@ -327,11 +338,11 @@ export async function getCaseEventsAction(
       }
     });
 
-    return { events: signedEvents, hasMoreOlder };
+    return { events: signedEvents, hasMoreOlder, viewerSignedImage };
   } catch (error) {
     console.error("[getCaseEventsAction] Error:", error);
     console.error("[getCaseEventsAction] Stack:", (error as Error)?.stack);
-    return { events: [], hasMoreOlder: false };
+    return { events: [], hasMoreOlder: false, viewerSignedImage: null };
   }
 }
 
@@ -1474,9 +1485,7 @@ export async function requestRevisionAction(caseId: string, reason: string): Pro
           deliveryId: pendingDelivery?.id ?? null,
           deliveryVersion: pendingDelivery?.version ?? null,
           files: pendingDelivery?.files ?? [],
-          /** Bitácora compartida: el solicitante debe ver su propia solicitud en el UCH; el técnico sigue viendo voz Fauchard vía presentationAuthor. */
           visibleTo: 'ambos',
-          ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
         },
         stateChange: { from: 'enRevision', to: 'enEjecucion' }
       }, tx);

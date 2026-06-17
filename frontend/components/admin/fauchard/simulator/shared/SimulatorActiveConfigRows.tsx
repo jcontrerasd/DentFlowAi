@@ -40,17 +40,17 @@ export default function SimulatorActiveConfigRows({
           <div key={g.group} className="space-y-2">
             <span className="text-[9px] font-black uppercase tracking-wider text-faint px-1">{g.group}</span>
             <div className="grid grid-cols-1 gap-1">
-              {g.items.map((it) => {
+              {g.items.map((it, idx) => {
                 const raw = currentConfig?.[it.key];
                 const val = raw === undefined || raw === null ? '—' : `${raw}${it.suffix ? ` ${it.suffix}` : ''}`;
                 return (
                   <div
-                    key={it.key}
+                    key={`${it.key}-${idx}`}
                     className="flex items-center justify-between text-[11px] px-2 py-1 rounded-lg hover:bg-white/[0.04] transition-colors"
                   >
                     <span className="flex items-center gap-1 text-muted">
                       {it.label}
-                      <SimulatorParamHelpButton focusKey={it.key} label={it.label} />
+                      <SimulatorParamHelpButton focusKey={it.helpKey ?? it.key} label={it.label} />
                     </span>
                     <span className="font-mono font-bold text-foreground">{val}</span>
                   </div>

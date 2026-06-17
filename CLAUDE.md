@@ -9,6 +9,23 @@ Plataforma clínica-laboratorio dental: dentistas crean casos con modelos 3D, el
 - **Cursor:** en *Settings → Rules → Project rules*, incluir al menos [CLAUDE.md](CLAUDE.md) y, si usas la convención del repo, [AGENTS.md](AGENTS.md) en la raíz (puente corto). Convenciones Next del proyecto: [frontend/AGENTS.md](frontend/AGENTS.md). Trabajo intensivo en UCH: skill del proyecto `@uch-reglas-diseno-dentflowai` (cuerpo alineado con la sección **UCH — Reglas de Diseño DentFlowAi** más abajo).
 - **Orden de lectura recomendado:** `CLAUDE.md` (raíz) → `AGENTS.md` (raíz) → `frontend/AGENTS.md` → `frontend/CLAUDE.md` → el `CLAUDE.md` del subdirectorio en el que edites.
 
+### Flujo de trabajo con planes (Plan Mode)
+Cuando el usuario aprueba un plan vía `ExitPlanMode`, **no implementar automáticamente**. Esperar confirmación explícita del usuario ("sí, adelante", "procede", etc.) antes de ejecutar cualquier cambio. La aprobación del plan no es autorización para implementar. Esto aplica especialmente en cambios sobre la rama `v2`: **nunca** proponer ni ejecutar merge `v2 → main` como parte de una implementación — ese paso requiere validación completa en staging y decisión explícita del dueño del proyecto.
+
+### Acciones destructivas o visibles externamente
+Antes de ejecutar cualquier acción que afecte sistemas compartidos o sea difícil de revertir, pedir confirmación explícita aunque el contexto parezca obvio:
+- **Deploy** — no ejecutar `deploy.sh`, `deploy_gui.py` ni comandos `gcloud` sin instrucción directa.
+- **Push / PR** — no hacer `git push` ni crear pull requests por iniciativa propia.
+- **Commits** — no hacer commit sin que el usuario lo pida explícitamente.
+- **Operaciones destructivas** — `git reset --hard`, borrar ramas, truncar tablas, etc. requieren confirmación independientemente del contexto.
+
+### Alcance de los comandos de validación
+No ejecutar `npm run validate:full` (lint + type-check + build) salvo que se pida explícitamente — es costoso y bloquea el flujo. Para verificar un cambio puntual usar solo lo necesario:
+- Cambio de tipos → `npm run type-check`
+- Cambio de estilo/linting → `npm run lint`
+- Test de una feature → `npm run test:run`
+- Pre-deploy o validación completa → `npm run validate:full` (solo si se pide)
+
 ## Stack
 - Next.js 15 App Router · React 19 · TypeScript · Tailwind CSS 4
 - Drizzle ORM + PostgreSQL (Cloud SQL) · NextAuth 5 beta

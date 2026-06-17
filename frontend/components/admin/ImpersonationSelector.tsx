@@ -9,6 +9,7 @@ import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, U
 export default function ImpersonationSelector() {
   const { user, userProfile, isSimulating, startSimulation, stopSimulation, simulatedProfile } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [confirmStop, setConfirmStop] = useState(false);
   const [roleMode, setRoleMode] = useState<'dentista' | 'tecnico'>('dentista');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [availableUsers, setAvailableUsers] = useState<any[]>([]);
@@ -43,7 +44,7 @@ export default function ImpersonationSelector() {
     <div className="relative">
       {/* Botón Principal / Trigger */}
       <button 
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => { setIsOpen(!isOpen); if (!isOpen) setConfirmStop(false); }}
         className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all ${
           isSimulating 
           ? 'bg-error-hl border-error/20 text-error shadow-lg shadow-sm' 
@@ -61,7 +62,7 @@ export default function ImpersonationSelector() {
         {isOpen && (
           <>
             {/* Backdrop para cerrar */}
-            <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+            <div className="fixed inset-0 z-40" onClick={() => { setIsOpen(false); setConfirmStop(false); }} />
             
             {/* Popover */}
             <motion.div 
@@ -158,16 +159,36 @@ export default function ImpersonationSelector() {
 
               {/* Footer / Reset */}
               {isSimulating && (
-                <div className="p-4 bg-error border-t border-error/20">
-                  <button 
-                    onClick={() => {
-                        stopSimulation();
-                        setIsOpen(false);
-                    }}
-                    className="w-full py-3 bg-error hover:bg-error text-inverse text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-xl shadow-sm"
-                  >
-                    Detener Simulación
-                  </button>
+                <div className="p-4 border-t border-error/20 bg-error/10">
+                  {confirmStop ? (
+                    <div className="space-y-3">
+                      <p className="text-[10px] text-error font-semibold text-center leading-snug">
+                        ¿Salir de la simulación de<br />
+                        <span className="font-black">{simulatedProfile?.fullName || 'este usuario'}</span>?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setConfirmStop(false)}
+                          className="flex-1 py-2.5 bg-surface hover:bg-surface-off border border-divider text-foreground text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={() => { stopSimulation(); setIsOpen(false); }}
+                          className="flex-1 py-2.5 bg-error hover:bg-error/80 text-inverse text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-sm"
+                        >
+                          Sí, salir
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmStop(true)}
+                      className="w-full py-3 bg-error hover:bg-error/80 text-inverse text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-sm"
+                    >
+                      Detener Simulación
+                    </button>
+                  )}
                 </div>
               )}
             </motion.div>

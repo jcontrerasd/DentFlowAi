@@ -23,7 +23,7 @@ export const EXCLUSION_LABELS: Record<ExclusionReason, string> = {
   excluded_manually: 'Excluido manualmente',
 };
 
-export type ParamGroupItem = { key: string; label: string; suffix?: string };
+export type ParamGroupItem = { key: string; label: string; suffix?: string; helpKey?: string };
 export type ParamGroup = { group: string; items: ParamGroupItem[] };
 
 export const PARAM_GROUPS: ParamGroup[] = [
@@ -39,8 +39,11 @@ export const PARAM_GROUPS: ParamGroup[] = [
     ],
   },
   {
-    group: 'Ventana de calidad (Q)',
-    items: [{ key: 'wQualityDays', label: 'Calidad histórica', suffix: 'd' }],
+    group: 'Ventana de calidad y puntualidad (Q · P)',
+    items: [
+      { key: 'wQualityDays', label: 'Calidad histórica', suffix: 'd', helpKey: 'wQualityDays-q' },
+      { key: 'wQualityDays', label: 'Puntualidad histórica', suffix: 'd', helpKey: 'wQualityDays-p' },
+    ],
   },
   {
     group: 'Filtros de exclusión',

@@ -359,6 +359,7 @@ function CaseDetailPageContent() {
   /** Tras abrir el Centro de control una vez, el panel permanece montado (oculto al cerrar) para no reiniciar cuentas regresivas. */
   const [uchPanelMounted, setUchPanelMounted] = useState(false);
   const [caseEvents, setCaseEvents] = useState<any[]>([]);
+  const [viewerSignedImage, setViewerSignedImage] = useState<string | null>(null);
   /** Cursores de lectura del Centro de control (servidor). */
   const [hubServerReads, setHubServerReads] = useState<{
     lastReadTech: Date | null;
@@ -458,9 +459,10 @@ function CaseDetailPageContent() {
   const loadCaseEvents = async () => {
     try {
       setIsLoadingEvents(true);
-      const { events, hasMoreOlder } = await getCaseEventsAction(id as string);
+      const { events, hasMoreOlder, viewerSignedImage: vsi } = await getCaseEventsAction(id as string);
       setCaseEvents(events);
       setUchHasMoreOlder(hasMoreOlder);
+      if (vsi) setViewerSignedImage(vsi);
     } catch (err) {
       console.error("Error loading events:", err);
     } finally {
@@ -736,6 +738,7 @@ function CaseDetailPageContent() {
         ]);
         setCaseEvents(evPage.events || []);
         setUchHasMoreOlder(evPage.hasMoreOlder);
+        if (evPage.viewerSignedImage) setViewerSignedImage(evPage.viewerSignedImage);
         setIsLoadingEvents(false);
 
         if (rs) {
@@ -2472,7 +2475,7 @@ function CaseDetailPageContent() {
                   initialEvents={caseEvents}
                   uchHasMoreOlder={uchHasMoreOlder}
                   onLoadOlderUchEvents={loadOlderUchEvents}
-                  currentUser={authUserProfile}
+                  currentUser={viewerSignedImage ? { ...authUserProfile, image: viewerSignedImage } : authUserProfile}
                   actingAsDentista={actingAsDentista}
                   actingAsTecnico={actingAsTecnico}
                   viewingAsAdmin={viewingAsAdmin}
