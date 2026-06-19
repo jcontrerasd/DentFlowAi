@@ -8,6 +8,7 @@ import {
   Pause,
   X,
 } from 'lucide-react';
+import { maskCaseStatusForViewer, type CaseViewerRole } from '@/lib/cases/qualityStatusMasking';
 
 interface StatusConfig {
   label: string;
@@ -32,6 +33,8 @@ export const STATUS_MAP: Record<string, StatusConfig> = {
   aceptadaPendienteInicio: { label: 'Esperando inicio', icon: CheckCircle2, className: IN_PROGRESS },
   enEjecucion: { label: 'En Ejecución', icon: Activity, className: IN_PROGRESS },
   enRevision: { label: 'En Revisión', icon: Eye, className: ATTENTION },
+  enRevisionCalidad: { label: 'Revisión calidad', icon: Eye, className: ATTENTION },
+  certificadoCalidad: { label: 'Certificado', icon: CheckCircle2, className: IN_PROGRESS },
   cambiosEnProceso: { label: 'Cambios', icon: AlertCircle, className: ATTENTION },
   completado: { label: 'Completado', icon: CheckCircle2, className: SUCCESS },
   cerrado: { label: 'Cerrado', icon: X, className: NEUTRAL },
@@ -45,11 +48,14 @@ const FALLBACK_ICON = FileText;
 interface StatusBadgeProps {
   status: string;
   className?: string;
+  /** Si se provee, enmascara la etapa de Calidad para el dentista (anonimato). */
+  viewerRole?: CaseViewerRole;
 }
 
-export default function StatusBadge({ status, className = '' }: StatusBadgeProps) {
-  const config = STATUS_MAP[status] ?? {
-    label: status,
+export default function StatusBadge({ status, className = '', viewerRole }: StatusBadgeProps) {
+  const resolvedStatus = viewerRole ? maskCaseStatusForViewer(status, viewerRole) : status;
+  const config = STATUS_MAP[resolvedStatus] ?? {
+    label: resolvedStatus,
     className: NEUTRAL,
     icon: FALLBACK_ICON,
   };

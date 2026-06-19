@@ -20,6 +20,7 @@ export type TechKpiId =
   | 'ofertaNoSeleccionada'
   | 'aceptadaPendienteInicio'
   | 'enEjecucion'
+  | 'enRevisionCalidad'
   | 'enRevision'
   | 'completado'
   | 'otros';
@@ -52,6 +53,7 @@ export const PRE_AWARD_CASE_STATUSES = new Set([
 export const WINNER_CASE_STATUSES_BY_TECH_KPI: Record<string, string[]> = {
   aceptadaPendienteInicio: [CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO],
   enEjecucion: [CASE_STATUSES.EN_EJECUCION],
+  enRevisionCalidad: [CASE_STATUSES.EN_REVISION_CALIDAD, CASE_STATUSES.CERTIFICADO_CALIDAD],
   enRevision: [CASE_STATUSES.EN_REVISION, CASE_STATUSES.CAMBIOS_EN_PROCESO],
   completado: [CASE_STATUSES.COMPLETADO],
 };
@@ -62,6 +64,9 @@ export function mapWinnerCaseStatusToTechKpi(status: string): TechKpiId {
       return 'aceptadaPendienteInicio';
     case CASE_STATUSES.EN_EJECUCION:
       return 'enEjecucion';
+    case CASE_STATUSES.EN_REVISION_CALIDAD:
+    case CASE_STATUSES.CERTIFICADO_CALIDAD:
+      return 'enRevisionCalidad';
     case CASE_STATUSES.EN_REVISION:
     case CASE_STATUSES.CAMBIOS_EN_PROCESO:
       return 'enRevision';
@@ -85,6 +90,8 @@ export function classifyDentistCaseKpi(status: string): DentistKpiId {
     case CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO:
       return 'aceptadaPendienteInicio';
     case CASE_STATUSES.EN_EJECUCION:
+    case CASE_STATUSES.EN_REVISION_CALIDAD:
+    case CASE_STATUSES.CERTIFICADO_CALIDAD:
       return 'enEjecucion';
     case CASE_STATUSES.EN_REVISION:
     case CASE_STATUSES.CAMBIOS_EN_PROCESO:

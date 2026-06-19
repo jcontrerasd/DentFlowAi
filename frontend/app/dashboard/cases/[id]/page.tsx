@@ -84,6 +84,7 @@ import { TeethSelector } from '@/components/cases/TeethSelector';
 import UnifiedCaseHub from '@/components/cases/UnifiedCaseHub';
 import Button from '@/components/ui/Button';
 import StatusBadge from '@/components/ui/StatusBadge';
+import type { CaseViewerRole } from '@/lib/cases/qualityStatusMasking';
 import CaseViewerStatusStripe from '@/components/cases/CaseViewerStatusStripe';
 import type { InvitationStatusForKpi } from '@/lib/dashboard/classifyCaseForDashboardKpi';
 import CaseWorkflowStepper from '@/components/cases/CaseWorkflowStepper';
@@ -127,6 +128,22 @@ const TimeCounter = ({ createdAt }: { createdAt: string | Date }) => {
 
   return <span className="text-[10px] text-primary/80 font-mono tracking-normal shrink-0">hace {elapsed}</span>;
 };
+
+const DAYS_ES = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+function formatCaseDateShort(date: Date | string | null | undefined): string {
+  if (!date) return '';
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return '';
+  const day = DAYS_ES[d.getDay()];
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mon = MONTHS_ES[d.getMonth()];
+  const yy = String(d.getFullYear()).slice(2);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${day} ${dd}/${mon}/${yy}, ${hh}:${mm}`;
+}
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('es-CL', {
@@ -241,6 +258,7 @@ function CaseDetailPageContent() {
   const openHubAppliedRef = useRef(false);
   /** Evita reabrir el UCH en cada refetch cuando el técnico ya es ganador (cerrar debe persistir). */
   const techWinnerHubAutoOpenRef = useRef(false);
+  const calidadHubAutoOpenRef = useRef(false);
   const { user, userProfile: authUserProfile, isSimulating } = useAuth();
   const { showSuccess: showSuccessToastMessage, showError: showErrorToast } = useToast();
   const userRole = authUserProfile?.role;
@@ -454,6 +472,15 @@ function CaseDetailPageContent() {
     !!viewerIdStr &&
     clinicalCase?.qualityReviewerId != null &&
     String(clinicalCase.qualityReviewerId) === viewerIdStr;
+
+  // Rol del viewer para presentación de estado (enmascara la etapa de Calidad al dentista).
+  const viewerRole: CaseViewerRole = viewingAsAdmin
+    ? 'admin'
+    : actingAsCalidad
+      ? 'calidad'
+      : actingAsTecnico
+        ? 'tecnico'
+        : 'dentista';
 
   const techOfferRejectedView = useMemo(() => {
     if (viewingAsAdmin || !actingAsTecnico || !viewerIdStr) return false;
@@ -684,6 +711,7 @@ function CaseDetailPageContent() {
   useEffect(() => {
     openHubAppliedRef.current = false;
     techWinnerHubAutoOpenRef.current = false;
+    calidadHubAutoOpenRef.current = false;
     setIsHubOpen(false);
     setHubServerReads(null);
     setUchPanelMounted(false);
@@ -694,6 +722,7 @@ function CaseDetailPageContent() {
 
   useEffect(() => {
     techWinnerHubAutoOpenRef.current = false;
+    calidadHubAutoOpenRef.current = false;
   }, [profileUserId]);
 
   useEffect(() => {
@@ -817,6 +846,16 @@ function CaseDetailPageContent() {
             techWinnerHubAutoOpenRef.current = true;
             setIsHubOpen(true);
           }
+        }
+
+        // Auto-abrir hub para Calidad cuando el caso está en etapa de revisión de Calidad.
+        if (
+          !calidadHubAutoOpenRef.current &&
+          prof.role === 'calidad' &&
+          c?.status === 'enRevisionCalidad'
+        ) {
+          calidadHubAutoOpenRef.current = true;
+          setIsHubOpen(true);
         }
       } catch (err) {
         logError('Error fetching case detail', err, { caseId: id });
@@ -999,6 +1038,24 @@ function CaseDetailPageContent() {
       const refreshed = await getCaseDetails(id as string);
       if (refreshed && !(refreshed as any)._error) {
         ingestCasePayloadFromServer(refreshed);
+        // Sincronizar editForm con los valores del servidor para que isFormDirty
+        // quede false sin necesidad de salir y volver a entrar (borrador permanece en edición).
+        setEditForm({
+          internalName: (refreshed as any).internalName,
+          patientIdAnon: (refreshed as any).patientIdAnon || '',
+          urgency: (refreshed as any).urgency ?? '',
+          teeth: ((refreshed as any).teeth as number[]) || [],
+          restorationType: (refreshed as any).restorationTypeCode ?? '',
+          material: (refreshed as any).materialCode ?? '',
+          shade: (refreshed as any).shadeCode ?? '',
+          notesEsthetic: (refreshed as any).notesEsthetic || '',
+          notesOclusal: (refreshed as any).notesOclusal || '',
+          doctorNotes: ((refreshed as any).specialInstructions ?? (refreshed as any).doctorNotes) || '',
+          desiredDeliveryAt: toLocalDatetimeValue((refreshed as any).desiredDeliveryAt),
+          status: (refreshed as any).status,
+          serviceType: (refreshed as any).serviceType,
+          replacesMissingTeeth: (refreshed as any).replacesMissingTeeth ?? null,
+        });
         const refreshedFiles = ((refreshed as any).files ?? []) as any[];
         if (refreshedFiles.length > 0) {
           const viewerUrls: Record<string, string> = {};
@@ -1704,19 +1761,22 @@ function CaseDetailPageContent() {
 
   const formSnapshot = (c: Record<string, unknown> | null | undefined) => {
     if (!c) return '';
+    const str = (v: unknown) => (v == null ? '' : String(v));
     return JSON.stringify({
-      internalName: c.internalName,
-      patientIdAnon: c.patientIdAnon,
-      urgency: c.urgency,
+      internalName: str(c.internalName),
+      patientIdAnon: str(c.patientIdAnon),
+      urgency: str(c.urgency),
       teeth: c.teeth,
-      restorationType: c.restorationType,
-      material: c.material,
-      shade: c.shade,
-      notesEsthetic: c.notesEsthetic,
-      notesOclusal: c.notesOclusal,
-      doctorNotes: c.specialInstructions ?? c.doctorNotes,
-      desiredDeliveryAt: c.desiredDeliveryAt,
-      replacesMissingTeeth: c.replacesMissingTeeth,
+      // editForm guarda codes; clinicalCase expone labels pero también codes (*Code).
+      restorationType: str(c.restorationTypeCode ?? c.restorationType),
+      material: str(c.materialCode ?? c.material),
+      shade: str(c.shadeCode ?? c.shade),
+      notesEsthetic: str(c.notesEsthetic),
+      notesOclusal: str(c.notesOclusal),
+      doctorNotes: str(c.specialInstructions ?? c.doctorNotes),
+      // Normalizar a formato local datetime para que editForm y clinicalCase coincidan.
+      desiredDeliveryAt: toLocalDatetimeValue(c.desiredDeliveryAt as string | Date | null | undefined),
+      replacesMissingTeeth: c.replacesMissingTeeth ?? null,
     });
   };
 
@@ -1925,7 +1985,7 @@ function CaseDetailPageContent() {
                   }}
                 />
               ) : (
-                <StatusBadge status={isEditingStatus} />
+                <StatusBadge status={isEditingStatus} viewerRole={viewerRole} />
               )}
               {canEditForm && Object.values(SERVICE_TYPES).length > 1 ? (
                 <select 
@@ -1961,6 +2021,20 @@ function CaseDetailPageContent() {
                   ⚙ {clinicalCase.internalStatus}
                 </span>
               )}
+              {(() => {
+                const isPublished = Boolean(clinicalCase?.publishedAt);
+                const caseDateLabel = formatCaseDateShort(clinicalCase?.publishedAt ?? clinicalCase?.updatedAt);
+                const caseDatePrefix = isPublished ? 'F.Publicación' : 'F.Borrador';
+                const deliveryDateLabel = formatCaseDateShort(clinicalCase?.desiredDeliveryAt);
+                if (!caseDateLabel && !deliveryDateLabel) return null;
+                return (
+                  <span className="text-[10px] font-mono text-faint normal-case whitespace-nowrap">
+                    {caseDateLabel && <><span className="text-faint/70">{caseDatePrefix} :</span> {caseDateLabel}</>}
+                    {caseDateLabel && deliveryDateLabel && <span className="text-faint/40 mx-2">·</span>}
+                    {deliveryDateLabel && <><span className="text-faint/70">F.Entrega :</span> {deliveryDateLabel}</>}
+                  </span>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -2169,6 +2243,23 @@ function CaseDetailPageContent() {
             );
           })()}
 
+          {/* BLOQUE CALIDAD — botón Centro de Control */}
+          {actingAsCalidad && clinicalCase?.status !== 'borrador' && (
+            <button
+              type="button"
+              onClick={toggleCaseHubOpen}
+              className={`relative flex items-center gap-2 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/30 ${
+                isHubOpen
+                  ? 'bg-amber-500 border-amber-400/30 text-white hover:bg-amber-500'
+                  : 'bg-amber-500/10 border-amber-400/30 text-amber-400 hover:bg-amber-500 hover:text-white'
+              }`}
+              aria-label={isHubOpen ? 'Cerrar Centro de control' : 'Abrir Centro de control'}
+            >
+              <UchHubIcon className="h-4 w-4" />
+              <span>Centro de Control</span>
+            </button>
+          )}
+
           {actingAsTecnico &&
             !showCaseToolbar &&
             (detailActions.archive.visible || detailActions.unarchive.visible) && (
@@ -2293,7 +2384,7 @@ function CaseDetailPageContent() {
           currentStatus={isEditingStatus ?? clinicalCase?.status ?? 'borrador'}
           workDeadline={techOfferRejectedView ? undefined : clinicalCase?.workDeadline}
           variant={techOfferRejectedView ? 'techRejected' : 'case'}
-          viewerRole={viewingAsAdmin ? 'admin' : actingAsCalidad ? 'calidad' : actingAsTecnico ? 'tecnico' : 'dentista'}
+          viewerRole={viewerRole}
         />
       </div>
 
@@ -2315,20 +2406,6 @@ function CaseDetailPageContent() {
           <div className="relative group">
             {modelConfig.length > 0 ? (
               <div className="relative h-[320px] sm:h-[450px] lg:h-[600px] w-full overflow-hidden rounded-[1.5rem] bg-surface/40">
-                {/* WATERMARK ESTADO LICITACIÓN — solo si ya se aceptó (no en propuestaLista) */}
-                {assignedTechnicianIdStr != null && clinicalCase?.status !== 'propuestaLista' && (
-                  <div className="absolute top-10 -left-14 z-50 pointer-events-none transform -rotate-45 w-64 text-center drop-shadow-xl">
-                    {(actingAsDentista || (viewerIdStr != null && assignedTechnicianIdStr === viewerIdStr)) ? (
-                      <div className="bg-primary/90 text-inverse font-black uppercase text-[10px] tracking-[0.2em] py-1.5 shadow-lg shadow-sm backdrop-blur-sm border-y border-primary/30">
-                        OFERTA ACEPTADA
-                      </div>
-                    ) : (
-                      <div className="bg-error text-inverse font-black uppercase text-[10px] tracking-[0.2em] py-1.5 shadow-lg shadow-sm backdrop-blur-sm border-y border-rose-400/30">
-                        OFERTA RECHAZADA
-                      </div>
-                    )}
-                  </div>
-                )}
                 
                 <DentalViewer3D
                   models={modelConfig}
@@ -2540,9 +2617,11 @@ function CaseDetailPageContent() {
                   myInvitation={myInvitation}
                   techOfferRejectedView={techOfferRejectedView}
                   onInvitationUpdate={async () => {
-                    const invRes = await getMyInvitationForCaseAction(id as string);
+                    const [invRes, c] = await Promise.all([
+                      getMyInvitationForCaseAction(id as string),
+                      getCaseDetails(id as string),
+                    ]);
                     setMyInvitation(invRes.data);
-                    const c = await getCaseDetails(id as string);
                     if (c && !(c as any)._error) ingestCasePayloadFromServer(c);
                     await loadCaseEvents();
                   }}
@@ -2950,7 +3029,7 @@ function CaseDetailPageContent() {
 
       {/* MODAL DE CONFIRMACIÓN DE PUBLICACIÓN DE CASO (DENTISTA) */}
       {isPublishing && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center p-4 pt-[12vh] bg-background/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[500] flex items-start justify-center p-4 pt-[12vh] bg-background/60 backdrop-blur-sm">
           <FocusTrap onEscape={() => setIsPublishing(false)}>
           <motion.div
             initial={{ opacity: 0, scale: 0.92, y: 20 }}

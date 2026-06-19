@@ -152,7 +152,7 @@ export default function KanbanBoard({ cases, role, userId }: KanbanBoardProps) {
                     {techInput ? (
                       <CaseViewerStatusStripe input={techInput} compact />
                     ) : (
-                      <StatusBadge status={c.status} />
+                      <StatusBadge status={c.status} viewerRole={role} />
                     )}
                   </div>
 

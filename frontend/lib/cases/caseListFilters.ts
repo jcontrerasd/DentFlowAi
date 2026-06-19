@@ -372,7 +372,12 @@ export function filtersFromDashboardMetricId(
     enEvaluacion: [CASE_STATUSES.EN_EVALUACION],
     propuestaLista: [CASE_STATUSES.PROPUESTA_LISTA],
     aceptadaPendienteInicio: [CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO],
-    enEjecucion: [CASE_STATUSES.EN_EJECUCION],
+    // El dentista no percibe la etapa de Calidad: sus casos cuentan y se filtran bajo "En ejecución".
+    enEjecucion: [
+      CASE_STATUSES.EN_EJECUCION,
+      CASE_STATUSES.EN_REVISION_CALIDAD,
+      CASE_STATUSES.CERTIFICADO_CALIDAD,
+    ],
     enRevision: [CASE_STATUSES.EN_REVISION, CASE_STATUSES.CAMBIOS_EN_PROCESO],
     completado: [CASE_STATUSES.COMPLETADO],
     cerrado: [CASE_STATUSES.CERRADO],
