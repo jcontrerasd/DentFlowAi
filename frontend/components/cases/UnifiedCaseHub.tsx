@@ -22,14 +22,15 @@ import UchDeliveryPanel, { newDeliveryEntry } from '@/components/cases/uch/UchDe
 import type { DeliveryFileEntry } from '@/components/cases/uch/UchDeliveryPanel';
 import DeliveryViewer3DModal from '@/components/cases/uch/DeliveryViewer3DModal';
 import UchFauchardActionsPanel from '@/components/cases/uch/UchFauchardActionsPanel';
-import UchQualityReviewPanel from '@/components/cases/uch/UchQualityReviewPanel';
 import UchSendToDentistPanel from '@/components/cases/uch/UchSendToDentistPanel';
+
 import { CaseDesiredDeliveryChip } from '@/components/cases/CaseDesiredDeliveryChip';
 import { shouldShowDesiredDeliveryInUch } from '@/lib/cases/caseDeliveryPresentation';
 import UchRatingPanel from '@/components/cases/uch/UchRatingPanel';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { useRemainingMsUntil, formatCountdownHMS } from '@/lib/hooks/useRemainingUntil';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
+import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { splitCasoPublicadoForDentista } from '@/lib/uchCasoPublicadoSplit';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
 
@@ -253,6 +254,7 @@ export default function UnifiedCaseHub({
   const [isSendingDelivery, setIsSendingDelivery] = useState(false);
   const [fileProgress, setFileProgress] = useState<Record<number, number>>({});
   const [reviewComment, setReviewComment] = useState('');
+  const [qualityComment, setQualityComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
   const [viewer3DState, setViewer3DState] = useState<{ deliveryId: string; version: number; files: string[]; dentistNote?: string } | null>(null);
@@ -299,6 +301,7 @@ export default function UnifiedCaseHub({
       'ASIGNACION_ENVIADA', 'ASIGNACION_RECIBIDA', 'ASIGNACION_ACEPTADA',
       'ASIGNACION_RECHAZADA', 'ASIGNACION_EXPIRADA', 'ASIGNACION_REASIGNADA',
       'OFERTA_RECHAZADA_POR_TECNICO', 'TRABAJO_INICIADO',
+      'ASIGNACION_CALIDAD', 'CASO_DERIVADO_CALIDAD',
       // Legacy cotización/comparativo
       'INVITACION_RECIBIDA', 'INVITACION_EXPIRADA', 'OFERTA_ENVIADA',
       'PROPUESTA_ACEPTADA', 'OFERTA_ACEPTADA', 'OFERTA_RECHAZADA',
@@ -310,11 +313,11 @@ export default function UnifiedCaseHub({
     entrega: [
       'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO',
       'REVISION_ENVIADA_CALIDAD', 'REVISION_SOLICITADA_CALIDAD', 'CALIDAD_CERTIFICADA',
-      'ASIGNACION_CALIDAD', 'CASO_DERIVADO_CALIDAD',
       'COMENTARIO_TECNICO', 'REANUDADO',
     ],
     calificacion: [
       'CALIFICACION_ENVIADA',
+      'CALIFICACION_ENVIADA_CALIDAD',
     ],
   };
 
@@ -371,7 +374,11 @@ export default function UnifiedCaseHub({
     canRate &&
     caseStatus === 'completado' &&
     !reviewedDims.includes('design');
-  const showAnyRatingPanel = showRateDesignPanel;
+  const showQualityRatingPanel =
+    actingAsCalidad &&
+    caseStatus === 'completado' &&
+    !reviewedDims.includes('quality');
+  const showAnyRatingPanel = showRateDesignPanel || showQualityRatingPanel;
 
   const roleScopedEvents = useMemo(
     () =>
@@ -382,6 +389,21 @@ export default function UnifiedCaseHub({
           if (visibleTo === 'sistema') return false;
 
           if (viewingAsAdmin) return true;
+
+          // Calidad ve solo eventos de su circuito QA.
+          if (actingAsCalidad) {
+            const CALIDAD_ALLOWED = new Set([
+              CASE_EVENTS.ASIGNACION_CALIDAD,
+              CASE_EVENTS.CASO_DERIVADO_CALIDAD,
+              CASE_EVENTS.REVISION_ENVIADA_CALIDAD,
+              CASE_EVENTS.REVISION_SOLICITADA_CALIDAD,
+              CASE_EVENTS.CALIDAD_CERTIFICADA,
+              CASE_EVENTS.QUALITY_PLAZO_POR_VENCER,
+              CASE_EVENTS.QUALITY_PLAZO_VENCIDO,
+              CASE_EVENTS.CALIFICACION_ENVIADA_CALIDAD,
+            ]);
+            return CALIDAD_ALLOWED.has(e.action as any);
+          }
 
           /** Dentista: ocultar ruido motor comparativo (sigue en pestaña Todos vía otras rutas / servidor). */
           if (actingAsTecnico && techOfferRejectedView && selectedTechnicianId) {
@@ -413,6 +435,11 @@ export default function UnifiedCaseHub({
             }
 
             if (visibleTo === 'tecnico' && selectedTechnicianId) {
+              // Eventos de la etapa QA (qualityScoped): el técnico asignado los ve siempre.
+              // Espeja la misma excepción que caseEventsUchFilter.ts línea 72-74.
+              if ((e.payload as any)?.qualityScoped) {
+                return String(clinicalCase?.assignedTechnicianId) === String(selectedTechnicianId);
+              }
               const evtInvId = (e.payload as any)?.invitationId;
               if (evtInvId && myInvitation?.id && evtInvId !== myInvitation.id) return false;
               if (
@@ -952,16 +979,23 @@ export default function UnifiedCaseHub({
               </div>
             )}
 
-            {showAnyRatingPanel && uchAssignedId && (
+            {showAnyRatingPanel && (
               <div
                 data-testid="uch-rating-panels"
                 className="px-3 pt-2 pb-2 space-y-2 flex-shrink-0 border-b border-divider bg-background"
               >
-                {showRateDesignPanel && (
+                {showRateDesignPanel && uchAssignedId && (
                   <UchRatingPanel
                     caseId={caseId}
                     revieweeId={uchAssignedId}
                     dimension="design"
+                    onRated={async () => { await onInvitationUpdate?.(); }}
+                  />
+                )}
+                {showQualityRatingPanel && (
+                  <UchRatingPanel
+                    caseId={caseId}
+                    dimension="quality"
                     onRated={async () => { await onInvitationUpdate?.(); }}
                   />
                 )}
@@ -973,31 +1007,7 @@ export default function UnifiedCaseHub({
               data-testid="uch-timeline-scroll"
               className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar bg-background"
             >
-              {/* Etapa de Calidad (v5.19): acción primaria del revisor de Calidad. */}
-              {actingAsCalidad && caseStatus === 'enRevisionCalidad' && pendingDeliveryForReview && (
-                <UchQualityReviewPanel
-                  caseId={caseId}
-                  delivery={pendingDeliveryForReview}
-                  onCertify={async (comment) => {
-                    const ok = await onActionTriggered?.('certify_quality', { comment });
-                    return ok;
-                  }}
-                  onRequestChanges={async (reason) => {
-                    const ok = await onActionTriggered?.('request_quality_revision', { reason });
-                    return ok;
-                  }}
-                  onDownload={async () => {
-                    if (pendingDeliveryForReview?.id) {
-                      await handleDownloadAll(
-                        pendingDeliveryForReview.id,
-                        `v${pendingDeliveryForReview.version ?? ''}`,
-                        pendingDeliveryForReview.files ?? [],
-                      );
-                    }
-                  }}
-                  onDerived={() => { onInvitationUpdate?.(); }}
-                />
-              )}
+
               {/* Entrega certificada (v5.19): el técnico decide cuándo enviarla al dentista. */}
               {actingAsTecnico && uchViewerIsAssignedTechnician && caseStatus === 'certificadoCalidad' && (
                 <UchSendToDentistPanel
@@ -1122,6 +1132,27 @@ export default function UnifiedCaseHub({
                       setReviewComment={setReviewComment}
                       isSubmittingReview={isSubmittingReview}
                       isSubmittingRevision={isSubmittingRevision}
+                      caseId={caseId}
+                      actingAsCalidad={actingAsCalidad}
+                      qualityComment={qualityComment}
+                      setQualityComment={setQualityComment}
+                      isPendingQualityDelivery={(() => {
+                        if (!pendingDeliveryForReview || !actingAsCalidad || caseStatus !== 'enRevisionCalidad') return false;
+                        const p = (row.event.payload as Record<string, unknown> | undefined) ?? {};
+                        if (p.deliveryId) return p.deliveryId === pendingDeliveryForReview.id;
+                        return p.deliveryVersion === pendingDeliveryForReview.version;
+                      })()}
+                      onCertifyQuality={async (comment) => {
+                        const ok = await onActionTriggered?.('certify_quality', { comment });
+                        if (ok) setQualityComment('');
+                        return ok;
+                      }}
+                      onQualityRequestChanges={async (reason) => {
+                        const ok = await onActionTriggered?.('request_quality_revision', { reason });
+                        if (ok) setQualityComment('');
+                        return ok;
+                      }}
+                      onDeriveQuality={() => { onInvitationUpdate?.(); }}
                     />
                   );
                 }
@@ -1180,10 +1211,14 @@ export default function UnifiedCaseHub({
         zipFiles={viewer3DState.files}
         caseId={caseId}
         caseNumber={clinicalCase?.caseNumber ?? ''}
-        viewerRole={actingAsDentista ? 'dentista' : actingAsTecnico ? 'tecnico' : 'admin'}
+        viewerRole={actingAsDentista ? 'dentista' : actingAsTecnico ? 'tecnico' : actingAsCalidad ? 'calidad' : 'admin'}
         dentistNote={viewer3DState.dentistNote}
         canReview={!!(actingAsDentista && caseStatus === 'enRevision' && pendingDeliveryForReview)}
-        canAnnotate={!!(actingAsDentista && caseStatus === 'enRevision' && pendingDeliveryForReview)}
+        canAnnotate={!!(
+          (actingAsDentista && caseStatus === 'enRevision' && pendingDeliveryForReview) ||
+          (actingAsCalidad && caseStatus === 'enRevisionCalidad' && pendingDeliveryForReview)
+        )}
+        canReviewQuality={!!(actingAsCalidad && caseStatus === 'enRevisionCalidad' && pendingDeliveryForReview)}
         onApprove={async () => {
           setIsSubmittingReview(true);
           try {
@@ -1207,8 +1242,20 @@ export default function UnifiedCaseHub({
         setReviewComment={setReviewComment}
         isSubmittingReview={isSubmittingReview}
         isSubmittingRevision={isSubmittingRevision}
+        qualityComment={qualityComment}
+        setQualityComment={setQualityComment}
         onDownloadAll={handleDownloadAll}
         downloadingVersionId={downloadingVersionId}
+        onCertifyQuality={async (comment) => {
+          const ok = await onActionTriggered?.('certify_quality', { comment });
+          if (ok) { setQualityComment(''); setViewer3DState(null); }
+        }}
+        onQualityRequestChanges={async (comment) => {
+          if (!comment.trim()) return;
+          const ok = await onActionTriggered?.('request_quality_revision', { reason: comment });
+          if (ok) setViewer3DState(null);
+        }}
+        onDeriveQuality={() => { setViewer3DState(null); onInvitationUpdate?.(); }}
       />
     )}
     </>

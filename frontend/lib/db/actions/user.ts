@@ -170,7 +170,7 @@ export async function checkUserStatusAction(email: string) {
  * Obtiene una lista de usuarios filtrada por rol.
  * Usado principalmente por administradores para simulación de identidad.
  */
-export async function getUsersByRoleAction(role: 'dentista' | 'tecnico') {
+export async function getUsersByRoleAction(role: 'dentista' | 'tecnico' | 'calidad') {
   try {
     const results = await db
       .select({

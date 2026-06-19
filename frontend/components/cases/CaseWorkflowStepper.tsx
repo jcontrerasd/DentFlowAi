@@ -69,8 +69,9 @@ export default function CaseWorkflowStepper({
 }: CaseWorkflowStepperProps) {
   const rawStatus = String(currentStatus || 'borrador').trim() || 'borrador';
   const techRejected = variant === 'techRejected';
-  // El dentista nunca percibe la etapa de Calidad: para él, enRevisionCalidad/certificadoCalidad
-  // se muestran como "En ejecución". Técnico/Calidad/admin sí ven el paso de Calidad.
+  // El dentista nunca percibe la etapa de Calidad: para él, enRevisionCalidad se muestra
+  // como "En ejecución". Técnico/Calidad/admin sí ven el paso de Calidad.
+  // certificadoCalidad: alias de compatibilidad para casos históricos (ya no alcanzable en flujos nuevos).
   const showQualityStep = viewerRole === 'tecnico' || viewerRole === 'calidad' || viewerRole === 'admin';
   const extraAliases: Record<string, string> = showQualityStep
     ? { certificadoCalidad: 'enRevisionCalidad' }

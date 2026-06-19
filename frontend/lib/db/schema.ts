@@ -227,7 +227,7 @@ export const review = pgTable("review", {
   reviewerId: text("reviewer_id").notNull().references(() => user.id),
   revieweeId: text("reviewee_id").notNull().references(() => user.id),
   rating: integer("rating").notNull(),
-  /** Fase calificada: 'design' (CAD) | 'fabrication' (CAM). v5.3. */
+  /** Fase calificada: 'design' (CAD, dentista) | 'fabrication' (CAM) | 'quality' (revisor Calidad). v5.3/v5.19. */
   dimension: text("dimension").default('design').notNull(),
   comment: text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),

@@ -200,6 +200,15 @@ export async function ensureIncrementalInfrastructure(db: any) {
   } catch (e) {
     console.error("[Infrastructure] Error creando infraestructura de Calidad (v5.19):", e);
   }
+
+  // v5.19 — user.organization_id pasa a nullable para soportar usuarios sin org (admin, calidad).
+  try {
+    await db.execute(sql`
+      ALTER TABLE "user" ALTER COLUMN organization_id DROP NOT NULL;
+    `);
+  } catch (e) {
+    // Silencioso si ya es nullable (el ALTER falla solo si hay un error real).
+  }
 }
 
 /**

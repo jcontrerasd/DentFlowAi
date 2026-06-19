@@ -19,8 +19,20 @@ export type EmailPreview = {
 };
 
 const MAX = 50;
-const buffer: EmailPreview[] = [];
-let seq = 0;
+
+// globalThis persists across module instances (Turbopack isolates Server Actions
+// and API routes in separate module contexts — a plain const buffer would be empty
+// on the API route side even after notifyUser pushes to it).
+declare global {
+  // eslint-disable-next-line no-var
+  var __emailPreviewBuffer: EmailPreview[] | undefined;
+  // eslint-disable-next-line no-var
+  var __emailPreviewSeq: number | undefined;
+}
+if (!globalThis.__emailPreviewBuffer) globalThis.__emailPreviewBuffer = [];
+if (globalThis.__emailPreviewSeq === undefined) globalThis.__emailPreviewSeq = 0;
+
+const buffer = globalThis.__emailPreviewBuffer;
 
 export function isEmailPreviewEnabled(): boolean {
   return process.env.NEXT_PUBLIC_DEMO_EMAIL_PREVIEW === 'true';
@@ -28,7 +40,7 @@ export function isEmailPreviewEnabled(): boolean {
 
 export function pushEmailPreview(email: Omit<EmailPreview, 'id' | 'ts'>): void {
   if (!isEmailPreviewEnabled()) return;
-  const entry: EmailPreview = { ...email, id: `${Date.now()}-${++seq}`, ts: Date.now() };
+  const entry: EmailPreview = { ...email, id: `${Date.now()}-${++globalThis.__emailPreviewSeq!}`, ts: Date.now() };
   buffer.push(entry);
   if (buffer.length > MAX) buffer.splice(0, buffer.length - MAX);
 }

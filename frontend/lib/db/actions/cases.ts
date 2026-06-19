@@ -1054,12 +1054,24 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
     return { success: false, error: guarded.error };
   }
 
+  // Lazy quality assignment: si el flag está on pero quality_reviewer_id quedó NULL,
+  // intentar asignar ANTES de abrir la transacción principal para evitar deadlock.
+  // (Dentro de la tx principal se volvería a leer el valor ya persistido.)
+  if (isQualityGateEnabled()) {
+    try {
+      const { assignQualityReviewerAction } = await import('./quality');
+      await assignQualityReviewerAction(caseId);
+    } catch {
+      // best-effort: si falla, la tx principal degrada al flujo legacy
+    }
+  }
+
   try {
     return await db.transaction(async (tx) => {
       // 1. Obtener versión actual de entregas
       const [lastDelivery]: any = await tx.execute(sql`
-        SELECT version FROM clinical_case_delivery 
-        WHERE clinical_case_id = ${caseId} 
+        SELECT version FROM clinical_case_delivery
+        WHERE clinical_case_id = ${caseId}
         ORDER BY version DESC LIMIT 1
       `);
       const nextVersion = (lastDelivery?.version || 0) + 1;
@@ -1096,9 +1108,12 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
         SELECT service_type, quality_reviewer_id, doctor_id
         FROM clinical_case WHERE id = ${caseId} LIMIT 1
       `);
+
+      const effectiveReviewerId = (caseRow?.quality_reviewer_id as string | null) ?? null;
+
       const useQualityGate = isQualityGateEnabled()
         && caseRow?.service_type === 'solo_diseno'
-        && !!caseRow?.quality_reviewer_id;
+        && !!effectiveReviewerId;
       const targetStatus = useQualityGate ? 'enRevisionCalidad' : 'enRevision';
 
       // 3. Actualizar caso
@@ -1133,8 +1148,8 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
           payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'tecnico', qualityScoped: true },
           stateChange: { from: 'enEjecucion', to: 'enRevisionCalidad' }
         }, tx);
-        if (caseRow?.quality_reviewer_id) {
-          await notifyUser(caseRow.quality_reviewer_id as string, 'REVISION_PENDIENTE_CALIDAD', { caseId, version: nextVersion });
+        if (effectiveReviewerId) {
+          await notifyUser(effectiveReviewerId, 'REVISION_PENDIENTE_CALIDAD', { caseId, version: nextVersion });
         }
       } else {
         await logCaseEvent({

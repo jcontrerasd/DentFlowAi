@@ -89,7 +89,7 @@ export async function listDeliveryAnnotationsAction(deliveryId: string): Promise
     text: string;
     coordinates: { x: number; y: number; z: number };
     userId: string;
-    user: { fullName: string };
+    user: { fullName: string; role: string };
   }>;
   error?: string;
 }> {
@@ -128,6 +128,7 @@ export async function listDeliveryAnnotationsAction(deliveryId: string): Promise
         coordinates: annotation.coordinates,
         userId: annotation.userId,
         fullName: user.fullName,
+        role: user.role,
       })
       .from(annotation)
       .innerJoin(user, eq(annotation.userId, user.id))
@@ -140,7 +141,7 @@ export async function listDeliveryAnnotationsAction(deliveryId: string): Promise
         text: r.text,
         coordinates: r.coordinates as { x: number; y: number; z: number },
         userId: r.userId,
-        user: { fullName: r.fullName ?? 'Usuario' },
+        user: { fullName: r.fullName ?? 'Usuario', role: r.role ?? '' },
       })),
     };
   } catch (error) {

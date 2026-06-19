@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Download, Activity, AlertCircle, CheckCircle, MessageSquare } from 'lucide-react';
+import { X, Download, Activity, AlertCircle, CheckCircle, FileCheck2, GitBranch, MessageSquareWarning } from 'lucide-react';
 import DentalViewer3D from '@/components/DentalViewer3D';
 import { getSignedUrlAction } from '@/lib/db/actions/cases';
 import {
@@ -15,7 +15,12 @@ interface DentalAnnotation {
   id: string;
   text: string;
   coordinates: { x: number; y: number; z: number };
-  user: { fullName: string };
+  user: { fullName: string; role?: string };
+}
+
+function pinColorForRole(role?: string): string {
+  if (role === 'dentista') return '#fd0017';
+  return '#f97316';
 }
 
 interface DentalModel {
@@ -34,7 +39,7 @@ interface Props {
   caseId: string;
   caseNumber: string;
   zipFiles: string[];
-  viewerRole: 'dentista' | 'tecnico' | 'admin';
+  viewerRole: 'dentista' | 'tecnico' | 'admin' | 'calidad';
   dentistNote?: string;
   canReview: boolean;
   canAnnotate: boolean;
@@ -46,6 +51,12 @@ interface Props {
   isSubmittingRevision: boolean;
   onDownloadAll: (id: string, label: string, files: string[]) => void;
   downloadingVersionId: string | null;
+  canReviewQuality?: boolean;
+  qualityComment?: string;
+  setQualityComment?: (v: string) => void;
+  onCertifyQuality?: (comment: string) => Promise<void>;
+  onQualityRequestChanges?: (comment: string) => Promise<void>;
+  onDeriveQuality?: () => void;
 }
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
@@ -70,6 +81,12 @@ export default function DeliveryViewer3DModal({
   isSubmittingRevision,
   onDownloadAll,
   downloadingVersionId,
+  canReviewQuality = false,
+  qualityComment: qualityCommentProp = '',
+  setQualityComment: setQualityCommentProp,
+  onCertifyQuality,
+  onQualityRequestChanges,
+  onDeriveQuality,
 }: Props) {
   const { showError } = useToast();
 
@@ -82,6 +99,11 @@ export default function DeliveryViewer3DModal({
   const [isSavingAnnotation, setIsSavingAnnotation] = useState(false);
 
   const [approveStep, setApproveStep] = useState<ApproveStep>('choose');
+  const [revisionStep, setRevisionStep] = useState<ApproveStep>('choose');
+  const [qualityRevisionStep, setQualityRevisionStep] = useState<ApproveStep>('choose');
+  const qualityComment = qualityCommentProp;
+  const setQualityComment = setQualityCommentProp ?? (() => {});
+  const [isBusyQuality, setIsBusyQuality] = useState(false);
 
   // Cargar modelos y anotaciones al abrir
   useEffect(() => {
@@ -92,6 +114,9 @@ export default function DeliveryViewer3DModal({
     setModels([]);
     setAnnotations([]);
     setApproveStep('choose');
+    setRevisionStep('choose');
+    setQualityRevisionStep('choose');
+    setIsBusyQuality(false);
 
     async function load() {
       try {
@@ -145,7 +170,7 @@ export default function DeliveryViewer3DModal({
           setAnnotations(
             (annotationsResult.annotations as DentalAnnotation[]).map((a) => ({
               ...a,
-              color: '#f59e0b',
+              color: pinColorForRole(a.user.role),
             }))
           );
         }
@@ -187,8 +212,8 @@ export default function DeliveryViewer3DModal({
             id: result.annotation!.id,
             text: result.annotation!.text,
             coordinates: result.annotation!.coordinates as { x: number; y: number; z: number },
-            user: { fullName: 'Tú' },
-            color: '#f59e0b',
+            user: { fullName: 'Tú', role: viewerRole },
+            color: pinColorForRole(viewerRole),
           },
         ]);
         setPendingCoords(null);
@@ -321,31 +346,13 @@ export default function DeliveryViewer3DModal({
           )}
         </div>
 
-        {/* Panel inferior: nota del dentista + anotaciones (solo para técnico / admin) */}
-        {viewerRole !== 'dentista' && (dentistNote || annotations.length > 0) && (
-          <div className="border-t border-divider px-4 py-3 shrink-0 space-y-2 max-h-44 overflow-y-auto">
-            {dentistNote && (
-              <div className="space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">Comentario del dentista</p>
-                <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{dentistNote}</p>
-              </div>
-            )}
-            {annotations.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">
-                  <MessageSquare className="w-3 h-3 inline mr-1" aria-hidden />
-                  Anotaciones ({annotations.length})
-                </p>
-                <ul className="space-y-1">
-                  {annotations.map((a, i) => (
-                    <li key={a.id} className="text-xs text-foreground leading-relaxed">
-                      <span className="text-amber-400 font-bold mr-1">#{i + 1}</span>
-                      {a.text}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+        {/* Panel inferior: solo nota del dentista cuando aplica (los pins se leen directamente en el modelo) */}
+        {viewerRole !== 'dentista' && dentistNote && (
+          <div className="border-t border-divider px-4 py-3 shrink-0">
+            <div className="space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">Comentario del dentista</p>
+              <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{dentistNote}</p>
+            </div>
           </div>
         )}
       </div>
@@ -359,7 +366,7 @@ export default function DeliveryViewer3DModal({
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setApproveStep('choose')}
+                  onClick={() => { setApproveStep('choose'); setReviewComment(''); }}
                   className="text-xs text-muted hover:text-foreground"
                 >
                   Cancelar
@@ -389,19 +396,41 @@ export default function DeliveryViewer3DModal({
                 onChange={(e) => setReviewComment(e.target.value)}
               />
               <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => void onRequestRevision?.()}
-                  disabled={isSubmittingRevision || !reviewComment.trim()}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-3 py-1.5 rounded disabled:opacity-40"
-                >
-                  {isSubmittingRevision ? (
-                    <Activity className="w-3 h-3 animate-spin" aria-hidden />
-                  ) : (
+                {revisionStep === 'confirm' ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted">¿Confirmas que solicitas ajustes?</span>
+                    <button
+                      type="button"
+                      onClick={() => { setRevisionStep('choose'); setReviewComment(''); }}
+                      className="text-xs text-muted hover:text-foreground"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => { await onRequestRevision?.(); setRevisionStep('choose'); }}
+                      disabled={isSubmittingRevision}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-3 py-1.5 rounded disabled:opacity-40"
+                    >
+                      {isSubmittingRevision ? (
+                        <Activity className="w-3 h-3 animate-spin" aria-hidden />
+                      ) : (
+                        <AlertCircle className="w-3 h-3" aria-hidden />
+                      )}
+                      Confirmar ajustes
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setRevisionStep('confirm')}
+                    disabled={!reviewComment.trim()}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-3 py-1.5 rounded disabled:opacity-40"
+                  >
                     <AlertCircle className="w-3 h-3" aria-hidden />
-                  )}
-                  Pedir ajustes
-                </button>
+                    Pedir ajustes
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => void handleApproveClick()}
@@ -418,6 +447,76 @@ export default function DeliveryViewer3DModal({
               </div>
             </>
           )}
+        </div>
+      )}
+      {/* Footer de revisión QA (solo revisor de Calidad con entrega pending) */}
+      {canReviewQuality && (
+        <div className="border-t border-divider px-4 py-3 shrink-0 space-y-2">
+          <textarea
+            rows={2}
+            placeholder="Comentario para el técnico (obligatorio para solicitar ajustes)…"
+            value={qualityComment}
+            onChange={(e) => setQualityComment(e.target.value)}
+            disabled={isBusyQuality}
+            className="w-full text-xs bg-background border border-divider rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground"
+          />
+          <div className="flex justify-end gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => onDeriveQuality?.()}
+              disabled={isBusyQuality}
+              className="inline-flex items-center gap-1 text-xs text-muted hover:text-foreground transition-colors disabled:opacity-40"
+            >
+              <GitBranch className="w-3 h-3" aria-hidden />
+              Derivar
+            </button>
+            {qualityRevisionStep === 'confirm' ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted">¿Confirmas que solicitas ajustes?</span>
+                <button
+                  type="button"
+                  onClick={() => { setQualityRevisionStep('choose'); setQualityComment(''); }}
+                  className="text-xs text-muted hover:text-foreground"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsBusyQuality(true);
+                    try { await onQualityRequestChanges?.(qualityComment); } finally { setIsBusyQuality(false); setQualityRevisionStep('choose'); }
+                  }}
+                  disabled={isBusyQuality}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-3 py-1.5 rounded disabled:opacity-40"
+                >
+                  {isBusyQuality ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <MessageSquareWarning className="w-3 h-3" aria-hidden />}
+                  Confirmar ajustes
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setQualityRevisionStep('confirm')}
+                disabled={!qualityComment.trim() || isBusyQuality}
+                className="inline-flex items-center gap-1 text-xs font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-3 py-1.5 rounded disabled:opacity-40"
+              >
+                <MessageSquareWarning className="w-3 h-3" aria-hidden />
+                Solicitar ajustes
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={async () => {
+                setIsBusyQuality(true);
+                try { await onCertifyQuality?.(qualityComment); } finally { setIsBusyQuality(false); }
+              }}
+              disabled={isBusyQuality}
+              className="inline-flex items-center gap-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded disabled:opacity-40"
+            >
+              {isBusyQuality ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <FileCheck2 className="w-3 h-3" aria-hidden />}
+              Certificar entrega
+            </button>
+          </div>
         </div>
       )}
     </div>

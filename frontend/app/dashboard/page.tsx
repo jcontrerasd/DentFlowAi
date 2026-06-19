@@ -303,7 +303,7 @@ export default function DashboardHome() {
       )}
 
       <DashboardRecentCasesSection
-        role={isDentist ? 'dentista' : 'tecnico'}
+        role={isDentist ? 'dentista' : String(userProfile?.role) === 'calidad' ? 'calidad' : 'tecnico'}
         rawCases={rawCases}
         featuredFilters={featuredFilters}
         onFilterChange={(f) =>

@@ -16,7 +16,7 @@ import { RECENT_CASES_LIMIT } from '@/lib/dashboard/constants';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 
 type DashboardRecentCasesSectionProps = {
-  role: 'dentista' | 'tecnico';
+  role: 'dentista' | 'tecnico' | 'calidad';
   rawCases: any[];
   featuredFilters: CaseListQueryFilters;
   onFilterChange: (filters: CaseListQueryFilters) => void;
@@ -41,6 +41,7 @@ export default function DashboardRecentCasesSection({
   const router = useRouter();
   const scrollRef = useRef<HTMLDivElement>(null);
   const isDentist = role === 'dentista';
+  const isCalidad = role === 'calidad';
   const displayedCases = rawCases.slice(0, RECENT_CASES_LIMIT);
 
   const scroll = (direction: 'left' | 'right') => {
@@ -109,6 +110,7 @@ export default function DashboardRecentCasesSection({
               <MarketplaceCaseCard
                 c={c}
                 isDentist={isDentist}
+                isCalidad={isCalidad}
                 hubUchUnread={hubUnreadByCase[c.id] ?? 0}
                 myBid={myBid}
                 invitation={invitation}

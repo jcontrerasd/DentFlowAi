@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { Star, CheckCircle2 } from 'lucide-react';
 import RatingScale from '@/components/ui/RatingScale';
 import { submitUserRatingAction } from '@/lib/db/actions/cases';
+import { submitQualityRatingAction } from '@/lib/db/actions/quality';
 import { useToast } from '@/context/ToastContext';
 
 interface UchRatingPanelProps {
   caseId: string;
-  /** Técnico/laboratorio calificado (reviewee). */
-  revieweeId: string;
-  dimension: 'design';
+  /** Técnico/laboratorio calificado (reviewee). Solo requerido para dimension='design'. */
+  revieweeId?: string;
+  dimension: 'design' | 'quality';
   /** Refresca el caso tras calificar (oculta el panel). */
   onRated: () => void | Promise<void>;
 }
@@ -19,6 +20,10 @@ const COPY = {
   design: {
     title: 'Califica el diseño recibido (CAD)',
     subtitle: 'Tu valoración ayuda a Fauchard a seleccionar mejores laboratorios. Es anónima.',
+  },
+  quality: {
+    title: 'Califica al técnico (Revisión QA)',
+    subtitle: 'Tu evaluación es privada del equipo de Calidad y contribuye al score del laboratorio.',
   },
 } as const;
 
@@ -36,7 +41,13 @@ export default function UchRatingPanel({ caseId, revieweeId, dimension, onRated 
     }
     setSubmitting(true);
     try {
-      const res = await submitUserRatingAction({ caseId, revieweeId, rating, dimension, comment: comment.trim() || undefined });
+      let res: { success: boolean; error?: string };
+      if (dimension === 'quality') {
+        res = await submitQualityRatingAction({ caseId, rating, comment: comment.trim() || undefined });
+      } else {
+        if (!revieweeId) { showError('Técnico no identificado'); setSubmitting(false); return; }
+        res = await submitUserRatingAction({ caseId, revieweeId, rating, dimension, comment: comment.trim() || undefined });
+      }
       if (res.success) {
         showSuccess('¡Gracias por tu calificación!');
         await onRated();

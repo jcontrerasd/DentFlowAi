@@ -21,7 +21,7 @@ export type FilterContext = 'DASHBOARD' | 'MARKETPLACE' | 'MY_CASES' | 'MY_BIDS'
 
 interface AdvancedFiltersRowProps {
   context: FilterContext;
-  role: 'dentista' | 'tecnico';
+  role: 'dentista' | 'tecnico' | 'calidad';
   onFilterChange: (filters: CaseListQueryFilters) => void;
   initialFilters?: Partial<CaseListQueryFilters>;
 }

@@ -17,7 +17,7 @@
  */
 
 import { db } from '@/lib/db';
-import { clinicalCase, clinicalCaseDelivery, user, caseQualityAssignment } from '@/lib/db/schema';
+import { clinicalCase, clinicalCaseDelivery, user, caseQualityAssignment, review } from '@/lib/db/schema';
 import { and, eq, sql } from 'drizzle-orm';
 import type { ActionResult } from '@/lib/types/actions';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
@@ -262,8 +262,6 @@ export async function sendToDentistAction(caseId: string): Promise<ActionResult>
         })
         .where(eq(clinicalCase.id, caseId));
 
-      // El dentista ve la entrega llegar (anónima/Fauchard, igual que hoy). visibleTo 'dentista'
-      // porque el técnico ya tiene su propio evento self de la entrega a Calidad.
       await logCaseEvent({
         caseId,
         userId: identity.id as string,
@@ -274,7 +272,7 @@ export async function sendToDentistAction(caseId: string): Promise<ActionResult>
           deliveryVersion: certifiedDelivery.version,
           deliveryId: certifiedDelivery.id,
           files: certifiedDelivery.files ?? [],
-          visibleTo: 'dentista',
+          visibleTo: 'ambos',
         },
         stateChange: { from: CASE_STATUSES.CERTIFICADO_CALIDAD, to: CASE_STATUSES.EN_REVISION },
       }, tx);
@@ -349,6 +347,79 @@ export async function assignQualityReviewerAction(caseId: string, tx?: any): Pro
   } catch (error) {
     console.error('Error assigning quality reviewer:', error);
     return { success: false, assigned: false, error: 'Fallo al asignar revisor de Calidad' };
+  }
+}
+
+/**
+ * Calificación del revisor de Calidad al técnico (dimension='quality').
+ * Separada de la calificación del dentista; privada del equipo QA (visibleTo calidad).
+ * Solo disponible cuando el caso está completado.
+ */
+export async function submitQualityRatingAction(data: {
+  caseId: string;
+  rating: number;
+  comment?: string;
+}): Promise<ActionResult> {
+  if (!isQualityGateEnabled()) return { success: false, error: 'Compuerta de Calidad desactivada' };
+
+  const identity = await getServerIdentity();
+  if (!identity?.id) return { success: false, error: 'No autorizado' };
+  if (!canActAsCalidad(identity.role)) return { success: false, error: 'Solo Calidad puede enviar esta calificación' };
+
+  const rating = Math.round(data.rating);
+  if (rating < 1 || rating > 5) return { success: false, error: 'La calificación debe ser entre 1 y 5' };
+
+  if (data.comment) {
+    const guarded = await guardTextOrFail({
+      actionName: 'submitQualityRatingAction',
+      caseId: data.caseId,
+      identity: { id: identity.id, orgId: identity.orgId, role: identity.role },
+      fields: [{ text: data.comment, field: 'qualityRatingComment' }],
+    });
+    if (!guarded.ok) return { success: false, error: guarded.error };
+  }
+
+  try {
+    return await db.transaction(async (tx) => {
+      const caseRow = await loadCaseGuardRow(tx, data.caseId);
+      if (!caseRow) return { success: false, error: 'Caso no encontrado' };
+      if (caseRow.status !== 'completado') return { success: false, error: 'Solo se puede calificar cuando el caso está completado' };
+      if (!identity.isSystemAdmin && caseRow.quality_reviewer_id !== identity.id) {
+        return { success: false, error: 'Solo el revisor asignado puede calificar este caso' };
+      }
+      if (!caseRow.assigned_technician_id) return { success: false, error: 'El caso no tiene técnico asignado' };
+
+      await tx.insert(review).values({
+        clinicalCaseId: data.caseId,
+        reviewerId: identity.id as string,
+        revieweeId: caseRow.assigned_technician_id,
+        rating,
+        dimension: 'quality',
+        comment: data.comment?.trim() || null,
+      }).onConflictDoUpdate({
+        target: [review.clinicalCaseId, review.reviewerId, review.dimension],
+        set: { rating, comment: data.comment?.trim() || null, createdAt: new Date() },
+      });
+
+      await logCaseEvent({
+        caseId: data.caseId,
+        userId: identity.id as string,
+        type: 'sistema',
+        action: CASE_EVENTS.CALIFICACION_ENVIADA_CALIDAD,
+        content: `Calificación de Calidad: ${rating}/5`,
+        payload: {
+          dimension: 'quality',
+          rating,
+          revieweeId: caseRow.assigned_technician_id,
+          visibleTo: 'calidad',
+        },
+      }, tx);
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error('Error submitting quality rating:', error);
+    return { success: false, error: 'Fallo al enviar la calificación' };
   }
 }
 

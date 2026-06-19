@@ -11,12 +11,12 @@ import {
 } from '@/components/cases/CaseFichaHubAndServiceIcons';
 import { formatCaseIdAndPac } from '@/lib/cases/caseDisplay';
 import CaseViewerStatusStripe from '@/components/cases/CaseViewerStatusStripe';
+import StatusBadge from '@/components/ui/StatusBadge';
 import type { CaseViewerStatusInput } from '@/lib/cases/caseViewerStatusPresentation';
 import type { InvitationStatusForKpi } from '@/lib/dashboard/classifyCaseForDashboardKpi';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { dispatchCaseHubToggle } from '@/lib/caseHubToggleEvent';
 import { getDentistCardZone, getTechnicianCardCta } from '@/lib/cases/dentistCardPresentation';
-import { formatDesiredDeliveryCompact } from '@/lib/cases/caseDeliveryPresentation';
 
 /** Marco de ficha sobre fondo oscuro: borde + aro interior muy suave. */
 const CASE_CARD_SHELL =
@@ -27,11 +27,20 @@ const CTA_BUTTON_BASE =
 const CTA_BUTTON_NEUTRAL = `${CTA_BUTTON_BASE} bg-surface border border-divider text-foreground hover:bg-primary hover:border-teal-600`;
 const CTA_BUTTON_PRIMARY = `${CTA_BUTTON_BASE} bg-primary border border-teal-600 text-on-primary hover:bg-primary/90 shadow-[0_0_18px_-6px_rgba(20,184,166,0.55)]`;
 
-function formatPublishedShort(value: unknown): string | null {
+const DAYS_ES = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MONTHS_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+function formatCaseDateShort(value: unknown): string | null {
   if (!value) return null;
   const d = value instanceof Date ? value : new Date(value as string);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' });
+  const day = DAYS_ES[d.getDay()];
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mon = MONTHS_ES[d.getMonth()];
+  const yy = String(d.getFullYear()).slice(2);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${day} ${dd}/${mon}/${yy}, ${hh}:${mm}`;
 }
 
 function countFiles(c: any): number {
@@ -50,6 +59,7 @@ interface MarketplaceCaseCardProps {
   onSelectCase: (c: any) => void;
   isLink?: boolean;
   isDentist?: boolean;
+  isCalidad?: boolean;
   /** Pendientes por caso (servidor): UCH + bump de responsabilidad / turno. */
   hubUchUnread?: number;
   /** Ancla de reloj del servidor (listCases / detalle) para countdown alineado. */
@@ -62,6 +72,7 @@ export default function MarketplaceCaseCard({
   invitation,
   onSelectCase,
   isDentist = false,
+  isCalidad = false,
   hubUchUnread = 0,
   serverClockAnchor = null,
 }: MarketplaceCaseCardProps) {
@@ -172,15 +183,11 @@ export default function MarketplaceCaseCard({
     </motion.div>
   );
 
-  const deliveryCompact = formatDesiredDeliveryCompact(c.desiredDeliveryAt);
-  const publishedShort = formatPublishedShort(c.createdAt);
-  const metaLine = [
-    formatCaseIdAndPac(c.caseNumber, c.patientIdAnon),
-    publishedShort,
-    deliveryCompact ? `Entrega ${deliveryCompact}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const isPublished = Boolean(c.publishedAt);
+  const caseDateLabel = formatCaseDateShort(c.publishedAt ?? c.updatedAt);
+  const caseDatePrefix = isPublished ? 'F.Publicación' : 'F.Borrador';
+  const deliveryDateLabel = formatCaseDateShort(c.desiredDeliveryAt);
+  const metaLine = formatCaseIdAndPac(c.caseNumber, c.patientIdAnon);
 
   const ctaClass = dentistZone?.ctaVariant === 'primary' ? CTA_BUTTON_PRIMARY : CTA_BUTTON_NEUTRAL;
   const ctaLabel = isDentist ? dentistZone?.ctaLabel ?? 'Ver caso' : technicianCta ?? 'Ver caso';
@@ -193,13 +200,24 @@ export default function MarketplaceCaseCard({
       className={`${CASE_CARD_SHELL} transition-all group relative overflow-hidden backdrop-blur-sm flex flex-col h-full min-w-[260px]`}
     >
       <div className="p-4 flex flex-col flex-1 text-sm">
-        {/* Header: chips */}
-        <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary-hl px-1.5 py-0.5 rounded-md">
-            {c.restorationType || 'General'}
-          </span>
+        {/* Header: chips + fecha */}
+        <div className="flex flex-col gap-1 mb-3">
+          <div className="flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-bold uppercase tracking-wider text-primary bg-primary-hl px-1.5 py-0.5 rounded-md">
+                {c.restorationType || 'General'}
+              </span>
+              <CaseServiceTypeBadge serviceType={c.serviceType} />
+            </div>
+            {(caseDateLabel || deliveryDateLabel) && (
+              <div className="text-[9px] font-mono text-faint shrink-0 ml-1 flex flex-col items-end">
+                {caseDateLabel && <span><span className="text-faint/70">{caseDatePrefix} :</span> {caseDateLabel}</span>}
+                {deliveryDateLabel && <span><span className="text-faint/70">F.Entrega :</span> {deliveryDateLabel}</span>}
+              </div>
+            )}
+          </div>
           <span
-            className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md ${
+            className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md w-fit ${
               c.urgency === 'Alta' || c.urgency === 'Urgente'
                 ? 'bg-error-hl text-error'
                 : 'bg-primary-hl text-primary'
@@ -207,7 +225,6 @@ export default function MarketplaceCaseCard({
           >
             Prioridad {c.urgency || 'Normal'}
           </span>
-          <CaseServiceTypeBadge serviceType={c.serviceType} />
         </div>
 
         {/* Título + metadata en una línea */}
@@ -223,7 +240,7 @@ export default function MarketplaceCaseCard({
         {/* Zona adaptativa */}
         <div className="flex-1 mb-4">
           {isDentist && dentistZone ? (
-            <div className="w-full rounded-xl bg-background/60 border border-divider/60 px-3 py-2.5">
+            <div className="w-full rounded-xl bg-background/80 border border-divider px-3 py-2.5">
               <div className="flex items-center gap-2">
                 <dentistZone.icon className={`w-4 h-4 shrink-0 ${dentistZone.iconClass}`} aria-hidden />
                 <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
@@ -231,7 +248,7 @@ export default function MarketplaceCaseCard({
                 </span>
                 {dentistCountdown && (
                   <span
-                    className={`ml-auto font-mono text-[11px] tabular-nums tracking-normal text-warning opacity-90 ${
+                    className={`ml-auto font-mono text-[11px] tabular-nums tracking-normal text-warning ${
                       dentistCountdownPulses ? 'animate-pulse' : ''
                     }`}
                   >
@@ -239,9 +256,10 @@ export default function MarketplaceCaseCard({
                   </span>
                 )}
               </div>
-              {dentistZone.secondary && (
-                <p className="mt-1 text-[10px] text-muted leading-tight">{dentistZone.secondary}</p>
-              )}
+            </div>
+          ) : isCalidad ? (
+            <div className="w-full min-h-10 flex items-center px-3 rounded-xl bg-background border border-divider">
+              <StatusBadge status={String(c.status ?? '')} />
             </div>
           ) : !isDentist && techStatusInput ? (
             <CaseViewerStatusStripe

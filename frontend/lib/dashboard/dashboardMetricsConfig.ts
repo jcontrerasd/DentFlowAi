@@ -33,6 +33,7 @@ const TECH_KPI_IDS: TechKpiId[] = [
   'ofertaNoSeleccionada',
   'aceptadaPendienteInicio',
   'enEjecucion',
+  'enRevisionCalidad',
   'enRevision',
   'completado',
   'otros',
@@ -68,7 +69,7 @@ export const TECH_DASHBOARD_METRICS: DashboardMetricDef[] = TECH_KPI_IDS.map(tec
 export type CalidadKpiId = 'porCertificar' | 'certificadas' | 'enProceso' | 'completado' | 'otros';
 
 export const CALIDAD_DASHBOARD_METRICS: DashboardMetricDef[] = [
-  { id: 'porCertificar', label: 'Por certificar', statusColorKey: 'enRevision', icon: ShieldCheck, attentionBadge: true },
+  { id: 'porCertificar', label: 'En revisión calidad', statusColorKey: 'enRevision', icon: ShieldCheck, attentionBadge: true },
   { id: 'certificadas', label: 'Listas para enviar', statusColorKey: 'aceptadaPendienteInicio', icon: BadgeCheck },
   { id: 'enProceso', label: 'En proceso', statusColorKey: 'enEjecucion', icon: Hammer },
   { id: 'completado', label: 'Completados', statusColorKey: 'completado', icon: Layers },

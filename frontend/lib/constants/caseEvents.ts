@@ -67,6 +67,8 @@ export const CASE_EVENTS = {
   QUALITY_PLAZO_VENCIDO: 'QUALITY_PLAZO_VENCIDO',
   /** Calificación (CAD/CAM) que el dentista deja al técnico; queda reflejada en el UCH de ambos (técnico la ve enmascarada/anónima) y la ve el admin para arbitrar. */
   CALIFICACION_ENVIADA: 'CALIFICACION_ENVIADA',
+  /** Calificación del revisor de Calidad al técnico (dimension='quality'); privada del equipo QA, no visible al técnico ni dentista. */
+  CALIFICACION_ENVIADA_CALIDAD: 'CALIFICACION_ENVIADA_CALIDAD',
   REANUDADO: 'REANUDADO',
 
   /** Mutuo acuerdo: pausa o cancelación aprobada */

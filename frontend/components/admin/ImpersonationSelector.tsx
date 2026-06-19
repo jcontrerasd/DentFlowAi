@@ -4,13 +4,13 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getUsersByRoleAction } from '@/lib/db/actions/user';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus, Inbox } from 'lucide-react';
+import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus, Inbox, ClipboardCheck } from 'lucide-react';
 
 export default function ImpersonationSelector() {
   const { user, userProfile, isSimulating, startSimulation, stopSimulation, simulatedProfile } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
-  const [roleMode, setRoleMode] = useState<'dentista' | 'tecnico'>('dentista');
+  const [roleMode, setRoleMode] = useState<'dentista' | 'tecnico' | 'calidad'>('dentista');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [availableUsers, setAvailableUsers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -88,11 +88,17 @@ export default function ImpersonationSelector() {
                     >
                     <GraduationCap className="w-3.5 h-3.5" /> Dentista
                     </button>
-                    <button 
+                    <button
                     onClick={() => { setRoleMode('tecnico'); setSearch(''); }}
                     className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${roleMode === 'tecnico' ? 'bg-orange-500 text-foreground shadow-lg shadow-orange-500/20' : 'text-faint hover:text-muted'}`}
                     >
                     <Microscope className="w-3.5 h-3.5" /> Técnico
+                    </button>
+                    <button
+                    onClick={() => { setRoleMode('calidad'); setSearch(''); }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${roleMode === 'calidad' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' : 'text-faint hover:text-muted'}`}
+                    >
+                    <ClipboardCheck className="w-3.5 h-3.5" /> Calidad
                     </button>
                 </div>
               </div>
@@ -103,7 +109,7 @@ export default function ImpersonationSelector() {
                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
                    <input 
                      type="text" 
-                     placeholder={`Buscar ${roleMode}...`}
+                     placeholder={`Buscar ${roleMode === 'calidad' ? 'revisor' : roleMode}...`}
                      className="w-full bg-background border border-divider rounded-xl py-2.5 pl-10 pr-4 text-xs text-foreground focus:outline-none focus:border-primary/30 transition-all"
                      value={search}
                      onChange={(e) => setSearch(e.target.value)}
@@ -126,7 +132,7 @@ export default function ImpersonationSelector() {
                         onClick={() => startSimulation(u.id)}
                         className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-surface-off text-left transition-all group relative overflow-hidden"
                       >
-                         <div className={`w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center text-muted group-hover:scale-110 transition-transform ${u.role === 'tecnico' ? 'group-hover:text-orange-400' : 'group-hover:text-primary'}`}>
+                         <div className={`w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center text-muted group-hover:scale-110 transition-transform ${u.role === 'tecnico' ? 'group-hover:text-orange-400' : u.role === 'calidad' ? 'group-hover:text-amber-400' : 'group-hover:text-primary'}`}>
                            <User className="w-5 h-5" />
                          </div>
                          <div className="flex-1 min-w-0">
