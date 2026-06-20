@@ -18,6 +18,7 @@ import { archiveCaseFilesBestEffort } from '@/lib/db/archiveCaseFiles';
 import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
 import { getSignedUrl, getUploadUrl } from "@/lib/gcs";
 import { canActAsTecnico, canActAsDentista } from "@/lib/auth-helpers";
+import { isQualityGateEnabled } from "@/lib/constants/qualityFlags";
 import { getServerIdentity } from "./impersonation";
 import { resolveCatalogCodesToIds } from "@/lib/db/catalogResolver";
 import {
@@ -40,6 +41,7 @@ import {
 } from '@/lib/uchPresentation';
 import { filterCaseEventsForUchViewer } from '@/lib/caseEventsUchFilter';
 import type { CaseListQueryFilters } from '@/lib/cases/caseListFilters';
+import { isQualityRatingPending } from '@/lib/cases/qualityRatingPending';
 import {
   buildActiveCaseVisibilityWhere,
   userCanAccessClinicalCase,
@@ -51,7 +53,7 @@ import {
   buildTechFacetCondition,
 } from '@/lib/db/caseListQueryBuilder';
 import { pickInvitationStatusForKpi } from '@/lib/cases/technicianInvitationForKpi';
-import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt, getCaseReviewDeadlineAt } from '@/lib/db/caseDeadlines';
+import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt, getCaseReviewDeadlineAt, getCaseQualityReviewDeadlineAt } from '@/lib/db/caseDeadlines';
 
 
 /**
@@ -565,6 +567,26 @@ export async function listCasesByOrganization(
     const evalCaseIds = results.filter((c) => c.status === 'enEvaluacion').map((c) => c.id);
     const quoteDeadlines = await getCaseQuoteDeadlineAtBatch(evalCaseIds);
 
+    // Calidad: marca por caso "por calificar" (completado sin review dimension='quality' del revisor).
+    const isCalidad = role === 'calidad';
+    let qualityRatedCaseIds = new Set<string>();
+    if (isCalidad && isQualityGateEnabled()) {
+      const completedIds = results
+        .filter((c: any) => c.status === 'completado')
+        .map((c: any) => c.id);
+      if (completedIds.length > 0) {
+        const reviewed = await db
+          .select({ clinicalCaseId: review.clinicalCaseId })
+          .from(review)
+          .where(and(
+            inArray(review.clinicalCaseId, completedIds),
+            eq(review.reviewerId, userId as string),
+            eq(review.dimension, 'quality'),
+          ));
+        qualityRatedCaseIds = new Set(reviewed.map((r) => r.clinicalCaseId));
+      }
+    }
+
     const processedResults = results.map((c: any) => {
       const row = c as typeof c & { invitations?: typeof caseAssignment.$inferSelect[] };
       const invRows = Array.isArray(row.invitations) ? row.invitations : [];
@@ -592,6 +614,14 @@ export async function listCasesByOrganization(
         viewerInvitation: viewerInv ?? null,
         invitationExpiresAt:
           c.status === 'enEvaluacion' ? quoteDeadlines.get(c.id) ?? null : null,
+        qualityRatingPending: isCalidad
+          ? isQualityRatingPending({
+              status: c.status,
+              qualityReviewerId: (c as any).qualityReviewerId ?? null,
+              viewerId: userId as string,
+              hasQualityReview: qualityRatedCaseIds.has(c.id),
+            })
+          : false,
       };
     });
 
@@ -833,6 +863,16 @@ export async function getCaseDetails(caseId: string) {
       reviewDeadlineAt = await getCaseReviewDeadlineAt(caseId);
     }
 
+    // v5.19 — SLA de la etapa de Calidad (solo en enRevisionCalidad, flag on).
+    let qualityReviewDeadlineAt: Date | null = null;
+    if (cCase.status === 'enRevisionCalidad') {
+      qualityReviewDeadlineAt = await getCaseQualityReviewDeadlineAt(caseId);
+    }
+    // Anonimato: la identidad del revisor de Calidad nunca se expone a dentista ni técnico.
+    if (userRole !== 'admin' && userRole !== 'calidad') {
+      (cCase as any).qualityReviewerId = null;
+    }
+
     // Modelo asignación directa: sin comparativo de ofertas.
     const comparativeOffers = undefined;
 
@@ -899,6 +939,7 @@ export async function getCaseDetails(caseId: string) {
       ...cCase,
       evaluationExpiresAt,
       reviewDeadlineAt,
+      qualityReviewDeadlineAt,
       comparativeOffers,
       serverNowMs: Date.now(),
       archivedByCurrentUser,
@@ -1042,12 +1083,24 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
     return { success: false, error: guarded.error };
   }
 
+  // Lazy quality assignment: si el flag está on pero quality_reviewer_id quedó NULL,
+  // intentar asignar ANTES de abrir la transacción principal para evitar deadlock.
+  // (Dentro de la tx principal se volvería a leer el valor ya persistido.)
+  if (isQualityGateEnabled()) {
+    try {
+      const { assignQualityReviewerAction } = await import('./quality');
+      await assignQualityReviewerAction(caseId);
+    } catch {
+      // best-effort: si falla, la tx principal degrada al flujo legacy
+    }
+  }
+
   try {
     return await db.transaction(async (tx) => {
       // 1. Obtener versión actual de entregas
       const [lastDelivery]: any = await tx.execute(sql`
-        SELECT version FROM clinical_case_delivery 
-        WHERE clinical_case_id = ${caseId} 
+        SELECT version FROM clinical_case_delivery
+        WHERE clinical_case_id = ${caseId}
         ORDER BY version DESC LIMIT 1
       `);
       const nextVersion = (lastDelivery?.version || 0) + 1;
@@ -1076,41 +1129,69 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
         whereConditions.push(eq(clinicalCase.assignedTechnicianId, userId as string));
       }
 
+      // ¿La entrega pasa por la compuerta de Calidad antes de llegar al dentista?
+      // Solo cuando el flag está on, el caso es solo_diseno y hay un revisor de Calidad
+      // asignado. Si no hay revisor (pool vacío al iniciar), se degrada al flujo legacy
+      // (entrega directa al dentista) para no atascar el caso.
+      const [caseRow]: any = await tx.execute(sql`
+        SELECT service_type, quality_reviewer_id, doctor_id
+        FROM clinical_case WHERE id = ${caseId} LIMIT 1
+      `);
+
+      const effectiveReviewerId = (caseRow?.quality_reviewer_id as string | null) ?? null;
+
+      const useQualityGate = isQualityGateEnabled()
+        && caseRow?.service_type === 'solo_diseno'
+        && !!effectiveReviewerId;
+      const targetStatus = useQualityGate ? 'enRevisionCalidad' : 'enRevision';
 
       // 3. Actualizar caso
       const [updatedCase] = await tx.update(clinicalCase)
         .set({
-          status: 'enRevision',
+          status: targetStatus,
           labNotes: notes,
-          currentResponsibility: 'dentista',
+          currentResponsibility: useQualityGate ? 'calidad' : 'dentista',
           lastActivityAt: new Date(),
-          // v5.0: cada entrega reinicia el countdown tDentistReviewHours (§4.2)
-          // y la escalación de notificaciones del cron (v5.2).
-          lastRevisionSubmittedAt: new Date(),
-          reviewReminderSentAt: null,
-          reviewOverdueNotifiedAt: null,
+          // El countdown que se reinicia depende de la etapa de destino: SLA de Calidad
+          // si va a Calidad; countdown de revisión del dentista (tDentistReviewHours) si va al dentista.
+          ...(useQualityGate
+            ? { lastQualitySubmittedAt: new Date(), qualityReminderSentAt: null, qualityOverdueNotifiedAt: null }
+            : { lastRevisionSubmittedAt: new Date(), reviewReminderSentAt: null, reviewOverdueNotifiedAt: null }),
           updatedAt: new Date()
         })
         .where(and(...whereConditions))
         .returning();
 
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'tecnico',
-        action: CASE_EVENTS.REVISION_ENVIADA,
-        content: notes || `Entrega v${nextVersion} lista para revisión.`,
-        payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'ambos' },
-        stateChange: { from: 'enEjecucion', to: 'enRevision' }
-      }, tx);
-
-
-
       if (!updatedCase) {
         throw new Error("No se pudo actualizar el caso. Verifica que eres el técnico asignado.");
       }
 
-      await notifyUser(updatedCase.doctorId as string, 'REVISION_PENDIENTE', { caseId, version: nextVersion });
+      if (useQualityGate) {
+        // Etapa de Calidad: invisible al dentista (visibleTo 'tecnico'); Calidad lo ve por acceso amplio.
+        await logCaseEvent({
+          caseId,
+          userId: identity.id as string,
+          type: 'tecnico',
+          action: CASE_EVENTS.REVISION_ENVIADA_CALIDAD,
+          content: notes || `Entrega v${nextVersion} enviada a revisión de Calidad.`,
+          payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'tecnico', qualityScoped: true },
+          stateChange: { from: 'enEjecucion', to: 'enRevisionCalidad' }
+        }, tx);
+        if (effectiveReviewerId) {
+          await notifyUser(effectiveReviewerId, 'REVISION_PENDIENTE_CALIDAD', { caseId, version: nextVersion });
+        }
+      } else {
+        await logCaseEvent({
+          caseId,
+          userId: identity.id as string,
+          type: 'tecnico',
+          action: CASE_EVENTS.REVISION_ENVIADA,
+          content: notes || `Entrega v${nextVersion} lista para revisión.`,
+          payload: { deliveryVersion: nextVersion, deliveryId: newDelivery?.id ?? null, files, visibleTo: 'ambos' },
+          stateChange: { from: 'enEjecucion', to: 'enRevision' }
+        }, tx);
+        await notifyUser(updatedCase.doctorId as string, 'REVISION_PENDIENTE', { caseId, version: nextVersion });
+      }
 
       return { success: true, version: nextVersion };
     });
@@ -1384,6 +1465,17 @@ export async function approveWorkAction(
       
       if (updatedCase && updatedCase.assignedTechnicianId) {
         await notifyUser(updatedCase.assignedTechnicianId, 'TRABAJO_APROBADO', { caseId });
+      }
+
+      // Compuerta de Calidad: el caso quedó completado y el revisor asignado todavía
+      // debe calificar al técnico. La señal "por calificar" persiste en sus superficies
+      // hasta que envíe la nota; esta notificación lo avisa al cierre. Gateada por el flag
+      // (sin Quality Gate no hay quality_reviewer_id asignado).
+      if (isQualityGateEnabled() && updatedCase?.qualityReviewerId) {
+        await notifyUser(updatedCase.qualityReviewerId, 'CALIDAD_POR_CALIFICAR', {
+          caseId,
+          caseNumber: updatedCase.caseNumber,
+        });
       }
 
       // Registrar en la nueva tabla (UCH)

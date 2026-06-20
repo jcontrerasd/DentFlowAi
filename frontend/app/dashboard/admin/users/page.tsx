@@ -14,7 +14,8 @@ import {
   Briefcase,
   UserPlus,
   ArrowLeft,
-  ShieldCheck
+  ShieldCheck,
+  ClipboardCheck,
 } from 'lucide-react';
 import Link from 'next/link';
 import ResetNoResponseModal from '@/components/admin/technicians/ResetNoResponseModal';
@@ -24,6 +25,7 @@ import {
   deleteUserAdmin,
   changeUserPasswordAdmin,
   createCoAdminAction,
+  createCalidadUserAction,
 } from '@/lib/db/actions/admin';
 import { useAuth } from '@/context/AuthContext';
 
@@ -35,6 +37,8 @@ export default function AdminUsersPage() {
   const [showCreateAdmin, setShowCreateAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showCreateCalidad, setShowCreateCalidad] = useState(false);
+  const [calidadForm, setCalidadForm] = useState({ fullName: '', email: '', password: '' });
   const [processing, setProcessing] = useState(false);
   const [actionModal, setActionModal] = useState<{
     show: boolean;
@@ -60,6 +64,19 @@ export default function AdminUsersPage() {
       fetchUsers();
     } else {
       alert(res.error || 'Error al crear administrador.');
+    }
+  };
+
+  const handleCreateCalidad = async () => {
+    if (!calidadForm.fullName || !calidadForm.email || !calidadForm.password) return;
+    const res = await createCalidadUserAction(calidadForm);
+    if (res.success && res.data) {
+      alert(`¡Revisor de Calidad creado!\nNombre: ${res.data.name}\nEmail: ${res.data.email}`);
+      setShowCreateCalidad(false);
+      setCalidadForm({ fullName: '', email: '', password: '' });
+      fetchUsers();
+    } else {
+      alert(res.error || 'Error al crear revisor de Calidad.');
     }
   };
 
@@ -137,6 +154,13 @@ export default function AdminUsersPage() {
 
         <div className="flex items-center gap-4">
           <button
+            onClick={() => setShowCreateCalidad(true)}
+            className="flex items-center gap-2 px-6 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-xl text-xs font-bold uppercase tracking-wider transition-all"
+          >
+            <ClipboardCheck className="w-4 h-4" />
+            Nuevo Revisor Calidad
+          </button>
+          <button
             onClick={() => setShowCreateAdmin(true)}
             className="flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary text-inverse rounded-xl text-xs font-bold uppercase tracking-wider shadow-xl shadow-sm transition-all"
           >
@@ -193,9 +217,11 @@ export default function AdminUsersPage() {
                       <div className="flex flex-col gap-1">
                         <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md inline-block w-max ${
                           u.role === 'admin' ? 'bg-error-hl text-error' :
-                          u.role === 'dentista' ? 'bg-primary-hl text-primary' : 'bg-orange-500/10 text-orange-400'
+                          u.role === 'dentista' ? 'bg-primary-hl text-primary' :
+                          u.role === 'calidad' ? 'bg-amber-500/10 text-amber-400' :
+                          'bg-orange-500/10 text-orange-400'
                         }`}>
-                          {u.role}
+                          {u.role === 'calidad' ? 'Control Calidad' : u.role}
                         </span>
                         <span className="text-muted text-[10px] uppercase font-bold flex items-center gap-1">
                           <Briefcase className="w-3 h-3" /> {u.organizationName || 'Sin Org'}
@@ -409,6 +435,83 @@ export default function AdminUsersPage() {
                 <div className="flex gap-3 pt-4">
                   <button onClick={() => setShowCreateAdmin(false)} className="flex-1 py-3 text-faint font-black text-[10px] uppercase tracking-widest">Cerrar</button>
                   <button onClick={handleCreateAdmin} className="flex-1 py-3 bg-primary text-inverse rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-sm transition-all">Crear Admin</button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showCreateCalidad && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-black/60">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md bg-surface border border-amber-500/20 rounded-[2.5rem] p-10 shadow-2xl"
+            >
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center text-amber-400">
+                  <ClipboardCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-2xl serif-font text-foreground">Nuevo Revisor de Calidad</h3>
+                  <p className="text-faint text-xs mt-0.5">Rol: Control de Calidad</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-4 bg-background rounded-2xl border border-divider text-muted text-xs leading-relaxed">
+                  Este usuario revisará las entregas de los técnicos antes de enviarlas al dentista.
+                  Fauchard lo asignará automáticamente a los casos de manera equitativa.
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-faint font-bold uppercase tracking-wider mb-2 block ml-1">Nombre Completo</label>
+                  <input
+                    type="text"
+                    value={calidadForm.fullName}
+                    onChange={(e) => setCalidadForm(f => ({ ...f, fullName: e.target.value }))}
+                    className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-foreground outline-none focus:border-amber-500/30"
+                    placeholder="Ej: Ana García"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-faint font-bold uppercase tracking-wider mb-2 block ml-1">Email</label>
+                  <input
+                    type="email"
+                    value={calidadForm.email}
+                    onChange={(e) => setCalidadForm(f => ({ ...f, email: e.target.value }))}
+                    className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-foreground outline-none focus:border-amber-500/30"
+                    placeholder="revisor@clinica.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-faint font-bold uppercase tracking-wider mb-2 block ml-1">Contraseña Inicial</label>
+                  <input
+                    type="password"
+                    value={calidadForm.password}
+                    onChange={(e) => setCalidadForm(f => ({ ...f, password: e.target.value }))}
+                    className="w-full bg-background border border-divider rounded-xl px-4 py-3 text-foreground outline-none focus:border-amber-500/30"
+                    placeholder="••••••••"
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={() => { setShowCreateCalidad(false); setCalidadForm({ fullName: '', email: '', password: '' }); }}
+                    className="flex-1 py-3 text-faint font-black text-[10px] uppercase tracking-widest"
+                  >
+                    Cerrar
+                  </button>
+                  <button
+                    onClick={handleCreateCalidad}
+                    disabled={!calidadForm.fullName || !calidadForm.email || !calidadForm.password}
+                    className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-black text-[10px] uppercase tracking-widest transition-all disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    Crear Revisor
+                  </button>
                 </div>
               </div>
             </motion.div>

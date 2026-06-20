@@ -4,13 +4,18 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getUsersByRoleAction } from '@/lib/db/actions/user';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus, Inbox } from 'lucide-react';
+import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus, Inbox, ClipboardCheck } from 'lucide-react';
 
-export default function ImpersonationSelector() {
+export default function ImpersonationSelector({ onOpenChange, collapsed }: { onOpenChange?: (open: boolean) => void; collapsed?: boolean }) {
   const { user, userProfile, isSimulating, startSimulation, stopSimulation, simulatedProfile } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+
+  const setIsOpenWithCallback = (val: boolean) => {
+    setIsOpen(val);
+    onOpenChange?.(val);
+  };
   const [confirmStop, setConfirmStop] = useState(false);
-  const [roleMode, setRoleMode] = useState<'dentista' | 'tecnico'>('dentista');
+  const [roleMode, setRoleMode] = useState<'dentista' | 'tecnico' | 'calidad'>('dentista');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [availableUsers, setAvailableUsers] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -44,7 +49,7 @@ export default function ImpersonationSelector() {
     <div className="relative">
       {/* Botón Principal / Trigger */}
       <button 
-        onClick={() => { setIsOpen(!isOpen); if (!isOpen) setConfirmStop(false); }}
+        onClick={() => { setIsOpenWithCallback(!isOpen); if (!isOpen) setConfirmStop(false); }}
         className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all ${
           isSimulating 
           ? 'bg-error-hl border-error/20 text-error shadow-lg shadow-sm' 
@@ -52,17 +57,21 @@ export default function ImpersonationSelector() {
         }`}
       >
         <ShieldAlert className={`w-4 h-4 ${isSimulating ? 'animate-pulse' : ''}`} />
-        <span className="text-[10px] font-bold uppercase tracking-wider hidden lg:block">
-          {isSimulating ? `Mimetizado: ${simulatedProfile?.fullName || 'Usuario'}` : 'Simulación Maestro'}
-        </span>
-        <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        {!collapsed && (
+          <>
+            <span className="text-[10px] font-bold uppercase tracking-wider">
+              {isSimulating ? `Mimetizado: ${simulatedProfile?.fullName || 'Usuario'}` : 'Simulación Maestro'}
+            </span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </>
+        )}
       </button>
 
       <AnimatePresence>
         {isOpen && (
           <>
             {/* Backdrop para cerrar */}
-            <div className="fixed inset-0 z-40" onClick={() => { setIsOpen(false); setConfirmStop(false); }} />
+            <div className="fixed inset-0 z-40" onClick={() => { setIsOpenWithCallback(false); setConfirmStop(false); }} />
             
             {/* Popover */}
             <motion.div 
@@ -75,7 +84,7 @@ export default function ImpersonationSelector() {
               <div className="p-5 bg-gradient-to-b from-slate-800/50 to-transparent border-b border-divider">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-primary">Elegir Identidad</h3>
-                    <button onClick={() => setIsOpen(false)} className="text-faint hover:text-foreground transition-colors">
+                    <button onClick={() => setIsOpenWithCallback(false)} className="text-faint hover:text-foreground transition-colors">
                         <X className="w-4 h-4" />
                     </button>
                 </div>
@@ -88,11 +97,17 @@ export default function ImpersonationSelector() {
                     >
                     <GraduationCap className="w-3.5 h-3.5" /> Dentista
                     </button>
-                    <button 
+                    <button
                     onClick={() => { setRoleMode('tecnico'); setSearch(''); }}
                     className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${roleMode === 'tecnico' ? 'bg-orange-500 text-foreground shadow-lg shadow-orange-500/20' : 'text-faint hover:text-muted'}`}
                     >
                     <Microscope className="w-3.5 h-3.5" /> Técnico
+                    </button>
+                    <button
+                    onClick={() => { setRoleMode('calidad'); setSearch(''); }}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${roleMode === 'calidad' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' : 'text-faint hover:text-muted'}`}
+                    >
+                    <ClipboardCheck className="w-3.5 h-3.5" /> Calidad
                     </button>
                 </div>
               </div>
@@ -103,7 +118,7 @@ export default function ImpersonationSelector() {
                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
                    <input 
                      type="text" 
-                     placeholder={`Buscar ${roleMode}...`}
+                     placeholder={`Buscar ${roleMode === 'calidad' ? 'revisor' : roleMode}...`}
                      className="w-full bg-background border border-divider rounded-xl py-2.5 pl-10 pr-4 text-xs text-foreground focus:outline-none focus:border-primary/30 transition-all"
                      value={search}
                      onChange={(e) => setSearch(e.target.value)}
@@ -126,7 +141,7 @@ export default function ImpersonationSelector() {
                         onClick={() => startSimulation(u.id)}
                         className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-surface-off text-left transition-all group relative overflow-hidden"
                       >
-                         <div className={`w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center text-muted group-hover:scale-110 transition-transform ${u.role === 'tecnico' ? 'group-hover:text-orange-400' : 'group-hover:text-primary'}`}>
+                         <div className={`w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center text-muted group-hover:scale-110 transition-transform ${u.role === 'tecnico' ? 'group-hover:text-orange-400' : u.role === 'calidad' ? 'group-hover:text-amber-400' : 'group-hover:text-primary'}`}>
                            <User className="w-5 h-5" />
                          </div>
                          <div className="flex-1 min-w-0">
@@ -174,7 +189,7 @@ export default function ImpersonationSelector() {
                           Cancelar
                         </button>
                         <button
-                          onClick={() => { stopSimulation(); setIsOpen(false); }}
+                          onClick={() => { stopSimulation(); setIsOpenWithCallback(false); }}
                           className="flex-1 py-2.5 bg-error hover:bg-error/80 text-inverse text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-sm"
                         >
                           Sí, salir

@@ -14,6 +14,10 @@ export const CASE_STATUSES = {
   PROPUESTA_LISTA: 'propuestaLista',
   ACEPTADA_PENDIENTE_INICIO: 'aceptadaPendienteInicio',
   EN_EJECUCION: 'enEjecucion',
+  /** Entrega del técnico en revisión de Calidad (gated por QUALITY_GATE_ENABLED) */
+  EN_REVISION_CALIDAD: 'enRevisionCalidad',
+  /** Entrega certificada por Calidad, lista para que el técnico la envíe al dentista */
+  CERTIFICADO_CALIDAD: 'certificadoCalidad',
   EN_REVISION: 'enRevision',
   CAMBIOS_EN_PROCESO: 'cambiosEnProceso',
   COMPLETADO: 'completado',
@@ -34,6 +38,10 @@ export const INTERNAL_CASE_STATUSES = {
   PROPUESTA_PRESENTADA: 'propuestaPresentada',
   ACEPTADA_CONFIGURANDO: 'aceptadaConfigurando',
   EN_EJECUCION_DISENO: 'enEjecucionDiseno',
+  /** Entrega en revisión de Calidad antes de llegar al dentista */
+  EN_REVISION_CALIDAD: 'enRevisionCalidad',
+  /** Calidad certificó; el técnico decide cuándo enviar al dentista */
+  CERTIFICADO_CALIDAD: 'certificadoCalidad',
   EN_REVISION_DISENO: 'enRevisionDiseno',
   CAMBIOS_SOLICITADOS: 'cambiosSolicitados',
   SIN_ASIGNACION_FALLO: 'sin_asignacion_fallo',

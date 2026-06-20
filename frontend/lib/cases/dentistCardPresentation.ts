@@ -85,16 +85,21 @@ export function getDentistCardZone(input: DentistCardInput): DentistCardZone {
         ctaVariant: 'neutral',
       };
     case 'enEjecucion':
+    case 'enRevisionCalidad':
+    case 'certificadoCalidad':
     case 'enRevision':
-    case 'cambiosEnProceso':
+    case 'cambiosEnProceso': {
+      const displayStatus =
+        status === 'enRevisionCalidad' || status === 'certificadoCalidad' ? 'enEjecucion' : status;
       return {
-        icon: status === 'enRevision' || status === 'cambiosEnProceso' ? AlertCircle : Activity,
-        iconClass: status === 'enRevision' || status === 'cambiosEnProceso' ? 'text-warning' : 'text-primary',
-        primary: statusLabel(status),
+        icon: displayStatus === 'enRevision' || displayStatus === 'cambiosEnProceso' ? AlertCircle : Activity,
+        iconClass: displayStatus === 'enRevision' || displayStatus === 'cambiosEnProceso' ? 'text-warning' : 'text-primary',
+        primary: statusLabel(displayStatus),
         secondary: joinSecondary([material, formatShortDate(input.workDeadline) && `entrega est. ${formatShortDate(input.workDeadline)}`]),
         ctaLabel: 'Ver progreso',
         ctaVariant: 'neutral',
       };
+    }
     case 'completado': {
       const delivered = formatShortDate(input.completedAt);
       return {
@@ -154,6 +159,6 @@ type TechnicianCtaInput = {
 export function getTechnicianCardCta(input: TechnicianCtaInput): string {
   const TERMINAL = new Set(['completado', 'rechazado', 'cerrado', 'cancelado']);
   if (TERMINAL.has(input.caseStatus)) return 'Ver detalle';
-  if (input.invitationStatus === 'pending') return 'Cotizar';
+  if (input.invitationStatus === 'pending') return 'Ver asignación';
   return 'Ver caso';
 }

@@ -21,3 +21,11 @@ export function canActAsDentista(role: string | undefined | null): boolean {
   return role === 'dentista' || role === 'admin';
 }
 
+/**
+ * Verifica si un rol tiene acceso como revisor de Calidad.
+ * Admin puede actuar como Calidad para pruebas/supervisión.
+ */
+export function canActAsCalidad(role: string | undefined | null): boolean {
+  return role === 'calidad' || role === 'admin';
+}
+

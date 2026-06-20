@@ -15,6 +15,9 @@ const BASE_STEPS: Step[] = [
   { status: 'enRevision', label: 'En revisión' },
 ];
 
+/** Paso de Calidad (v5.19), visible solo a técnico/calidad/admin (invisible al dentista). */
+const QUALITY_STEP: Step = { status: 'enRevisionCalidad', label: 'Revisión calidad' };
+
 const FINAL_STEP: Step = { status: 'completado', label: 'Completado' };
 
 const TERMINAL_STEPS: Record<string, Step> = {
@@ -33,12 +36,16 @@ const STEP_STATUS_ALIASES: Record<string, string> = {
  * Resuelve el estado del caso a una clave presente en `stepStatusOrder`.
  * Nunca aplica toLowerCase() al camelCase completo (rompe p. ej. aceptadaPendienteInicio).
  */
-function resolveStepperStatusKey(raw: string | undefined | null, stepStatusOrder: string[]): string {
+function resolveStepperStatusKey(
+  raw: string | undefined | null,
+  stepStatusOrder: string[],
+  extraAliases: Record<string, string> = {},
+): string {
   const t = String(raw ?? 'borrador').trim() || 'borrador';
   if (stepStatusOrder.includes(t)) return t;
   const caseInsensitive = stepStatusOrder.find((s) => s.toLowerCase() === t.toLowerCase());
   if (caseInsensitive) return caseInsensitive;
-  const migrated = STEP_STATUS_ALIASES[t];
+  const migrated = extraAliases[t] ?? STEP_STATUS_ALIASES[t];
   if (migrated && stepStatusOrder.includes(migrated)) return migrated;
   return t;
 }
@@ -50,23 +57,40 @@ interface CaseWorkflowStepperProps {
   workDeadline?: Date | null;
   /** Técnico no ganador / oferta no seleccionada: narrativa de cierre en rosa, sin fecha de entrega del caso. */
   variant?: CaseWorkflowStepperVariant;
+  /** v5.19 — Rol del viewer: define si se muestra el paso "Revisión calidad" (oculto al dentista). */
+  viewerRole?: 'dentista' | 'tecnico' | 'calidad' | 'admin';
+  /** v5.19 — Responsabilidad actual; en la compuerta de Calidad marca de quién es la pelota. */
+  currentResponsibility?: string | null;
 }
 
 export default function CaseWorkflowStepper({
   currentStatus,
   workDeadline,
   variant = 'case',
+  viewerRole = 'dentista',
+  currentResponsibility = null,
 }: CaseWorkflowStepperProps) {
   const rawStatus = String(currentStatus || 'borrador').trim() || 'borrador';
   const techRejected = variant === 'techRejected';
+  // El dentista nunca percibe la etapa de Calidad: para él, enRevisionCalidad se muestra
+  // como "En ejecución". Técnico/Calidad/admin sí ven el paso de Calidad.
+  // certificadoCalidad: alias de compatibilidad para casos históricos (ya no alcanzable en flujos nuevos).
+  const showQualityStep = viewerRole === 'tecnico' || viewerRole === 'calidad' || viewerRole === 'admin';
+  const extraAliases: Record<string, string> = showQualityStep
+    ? { certificadoCalidad: 'enRevisionCalidad' }
+    : { enRevisionCalidad: 'enEjecucion', certificadoCalidad: 'enEjecucion' };
   const isTerminal =
     rawStatus === 'rechazado' ||
     rawStatus === 'cerrado' ||
     rawStatus.toLowerCase() === 'rechazado' ||
     rawStatus.toLowerCase() === 'cerrado';
 
+  const baseSteps: Step[] = showQualityStep
+    ? BASE_STEPS.flatMap((s) => (s.status === 'enRevision' ? [QUALITY_STEP, s] : [s]))
+    : BASE_STEPS;
+
   const steps: Step[] = [
-    ...BASE_STEPS,
+    ...baseSteps,
     techRejected ? { ...FINAL_STEP, label: 'Rechazado' } : FINAL_STEP,
     ...(!techRejected && isTerminal
       ? (() => {
@@ -78,7 +102,7 @@ export default function CaseWorkflowStepper({
   ];
 
   const statusOrder = steps.map((s) => s.status);
-  const statusKey = resolveStepperStatusKey(currentStatus, statusOrder);
+  const statusKey = resolveStepperStatusKey(currentStatus, statusOrder, extraAliases);
   const idxEvaluacion = steps.findIndex((s) => s.status === 'enEvaluacion');
   const lastIdx = steps.length - 1;
 
@@ -203,6 +227,11 @@ export default function CaseWorkflowStepper({
               {step.status === 'enEjecucion' && deadlineText && (
                 <p className="text-[7px] text-muted text-center leading-tight whitespace-nowrap">
                   Entrega: {deadlineText}
+                </p>
+              )}
+              {step.status === 'enRevisionCalidad' && isCurrent && showQualityStep && (
+                <p className="text-[7px] text-muted text-center leading-tight whitespace-nowrap">
+                  {currentResponsibility === 'tecnico' ? 'Ajustes del técnico' : 'En revisión'}
                 </p>
               )}
             </div>

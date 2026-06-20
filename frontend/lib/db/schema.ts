@@ -159,11 +159,21 @@ export const clinicalCase = pgTable("clinical_case", {
   /** v5.13 — workType y categoría derivados en classify/reclassify (auditoría UI). */
   derivedWorkType: text("derived_work_type"),
   derivedCategory: text("derived_category"),
+  // v5.19 — Compuerta de Calidad (gated por QUALITY_GATE_ENABLED).
+  /** Revisor de Calidad asignado actualmente al caso (round-robin / derivación). */
+  qualityReviewerId: text("quality_reviewer_id").references(() => user.id, { onDelete: 'set null' }),
+  qualityAssignedAt: timestamp("quality_assigned_at", { withTimezone: true, mode: 'date' }),
+  /** Reinicia el countdown `tQualityReviewHours` en cada entrega del técnico a Calidad. */
+  lastQualitySubmittedAt: timestamp("last_quality_submitted_at", { withTimezone: true, mode: 'date' }),
+  /** Idempotencia de la escalación del SLA de Calidad. Reset en cada entrega a Calidad. */
+  qualityReminderSentAt: timestamp("quality_reminder_sent_at", { withTimezone: true, mode: 'date' }),
+  qualityOverdueNotifiedAt: timestamp("quality_overdue_notified_at", { withTimezone: true, mode: 'date' }),
 }, (table) => [
 	uniqueIndex("clinical_case_case_number_uidx").on(table.caseNumber),
 	index("clinical_case_assignedTechnicianId_idx").on(table.assignedTechnicianId),
 	index("clinical_case_organizationId_idx").on(table.organizationId),
 	index("clinical_case_fauchardConfigId_idx").on(table.fauchardConfigId),
+	index("clinical_case_qualityReviewerId_idx").on(table.qualityReviewerId),
 ]);
 
 /** Archivo operativo por usuario (no modifica status del caso). */
@@ -188,6 +198,12 @@ export const clinicalCaseDelivery = pgTable("clinical_case_delivery", {
   reviewedAt: timestamp("reviewed_at", { withTimezone: true, mode: 'date' }),
   reviewComment: text("review_comment"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  // v5.19 — Certificación de Calidad previa al envío al dentista.
+  /** pending | certified | rejected — estado de la revisión de Calidad de esta entrega. */
+  qualityStatus: text("quality_status").default('pending').notNull(),
+  qualityComment: text("quality_comment"),
+  qualityReviewedAt: timestamp("quality_reviewed_at", { withTimezone: true, mode: 'date' }),
+  qualityReviewerId: text("quality_reviewer_id").references(() => user.id),
 });
 
 export const commercialRound = pgTable("commercial_round", {
@@ -211,7 +227,7 @@ export const review = pgTable("review", {
   reviewerId: text("reviewer_id").notNull().references(() => user.id),
   revieweeId: text("reviewee_id").notNull().references(() => user.id),
   rating: integer("rating").notNull(),
-  /** Fase calificada: 'design' (CAD) | 'fabrication' (CAM). v5.3. */
+  /** Fase calificada: 'design' (CAD, dentista) | 'fabrication' (CAM) | 'quality' (revisor Calidad). v5.3/v5.19. */
   dimension: text("dimension").default('design').notNull(),
   comment: text("comment"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
@@ -359,6 +375,8 @@ export const fauchardConfig = pgTable("fauchard_config", {
   // ─── v5.0 — Disponibilidad, sanción rolling, cola pool y revisión dentista ───
   // Plazos (wall-clock).
   tDentistReviewHours: integer("t_dentist_review_hours").default(48).notNull(),
+  /** v5.19 — SLA de la revisión de Calidad (gated por QUALITY_GATE_ENABLED). */
+  tQualityReviewHours: integer("t_quality_review_hours").default(24).notNull(),
   tNoEligiblePoolHours: integer("t_no_eligible_pool_hours").default(24).notNull(),
   maxPoolCycles: integer("max_pool_cycles").default(2).notNull(),
   replacementCutoffMinutes: integer("replacement_cutoff_minutes").default(10).notNull(),
@@ -842,6 +860,41 @@ export const bulkRejectionReason = pgTable("bulk_rejection_reason", {
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("bulk_rejection_reason_code_uidx").on(table.code),
+]);
+
+/** v5.19 — Catálogo de motivos de derivación entre revisores de Calidad. Code opaco `qdr_NNN`. */
+export const qualityDerivationReason = pgTable("quality_derivation_reason", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  code: text().notNull(),
+  label: text().notNull(),
+  description: text(),
+  sortOrder: integer("sort_order").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("quality_derivation_reason_code_uidx").on(table.code),
+]);
+
+/**
+ * v5.19 — Historial/auditoría del revisor de Calidad asignado a un caso y sus derivaciones.
+ * El reviewer "actual" vive en `clinical_case.quality_reviewer_id`; esta tabla guarda la cadena.
+ * status: active | derived | released.
+ */
+export const caseQualityAssignment = pgTable("case_quality_assignment", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  clinicalCaseId: uuid("clinical_case_id").notNull().references(() => clinicalCase.id, { onDelete: 'cascade' }),
+  calidadUserId: text("calidad_user_id").notNull().references(() => user.id),
+  status: text("status").default('active').notNull(),
+  assignedAt: timestamp("assigned_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  derivedToId: text("derived_to_id").references(() => user.id, { onDelete: 'set null' }),
+  derivationReasonId: uuid("derivation_reason_id").references(() => qualityDerivationReason.id),
+  derivationComment: text("derivation_comment"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  index("cqa_case_idx").on(table.clinicalCaseId),
+  index("cqa_calidad_status_idx").on(table.calidadUserId, table.status),
 ]);
 
 /**

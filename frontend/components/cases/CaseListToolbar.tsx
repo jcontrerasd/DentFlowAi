@@ -23,7 +23,7 @@ const TECH_PRESET_LABELS: Record<TechListPreset, string> = {
 };
 
 type CaseListToolbarProps = {
-  role: 'dentista' | 'tecnico';
+  role: 'dentista' | 'tecnico' | 'calidad';
   filters: CaseListQueryFilters;
   onFiltersChange: (f: CaseListQueryFilters) => void;
   /** Texto inmediato del buscador (desacoplado de URL debounced). */

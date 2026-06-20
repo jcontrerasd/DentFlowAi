@@ -41,7 +41,7 @@ const INVITATION_FILTER_ICONS: Record<InvitationStatusFilter, LucideIcon> = {
 };
 
 type CaseListFiltersModalProps = {
-  role: 'dentista' | 'tecnico';
+  role: 'dentista' | 'tecnico' | 'calidad';
   currentFilters: CaseListQueryFilters;
   onClose: () => void;
   onApply: (f: CaseListQueryFilters) => void;

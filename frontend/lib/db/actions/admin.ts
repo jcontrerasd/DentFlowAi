@@ -197,9 +197,50 @@ export async function createCoAdminAction(password: string) {
 }
 
 /**
+ * Crea un nuevo usuario con rol 'calidad' (revisor de Control de Calidad).
+ * A diferencia de createCoAdminAction, permite especificar nombre, email y contraseña
+ * porque los revisores de calidad son personas identificables del staff interno.
+ */
+export async function createCalidadUserAction(input: { fullName: string; email: string; password: string }) {
+  await ensureAdmin();
+  try {
+    const { fullName, email, password } = input;
+    if (!fullName?.trim() || !email?.trim() || !password) {
+      return { success: false, error: 'Nombre, email y contraseña son obligatorios.' };
+    }
+
+    const existing = await db.select({ id: user.id }).from(user).where(eq(user.email, email.trim().toLowerCase())).limit(1);
+    if (existing.length > 0) {
+      return { success: false, error: 'Ya existe un usuario con ese email.' };
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    await db.insert(user).values({
+      id: crypto.randomUUID(),
+      email: email.trim().toLowerCase(),
+      fullName: fullName.trim(),
+      role: 'calidad',
+      hashedPassword,
+      isActive: true,
+      isAvailable: true,
+      onboardingStep: 100,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    return { success: true, data: { name: fullName.trim(), email: email.trim().toLowerCase() } };
+  } catch (error) {
+    console.error('[createCalidadUserAction] Error:', error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
  * Permite al admin actual cambiar su propio rol para simular la experiencia de otros usuarios.
  */
-export async function switchMyRoleAdmin(newRole: 'dentista' | 'tecnico' | 'admin') {
+export async function switchMyRoleAdmin(newRole: 'dentista' | 'tecnico' | 'admin' | 'calidad') {
   const session = await auth();
   if (!session?.user?.id) throw new Error("No hay sesión activa");
   

@@ -4,7 +4,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
 /** v5.18 — Visor 3D de revisión: delivery_id en annotation para anotaciones por entrega. */
-export const INFRA_VERSION = 'v5.18';
+export const INFRA_VERSION = 'v5.19';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -193,6 +193,94 @@ export async function ensureIncrementalInfrastructure(db: any) {
   } catch (e) {
     console.error("[Infrastructure] Error migrando price_rule.code (v5.11):", e);
   }
+
+  // v5.19 — Compuerta de Calidad (rol calidad + certificación previa al dentista).
+  try {
+    await ensureQualityGateInfrastructure(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando infraestructura de Calidad (v5.19):", e);
+  }
+
+  // v5.19 — user.organization_id pasa a nullable para soportar usuarios sin org (admin, calidad).
+  try {
+    await db.execute(sql`
+      ALTER TABLE "user" ALTER COLUMN organization_id DROP NOT NULL;
+    `);
+  } catch (e) {
+    // Silencioso si ya es nullable (el ALTER falla solo si hay un error real).
+  }
+}
+
+/**
+ * v5.19 — DDL idempotente de la compuerta de Calidad. Inerte mientras
+ * `QUALITY_GATE_ENABLED` esté off (las columnas/tablas existen pero no se usan).
+ */
+export async function ensureQualityGateInfrastructure(db: any) {
+  // Columnas en clinical_case
+  await db.execute(sql`
+    ALTER TABLE clinical_case
+      ADD COLUMN IF NOT EXISTS quality_reviewer_id TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+      ADD COLUMN IF NOT EXISTS quality_assigned_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS last_quality_submitted_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS quality_reminder_sent_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS quality_overdue_notified_at TIMESTAMPTZ;
+    CREATE INDEX IF NOT EXISTS clinical_case_qualityReviewerId_idx ON clinical_case(quality_reviewer_id);
+  `);
+
+  // Columnas en clinical_case_delivery
+  await db.execute(sql`
+    ALTER TABLE clinical_case_delivery
+      ADD COLUMN IF NOT EXISTS quality_status TEXT NOT NULL DEFAULT 'pending',
+      ADD COLUMN IF NOT EXISTS quality_comment TEXT,
+      ADD COLUMN IF NOT EXISTS quality_reviewed_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS quality_reviewer_id TEXT REFERENCES "user"(id);
+  `);
+
+  // Parámetro SLA en fauchard_config
+  await db.execute(sql`
+    ALTER TABLE fauchard_config
+      ADD COLUMN IF NOT EXISTS t_quality_review_hours INTEGER NOT NULL DEFAULT 24;
+  `);
+
+  // Catálogo de motivos de derivación + seed idempotente
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS quality_derivation_reason (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      code TEXT NOT NULL,
+      label TEXT NOT NULL,
+      description TEXT,
+      sort_order INTEGER NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS quality_derivation_reason_code_uidx ON quality_derivation_reason(code);
+    INSERT INTO quality_derivation_reason (code, label, sort_order) VALUES
+      ('qdr_001', 'Requiere más expertise', 1),
+      ('qdr_002', 'Carga de trabajo alta', 2),
+      ('qdr_003', 'Conflicto de interés', 3),
+      ('qdr_004', 'No disponible', 4),
+      ('qdr_005', 'Otro', 5)
+    ON CONFLICT (code) DO NOTHING;
+  `);
+
+  // Historial/auditoría del revisor de Calidad por caso
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS case_quality_assignment (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      clinical_case_id UUID NOT NULL REFERENCES clinical_case(id) ON DELETE CASCADE,
+      calidad_user_id TEXT NOT NULL REFERENCES "user"(id),
+      status TEXT NOT NULL DEFAULT 'active',
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      derived_to_id TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+      derivation_reason_id UUID REFERENCES quality_derivation_reason(id),
+      derivation_comment TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS cqa_case_idx ON case_quality_assignment(clinical_case_id);
+    CREATE INDEX IF NOT EXISTS cqa_calidad_status_idx ON case_quality_assignment(calidad_user_id, status);
+  `);
 }
 
 /**

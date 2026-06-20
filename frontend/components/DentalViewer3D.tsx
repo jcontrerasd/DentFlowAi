@@ -164,20 +164,15 @@ function Model({
   return <primitive object={result} onPointerDown={onPointerDown} />;
 }
 
-function Pin({ position, text, user, color = '#e11d48' }: { position: [number, number, number], text: string, user: string, color?: string }) {
-  const [hovered, setHovered] = useState(false);
-
+function Pin({ position, text, color = '#e11d48' }: { position: [number, number, number], text: string, user: string, color?: string }) {
   return (
     <group position={position}>
-      <mesh
-        onPointerOver={() => setHovered(true)}
-        onPointerOut={() => setHovered(false)}
-      >
+      <mesh>
         <sphereGeometry args={[0.5, 16, 16]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={hovered ? 5 : 2}
+          emissiveIntensity={2}
         />
       </mesh>
 
@@ -186,21 +181,13 @@ function Pin({ position, text, user, color = '#e11d48' }: { position: [number, n
         <sphereGeometry args={[0.7, 16, 16]} />
         <meshBasicMaterial color={color} transparent opacity={0.2} />
       </mesh>
-      
+
       <Html zIndexRange={[100, 0]} style={{ pointerEvents: 'none' }}>
-        {hovered ? (
-          <div className="bg-surface/95 backdrop-blur-md border border-divider/80 px-4 py-3 rounded-xl shadow-2xl min-w-[220px] select-none" style={{ transform: 'translate(14px, -50%)' }}>
-            <p className="text-sm text-primary font-bold uppercase tracking-widest mb-1 leading-none">{user}</p>
-            <p className="text-base text-foreground leading-snug font-medium">{text}</p>
-          </div>
-        ) : (
-          <div className="bg-surface backdrop-blur-md border border-divider/60 px-2.5 py-1.5 rounded-lg shadow-lg select-none whitespace-nowrap" style={{ transform: 'translate(14px, -50%)' }}>
-            <p className="text-sm text-foreground/80 font-medium leading-none">{text}</p>
-          </div>
-        )}
+        <div className="bg-surface backdrop-blur-md border border-divider/60 px-2.5 py-1.5 rounded-lg shadow-lg select-none whitespace-nowrap" style={{ transform: 'translate(14px, -50%)' }}>
+          <p className="text-sm text-foreground/80 font-medium leading-none">{text}</p>
+        </div>
       </Html>
     </group>
-
   );
 }
 

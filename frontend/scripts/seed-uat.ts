@@ -86,6 +86,31 @@ async function seed() {
   }
   console.log('Técnicos verificados/creados');
 
+  // 3b. Crear revisores de Calidad (v5.19) — para probar reparto equitativo y derivación.
+  const calidades = [
+    { id: 'calidad-uat-001', name: 'Calidad A (UAT)' },
+    { id: 'calidad-uat-002', name: 'Calidad B (UAT)' },
+  ];
+  for (const c of calidades) {
+    await db.insert(user).values({
+      id: c.id,
+      email: `${c.id}@uat.com`,
+      fullName: c.name,
+      role: 'calidad',
+      organizationId: orgId,
+      isActive: true,
+      isAvailable: true,
+      hashedPassword,
+      onboardingStep: 100,
+      createdAt: now,
+      updatedAt: now,
+    }).onConflictDoUpdate({
+      target: [user.id],
+      set: { hashedPassword, onboardingStep: 100, role: 'calidad', updatedAt: now },
+    });
+  }
+  console.log('Revisores de Calidad verificados/creados');
+
   // 4. Config Algorithm
   const [config] = await db.select().from(fauchardConfig).where(eq(fauchardConfig.isActive, true)).limit(1);
   if (!config) {

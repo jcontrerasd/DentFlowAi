@@ -7,7 +7,7 @@ export interface UserProfile {
   id: string;
   email: string;
   fullName: string | null;
-  role: 'dentista' | 'tecnico' | 'admin' | null;
+  role: 'dentista' | 'tecnico' | 'admin' | 'calidad' | null;
   onboardingStep: number | null;
   phone: string | null;
   specialty: string | null;

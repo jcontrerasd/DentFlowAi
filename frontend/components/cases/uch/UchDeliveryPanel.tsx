@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { FileText, Paperclip, Send, X, ChevronDown, Upload } from 'lucide-react';
 import { getUploadUrlAction } from '@/lib/db/actions/cases';
@@ -60,6 +60,8 @@ export default function UchDeliveryPanel({
   expanded,
   onToggleExpanded,
 }: UchDeliveryPanelProps) {
+  const [sendStep, setSendStep] = useState<'choose' | 'confirm'>('choose');
+
   if (!expanded) {
     return (
       <button
@@ -214,81 +216,89 @@ export default function UchDeliveryPanel({
         >
           Cancelar
         </button>
-        <button
-          type="button"
-          onClick={async () => {
-            if (!deliveryNotes.trim()) {
-              showError('Añade un mensaje para el dentista.');
-              return;
-            }
-            if (deliveryFiles.length === 0) {
-              showError('Debes adjuntar al menos un archivo de diseño.');
-              return;
-            }
-            if (!organizationId) {
-              showError('No se pudo determinar la organización del caso.');
-              return;
-            }
-            setFileProgress({});
-            try {
-              // Pre-validación de texto ANTES de subir archivos a GCS.
-              // Evita uploads costosos cuando ContactGuard bloqueará el envío.
-              const pre = await precheckTextContactGuardAction({
-                field: 'deliveryNotes',
-                text: deliveryNotes,
-              });
-              if (pre.success && pre.data?.blocked) {
-                showError(pre.data.userMessage ?? 'El mensaje contiene contenido no permitido.');
-                return;
-              }
-
-              setIsUploadingFiles(true);
-              const uploadedPaths: string[] = [];
-              for (let i = 0; i < deliveryFiles.length; i++) {
-                const file = deliveryFiles[i].file;
-                const safeName = file.name.replace(/[^\w.\-()+]/g, '_');
-                const stamp = `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 10)}`;
-                const gcsPath = `organizations/${organizationId}/cases/${caseId}/deliveries/${stamp}_${safeName}`;
-                const url = await getUploadUrlAction(
-                  gcsPath,
-                  file.type,
-                  isGzipCompressible(file.name) ? { contentEncoding: 'gzip' } : undefined,
-                );
-                if (!url) throw new Error(`No se pudo obtener URL para ${file.name}`);
-                await uploadFileWithProgress(file, url, i);
-                uploadedPaths.push(gcsPath);
-              }
-              setIsUploadingFiles(false);
-              setIsSendingDelivery(true);
-              await onSubmitDelivery({ notes: deliveryNotes, filePaths: uploadedPaths });
-              // El parent (UnifiedCaseHub) decide si limpiar el formulario según
-              // el resultado del server. No cerramos el panel desde acá para no
-              // pisar ese comportamiento en caso de bloqueo tardío.
-            } catch (err) {
-              console.error('Error enviando entrega:', err);
-              showError('No se pudo completar la subida. Revisa la conexión e inténtalo de nuevo.');
-            } finally {
-              setIsUploadingFiles(false);
-              setIsSendingDelivery(false);
-            }
-          }}
-          disabled={isUploadingFiles || isSendingDelivery || !deliveryNotes.trim() || deliveryFiles.length === 0}
-          className="flex-[2] py-3 bg-primary text-inverse text-xs font-semibold rounded-xl shadow-lg shadow-sm disabled:opacity-40 flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-        >
-          {isUploadingFiles ? (
-            <>
-              <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" /> Subiendo…
-            </>
-          ) : isSendingDelivery ? (
-            <>
-              <div className="w-4 h-4 border-2 border-border border-t-white rounded-full animate-spin" /> Guardando…
-            </>
-          ) : (
-            <>
-              <Send className="w-4 h-4" /> Enviar para revisión
-            </>
-          )}
-        </button>
+        {sendStep === 'confirm' ? (
+          <div className="flex-[2] flex items-center gap-2">
+            <span className="text-xs text-muted flex-1">¿Confirmas el envío?</span>
+            <button
+              type="button"
+              onClick={() => setSendStep('choose')}
+              className="text-xs text-muted hover:text-foreground"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (!organizationId) {
+                  showError('No se pudo determinar la organización del caso.');
+                  setSendStep('choose');
+                  return;
+                }
+                setFileProgress({});
+                try {
+                  const pre = await precheckTextContactGuardAction({
+                    field: 'deliveryNotes',
+                    text: deliveryNotes,
+                  });
+                  if (pre.success && pre.data?.blocked) {
+                    showError(pre.data.userMessage ?? 'El mensaje contiene contenido no permitido.');
+                    setSendStep('choose');
+                    return;
+                  }
+                  setIsUploadingFiles(true);
+                  const uploadedPaths: string[] = [];
+                  for (let i = 0; i < deliveryFiles.length; i++) {
+                    const file = deliveryFiles[i].file;
+                    const safeName = file.name.replace(/[^\w.\-()+]/g, '_');
+                    const stamp = `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 10)}`;
+                    const gcsPath = `organizations/${organizationId}/cases/${caseId}/deliveries/${stamp}_${safeName}`;
+                    const url = await getUploadUrlAction(
+                      gcsPath,
+                      file.type,
+                      isGzipCompressible(file.name) ? { contentEncoding: 'gzip' } : undefined,
+                    );
+                    if (!url) throw new Error(`No se pudo obtener URL para ${file.name}`);
+                    await uploadFileWithProgress(file, url, i);
+                    uploadedPaths.push(gcsPath);
+                  }
+                  setIsUploadingFiles(false);
+                  setIsSendingDelivery(true);
+                  await onSubmitDelivery({ notes: deliveryNotes, filePaths: uploadedPaths });
+                } catch (err) {
+                  console.error('Error enviando entrega:', err);
+                  showError('No se pudo completar la subida. Revisa la conexión e inténtalo de nuevo.');
+                } finally {
+                  setIsUploadingFiles(false);
+                  setIsSendingDelivery(false);
+                  setSendStep('choose');
+                }
+              }}
+              disabled={isUploadingFiles || isSendingDelivery}
+              className="py-2 px-3 bg-primary text-inverse text-xs font-semibold rounded-xl shadow-sm disabled:opacity-40 flex items-center gap-2"
+            >
+              {isUploadingFiles ? (
+                <><div className="w-3 h-3 border-2 border-border border-t-white rounded-full animate-spin" /> Subiendo…</>
+              ) : isSendingDelivery ? (
+                <><div className="w-3 h-3 border-2 border-border border-t-white rounded-full animate-spin" /> Guardando…</>
+              ) : (
+                <><Send className="w-3 h-3" /> Confirmar envío</>
+              )}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              if (!deliveryNotes.trim()) { showError('Añade un mensaje para el dentista.'); return; }
+              if (deliveryFiles.length === 0) { showError('Debes adjuntar al menos un archivo de diseño.'); return; }
+              setSendStep('confirm');
+            }}
+            disabled={isUploadingFiles || isSendingDelivery}
+            className="flex-[2] py-3 bg-primary text-inverse text-xs font-semibold rounded-xl shadow-lg shadow-sm disabled:opacity-40 flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+          >
+            <Send className="w-4 h-4" /> Enviar para revisión de Calidad
+          </button>
+        )}
       </div>
     </div>
   );

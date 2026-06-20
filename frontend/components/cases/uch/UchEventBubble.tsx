@@ -4,8 +4,9 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import {
-  Activity, AlertCircle, Box, CheckCircle2, Download, FileText, Hammer, Send, Star, Undo2, User, XCircle,
+  Activity, AlertCircle, Box, CheckCircle2, Download, FileCheck2, FileText, GitBranch, Hammer, MessageSquareWarning, Send, ShieldAlert, Star, Undo2, User, XCircle,
 } from 'lucide-react';
+import UchDeriveQualityDialog from '@/components/cases/uch/UchDeriveQualityDialog';
 import { resolveUchThreadLane } from '@/lib/uchThreadLane';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { shouldUseUchNeutralSystemPill } from '@/lib/constants/uchEmitterMatrix';
@@ -56,6 +57,133 @@ function EventOfferQuoteDetail({
   );
 }
 
+function QualityReviewControls({
+  isSelfLane,
+  onCertifyQuality,
+  onQualityRequestChanges,
+  onDeriveQuality,
+  caseId,
+  comment,
+  setComment,
+}: {
+  isSelfLane: boolean;
+  onCertifyQuality?: (comment: string) => Promise<boolean | void>;
+  onQualityRequestChanges?: (reason: string) => Promise<boolean | void>;
+  onDeriveQuality?: () => void;
+  caseId: string;
+  comment: string;
+  setComment: (v: string) => void;
+}) {
+  const [certifyStep, setCertifyStep] = React.useState<'choose' | 'confirm'>('choose');
+  const [changesStep, setChangesStep] = React.useState<'choose' | 'confirm'>('choose');
+  const [busy, setBusy] = React.useState<null | 'certify' | 'changes'>(null);
+  const [deriveOpen, setDeriveOpen] = React.useState(false);
+
+  return (
+    <div className={`pt-2 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'} space-y-2`}>
+      {certifyStep === 'confirm' ? (
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] text-muted">¿Confirmas que certificas esta entrega?</span>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setCertifyStep('choose')}
+              className="text-[11px] text-muted hover:text-foreground"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                setBusy('certify');
+                try { await onCertifyQuality?.(comment.trim()); } finally { setBusy(null); }
+              }}
+              disabled={busy !== null}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-white bg-green-600 hover:bg-green-700 px-2 py-1 rounded disabled:opacity-40"
+            >
+              {busy === 'certify' ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <CheckCircle2 className="w-3 h-3" aria-hidden />}
+              Confirmar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <textarea
+            className="w-full text-[11px] bg-background border border-divider rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground"
+            rows={2}
+            placeholder="Comentario para el técnico (obligatorio para solicitar ajustes)"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            disabled={busy !== null}
+          />
+          <div className="flex flex-col gap-1.5">
+            <button
+              type="button"
+              onClick={() => setCertifyStep('confirm')}
+              disabled={busy !== null}
+              className="w-full inline-flex items-center justify-center gap-1 text-[11px] font-semibold text-white bg-green-600 hover:bg-green-700 px-2 py-1.5 rounded disabled:opacity-40"
+            >
+              <FileCheck2 className="w-3 h-3" aria-hidden />
+              Certificar entrega
+            </button>
+            {changesStep === 'confirm' ? (
+              <div className="flex items-center justify-between gap-2 w-full">
+                <span className="text-[11px] text-muted">¿Confirmas que solicitas ajustes?</span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setChangesStep('choose'); setComment(''); }}
+                    className="text-[11px] text-muted hover:text-foreground"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setBusy('changes');
+                      try { await onQualityRequestChanges?.(comment.trim()); } finally { setBusy(null); setChangesStep('choose'); }
+                    }}
+                    disabled={busy !== null}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-2 py-1 rounded disabled:opacity-40"
+                  >
+                    {busy === 'changes' ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <MessageSquareWarning className="w-3 h-3" aria-hidden />}
+                    Confirmar ajustes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setChangesStep('confirm')}
+                disabled={busy !== null || !comment.trim()}
+                className="w-full inline-flex items-center justify-center gap-1 text-[11px] font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-2 py-1 rounded disabled:opacity-40"
+              >
+                <MessageSquareWarning className="w-3 h-3" aria-hidden />
+                Solicitar ajustes
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setDeriveOpen(true)}
+              disabled={busy !== null}
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted hover:text-foreground transition-colors disabled:opacity-40"
+            >
+              <GitBranch className="w-3 h-3" aria-hidden />
+              Derivar a otro revisor
+            </button>
+          </div>
+        </>
+      )}
+      <UchDeriveQualityDialog
+        isOpen={deriveOpen}
+        onClose={() => setDeriveOpen(false)}
+        caseId={caseId}
+        onDerived={() => { setDeriveOpen(false); onDeriveQuality?.(); }}
+      />
+    </div>
+  );
+}
+
 type UchEventBubbleProps = {
   event: UchCaseEventLite;
   currentUser: { id?: string; image?: string } | null | undefined;
@@ -80,6 +208,17 @@ type UchEventBubbleProps = {
   setReviewComment?: (v: string) => void;
   isSubmittingReview?: boolean;
   isSubmittingRevision?: boolean;
+  /** true cuando esta burbuja corresponde a la entrega pendiente de revisión de Calidad. */
+  actingAsCalidad?: boolean;
+  isPendingQualityDelivery?: boolean;
+  onCertifyQuality?: (comment: string) => Promise<boolean | void>;
+  onQualityRequestChanges?: (reason: string) => Promise<boolean | void>;
+  onDeriveQuality?: () => void;
+  /** Comentario QA controlado desde UnifiedCaseHub (viaja al modal 3D). */
+  qualityComment?: string;
+  setQualityComment?: (v: string) => void;
+  /** caseId del caso clínico — requerido para UchDeriveQualityDialog */
+  caseId?: string;
 };
 
 export default function UchEventBubble({
@@ -101,6 +240,14 @@ export default function UchEventBubble({
   setReviewComment,
   isSubmittingReview = false,
   isSubmittingRevision = false,
+  actingAsCalidad = false,
+  isPendingQualityDelivery = false,
+  onCertifyQuality,
+  onQualityRequestChanges,
+  onDeriveQuality,
+  qualityComment = '',
+  setQualityComment,
+  caseId,
 }: UchEventBubbleProps) {
   const payloadVisibleTo = (event.payload as Record<string, unknown> | undefined)?.visibleTo;
   const { lane, showAsFauchard } = resolveUchThreadLane(event, {
@@ -197,7 +344,7 @@ export default function UchEventBubble({
       <div className={`relative max-w-[78%] transition-all ${bubbleShell}`}>
         <div className="space-y-2">
           <>
-            {!['TRABAJO_INICIADO', 'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO', 'COMENTARIO_TECNICO', CASE_EVENTS.CALIFICACION_ENVIADA, CASE_EVENTS.OFERTA_ENVIADA, CASE_EVENTS.OFERTA_RETIRADA, CASE_EVENTS.OFERTA_RECHAZADA_POR_TECNICO].includes(event.action) &&
+            {!['TRABAJO_INICIADO', 'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO', 'COMENTARIO_TECNICO', CASE_EVENTS.CALIFICACION_ENVIADA, CASE_EVENTS.CALIFICACION_ENVIADA_CALIDAD, CASE_EVENTS.OFERTA_ENVIADA, CASE_EVENTS.OFERTA_RETIRADA, CASE_EVENTS.OFERTA_RECHAZADA_POR_TECNICO, CASE_EVENTS.REVISION_ENVIADA_CALIDAD, CASE_EVENTS.CALIDAD_CERTIFICADA].includes(event.action) &&
               !isOutcomeNotice &&
               event.content && (
               <p className="text-xs leading-relaxed whitespace-pre-wrap">{event.content}</p>
@@ -358,7 +505,7 @@ export default function UchEventBubble({
 
           {(() => {
             const files = (event.payload as { files?: string[] } | null)?.files;
-            if (!Array.isArray(files) || files.length === 0 || event.action === 'REVISION_ENVIADA') return null;
+            if (!Array.isArray(files) || files.length === 0 || event.action === 'REVISION_ENVIADA' || event.action === CASE_EVENTS.REVISION_ENVIADA_CALIDAD) return null;
             return (
               <p
                 className={`text-[10px] flex items-center gap-1.5 mt-1 ${
@@ -401,7 +548,7 @@ export default function UchEventBubble({
               )}
             </div>
           )}
-          {event.action === 'REVISION_ENVIADA' && (() => {
+          {(event.action === 'REVISION_ENVIADA' || event.action === CASE_EVENTS.REVISION_ENVIADA_CALIDAD) && (() => {
             const payload = (event.payload ?? {}) as { deliveryVersion?: number; deliveryId?: string; files?: string[] };
             const deliveryVersion =
               payload.deliveryVersion ?? revisionVersionMap.get(event.id) ?? 1;
@@ -413,11 +560,16 @@ export default function UchEventBubble({
             const canDownload = !!onDownloadRevisionZip && files.length > 0;
             const canView3D = !!onView3D && files.length > 0;
             const [approveStep, setApproveStep] = React.useState<'choose' | 'confirm'>('choose');
+            const [revisionStep, setRevisionStep] = React.useState<'choose' | 'confirm'>('choose');
             return (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-primary">
                   <FileText className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px] font-bold">Entrega v{deliveryVersion} enviada a revisión</span>
+                  <span className="text-[11px] font-bold">
+                    {event.action === CASE_EVENTS.REVISION_ENVIADA_CALIDAD
+                      ? `Entrega v${deliveryVersion} enviada a revisión de Calidad`
+                      : `Entrega v${deliveryVersion} enviada a revisión`}
+                  </span>
                 </div>
                 {event.content?.trim() ? (
                   <div className="space-y-0.5">
@@ -476,7 +628,7 @@ export default function UchEventBubble({
                         <div className="flex gap-2">
                           <button
                             type="button"
-                            onClick={() => setApproveStep('choose')}
+                            onClick={() => { setApproveStep('choose'); setReviewComment?.(''); }}
                             className="text-[11px] text-muted hover:text-foreground"
                           >
                             Cancelar
@@ -511,19 +663,55 @@ export default function UchEventBubble({
                             {isSubmittingReview ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <CheckCircle2 className="w-3 h-3" aria-hidden />}
                             Aprobar entrega
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => void onRequestRevisionDelivery?.()}
-                            disabled={isSubmittingRevision || !reviewComment.trim()}
-                            className="w-full inline-flex items-center justify-center gap-1 text-[11px] font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-2 py-1 rounded disabled:opacity-40"
-                          >
-                            {isSubmittingRevision ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <AlertCircle className="w-3 h-3" aria-hidden />}
-                            Pedir ajustes
-                          </button>
+                          {revisionStep === 'confirm' ? (
+                            <div className="flex items-center justify-between gap-2 w-full">
+                              <span className="text-[11px] text-muted">¿Confirmas que solicitas ajustes?</span>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => { setRevisionStep('choose'); setReviewComment?.(''); }}
+                                  className="text-[11px] text-muted hover:text-foreground"
+                                >
+                                  Cancelar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => { await onRequestRevisionDelivery?.(); setRevisionStep('choose'); }}
+                                  disabled={isSubmittingRevision}
+                                  className="inline-flex items-center gap-1 text-[11px] font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-2 py-1 rounded disabled:opacity-40"
+                                >
+                                  {isSubmittingRevision ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <AlertCircle className="w-3 h-3" aria-hidden />}
+                                  Confirmar ajustes
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setRevisionStep('confirm')}
+                              disabled={!reviewComment.trim()}
+                              className="w-full inline-flex items-center justify-center gap-1 text-[11px] font-medium text-warning-foreground bg-warning/20 hover:bg-warning/30 border border-warning/40 px-2 py-1 rounded disabled:opacity-40"
+                            >
+                              <AlertCircle className="w-3 h-3" aria-hidden />
+                              Pedir ajustes
+                            </button>
+                          )}
                         </div>
                       </>
                     )}
                   </div>
+                )}
+                {/* Controles de revisión de Calidad (solo entrega pendiente de certificación) */}
+                {isPendingQualityDelivery && actingAsCalidad && caseId && (
+                  <QualityReviewControls
+                    isSelfLane={isSelfLane}
+                    onCertifyQuality={onCertifyQuality}
+                    onQualityRequestChanges={onQualityRequestChanges}
+                    onDeriveQuality={onDeriveQuality}
+                    caseId={caseId}
+                    comment={qualityComment}
+                    setComment={setQualityComment ?? (() => {})}
+                  />
                 )}
               </div>
             );
@@ -541,7 +729,7 @@ export default function UchEventBubble({
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-warning">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px] font-bold">Ajustes solicitados</span>
+                  <span className="text-[11px] font-bold">Ajuste requerido por el solicitante</span>
                 </div>
                 <p className="text-[10px] font-medium text-faint">Detalle del ajuste</p>
                 {adjustmentText ? (
@@ -561,6 +749,58 @@ export default function UchEventBubble({
                     </button>
                   </div>
                 )}
+              </div>
+            );
+          })()}
+          {event.action === CASE_EVENTS.REVISION_SOLICITADA_CALIDAD && (() => {
+            const payload = (event.payload ?? {}) as Record<string, unknown>;
+            const adjustmentText = [event.content, payload.reason]
+              .map((t) => (typeof t === 'string' ? t.trim() : ''))
+              .find((t) => t.length > 0) ?? '';
+            const calFiles = Array.isArray(payload.files) ? (payload.files as string[]).filter(Boolean) : [];
+            const calDeliveryId = typeof payload.deliveryId === 'string' ? payload.deliveryId : null;
+            const calVersion = typeof payload.deliveryVersion === 'number' ? payload.deliveryVersion : null;
+            const canView3DCal = !!onView3D && calFiles.length > 0 && (!!calDeliveryId || calVersion !== null);
+            return (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-primary">
+                  <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[11px] font-bold">Ajuste solicitado por Calidad</span>
+                  <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary-hl text-primary">Calidad</span>
+                </div>
+                <p className="text-[10px] font-medium text-faint">Detalle del ajuste</p>
+                {adjustmentText ? (
+                  <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{adjustmentText}</p>
+                ) : (
+                  <p className="text-[10px] text-faint italic">Sin descripción de ajuste.</p>
+                )}
+                {canView3DCal && (
+                  <div className={`pt-1.5 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'}`}>
+                    <button
+                      type="button"
+                      onClick={() => onView3D!(calDeliveryId ?? event.id, calVersion ?? 1, calFiles, adjustmentText || undefined)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border border-jade/30 text-jade hover:bg-jade-hl hover:text-jade-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-jade/30 transition-colors"
+                    >
+                      <Box className="w-3 h-3" aria-hidden />
+                      Ver en 3D
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          {event.action === CASE_EVENTS.CALIDAD_CERTIFICADA && (() => {
+            const payload = (event.payload ?? {}) as Record<string, unknown>;
+            const note = typeof payload.qualityComment === 'string' ? payload.qualityComment.trim() : '';
+            return (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-jade">
+                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[11px] font-bold">Certificada por Calidad — lista para enviar al dentista</span>
+                </div>
+                {note ? (
+                  <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">{note}</p>
+                ) : null}
               </div>
             );
           })()}
@@ -599,6 +839,28 @@ export default function UchEventBubble({
             );
           })()}
 
+          {event.action === CASE_EVENTS.CALIFICACION_ENVIADA_CALIDAD && (() => {
+            const payload = (event.payload ?? {}) as Record<string, unknown>;
+            const ratingNum = Number(payload.rating);
+            const rating = Number.isFinite(ratingNum) ? Math.max(0, Math.min(5, Math.round(ratingNum))) : 0;
+            return (
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 text-primary">
+                  <Star className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[11px] font-bold">Calificación · Calidad</span>
+                </div>
+                <div className="flex items-center gap-1 pl-5" aria-label={`${rating} de 5`}>
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <Star
+                      key={n}
+                      className={`w-3.5 h-3.5 ${n <= rating ? 'text-warning fill-current' : 'text-faint'}`}
+                    />
+                  ))}
+                  <span className="ml-1 text-[11px] font-semibold text-foreground/95 tabular-nums">{rating}/5</span>
+                </div>
+              </div>
+            );
+          })()}
           {event.action === CASE_EVENTS.CALIFICACION_ENVIADA && (() => {
             const payload = (event.payload ?? {}) as Record<string, unknown>;
             const ratingNum = Number(payload.rating);

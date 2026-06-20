@@ -87,6 +87,8 @@ export function shouldPresentUchEventAsFauchard(
 
   if (viewer.role === 'tecnico') {
     if (authorRole === 'dentista') return true;
+    // Calidad es anónima para el técnico: sus eventos se presentan como Fauchard.
+    if (authorRole === 'calidad') return true;
     const vt = payload.visibleTo as string | undefined;
     if (
       (vt === 'tecnico' || vt === 'ambos') &&
@@ -110,6 +112,14 @@ export function sanitizeUchPayloadForViewer(
   if (!payload || typeof payload !== 'object') return {};
   const raw = { ...(payload as Record<string, unknown>) };
   delete raw.presentationAuthor;
+
+  // Identidad del revisor de Calidad: nunca se filtra a dentista ni técnico (Calidad es anónima).
+  if (viewerRole !== 'admin' && viewerRole !== 'calidad') {
+    delete raw.calidadUserId;
+    delete raw.fromCalidadId;
+    delete raw.toCalidadId;
+    delete raw.qualityReviewerId;
+  }
 
   if (viewerRole === 'dentista') {
     delete raw.technicianId;

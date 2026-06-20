@@ -27,6 +27,11 @@ export type CaseListQueryFilters = {
   offerDateEnd?: string;
   techPreset?: TechListPreset | null;
   sortOrder?: 'recent' | 'old';
+  /**
+   * Calidad: acota completados según la calificación del revisor (review dimension='quality').
+   * `pending` = sin calificar (bucket "Por calificar"); `rated` = ya calificado ("Completados").
+   */
+  qualityRatingState?: 'pending' | 'rated';
 };
 
 export const TECH_ACTIVE_CASE_STATUSES = [
@@ -186,7 +191,7 @@ export function caseStatusFilterLabel(status: string): string {
 }
 
 export function normalizeFiltersForRole(
-  role: 'dentista' | 'tecnico',
+  role: 'dentista' | 'tecnico' | 'calidad',
   filters: CaseListQueryFilters,
 ): CaseListQueryFilters {
   const base = { ...filters };
@@ -310,7 +315,7 @@ export function collapseStaleTechPresetDerivatives(
 
 /** Misma normalización para fetch, URL y SQL (preset → KPI, rol, etc.). */
 export function prepareCaseListFiltersForQuery(
-  role: 'dentista' | 'tecnico',
+  role: 'dentista' | 'tecnico' | 'calidad',
   filters: CaseListQueryFilters,
 ): CaseListQueryFilters {
   const q = normalizeSearchQuery(filters.q);
@@ -343,7 +348,7 @@ export function hasActiveCaseListFilters(filters: CaseListQueryFilters): boolean
 
 /** Filtros de listado al pulsar un KPI del dashboard (carrusel + /dashboard/cases). */
 export function filtersFromDashboardMetricId(
-  role: 'dentista' | 'tecnico',
+  role: 'dentista' | 'tecnico' | 'calidad',
   metricId: string,
 ): CaseListQueryFilters {
   if (metricId === 'total') {
@@ -356,12 +361,32 @@ export function filtersFromDashboardMetricId(
       techPreset: null,
     });
   }
+  if (role === 'calidad') {
+    const calidadKpiToStatuses: Record<string, string[]> = {
+      porCertificar: [CASE_STATUSES.EN_REVISION_CALIDAD],
+      certificadas: [CASE_STATUSES.CERTIFICADO_CALIDAD],
+      enProceso: [CASE_STATUSES.EN_EJECUCION, CASE_STATUSES.CAMBIOS_EN_PROCESO, CASE_STATUSES.EN_REVISION],
+      // `porCalificar` y `completado` comparten estado COMPLETADO; los separa qualityRatingState.
+      porCalificar: [CASE_STATUSES.COMPLETADO],
+      completado: [CASE_STATUSES.COMPLETADO],
+    };
+    const statuses = calidadKpiToStatuses[metricId];
+    if (!statuses?.length) return { ...DEFAULT_CASE_LIST_FILTERS };
+    const qualityRatingState =
+      metricId === 'porCalificar' ? 'pending' : metricId === 'completado' ? 'rated' : undefined;
+    return { ...DEFAULT_CASE_LIST_FILTERS, caseStatuses: statuses, techPreset: null, qualityRatingState };
+  }
   const dentistKpiToStatuses: Record<string, string[]> = {
     borrador: [CASE_STATUSES.BORRADOR],
     enEvaluacion: [CASE_STATUSES.EN_EVALUACION],
     propuestaLista: [CASE_STATUSES.PROPUESTA_LISTA],
     aceptadaPendienteInicio: [CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO],
-    enEjecucion: [CASE_STATUSES.EN_EJECUCION],
+    // El dentista no percibe la etapa de Calidad: sus casos cuentan y se filtran bajo "En ejecución".
+    enEjecucion: [
+      CASE_STATUSES.EN_EJECUCION,
+      CASE_STATUSES.EN_REVISION_CALIDAD,
+      CASE_STATUSES.CERTIFICADO_CALIDAD,
+    ],
     enRevision: [CASE_STATUSES.EN_REVISION, CASE_STATUSES.CAMBIOS_EN_PROCESO],
     completado: [CASE_STATUSES.COMPLETADO],
     cerrado: [CASE_STATUSES.CERRADO],

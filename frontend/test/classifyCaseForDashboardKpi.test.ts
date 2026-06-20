@@ -24,6 +24,11 @@ describe('classifyDentistCaseKpi', () => {
   it('desconocido → otros', () => {
     expect(classifyDentistCaseKpi('estado_inventado')).toBe('otros');
   });
+
+  it('etapa de Calidad enmascarada como En Ejecución (anonimato)', () => {
+    expect(classifyDentistCaseKpi(CASE_STATUSES.EN_REVISION_CALIDAD)).toBe('enEjecucion');
+    expect(classifyDentistCaseKpi(CASE_STATUSES.CERTIFICADO_CALIDAD)).toBe('enEjecucion');
+  });
 });
 
 describe('classifyTechnicianCaseKpi', () => {
@@ -102,6 +107,19 @@ describe('classifyTechnicianCaseKpi', () => {
         invitationStatus: 'confirmed',
       }),
     ).toBe('aceptadaPendienteInicio');
+  });
+
+  it('ganador en etapa de Calidad → enRevisionCalidad (no otros)', () => {
+    for (const status of [CASE_STATUSES.EN_REVISION_CALIDAD, CASE_STATUSES.CERTIFICADO_CALIDAD]) {
+      expect(
+        classifyTechnicianCaseKpi({
+          caseStatus: status,
+          assignedTechnicianId: TECH_ID,
+          technicianUserId: TECH_ID,
+          invitationStatus: 'confirmed',
+        }),
+      ).toBe('enRevisionCalidad');
+    }
   });
 });
 
