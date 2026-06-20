@@ -3,22 +3,26 @@
 /**
  * Reasignación automática tras rechazo o expiración de asignación.
  * Siguiente candidato en el ranking (excluye técnicos ya intentados).
+ * Si no hay candidato o se alcanza maxAttempts, entra a pendiente_pool o falla.
  */
 
 import { db } from '@/lib/db';
 import { caseAssignment, clinicalCase } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { CASE_STATUSES } from '@/lib/constants/dental';
+import { CASE_STATUSES, INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
 import { logCaseEvent } from './cases';
 import { getConfigForCase } from './fauchard';
 import { assignCaseAction, rankAssignmentCandidates } from './assignment';
+import { enterPendingPoolAction } from './poolQueue';
+import { isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
+import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import type { ActionResult } from '@/lib/types/actions';
 
 export async function tryReplaceAfterRejectAction(
   assignmentId: string,
-): Promise<ActionResult<{ replaced: boolean; reason?: string }>> {
+): Promise<ActionResult<{ replaced: boolean; reason?: string; pooled?: boolean }>> {
   try {
     const [rejected] = await db
       .select()
@@ -41,15 +45,25 @@ export async function tryReplaceAfterRejectAction(
       .select({ technicianId: caseAssignment.technicianId })
       .from(caseAssignment)
       .where(eq(caseAssignment.clinicalCaseId, caseId));
-    if (prior.length >= maxAttempts) {
-      return { success: true, replaced: false, reason: 'max_attempts' };
-    }
 
     const tried = new Set(prior.map((r) => r.technicianId));
     const ranked = await rankAssignmentCandidates(caseId);
-    const next = ranked.find((r) => !tried.has(r.technicianId));
+    const next = prior.length < maxAttempts ? ranked.find((r) => !tried.has(r.technicianId)) : undefined;
+
     if (!next) {
-      return { success: true, replaced: false, reason: 'no_candidate' };
+      const reason = prior.length >= maxAttempts ? 'max_attempts' : 'no_candidate';
+      if (isPoolPendienteEnabled()) {
+        const [cCase] = await db.select({ internalStatus: clinicalCase.internalStatus })
+          .from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
+        if (cCase && cCase.internalStatus !== POOL_INTERNAL_STATUS) {
+          await enterPendingPoolAction(caseId);
+        }
+        return { success: true, replaced: false, reason, pooled: true };
+      }
+      await db.update(clinicalCase)
+        .set({ internalStatus: INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO })
+        .where(eq(clinicalCase.id, caseId));
+      return { success: true, replaced: false, reason };
     }
 
     const res = await assignCaseAction(caseId, next.technicianId, {

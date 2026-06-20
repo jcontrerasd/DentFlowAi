@@ -782,10 +782,11 @@ export async function runAssignmentAction(caseId: string): Promise<{
 export async function assignCaseAction(
   caseId: string,
   technicianId: string,
-  opts?: { fauchardConfigId?: string; pinCaseToConfig?: boolean; isReassignment?: boolean; score?: number },
+  opts?: { fauchardConfigId?: string; pinCaseToConfig?: boolean; isReassignment?: boolean; score?: number; systemActorId?: string },
 ): Promise<ActionResult<{ assignmentId: string; expiresAt: Date }>> {
-  const identity = await getServerIdentity();
-  if (!identity) return { success: false, error: 'No autenticado' };
+  const identity = opts?.systemActorId ? null : await getServerIdentity();
+  if (!identity && !opts?.systemActorId) return { success: false, error: 'No autenticado' };
+  const actorId = (identity?.id ?? opts?.systemActorId) as string;
 
   try {
     const config = opts?.fauchardConfigId
@@ -868,7 +869,7 @@ export async function assignCaseAction(
 
     await logCaseEvent({
       caseId,
-      userId: identity.id as string,
+      userId: actorId,
       type: 'sistema',
       action: CASE_EVENTS.ASIGNACION_ENVIADA,
       content: 'Asignación registrada.',

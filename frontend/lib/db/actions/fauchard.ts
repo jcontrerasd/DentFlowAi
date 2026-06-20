@@ -299,13 +299,25 @@ export async function reevaluatePendingPoolCaseAction(
   caseId: string,
 ): Promise<{ success: boolean; reactivated?: boolean; error?: string }> {
   try {
-    const sel = await runFauchardAction(caseId);
-    if (sel.success && sel.technicianIds?.length && sel.fauchardConfigId) {
-      await db.update(clinicalCase).set({ internalStatus: null, updatedAt: new Date() }).where(eq(clinicalCase.id, caseId));
-      await sendInvitationsAction(caseId, sel.technicianIds, { fauchardConfigId: sel.fauchardConfigId, pinCaseToConfig: true });
-      return { success: true, reactivated: true };
-    }
-    return { success: true, reactivated: false };
+    const { rankAssignmentCandidates, assignCaseAction } = await import('./assignment');
+    const config = await getConfigForCase(caseId);
+
+    // Obtener un actorId de sistema: el dentista del caso sirve como actor del evento.
+    const [cRow] = await db.select({ doctorId: clinicalCase.doctorId }).from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
+    const systemActorId = cRow?.doctorId ?? 'sistema';
+
+    const ranked = await rankAssignmentCandidates(caseId);
+    if (!ranked.length) return { success: true, reactivated: false };
+
+    const top = ranked[0];
+    const res = await assignCaseAction(caseId, top.technicianId, {
+      fauchardConfigId: config.id,
+      pinCaseToConfig: true,
+      score: top.score,
+      systemActorId,
+    });
+    if (!res.success) return { success: true, reactivated: false };
+    return { success: true, reactivated: true };
   } catch (error) {
     return { success: false, error: String(error) };
   }
