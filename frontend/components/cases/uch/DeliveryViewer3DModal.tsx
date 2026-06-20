@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Download, Activity, AlertCircle, CheckCircle, FileCheck2, GitBranch, MessageSquareWarning } from 'lucide-react';
 import DentalViewer3D from '@/components/DentalViewer3D';
+import NewAnnotationOverlay from '@/components/cases/NewAnnotationOverlay';
 import { getSignedUrlAction } from '@/lib/db/actions/cases';
 import {
   createDeliveryAnnotationAction,
@@ -298,7 +299,20 @@ export default function DeliveryViewer3DModal({
               annotations={annotations}
               onAnnotate={canAnnotate ? handleAnnotate : undefined}
               canAnnotate={canAnnotate}
-            />
+            >
+              {/* Overlay nueva anotación — dentro del visor para seguir visible en pantalla completa */}
+              {pendingCoords && (
+                <NewAnnotationOverlay
+                  key={`${pendingCoords.x}-${pendingCoords.y}-${pendingCoords.z}`}
+                  context="deliveryAdjustment"
+                  value={annotationText}
+                  onChange={setAnnotationText}
+                  onCancel={() => setPendingCoords(null)}
+                  onSave={() => void handleSaveAnnotation()}
+                  saving={isSavingAnnotation}
+                />
+              )}
+            </DentalViewer3D>
           )}
           {loadState === 'loading' && (
             <div className="flex items-center justify-center h-full text-muted text-sm">
@@ -313,37 +327,6 @@ export default function DeliveryViewer3DModal({
             </div>
           )}
 
-          {/* Overlay nueva anotación */}
-          {pendingCoords && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-80 bg-card border border-divider rounded-lg p-3 shadow-xl z-10">
-              <p className="text-xs font-semibold text-foreground mb-2">NUEVA ANOTACIÓN</p>
-              <textarea
-                className="w-full text-xs bg-background border border-divider rounded px-2 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground"
-                rows={2}
-                placeholder="Describe el ajuste necesario…"
-                value={annotationText}
-                onChange={(e) => setAnnotationText(e.target.value)}
-                autoFocus
-              />
-              <div className="flex justify-end gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => setPendingCoords(null)}
-                  className="text-xs text-muted hover:text-foreground"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleSaveAnnotation()}
-                  disabled={!annotationText.trim() || isSavingAnnotation}
-                  className="text-xs font-medium text-white bg-primary hover:bg-primary/90 px-3 py-1 rounded disabled:opacity-40"
-                >
-                  {isSavingAnnotation ? 'Guardando…' : 'Guardar'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Panel inferior: solo nota del dentista cuando aplica (los pins se leen directamente en el modelo) */}

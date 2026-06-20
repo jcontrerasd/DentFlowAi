@@ -80,6 +80,7 @@ import {
 } from '@/lib/db/actions/catalogs';
 import { resolveListPriceAction } from '@/lib/db/actions/priceRules';
 import DentalViewer3D from '@/components/DentalViewer3D';
+import NewAnnotationOverlay from '@/components/cases/NewAnnotationOverlay';
 import { TeethSelector } from '@/components/cases/TeethSelector';
 import UnifiedCaseHub from '@/components/cases/UnifiedCaseHub';
 import Button from '@/components/ui/Button';
@@ -2419,32 +2420,15 @@ function CaseDetailPageContent() {
                   canAnnotate={canEditForm}
                 >
                   {selectedCoords && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      className="absolute bottom-6 left-6 right-6 lg:left-1/4 lg:right-1/4 bg-surface/95 backdrop-blur-xl border border-divider p-5 rounded-3xl shadow-2xl z-50 flex flex-col md:flex-row items-center gap-4"
-                    >
-                      <div className="flex-1 w-full">
-                        <p className="text-[10px] text-primary font-bold uppercase tracking-widest mb-2">Nueva Anotación</p>
-                        <input
-                          autoFocus
-                          value={newAnnotationText}
-                          onChange={(e) => setNewAnnotationText(e.target.value)}
-                          className="w-full bg-background/50 border border-divider rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none"
-                          placeholder="Tu observación aquí..."
-                        />
-                      </div>
-                      <div className="flex gap-2 w-full md:w-auto">
-                        <button onClick={() => setSelectedCoords(null)} className="p-3 bg-surface-2 text-muted rounded-xl"><X className="w-5 h-5" /></button>
-                        <button
-                          onClick={handleSaveAnnotation}
-                          disabled={savingAnnotation || !newAnnotationText.trim()}
-                          className="flex-1 px-6 bg-primary text-inverse rounded-xl font-bold"
-                        >
-                          {savingAnnotation ? "..." : "Guardar"}
-                        </button>
-                      </div>
-                    </motion.div>
+                    <NewAnnotationOverlay
+                      key={`${selectedCoords.x}-${selectedCoords.y}-${selectedCoords.z}`}
+                      context="caseCreation"
+                      value={newAnnotationText}
+                      onChange={setNewAnnotationText}
+                      onCancel={() => setSelectedCoords(null)}
+                      onSave={() => void handleSaveAnnotation()}
+                      saving={savingAnnotation}
+                    />
                   )}
                 </DentalViewer3D>
               </div>

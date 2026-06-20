@@ -23,11 +23,16 @@ vi.mock('@/lib/db/actions/cases', () => ({
 }));
 
 vi.mock('@/components/DentalViewer3D', () => ({
-  default: ({ onAnnotate }: { onAnnotate?: (c: object) => void }) => (
-    <div
-      data-testid="viewer3d"
-      onClick={() => onAnnotate?.({ x: 0, y: 0, z: 0 })}
-    />
+  default: ({
+    onAnnotate,
+    children,
+  }: {
+    onAnnotate?: (c: object) => void;
+    children?: React.ReactNode;
+  }) => (
+    <div data-testid="viewer3d" onClick={() => onAnnotate?.({ x: 0, y: 0, z: 0 })}>
+      {children}
+    </div>
   ),
 }));
 
