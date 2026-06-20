@@ -37,6 +37,8 @@ import Image from 'next/image';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const { user, userProfile, loading, isSimulating } = useAuth();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [pendingInvitations, setPendingInvitations] = useState(0);
@@ -183,6 +185,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <aside
         className={`fixed top-0 left-0 h-full bg-surface backdrop-blur-xl border-r border-divider transition-all duration-300 z-50 ${isSidebarOpen ? 'w-64' : 'w-20'}`}
+        onMouseEnter={() => setIsSidebarHovered(true)}
+        onMouseLeave={() => setIsSidebarHovered(false)}
       >
         <div className="p-6 mb-8 flex items-center gap-3">
           <div className="w-10 h-10 bg-surface rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-sm overflow-hidden">
@@ -191,9 +195,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {isSidebarOpen && <span className="text-xl serif-font font-bold text-foreground">DentFlowAi</span>}
         </div>
 
-        {(userProfile?.role === 'admin' || isSimulating || user?.email === 'jaime.contreras.d@gmail.com') && isSidebarOpen && (
+        {(userProfile?.role === 'admin' || isSimulating || user?.email === 'jaime.contreras.d@gmail.com') && (
           <div className="px-4 mb-3">
-            <ImpersonationSelector />
+            <ImpersonationSelector onOpenChange={setIsSelectorOpen} collapsed={!isSidebarOpen} />
           </div>
         )}
 
@@ -243,19 +247,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </div>
 
-        {/* Toggle de colapso sobre la línea divisoria, centrado verticalmente */}
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute top-1/2 -translate-y-1/2 -right-3 z-50 w-6 h-6 rounded-full bg-surface border border-divider flex items-center justify-center text-muted shadow-sm transition-colors hover:text-foreground hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-          aria-label={isSidebarOpen ? 'Colapsar menú lateral' : 'Expandir menú lateral'}
-          title={isSidebarOpen ? 'Colapsar menú' : 'Expandir menú'}
-        >
-          {isSidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-        </button>
       </aside>
 
+      {/* Toggle de colapso — fuera del aside para que hover de modales no lo active */}
+      <button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        onMouseEnter={() => setIsSidebarHovered(true)}
+        onMouseLeave={() => setIsSidebarHovered(false)}
+        className={`fixed top-1/2 -translate-y-1/2 z-[60] w-6 h-6 rounded-full bg-surface border border-divider flex items-center justify-center text-muted shadow-sm transition-all hover:text-foreground hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${isSidebarOpen ? 'left-[calc(16rem-0.75rem)]' : 'left-[calc(5rem-0.75rem)]'} ${isSidebarHovered && !isSelectorOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        aria-label={isSidebarOpen ? 'Colapsar menú lateral' : 'Expandir menú lateral'}
+        title={isSidebarOpen ? 'Colapsar menú' : 'Expandir menú'}
+      >
+        {isSidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+      </button>
+
       {/* Main Content */}
-      <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'pl-64' : 'pl-20'}`}>
+      <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'pl-64' : 'pl-0'}`}>
         <header className="h-20 border-b border-divider/50 flex items-center justify-between px-10 bg-surface shadow-sm border border-divider sticky top-0 z-40">
           <div className="flex items-center gap-4" />
 

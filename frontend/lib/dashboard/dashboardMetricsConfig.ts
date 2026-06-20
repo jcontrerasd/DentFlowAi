@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { FileText, ShieldCheck, BadgeCheck, Hammer, Layers } from 'lucide-react';
+import { FileText, ShieldCheck, BadgeCheck, Hammer, Layers, ClipboardCheck } from 'lucide-react';
 import {
   getDentistKpiFichaPresentation,
   getTechKpiFichaPresentation,
@@ -66,25 +66,33 @@ export const DENTIST_DASHBOARD_METRICS: DashboardMetricDef[] = DENTIST_KPI_IDS.m
 export const TECH_DASHBOARD_METRICS: DashboardMetricDef[] = TECH_KPI_IDS.map(techMetricDef);
 
 /** KPIs del revisor de Calidad (v5.19). Sobre sus casos asignados. */
-export type CalidadKpiId = 'porCertificar' | 'certificadas' | 'enProceso' | 'completado' | 'otros';
+export type CalidadKpiId = 'porCertificar' | 'certificadas' | 'enProceso' | 'porCalificar' | 'completado' | 'otros';
 
 export const CALIDAD_DASHBOARD_METRICS: DashboardMetricDef[] = [
   { id: 'porCertificar', label: 'En revisión calidad', statusColorKey: 'enRevision', icon: ShieldCheck, attentionBadge: true },
   { id: 'certificadas', label: 'Listas para enviar', statusColorKey: 'aceptadaPendienteInicio', icon: BadgeCheck },
   { id: 'enProceso', label: 'En proceso', statusColorKey: 'enEjecucion', icon: Hammer },
+  { id: 'porCalificar', label: 'Por calificar', statusColorKey: 'enRevision', icon: ClipboardCheck, attentionBadge: true },
   { id: 'completado', label: 'Completados', statusColorKey: 'completado', icon: Layers },
   { id: 'otros', label: 'Otros', statusColorKey: 'otros', icon: FileText },
 ];
 
-/** Clasifica un caso (por estado) en un KPI de Calidad. */
-export function classifyCalidadCaseKpi(status: string | null | undefined): CalidadKpiId {
+/**
+ * Clasifica un caso en un KPI de Calidad. Un caso `completado` sin la calificación del
+ * revisor (review dimension='quality') cae en `porCalificar` (tarea pendiente persistente);
+ * una vez calificado, pasa a `completado`. El resto se clasifica solo por estado.
+ */
+export function classifyCalidadCaseKpi(
+  status: string | null | undefined,
+  hasQualityReview: boolean = true,
+): CalidadKpiId {
   switch (status) {
     case 'enRevisionCalidad': return 'porCertificar';
     case 'certificadoCalidad': return 'certificadas';
     case 'enEjecucion':
     case 'cambiosEnProceso':
     case 'enRevision': return 'enProceso';
-    case 'completado': return 'completado';
+    case 'completado': return hasQualityReview ? 'completado' : 'porCalificar';
     default: return 'otros';
   }
 }

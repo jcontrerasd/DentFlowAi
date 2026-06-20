@@ -729,7 +729,7 @@ export default function UchEventBubble({
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-warning">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px] font-bold">Ajuste solicitado por el solicitante</span>
+                  <span className="text-[11px] font-bold">Ajuste requerido por el solicitante</span>
                 </div>
                 <p className="text-[10px] font-medium text-faint">Detalle del ajuste</p>
                 {adjustmentText ? (

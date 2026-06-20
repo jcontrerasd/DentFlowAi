@@ -74,14 +74,24 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
   }
 
   if (isCalidad) {
+    // Por caso, además del estado, si este revisor ya envió su calificación
+    // (review dimension='quality'): un completado sin review cae en "Por calificar".
     const rows = await db
-      .select({ status: clinicalCase.status })
+      .select({
+        status: clinicalCase.status,
+        hasQualityReview: sql<boolean>`EXISTS (
+          SELECT 1 FROM review r
+          WHERE r.clinical_case_id = ${clinicalCase.id}
+            AND r.reviewer_id = ${identity.id as string}
+            AND r.dimension = 'quality'
+        )`,
+      })
       .from(clinicalCase)
       .where(whereClause);
 
     const metrics = initEmptyMetrics(CALIDAD_DASHBOARD_METRICS);
     for (const row of rows) {
-      const kpiId = classifyCalidadCaseKpi(row.status);
+      const kpiId = classifyCalidadCaseKpi(row.status, row.hasQualityReview);
       metrics[kpiId] = (metrics[kpiId] ?? 0) + 1;
     }
 

@@ -459,7 +459,7 @@ describe('UnifiedCaseHub', () => {
     };
     renderTechHub({ initialEvents: [revisionEvent, adjEvent] });
     const panel = activityScroll();
-    expect(within(panel).getByText(/Ajuste solicitado por el solicitante/i)).toBeInTheDocument();
+    expect(within(panel).getByText(/Ajuste requerido por el solicitante/i)).toBeInTheDocument();
     expect(within(panel).getByText(/Reducir contorno distal/i)).toBeInTheDocument();
   });
 
@@ -514,7 +514,7 @@ describe('UnifiedCaseHub', () => {
       </ToastProvider>,
     );
     const panel = activityScroll();
-    expect(within(panel).getByText('Ajuste solicitado por el solicitante')).toBeInTheDocument();
+    expect(within(panel).getByText('Ajuste requerido por el solicitante')).toBeInTheDocument();
     expect(within(panel).getByText(/Reducir vértice incisal/i)).toBeInTheDocument();
   });
 
@@ -607,7 +607,7 @@ describe('UnifiedCaseHub', () => {
       </ToastProvider>,
     );
     const alerts = screen.getByTestId('uch-inline-alerts');
-    expect(within(alerts).getByText(/Ajuste solicitado por el solicitante/i)).toBeInTheDocument();
+    expect(within(alerts).getByText(/Ajuste requerido por el solicitante/i)).toBeInTheDocument();
     expect(within(alerts).getByText(/Afilar incisal central/i)).toBeInTheDocument();
     expect(within(alerts).getByText(/Unificar contactos proximales/i)).toBeInTheDocument();
     expect(within(alerts).queryByText(/Texto legado que no debe mostrarse/i)).not.toBeInTheDocument();

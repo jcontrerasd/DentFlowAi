@@ -916,7 +916,7 @@ export default function UnifiedCaseHub({
               >
                 {showTechRevisionFromDeliveryBanner && techLatestRevisionComment && (
                   <div className="rounded-lg border-l-2 border-warning/20 bg-surface-off/40 pl-3 pr-2 py-2">
-                    <p className="text-[10px] text-faint mb-1">Ajuste solicitado por el solicitante</p>
+                    <p className="text-[10px] text-faint mb-1">Ajuste requerido por el solicitante</p>
                     <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{techLatestRevisionComment}</p>
                   </div>
                 )}

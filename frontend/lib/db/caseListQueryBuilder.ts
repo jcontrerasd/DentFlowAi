@@ -306,6 +306,19 @@ export function buildCaseListFilterWhere(
     );
   }
 
+  // Calidad: separa los completados según la calificación del revisor (review dimension='quality').
+  if (filters.qualityRatingState) {
+    const hasQualityReview = sql`EXISTS (
+      SELECT 1 FROM review r
+      WHERE r.clinical_case_id = ${clinicalCase.id}
+        AND r.reviewer_id = ${userId}
+        AND r.dimension = 'quality'
+    )`;
+    parts.push(
+      filters.qualityRatingState === 'pending' ? sql`NOT ${hasQualityReview}` : hasQualityReview,
+    );
+  }
+
   if (isTech) {
     if (filters.offerDateStart) {
       parts.push(

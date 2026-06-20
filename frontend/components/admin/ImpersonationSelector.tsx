@@ -6,9 +6,14 @@ import { getUsersByRoleAction } from '@/lib/db/actions/user';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus, Inbox, ClipboardCheck } from 'lucide-react';
 
-export default function ImpersonationSelector() {
+export default function ImpersonationSelector({ onOpenChange, collapsed }: { onOpenChange?: (open: boolean) => void; collapsed?: boolean }) {
   const { user, userProfile, isSimulating, startSimulation, stopSimulation, simulatedProfile } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+
+  const setIsOpenWithCallback = (val: boolean) => {
+    setIsOpen(val);
+    onOpenChange?.(val);
+  };
   const [confirmStop, setConfirmStop] = useState(false);
   const [roleMode, setRoleMode] = useState<'dentista' | 'tecnico' | 'calidad'>('dentista');
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -44,7 +49,7 @@ export default function ImpersonationSelector() {
     <div className="relative">
       {/* Botón Principal / Trigger */}
       <button 
-        onClick={() => { setIsOpen(!isOpen); if (!isOpen) setConfirmStop(false); }}
+        onClick={() => { setIsOpenWithCallback(!isOpen); if (!isOpen) setConfirmStop(false); }}
         className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all ${
           isSimulating 
           ? 'bg-error-hl border-error/20 text-error shadow-lg shadow-sm' 
@@ -52,17 +57,21 @@ export default function ImpersonationSelector() {
         }`}
       >
         <ShieldAlert className={`w-4 h-4 ${isSimulating ? 'animate-pulse' : ''}`} />
-        <span className="text-[10px] font-bold uppercase tracking-wider hidden lg:block">
-          {isSimulating ? `Mimetizado: ${simulatedProfile?.fullName || 'Usuario'}` : 'Simulación Maestro'}
-        </span>
-        <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        {!collapsed && (
+          <>
+            <span className="text-[10px] font-bold uppercase tracking-wider">
+              {isSimulating ? `Mimetizado: ${simulatedProfile?.fullName || 'Usuario'}` : 'Simulación Maestro'}
+            </span>
+            <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </>
+        )}
       </button>
 
       <AnimatePresence>
         {isOpen && (
           <>
             {/* Backdrop para cerrar */}
-            <div className="fixed inset-0 z-40" onClick={() => { setIsOpen(false); setConfirmStop(false); }} />
+            <div className="fixed inset-0 z-40" onClick={() => { setIsOpenWithCallback(false); setConfirmStop(false); }} />
             
             {/* Popover */}
             <motion.div 
@@ -75,7 +84,7 @@ export default function ImpersonationSelector() {
               <div className="p-5 bg-gradient-to-b from-slate-800/50 to-transparent border-b border-divider">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-primary">Elegir Identidad</h3>
-                    <button onClick={() => setIsOpen(false)} className="text-faint hover:text-foreground transition-colors">
+                    <button onClick={() => setIsOpenWithCallback(false)} className="text-faint hover:text-foreground transition-colors">
                         <X className="w-4 h-4" />
                     </button>
                 </div>
@@ -180,7 +189,7 @@ export default function ImpersonationSelector() {
                           Cancelar
                         </button>
                         <button
-                          onClick={() => { stopSimulation(); setIsOpen(false); }}
+                          onClick={() => { stopSimulation(); setIsOpenWithCallback(false); }}
                           className="flex-1 py-2.5 bg-error hover:bg-error/80 text-inverse text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-sm"
                         >
                           Sí, salir

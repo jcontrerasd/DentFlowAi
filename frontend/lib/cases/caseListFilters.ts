@@ -27,6 +27,11 @@ export type CaseListQueryFilters = {
   offerDateEnd?: string;
   techPreset?: TechListPreset | null;
   sortOrder?: 'recent' | 'old';
+  /**
+   * Calidad: acota completados según la calificación del revisor (review dimension='quality').
+   * `pending` = sin calificar (bucket "Por calificar"); `rated` = ya calificado ("Completados").
+   */
+  qualityRatingState?: 'pending' | 'rated';
 };
 
 export const TECH_ACTIVE_CASE_STATUSES = [
@@ -361,11 +366,15 @@ export function filtersFromDashboardMetricId(
       porCertificar: [CASE_STATUSES.EN_REVISION_CALIDAD],
       certificadas: [CASE_STATUSES.CERTIFICADO_CALIDAD],
       enProceso: [CASE_STATUSES.EN_EJECUCION, CASE_STATUSES.CAMBIOS_EN_PROCESO, CASE_STATUSES.EN_REVISION],
+      // `porCalificar` y `completado` comparten estado COMPLETADO; los separa qualityRatingState.
+      porCalificar: [CASE_STATUSES.COMPLETADO],
       completado: [CASE_STATUSES.COMPLETADO],
     };
     const statuses = calidadKpiToStatuses[metricId];
     if (!statuses?.length) return { ...DEFAULT_CASE_LIST_FILTERS };
-    return { ...DEFAULT_CASE_LIST_FILTERS, caseStatuses: statuses, techPreset: null };
+    const qualityRatingState =
+      metricId === 'porCalificar' ? 'pending' : metricId === 'completado' ? 'rated' : undefined;
+    return { ...DEFAULT_CASE_LIST_FILTERS, caseStatuses: statuses, techPreset: null, qualityRatingState };
   }
   const dentistKpiToStatuses: Record<string, string[]> = {
     borrador: [CASE_STATUSES.BORRADOR],

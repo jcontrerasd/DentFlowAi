@@ -67,6 +67,7 @@ export default function UchDealSummary({
     quotedPrice != null &&
     !showPactada &&
     !techQuoteStatusExcluded &&
+    !techRejectedSummary &&
     (assigned || (!assigned && (caseStatus === 'enEvaluacion' || caseStatus === 'propuestaLista')));
 
   const sentLabel =

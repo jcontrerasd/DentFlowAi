@@ -41,6 +41,7 @@ import {
 } from '@/lib/uchPresentation';
 import { filterCaseEventsForUchViewer } from '@/lib/caseEventsUchFilter';
 import type { CaseListQueryFilters } from '@/lib/cases/caseListFilters';
+import { isQualityRatingPending } from '@/lib/cases/qualityRatingPending';
 import {
   buildActiveCaseVisibilityWhere,
   userCanAccessClinicalCase,
@@ -566,6 +567,26 @@ export async function listCasesByOrganization(
     const evalCaseIds = results.filter((c) => c.status === 'enEvaluacion').map((c) => c.id);
     const quoteDeadlines = await getCaseQuoteDeadlineAtBatch(evalCaseIds);
 
+    // Calidad: marca por caso "por calificar" (completado sin review dimension='quality' del revisor).
+    const isCalidad = role === 'calidad';
+    let qualityRatedCaseIds = new Set<string>();
+    if (isCalidad && isQualityGateEnabled()) {
+      const completedIds = results
+        .filter((c: any) => c.status === 'completado')
+        .map((c: any) => c.id);
+      if (completedIds.length > 0) {
+        const reviewed = await db
+          .select({ clinicalCaseId: review.clinicalCaseId })
+          .from(review)
+          .where(and(
+            inArray(review.clinicalCaseId, completedIds),
+            eq(review.reviewerId, userId as string),
+            eq(review.dimension, 'quality'),
+          ));
+        qualityRatedCaseIds = new Set(reviewed.map((r) => r.clinicalCaseId));
+      }
+    }
+
     const processedResults = results.map((c: any) => {
       const row = c as typeof c & { invitations?: typeof caseAssignment.$inferSelect[] };
       const invRows = Array.isArray(row.invitations) ? row.invitations : [];
@@ -593,6 +614,14 @@ export async function listCasesByOrganization(
         viewerInvitation: viewerInv ?? null,
         invitationExpiresAt:
           c.status === 'enEvaluacion' ? quoteDeadlines.get(c.id) ?? null : null,
+        qualityRatingPending: isCalidad
+          ? isQualityRatingPending({
+              status: c.status,
+              qualityReviewerId: (c as any).qualityReviewerId ?? null,
+              viewerId: userId as string,
+              hasQualityReview: qualityRatedCaseIds.has(c.id),
+            })
+          : false,
       };
     });
 
@@ -1436,6 +1465,17 @@ export async function approveWorkAction(
       
       if (updatedCase && updatedCase.assignedTechnicianId) {
         await notifyUser(updatedCase.assignedTechnicianId, 'TRABAJO_APROBADO', { caseId });
+      }
+
+      // Compuerta de Calidad: el caso quedó completado y el revisor asignado todavía
+      // debe calificar al técnico. La señal "por calificar" persiste en sus superficies
+      // hasta que envíe la nota; esta notificación lo avisa al cierre. Gateada por el flag
+      // (sin Quality Gate no hay quality_reviewer_id asignado).
+      if (isQualityGateEnabled() && updatedCase?.qualityReviewerId) {
+        await notifyUser(updatedCase.qualityReviewerId, 'CALIDAD_POR_CALIFICAR', {
+          caseId,
+          caseNumber: updatedCase.caseNumber,
+        });
       }
 
       // Registrar en la nueva tabla (UCH)

@@ -114,6 +114,8 @@ export type NotificationType =
   /** Calidad: SLA de revisión por vencer / vencido (sin auto-acción). */
   | 'QUALITY_PLAZO_POR_VENCER'
   | 'QUALITY_PLAZO_VENCIDO'
+  /** Calidad: el caso se completó y queda pendiente la calificación del técnico. */
+  | 'CALIDAD_POR_CALIFICAR'
   /** Técnico: comunicación de rollout del modelo de disponibilidad (Fase 7). */
   | 'ROLLOUT_PROXIMO'
   | 'ROLLOUT_ACTIVADO';
@@ -149,6 +151,7 @@ const NOTIFICATION_CHANNELS: Partial<Record<NotificationType, NotificationChanne
   CASO_DERIVADO_CALIDAD: { email: true, inApp: true },
   QUALITY_PLAZO_POR_VENCER: { email: true, inApp: true },
   QUALITY_PLAZO_VENCIDO: { email: true, inApp: true },
+  CALIDAD_POR_CALIFICAR: { email: true, inApp: true },
   ROLLOUT_PROXIMO: { email: true, inApp: true },
   ROLLOUT_ACTIVADO: { email: true, inApp: true },
 };
@@ -286,6 +289,10 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   QUALITY_PLAZO_VENCIDO: {
     subject: 'Calidad: el plazo para certificar venció',
     body: (data) => `Hola,\n\nEl plazo de revisión de Calidad del caso ${data.caseNumber || data.caseId} venció. No se certificó ni rechazó nada automáticamente; el técnico sigue esperando tu respuesta.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  CALIDAD_POR_CALIFICAR: {
+    subject: 'Calidad: tienes un caso por calificar',
+    body: (data) => `Hola,\n\nEl caso ${data.caseNumber || data.caseId} se completó y queda pendiente tu calificación de Calidad al técnico. Ingresa al Hub del caso para enviarla.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
   ROLLOUT_PROXIMO: {
     subject: 'DentFlowAi: pronto tendrás más control sobre tus invitaciones',

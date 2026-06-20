@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, ClipboardCheck } from 'lucide-react';
 import React, { useMemo } from 'react';
 import { useDeadlineMs, useRemainingMsUntil, formatCountdownHMS } from '@/lib/hooks/useRemainingUntil';
 import { usePathname, useRouter } from 'next/navigation';
@@ -258,8 +258,14 @@ export default function MarketplaceCaseCard({
               </div>
             </div>
           ) : isCalidad ? (
-            <div className="w-full min-h-10 flex items-center px-3 rounded-xl bg-background border border-divider">
+            <div className="w-full min-h-10 flex items-center gap-2 px-3 rounded-xl bg-background border border-divider">
               <StatusBadge status={String(c.status ?? '')} />
+              {c.qualityRatingPending && (
+                <span className="ml-auto inline-flex items-center gap-1 text-[9px] font-bold uppercase tracking-wider text-warning bg-warning-hl px-1.5 py-0.5 rounded-md shrink-0">
+                  <ClipboardCheck className="w-3 h-3" aria-hidden />
+                  Por calificar
+                </span>
+              )}
             </div>
           ) : !isDentist && techStatusInput ? (
             <CaseViewerStatusStripe
