@@ -2386,6 +2386,7 @@ function CaseDetailPageContent() {
           workDeadline={techOfferRejectedView ? undefined : clinicalCase?.workDeadline}
           variant={techOfferRejectedView ? 'techRejected' : 'case'}
           viewerRole={viewerRole}
+          currentResponsibility={clinicalCase?.currentResponsibility ?? null}
         />
       </div>
 

@@ -577,9 +577,13 @@ export default function UnifiedCaseHub({
     return String(oldest.id);
   }, [events]);
 
+  // Re-entrega durante el bucle de Calidad: el caso sigue en `enRevisionCalidad` pero la
+  // responsabilidad es del técnico (Calidad pidió ajustes). Debe poder volver a entregar.
+  const isQualityAdjustmentByTech =
+    caseStatus === 'enRevisionCalidad' && clinicalCase?.currentResponsibility === 'tecnico';
   const canTechSubmitDesignDelivery =
     actingAsTecnico &&
-    (caseStatus === 'enEjecucion' || caseStatus === 'cambiosEnProceso') &&
+    (caseStatus === 'enEjecucion' || caseStatus === 'cambiosEnProceso' || isQualityAdjustmentByTech) &&
     clinicalCase?.assignedTechnicianId === currentUser?.id &&
     !!(clinicalCase?.workStartedAt || clinicalCase?.workDeadline);
 
@@ -912,7 +916,7 @@ export default function UnifiedCaseHub({
               >
                 {showTechRevisionFromDeliveryBanner && techLatestRevisionComment && (
                   <div className="rounded-lg border-l-2 border-warning/20 bg-surface-off/40 pl-3 pr-2 py-2">
-                    <p className="text-[10px] text-faint mb-1">Ajustes solicitados</p>
+                    <p className="text-[10px] text-faint mb-1">Ajuste solicitado por el solicitante</p>
                     <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{techLatestRevisionComment}</p>
                   </div>
                 )}

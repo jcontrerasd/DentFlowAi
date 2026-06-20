@@ -59,6 +59,8 @@ interface CaseWorkflowStepperProps {
   variant?: CaseWorkflowStepperVariant;
   /** v5.19 — Rol del viewer: define si se muestra el paso "Revisión calidad" (oculto al dentista). */
   viewerRole?: 'dentista' | 'tecnico' | 'calidad' | 'admin';
+  /** v5.19 — Responsabilidad actual; en la compuerta de Calidad marca de quién es la pelota. */
+  currentResponsibility?: string | null;
 }
 
 export default function CaseWorkflowStepper({
@@ -66,6 +68,7 @@ export default function CaseWorkflowStepper({
   workDeadline,
   variant = 'case',
   viewerRole = 'dentista',
+  currentResponsibility = null,
 }: CaseWorkflowStepperProps) {
   const rawStatus = String(currentStatus || 'borrador').trim() || 'borrador';
   const techRejected = variant === 'techRejected';
@@ -224,6 +227,11 @@ export default function CaseWorkflowStepper({
               {step.status === 'enEjecucion' && deadlineText && (
                 <p className="text-[7px] text-muted text-center leading-tight whitespace-nowrap">
                   Entrega: {deadlineText}
+                </p>
+              )}
+              {step.status === 'enRevisionCalidad' && isCurrent && showQualityStep && (
+                <p className="text-[7px] text-muted text-center leading-tight whitespace-nowrap">
+                  {currentResponsibility === 'tecnico' ? 'Ajustes del técnico' : 'En revisión'}
                 </p>
               )}
             </div>

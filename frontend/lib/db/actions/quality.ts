@@ -4,8 +4,10 @@
  * Compuerta de Calidad — server actions del rol `calidad` (gated por QUALITY_GATE_ENABLED).
  *
  * Flujo: el técnico entrega (`submitReviewAction` en cases.ts) → caso `enRevisionCalidad`.
- * Calidad itera con el técnico igual que el dentista hoy:
- *   - `requestQualityRevisionAction` → pide ajustes → `enEjecucion` (el técnico re-entrega).
+ * Calidad itera con el técnico SIN salir de la compuerta (el caso permanece en
+ * `enRevisionCalidad` durante todo el bucle; `currentResponsibility` marca de quién es la pelota):
+ *   - `requestQualityRevisionAction` → pide ajustes → sigue `enRevisionCalidad`, responsibility `tecnico`
+ *     (SLA de Calidad en pausa); el técnico re-entrega y la responsabilidad vuelve a `calidad`.
  *   - `certifyQualityAction` → certifica → `certificadoCalidad` (NO reenvía; lo controla el técnico).
  * Recién con `sendToDentistAction` (acción explícita del técnico) la entrega llega al dentista.
  *
@@ -94,8 +96,14 @@ export async function requestQualityRevisionAction(caseId: string, reason: strin
 
       await tx.update(clinicalCase)
         .set({
-          status: CASE_STATUSES.EN_EJECUCION,
+          // El caso permanece en la compuerta de Calidad durante todo el bucle de ajustes;
+          // `currentResponsibility` indica de quién es la pelota (técnico debe re-entregar).
+          status: CASE_STATUSES.EN_REVISION_CALIDAD,
           currentResponsibility: 'tecnico',
+          // Pausa el SLA de Calidad mientras ajusta el técnico (se reinicia al re-entregar).
+          lastQualitySubmittedAt: null,
+          qualityReminderSentAt: null,
+          qualityOverdueNotifiedAt: null,
           lastActivityAt: new Date(),
           updatedAt: new Date(),
         })
@@ -115,7 +123,7 @@ export async function requestQualityRevisionAction(caseId: string, reason: strin
           visibleTo: 'tecnico',
           qualityScoped: true,
         },
-        stateChange: { from: CASE_STATUSES.EN_REVISION_CALIDAD, to: CASE_STATUSES.EN_EJECUCION },
+        // Sin cambio de fase pública: sigue en la compuerta de Calidad (cambia la responsabilidad).
       }, tx);
 
       if (caseRow.assigned_technician_id) {

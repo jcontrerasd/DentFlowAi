@@ -4,7 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import {
-  Activity, AlertCircle, Box, CheckCircle2, Download, FileCheck2, FileText, GitBranch, Hammer, MessageSquareWarning, Send, Star, Undo2, User, XCircle,
+  Activity, AlertCircle, Box, CheckCircle2, Download, FileCheck2, FileText, GitBranch, Hammer, MessageSquareWarning, Send, ShieldAlert, Star, Undo2, User, XCircle,
 } from 'lucide-react';
 import UchDeriveQualityDialog from '@/components/cases/uch/UchDeriveQualityDialog';
 import { resolveUchThreadLane } from '@/lib/uchThreadLane';
@@ -729,7 +729,7 @@ export default function UchEventBubble({
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-warning">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px] font-bold">Ajustes solicitados</span>
+                  <span className="text-[11px] font-bold">Ajuste solicitado por el solicitante</span>
                 </div>
                 <p className="text-[10px] font-medium text-faint">Detalle del ajuste</p>
                 {adjustmentText ? (
@@ -763,9 +763,10 @@ export default function UchEventBubble({
             const canView3DCal = !!onView3D && calFiles.length > 0 && (!!calDeliveryId || calVersion !== null);
             return (
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-warning">
-                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px] font-bold">Ajustes solicitados</span>
+                <div className="flex items-center gap-2 text-primary">
+                  <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="text-[11px] font-bold">Ajuste solicitado por Calidad</span>
+                  <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary-hl text-primary">Calidad</span>
                 </div>
                 <p className="text-[10px] font-medium text-faint">Detalle del ajuste</p>
                 {adjustmentText ? (
