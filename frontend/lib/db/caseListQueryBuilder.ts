@@ -311,7 +311,6 @@ export function buildCaseListFilterWhere(
     const hasQualityReview = sql`EXISTS (
       SELECT 1 FROM review r
       WHERE r.clinical_case_id = ${clinicalCase.id}
-        AND r.reviewer_id = ${userId}
         AND r.dimension = 'quality'
     )`;
     parts.push(

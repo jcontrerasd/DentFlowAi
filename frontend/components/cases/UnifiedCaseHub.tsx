@@ -23,6 +23,7 @@ import type { DeliveryFileEntry } from '@/components/cases/uch/UchDeliveryPanel'
 import DeliveryViewer3DModal from '@/components/cases/uch/DeliveryViewer3DModal';
 import UchFauchardActionsPanel from '@/components/cases/uch/UchFauchardActionsPanel';
 import UchSendToDentistPanel from '@/components/cases/uch/UchSendToDentistPanel';
+import QualityIterationHistory from '@/components/cases/uch/QualityIterationHistory';
 
 import { CaseDesiredDeliveryChip } from '@/components/cases/CaseDesiredDeliveryChip';
 import { shouldShowDesiredDeliveryInUch } from '@/lib/cases/caseDeliveryPresentation';
@@ -257,7 +258,7 @@ export default function UnifiedCaseHub({
   const [qualityComment, setQualityComment] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
-  const [viewer3DState, setViewer3DState] = useState<{ deliveryId: string; version: number; files: string[]; dentistNote?: string } | null>(null);
+  const [viewer3DState, setViewer3DState] = useState<{ deliveryId: string; version: number; files: string[]; dentistNote?: string; readonly?: boolean } | null>(null);
   const [quotePrice, setQuotePrice] = useState('');
   const [quoteDays, setQuoteDays] = useState(0);
   const [quoteFlatUnit, setQuoteFlatUnit] = useState<'dias' | 'horas'>('dias');
@@ -624,6 +625,24 @@ export default function UnifiedCaseHub({
       (clinicalCase?.deliveries as { id?: string; status?: string; files?: string[]; version?: number }[] | undefined) ?? [];
     return deliveriesList.find((d) => d.status === 'pending');
   }, [clinicalCase?.deliveries]);
+
+  // Último rechazo del dentista — disponible para calidad en re-entregas post-ajuste.
+  const lastDentistRejection = useMemo(() => {
+    if (!actingAsCalidad || caseStatus !== 'enRevisionCalidad') return null;
+    type Delivery = { id?: string; status?: string; reviewComment?: string; files?: string[] | unknown; version?: number };
+    const deliveriesList = (clinicalCase?.deliveries as Delivery[] | undefined) ?? [];
+    const rejected = deliveriesList
+      .filter((d) => d.status === 'rejected' && d.reviewComment)
+      .sort((a, b) => (b.version ?? 0) - (a.version ?? 0));
+    const d = rejected[0];
+    if (!d?.id || !d.reviewComment) return null;
+    return {
+      deliveryId: d.id,
+      version: d.version ?? 0,
+      reason: d.reviewComment,
+      files: Array.isArray(d.files) ? (d.files as string[]).filter(Boolean) : [],
+    };
+  }, [actingAsCalidad, caseStatus, clinicalCase?.deliveries]);
 
   const includeDelivery = canTechSubmitDesignDelivery;
 
@@ -1012,6 +1031,16 @@ export default function UnifiedCaseHub({
               className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-2 custom-scrollbar bg-background"
             >
 
+              {/* Historial de rondas para calidad (Fase 3): visible solo para el revisor activo cuando hay más de una entrega. */}
+              {actingAsCalidad && caseStatus === 'enRevisionCalidad' && ((clinicalCase?.deliveries as unknown[])?.length ?? 0) > 1 && (
+                <QualityIterationHistory
+                  deliveries={(clinicalCase?.deliveries as Parameters<typeof QualityIterationHistory>[0]['deliveries']) ?? []}
+                  onViewDelivery={(deliveryId, version, files) =>
+                    setViewer3DState({ deliveryId, version, files, readonly: true })
+                  }
+                />
+              )}
+
               {/* Entrega certificada (v5.19): el técnico decide cuándo enviarla al dentista. */}
               {actingAsTecnico && uchViewerIsAssignedTechnician && caseStatus === 'certificadoCalidad' && (
                 <UchSendToDentistPanel
@@ -1029,6 +1058,7 @@ export default function UnifiedCaseHub({
                       <UchDeliveryPanel
                         caseId={caseId}
                         organizationId={clinicalCase?.organizationId}
+                        qualityGateActive={!!clinicalCase?.qualityGateActive}
                         deliveryNotes={deliveryNotes}
                         setDeliveryNotes={setDeliveryNotes}
                         deliveryFiles={deliveryFiles}
@@ -1157,6 +1187,10 @@ export default function UnifiedCaseHub({
                         return ok;
                       }}
                       onDeriveQuality={() => { onInvitationUpdate?.(); }}
+                      dentistRejectionContext={lastDentistRejection ?? undefined}
+                      onViewRejectedDelivery={(deliveryId, version, files) =>
+                        setViewer3DState({ deliveryId, version, files, readonly: true })
+                      }
                     />
                   );
                 }
@@ -1217,12 +1251,13 @@ export default function UnifiedCaseHub({
         caseNumber={clinicalCase?.caseNumber ?? ''}
         viewerRole={actingAsDentista ? 'dentista' : actingAsTecnico ? 'tecnico' : actingAsCalidad ? 'calidad' : 'admin'}
         dentistNote={viewer3DState.dentistNote}
-        canReview={!!(actingAsDentista && caseStatus === 'enRevision' && pendingDeliveryForReview)}
+        canReview={!!(actingAsDentista && caseStatus === 'enRevision' && pendingDeliveryForReview && !viewer3DState?.readonly)}
         canAnnotate={!!(
-          (actingAsDentista && caseStatus === 'enRevision' && pendingDeliveryForReview) ||
-          (actingAsCalidad && caseStatus === 'enRevisionCalidad' && pendingDeliveryForReview)
+          !viewer3DState?.readonly &&
+          ((actingAsDentista && caseStatus === 'enRevision' && pendingDeliveryForReview) ||
+          (actingAsCalidad && caseStatus === 'enRevisionCalidad' && pendingDeliveryForReview))
         )}
-        canReviewQuality={!!(actingAsCalidad && caseStatus === 'enRevisionCalidad' && pendingDeliveryForReview)}
+        canReviewQuality={!!(actingAsCalidad && caseStatus === 'enRevisionCalidad' && pendingDeliveryForReview && !viewer3DState?.readonly)}
         onApprove={async () => {
           setIsSubmittingReview(true);
           try {

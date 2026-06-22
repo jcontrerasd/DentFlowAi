@@ -24,10 +24,20 @@ export default function DashboardKpiStrip({
 }: DashboardKpiStripProps) {
   const defs = getDashboardMetricDefsForRole(role);
 
+  // KPIs del flujo v1 (cotización múltiple) que ya no aplican en v2.
+  // Se ocultan permanentemente salvo que tengan casos históricos activos.
+  const LEGACY_ONLY = new Set([
+    'propuestaLista',       // dentista — flujo de comparativo v1
+    'cotizacionEnviada',    // técnico — cotización múltiple v1
+    'ofertaNoSeleccionada', // técnico — cotización múltiple v1
+  ]);
+
+  // 'otros' y 'pausado' son válidos pero residuales: solo aparecen si hay casos.
+  const HIDE_WHEN_ZERO = new Set(['otros', 'pausado']);
+
   const visibleDefs = defs.filter((d) => {
-    if (d.id === 'otros' || d.id === 'pausado') {
-      return (metrics[d.id] ?? 0) > 0;
-    }
+    if (LEGACY_ONLY.has(d.id)) return (metrics[d.id] ?? 0) > 0;
+    if (HIDE_WHEN_ZERO.has(d.id)) return (metrics[d.id] ?? 0) > 0;
     return true;
   });
 

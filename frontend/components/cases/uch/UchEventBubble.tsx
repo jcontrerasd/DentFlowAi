@@ -4,7 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import {
-  Activity, AlertCircle, Box, CheckCircle2, Download, FileCheck2, FileText, GitBranch, Hammer, MessageSquareWarning, Send, ShieldAlert, Star, Undo2, User, XCircle,
+  Activity, AlertCircle, Box, CheckCircle2, ChevronDown, Download, Eye, FileCheck2, FileText, GitBranch, Hammer, MessageSquareWarning, Send, ShieldAlert, Star, Undo2, User, XCircle,
 } from 'lucide-react';
 import UchDeriveQualityDialog from '@/components/cases/uch/UchDeriveQualityDialog';
 import { resolveUchThreadLane } from '@/lib/uchThreadLane';
@@ -57,30 +57,85 @@ function EventOfferQuoteDetail({
   );
 }
 
+type DentistRejectionContext = {
+  deliveryId: string;
+  version: number;
+  reason: string;
+  files: string[];
+};
+
 function QualityReviewControls({
   isSelfLane,
   onCertifyQuality,
   onQualityRequestChanges,
   onDeriveQuality,
+  onViewRejectedDelivery,
   caseId,
   comment,
   setComment,
+  dentistRejectionContext,
 }: {
   isSelfLane: boolean;
   onCertifyQuality?: (comment: string) => Promise<boolean | void>;
   onQualityRequestChanges?: (reason: string) => Promise<boolean | void>;
   onDeriveQuality?: () => void;
+  onViewRejectedDelivery?: (deliveryId: string, version: number, files: string[]) => void;
   caseId: string;
   comment: string;
   setComment: (v: string) => void;
+  dentistRejectionContext?: DentistRejectionContext;
 }) {
   const [certifyStep, setCertifyStep] = React.useState<'choose' | 'confirm'>('choose');
   const [changesStep, setChangesStep] = React.useState<'choose' | 'confirm'>('choose');
   const [busy, setBusy] = React.useState<null | 'certify' | 'changes'>(null);
   const [deriveOpen, setDeriveOpen] = React.useState(false);
+  const [contextExpanded, setContextExpanded] = React.useState(true);
 
   return (
     <div className={`pt-2 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'} space-y-2`}>
+      {dentistRejectionContext && (
+        <div className="rounded-md border border-warning/40 bg-warning/5 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setContextExpanded((v) => !v)}
+            className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-warning/10 transition-colors"
+          >
+            <div className="flex items-center gap-1.5 text-warning">
+              <AlertCircle className="w-3 h-3 flex-shrink-0" aria-hidden />
+              <span className="text-[11px] font-semibold">
+                Ajuste solicitado por el solicitante (v{dentistRejectionContext.version})
+              </span>
+            </div>
+            <ChevronDown
+              className={`w-3 h-3 text-warning/70 transition-transform duration-150 ${contextExpanded ? 'rotate-180' : ''}`}
+              aria-hidden
+            />
+          </button>
+          {contextExpanded && (
+            <div className="px-2.5 pb-2 space-y-2">
+              <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
+                {dentistRejectionContext.reason}
+              </p>
+              {dentistRejectionContext.files.length > 0 && onViewRejectedDelivery && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onViewRejectedDelivery(
+                      dentistRejectionContext.deliveryId,
+                      dentistRejectionContext.version,
+                      dentistRejectionContext.files,
+                    )
+                  }
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  <Eye className="w-3 h-3" aria-hidden />
+                  Ver entrega marcada
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {certifyStep === 'confirm' ? (
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] text-muted">¿Confirmas que certificas esta entrega?</span>
@@ -219,6 +274,10 @@ type UchEventBubbleProps = {
   setQualityComment?: (v: string) => void;
   /** caseId del caso clínico — requerido para UchDeriveQualityDialog */
   caseId?: string;
+  /** Contexto del último rechazo del dentista — visible solo para calidad en re-entregas post-ajuste. */
+  dentistRejectionContext?: DentistRejectionContext;
+  /** Abre el visor 3D de la entrega rechazada por el dentista (en modo solo lectura). */
+  onViewRejectedDelivery?: (deliveryId: string, version: number, files: string[]) => void;
 };
 
 export default function UchEventBubble({
@@ -248,6 +307,8 @@ export default function UchEventBubble({
   qualityComment = '',
   setQualityComment,
   caseId,
+  dentistRejectionContext,
+  onViewRejectedDelivery,
 }: UchEventBubbleProps) {
   const payloadVisibleTo = (event.payload as Record<string, unknown> | undefined)?.visibleTo;
   const { lane, showAsFauchard } = resolveUchThreadLane(event, {
@@ -708,9 +769,11 @@ export default function UchEventBubble({
                     onCertifyQuality={onCertifyQuality}
                     onQualityRequestChanges={onQualityRequestChanges}
                     onDeriveQuality={onDeriveQuality}
+                    onViewRejectedDelivery={onViewRejectedDelivery}
                     caseId={caseId}
                     comment={qualityComment}
                     setComment={setQualityComment ?? (() => {})}
+                    dentistRejectionContext={dentistRejectionContext}
                   />
                 )}
               </div>

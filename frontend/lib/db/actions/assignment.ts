@@ -6,6 +6,7 @@
  */
 
 import { db } from '@/lib/db';
+import { perfLog, perfStart } from '@/lib/perfLog';
 import {
   caseAssignment,
   clinicalCase,
@@ -144,6 +145,11 @@ export async function deriveScenarioFromCase(caseId: string): Promise<ResolvedSc
   return scenario;
 }
 
+interface BatchFilterSets {
+  cooldownSet: Set<string>;
+  skillSet: Set<string>;
+}
+
 async function checkTechnicianPassesFilters(
   tech: typeof user.$inferSelect,
   scenario: ResolvedScenario,
@@ -153,6 +159,7 @@ async function checkTechnicianPassesFilters(
   now: Date,
   inactivityThreshold: Date,
   cooldownThreshold: Date,
+  batch?: BatchFilterSets,
 ): Promise<{ ok: boolean; reason?: ExclusionReason }> {
   if (exclude.has(tech.id)) return { ok: false, reason: 'excluded_manually' };
   if (!tech.isAvailable) return { ok: false, reason: 'not_available' };
@@ -166,38 +173,50 @@ async function checkTechnicianPassesFilters(
     return { ok: false, reason: 'inactive' };
   }
 
-  const [recent] = await db
-    .select({ id: caseAssignment.id })
-    .from(caseAssignment)
-    .where(
-      and(
-        eq(caseAssignment.technicianId, tech.id),
-        gt(caseAssignment.assignedAt, cooldownThreshold),
-        eq(caseAssignment.workType, scenario.workType),
-      ),
-    )
-    .limit(1);
-  if (recent) return { ok: false, reason: 'cooldown' };
+  if (batch) {
+    if (batch.cooldownSet.has(tech.id)) return { ok: false, reason: 'cooldown' };
+    if (!batch.skillSet.has(tech.id)) return { ok: false, reason: 'insufficient_skill' };
+  } else {
+    const t0cooldown = perfStart();
+    const [recent] = await db
+      .select({ id: caseAssignment.id })
+      .from(caseAssignment)
+      .where(
+        and(
+          eq(caseAssignment.technicianId, tech.id),
+          gt(caseAssignment.assignedAt, cooldownThreshold),
+          eq(caseAssignment.workType, scenario.workType),
+        ),
+      )
+      .limit(1);
+    perfLog('checkFilters.cooldown_query', Date.now() - t0cooldown, { techId: tech.id });
+    if (recent) return { ok: false, reason: 'cooldown' };
 
-  const minSkill = MIN_SKILL_FOR_CATEGORY[scenario.caseLeague] ?? 1;
-  const [skill] = await db
-    .select()
-    .from(technicianSkill)
-    .where(
-      and(
-        eq(technicianSkill.userId, tech.id),
-        eq(technicianSkill.workType, scenario.workType),
-        gte(technicianSkill.designLevel, minSkill),
-      ),
-    )
-    .limit(1);
-  if (!skill) return { ok: false, reason: 'insufficient_skill' };
+    const minSkill = MIN_SKILL_FOR_CATEGORY[scenario.caseLeague] ?? 1;
+    const t0skill = perfStart();
+    const [skill] = await db
+      .select()
+      .from(technicianSkill)
+      .where(
+        and(
+          eq(technicianSkill.userId, tech.id),
+          eq(technicianSkill.workType, scenario.workType),
+          gte(technicianSkill.designLevel, minSkill),
+        ),
+      )
+      .limit(1);
+    perfLog('checkFilters.skill_query', Date.now() - t0skill, { techId: tech.id });
+    if (!skill) return { ok: false, reason: 'insufficient_skill' };
+  }
 
   if (isAvailabilityEnabled()) {
+    const t0avail = perfStart();
     await ensureTechnicianAvailabilityAction(tech.id);
     if (!(await computeEligibleAction(tech.id, scenario.category, 'cad'))) {
+      perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'ineligible' });
       return { ok: false, reason: 'availability_filter' };
     }
+    perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'eligible' });
   }
 
   return { ok: true };
@@ -209,29 +228,67 @@ export async function buildEligiblePoolForScenario(
   config: FauchardConfigRow,
   excludeTechIds: string[] = [],
 ): Promise<EligiblePoolResult> {
+  const t0total = perfStart();
   const now = new Date();
   const inactivityThreshold = new Date(now.getTime() - config.dInactivityDays * 86400000);
   const cooldownThreshold = new Date(now.getTime() - config.tCooldownMinutes * 60000);
   const exclude = new Set(excludeTechIds);
 
+  const t0fetch = perfStart();
   const candidates = await db
     .select()
     .from(user)
     .where(and(eq(user.role, 'tecnico'), eq(user.isActive, true), eq(user.isAvailable, true)));
+  perfLog('buildEligiblePool.fetch_candidates', Date.now() - t0fetch, { count: candidates.length });
+
+  const techIds = candidates.map(t => t.id);
+  const minSkill = MIN_SKILL_FOR_CATEGORY[scenario.caseLeague] ?? 1;
+
+  const t0batch = perfStart();
+  const [recentAssignments, eligibleSkills] = await Promise.all([
+    techIds.length > 0
+      ? db.select({ technicianId: caseAssignment.technicianId })
+          .from(caseAssignment)
+          .where(and(
+            inArray(caseAssignment.technicianId, techIds),
+            gt(caseAssignment.assignedAt, cooldownThreshold),
+            eq(caseAssignment.workType, scenario.workType),
+          ))
+      : Promise.resolve([]),
+    techIds.length > 0
+      ? db.select({ userId: technicianSkill.userId })
+          .from(technicianSkill)
+          .where(and(
+            inArray(technicianSkill.userId, techIds),
+            eq(technicianSkill.workType, scenario.workType),
+            gte(technicianSkill.designLevel, minSkill),
+          ))
+      : Promise.resolve([]),
+  ]);
+  perfLog('buildEligiblePool.batch_queries', Date.now() - t0batch, { candidates: techIds.length });
+
+  const batch: BatchFilterSets = {
+    cooldownSet: new Set(recentAssignments.map(r => r.technicianId)),
+    skillSet: new Set(eligibleSkills.map(s => s.userId)),
+  };
 
   for (const mode of ['strict', 'expand'] as const) {
     const pool: typeof user.$inferSelect[] = [];
+    const t0loop = perfStart();
     for (const tech of candidates) {
       const { ok } = await checkTechnicianPassesFilters(
-        tech, scenario, config, exclude, mode, now, inactivityThreshold, cooldownThreshold,
+        tech, scenario, config, exclude, mode, now, inactivityThreshold, cooldownThreshold, batch,
       );
       if (ok) pool.push(tech);
     }
+    perfLog('buildEligiblePool.filter_loop', Date.now() - t0loop, { mode, candidates: candidates.length, poolSize: pool.length });
     if (pool.length > 0) {
+      perfLog('buildEligiblePool.total', Date.now() - t0total, { mode, poolSize: pool.length, workType: scenario.workType });
       return { pool, leagueMode: mode, workType: scenario.workType, caseLeague: scenario.caseLeague, config };
     }
   }
 
+  perfLog('buildEligiblePool.total', Date.now() - t0total, { mode: 'none', poolSize: 0, workType: scenario.workType });
   return { pool: [], leagueMode: null, workType: scenario.workType, caseLeague: scenario.caseLeague, config };
 }
 
@@ -260,6 +317,33 @@ export async function evaluateTechniciansForScenario(
     .from(user)
     .where(and(eq(user.role, 'tecnico'), eq(user.isActive, true)));
 
+  const universeIds = universe.map(t => t.id);
+  const minSkill = MIN_SKILL_FOR_CATEGORY[scenario.caseLeague] ?? 1;
+  const [recentAssignments, eligibleSkills] = await Promise.all([
+    universeIds.length > 0
+      ? db.select({ technicianId: caseAssignment.technicianId })
+          .from(caseAssignment)
+          .where(and(
+            inArray(caseAssignment.technicianId, universeIds),
+            gt(caseAssignment.assignedAt, cooldownThreshold),
+            eq(caseAssignment.workType, scenario.workType),
+          ))
+      : Promise.resolve([]),
+    universeIds.length > 0
+      ? db.select({ userId: technicianSkill.userId })
+          .from(technicianSkill)
+          .where(and(
+            inArray(technicianSkill.userId, universeIds),
+            eq(technicianSkill.workType, scenario.workType),
+            gte(technicianSkill.designLevel, minSkill),
+          ))
+      : Promise.resolve([]),
+  ]);
+  const evalBatch: BatchFilterSets = {
+    cooldownSet: new Set(recentAssignments.map(r => r.technicianId)),
+    skillSet: new Set(eligibleSkills.map(s => s.userId)),
+  };
+
   const excluded: Record<ExclusionReason, number> = {
     not_available: 0,
     suspended: 0,
@@ -276,7 +360,7 @@ export async function evaluateTechniciansForScenario(
   for (const tech of universe) {
     if (poolIds.has(tech.id)) continue;
     const result = await checkTechnicianPassesFilters(
-      tech, scenario, config, exclude, modeForExclusion, now, inactivityThreshold, cooldownThreshold,
+      tech, scenario, config, exclude, modeForExclusion, now, inactivityThreshold, cooldownThreshold, evalBatch,
     );
     if (!result.ok && result.reason) {
       excluded[result.reason]++;
@@ -456,12 +540,17 @@ export async function buildFunnelStagesForScenario(
 
     if (def.id === 'availability_filter' && availabilityOn) {
       const next: TechRow[] = [];
+      const t0avail = perfStart();
       for (const tech of remaining) {
+        const t0each = perfStart();
         await ensureTechnicianAvailabilityAction(tech.id);
-        if (await computeEligibleAction(tech.id, scenario.category, 'cad')) {
+        const eligible = await computeEligibleAction(tech.id, scenario.category, 'cad');
+        perfLog('buildFunnel.availability_per_tech', Date.now() - t0each, { techId: tech.id, eligible });
+        if (eligible) {
           next.push(tech);
         }
       }
+      perfLog('buildFunnel.availability_loop', Date.now() - t0avail, { checked: remaining.length, passed: next.length });
       const dropped = remaining.length - next.length;
       stages.push({
         id: 'availability_filter',

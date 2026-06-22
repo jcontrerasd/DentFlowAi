@@ -19,8 +19,8 @@
  */
 
 import { db } from '@/lib/db';
-import { clinicalCase, clinicalCaseDelivery, user, caseQualityAssignment, review } from '@/lib/db/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { clinicalCase, clinicalCaseDelivery, clinicalCaseEvent, user, caseQualityAssignment, review } from '@/lib/db/schema';
+import { and, count, eq, sql } from 'drizzle-orm';
 import type { ActionResult } from '@/lib/types/actions';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { CASE_STATUSES } from '@/lib/constants/dental';
@@ -257,6 +257,19 @@ export async function sendToDentistAction(caseId: string): Promise<ActionResult>
         .limit(1);
       if (!certifiedDelivery) return { success: false, error: 'No hay entrega certificada para enviar' };
 
+      // Versión desde la perspectiva del dentista: cuántas entregas REVISION_ENVIADA
+      // con visibleTo:'ambos' ya existen + 1. Distinto de certifiedDelivery.version que
+      // cuenta iteraciones internas técnico-calidad que el dentista no debe ver.
+      const [{ value: pastDentistDeliveries }] = await tx
+        .select({ value: count() })
+        .from(clinicalCaseEvent)
+        .where(and(
+          eq(clinicalCaseEvent.clinicalCaseId, caseId),
+          eq(clinicalCaseEvent.action, CASE_EVENTS.REVISION_ENVIADA),
+          sql`payload->>'visibleTo' = 'ambos'`,
+        ));
+      const dentistVersion = (pastDentistDeliveries ?? 0) + 1;
+
       await tx.update(clinicalCase)
         .set({
           status: CASE_STATUSES.EN_REVISION,
@@ -275,9 +288,9 @@ export async function sendToDentistAction(caseId: string): Promise<ActionResult>
         userId: identity.id as string,
         type: 'tecnico',
         action: CASE_EVENTS.REVISION_ENVIADA,
-        content: certifiedDelivery.notes || `Entrega v${certifiedDelivery.version} lista para revisión.`,
+        content: certifiedDelivery.notes || `Entrega v${dentistVersion} lista para revisión.`,
         payload: {
-          deliveryVersion: certifiedDelivery.version,
+          deliveryVersion: dentistVersion,
           deliveryId: certifiedDelivery.id,
           files: certifiedDelivery.files ?? [],
           visibleTo: 'ambos',
@@ -286,7 +299,7 @@ export async function sendToDentistAction(caseId: string): Promise<ActionResult>
       }, tx);
 
       if (caseRow.doctor_id) {
-        await notifyUser(caseRow.doctor_id, 'REVISION_PENDIENTE', { caseId, version: certifiedDelivery.version });
+        await notifyUser(caseRow.doctor_id, 'REVISION_PENDIENTE', { caseId, version: dentistVersion });
       }
 
       return { success: true };

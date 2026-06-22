@@ -12,6 +12,8 @@ export type DeliveryFileEntry = { id: string; file: File };
 type UchDeliveryPanelProps = {
   caseId: string;
   organizationId: string | undefined;
+  /** Si true, la entrega va primero a revisión de Calidad; si false, va directo al dentista. */
+  qualityGateActive?: boolean;
   deliveryNotes: string;
   setDeliveryNotes: (v: string) => void;
   deliveryFiles: DeliveryFileEntry[];
@@ -43,6 +45,7 @@ export function newDeliveryEntry(file: File): DeliveryFileEntry {
 export default function UchDeliveryPanel({
   caseId,
   organizationId,
+  qualityGateActive = false,
   deliveryNotes,
   setDeliveryNotes,
   deliveryFiles,
@@ -76,7 +79,9 @@ export default function UchDeliveryPanel({
               <Upload className="w-4 h-4 text-primary" aria-hidden />
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-semibold text-foreground">Enviar entrega al dentista</p>
+              <p className="text-xs font-semibold text-foreground">
+                {qualityGateActive ? 'Enviar entrega a Calidad' : 'Enviar entrega al Dentista'}
+              </p>
               <p className="text-[10px] text-muted mt-0.5">Sube archivos STL, imágenes o PDF para revisión</p>
             </div>
           </div>
@@ -296,7 +301,7 @@ export default function UchDeliveryPanel({
             disabled={isUploadingFiles || isSendingDelivery}
             className="flex-[2] py-3 bg-primary text-inverse text-xs font-semibold rounded-xl shadow-lg shadow-sm disabled:opacity-40 flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
           >
-            <Send className="w-4 h-4" /> Enviar para revisión de Calidad
+            <Send className="w-4 h-4" /> {qualityGateActive ? 'Enviar a Calidad' : 'Enviar al Dentista'}
           </button>
         )}
       </div>

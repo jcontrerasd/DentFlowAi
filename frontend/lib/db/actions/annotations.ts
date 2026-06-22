@@ -107,7 +107,11 @@ export async function listDeliveryAnnotationsAction(deliveryId: string): Promise
     if (!delivery) return { success: false, error: 'Entrega no encontrada' };
 
     const [caseRow] = await db
-      .select({ doctorId: clinicalCase.doctorId, assignedTechnicianId: clinicalCase.assignedTechnicianId })
+      .select({
+        doctorId: clinicalCase.doctorId,
+        assignedTechnicianId: clinicalCase.assignedTechnicianId,
+        qualityReviewerId: clinicalCase.qualityReviewerId,
+      })
       .from(clinicalCase)
       .where(eq(clinicalCase.id, delivery.clinicalCaseId))
       .limit(1);
@@ -115,9 +119,10 @@ export async function listDeliveryAnnotationsAction(deliveryId: string): Promise
     const isDentistOwner = caseRow?.doctorId === identity.id;
     const isAssignedTechnician = caseRow?.assignedTechnicianId === identity.id;
     const isAdmin = identity.isSystemAdmin;
+    // Calidad puede ver anotaciones solo si es el revisor activo del caso (solo lectura).
+    const isCalidadReviewer = identity.role === 'calidad' && caseRow?.qualityReviewerId === identity.id;
 
-    // El técnico asignado puede ver las anotaciones del dentista (solo lectura, para saber qué corregir)
-    if (!isDentistOwner && !isAssignedTechnician && !isAdmin) {
+    if (!isDentistOwner && !isAssignedTechnician && !isAdmin && !isCalidadReviewer) {
       return { success: true, annotations: [] };
     }
 

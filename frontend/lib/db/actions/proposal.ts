@@ -398,7 +398,7 @@ export async function rejectProposalAction(caseId: string, _reason?: string): Pr
 // S3-04 — Técnico inicia el trabajo
 export async function startWorkAction(caseId: string): Promise<ActionResult> {
   const identity = await getServerIdentity();
-  if (!identity?.orgId) return { success: false, error: 'No autorizado' };
+  if (!identity?.id) return { success: false, error: 'No autorizado' };
 
   try {
     const [cCase] = await db

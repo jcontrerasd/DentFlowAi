@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { notifyUser } from "../../services/notifications";
 import GCPStorageService from '@/lib/services/gcp-storage';
 import { db } from "@/lib/db";
+import { perfLog, perfStart } from '@/lib/perfLog';
 import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseAssignment, caseUserArchive } from "@/lib/db/schema";
 import { eq, desc, and, or, ne, not, sql, inArray, avg, exists, gt } from "drizzle-orm";
 import {
@@ -114,6 +115,7 @@ export async function getCaseEventsAction(
   filter?: 'negociacion' | 'tecnico' | 'sistema',
   options?: { limit?: number; beforeId?: string },
 ): Promise<{ events: any[]; hasMoreOlder: boolean; viewerSignedImage: string | null }> {
+  const t0events = perfStart();
   const identity = await getServerIdentity();
   if (!identity) throw new Error("No autorizado");
 
@@ -340,8 +342,10 @@ export async function getCaseEventsAction(
       }
     });
 
+    perfLog('getCaseEventsAction.total', Date.now() - t0events, { caseId, eventCount: signedEvents.length, hasMoreOlder });
     return { events: signedEvents, hasMoreOlder, viewerSignedImage };
   } catch (error) {
+    perfLog('getCaseEventsAction.error', Date.now() - t0events, { caseId, error: String(error) });
     console.error("[getCaseEventsAction] Error:", error);
     console.error("[getCaseEventsAction] Stack:", (error as Error)?.stack);
     return { events: [], hasMoreOlder: false, viewerSignedImage: null };
@@ -464,6 +468,7 @@ export async function listCasesByOrganization(
   hasMore: boolean;
   serverNowMs?: number;
 }> {
+  const t0list = perfStart();
   try {
     const identity = await getServerIdentity();
     if (!identity) return { cases: [], total: 0, page, pageSize, hasMore: false, serverNowMs: Date.now() };
@@ -630,6 +635,7 @@ export async function listCasesByOrganization(
       await batchExpireInvitationsForCases(evalCaseIds);
     }
 
+    perfLog('listCasesByOrganization.total', Date.now() - t0list, { page, pageSize, resultCount: processedResults.length, total });
     return {
       cases: processedResults,
       total,
@@ -639,6 +645,7 @@ export async function listCasesByOrganization(
       serverNowMs: Date.now(),
     };
   } catch (error) {
+    perfLog('listCasesByOrganization.error', Date.now() - t0list, { page, error: String(error) });
     console.error("[listCasesByOrganization] Error:", error);
     return { cases: [], total: 0, page, pageSize, hasMore: false, serverNowMs: Date.now() };
   }
@@ -683,6 +690,7 @@ export async function getCaseListFacetCountsAction(
   return facets;
 }
 export async function getCaseDetails(caseId: string) {
+  const t0details = perfStart();
   const identity = await getServerIdentity();
   if (!identity) return { _error: "NoSession" } as any;
 
@@ -868,6 +876,13 @@ export async function getCaseDetails(caseId: string) {
     if (cCase.status === 'enRevisionCalidad') {
       qualityReviewDeadlineAt = await getCaseQualityReviewDeadlineAt(caseId);
     }
+    // Calculamos qualityGateActive ANTES de anonimizar qualityReviewerId.
+    // El técnico necesita saber si su entrega va a Calidad, pero sin ver la identidad del revisor.
+    const qualityGateActive =
+      isQualityGateEnabled() &&
+      cCase.serviceType === 'solo_diseno' &&
+      !!(cCase as any).qualityReviewerId;
+
     // Anonimato: la identidad del revisor de Calidad nunca se expone a dentista ni técnico.
     if (userRole !== 'admin' && userRole !== 'calidad') {
       (cCase as any).qualityReviewerId = null;
@@ -935,11 +950,13 @@ export async function getCaseDetails(caseId: string) {
       myReviewedDimensions = reviewedRows.map(r => r.dimension);
     }
 
+    perfLog('getCaseDetails.total', Date.now() - t0details, { caseId });
     return {
       ...cCase,
       evaluationExpiresAt,
       reviewDeadlineAt,
       qualityReviewDeadlineAt,
+      qualityGateActive,
       comparativeOffers,
       serverNowMs: Date.now(),
       archivedByCurrentUser,
@@ -949,6 +966,7 @@ export async function getCaseDetails(caseId: string) {
       myReviewedDimensions,
     };
   } catch (error: any) {
+    perfLog('getCaseDetails.error', Date.now() - t0details, { caseId, error: String(error?.message) });
     console.error("==== [getCaseDetails] CRITICAL ERROR ====");
     console.error("MESSAGE:", error?.message);
     console.error("CAUSE:", error?.cause?.message ?? error?.cause);

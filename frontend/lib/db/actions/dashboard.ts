@@ -82,7 +82,6 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
         hasQualityReview: sql<boolean>`EXISTS (
           SELECT 1 FROM review r
           WHERE r.clinical_case_id = ${clinicalCase.id}
-            AND r.reviewer_id = ${identity.id as string}
             AND r.dimension = 'quality'
         )`,
       })

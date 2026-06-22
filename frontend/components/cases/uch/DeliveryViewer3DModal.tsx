@@ -123,7 +123,7 @@ export default function DeliveryViewer3DModal({
       try {
         const MODEL_EXTS = ['.stl', '.ply', '.obj'];
         const inferSubType = (path: string) => {
-          const lower = path.toLowerCase();
+          const lower = pathOf(path).toLowerCase();
           if (lower.includes('superior')) return 'superior';
           if (lower.includes('inferior')) return 'inferior';
           if (lower.includes('oclusal')) return 'oclusal';
@@ -131,9 +131,13 @@ export default function DeliveryViewer3DModal({
         };
 
         // Los archivos son rutas GCS individuales (STL/PLY/OBJ), no un ZIP.
+        // Pueden venir como paths GCS o como URLs ya firmadas (getCaseDetails pre-firma deliveries).
+        // Normalizar: extraer el path sin query params para el filtro de extensión.
+        const pathOf = (f: string) => f.startsWith('http') ? (f.split('?')[0] ?? f) : f;
+
         // Filtrar por extensión de modelo 3D y obtener URLs firmadas.
         const modelPaths = zipFiles.filter((f) =>
-          MODEL_EXTS.some((ext) => f.toLowerCase().endsWith(ext))
+          MODEL_EXTS.some((ext) => pathOf(f).toLowerCase().endsWith(ext))
         );
 
         if (modelPaths.length === 0) {
@@ -141,8 +145,11 @@ export default function DeliveryViewer3DModal({
           return;
         }
 
+        // Si el archivo ya es una URL firmada (https://...), usarla directamente.
         const [signedUrls, annotationsResult] = await Promise.all([
-          Promise.all(modelPaths.map((p) => getSignedUrlAction(p))),
+          Promise.all(modelPaths.map((p) =>
+            p.startsWith('http') ? Promise.resolve(p) : getSignedUrlAction(p)
+          )),
           listDeliveryAnnotationsAction(deliveryId),
         ]);
 
