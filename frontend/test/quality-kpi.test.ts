@@ -11,10 +11,7 @@ describe('Calidad — KPIs del dashboard', () => {
     expect(classifyCalidadCaseKpi('borrador')).toBe('otros');
   });
 
-  it('separa completado en porCalificar vs completado según la calificación', () => {
-    expect(classifyCalidadCaseKpi('completado', false)).toBe('porCalificar');
-    expect(classifyCalidadCaseKpi('completado', true)).toBe('completado');
-    // Sin el flag (default) asume ya calificado: no rotula casos legacy como pendientes.
+  it('todos los casos completado van al bucket completado', () => {
     expect(classifyCalidadCaseKpi('completado')).toBe('completado');
   });
 
@@ -22,9 +19,8 @@ describe('Calidad — KPIs del dashboard', () => {
     expect(getDashboardMetricDefsForRole('calidad')).toBe(CALIDAD_DASHBOARD_METRICS);
     const ids = CALIDAD_DASHBOARD_METRICS.map((d) => d.id);
     expect(ids).toContain('porCertificar');
-    expect(ids).toContain('porCalificar');
-    const porCalificar = CALIDAD_DASHBOARD_METRICS.find((d) => d.id === 'porCalificar');
-    expect(porCalificar?.attentionBadge).toBe(true);
+    expect(ids).toContain('completado');
+    expect(ids).not.toContain('porCalificar');
   });
 
   it('un KPI de Calidad mapea a filtros de estado de caso', () => {
@@ -34,13 +30,9 @@ describe('Calidad — KPIs del dashboard', () => {
     expect(f2.caseStatuses).toContain('certificadoCalidad');
   });
 
-  it('porCalificar y completado comparten estado pero difieren en qualityRatingState', () => {
-    const pend = filtersFromDashboardMetricId('calidad', 'porCalificar');
-    expect(pend.caseStatuses).toEqual(['completado']);
-    expect(pend.qualityRatingState).toBe('pending');
-
+  it('completado mapea a todos los casos con estado completado', () => {
     const done = filtersFromDashboardMetricId('calidad', 'completado');
     expect(done.caseStatuses).toEqual(['completado']);
-    expect(done.qualityRatingState).toBe('rated');
+    expect(done.qualityRatingState).toBeUndefined();
   });
 });

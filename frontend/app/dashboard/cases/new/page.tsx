@@ -135,6 +135,26 @@ export default function NewCasePage() {
       }
 
 
+      // Subir archivos complementarios (sin gzip, sin thumbnail)
+      for (const file of (files.complementary ?? [])) {
+        const gcsPath = `organizations/${orgId}/cases/${caseId}/complementary/${Date.now()}_${file.name}`;
+        const uploadUrl = await getUploadUrlAction(gcsPath, file.type, undefined);
+        if (!uploadUrl) throw new Error(`No se pudo obtener URL de subida para ${file.name}`);
+        const res = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+        if (!res.ok) throw new Error(`Fallo al subir ${file.name}`);
+        await registerFileAction({
+          caseId,
+          organizationId: orgId,
+          uploaderId: doctorId,
+          filename: file.name,
+          category: 'complementary',
+          subType: 'general',
+          size: file.size,
+          mimeType: file.type,
+          gcsPath,
+        });
+      }
+
       showSuccess(`Caso ${newCase?.caseNumber ?? ''} creado exitosamente`.trim());
       router.push('/dashboard/cases');
     } catch (err: any) {

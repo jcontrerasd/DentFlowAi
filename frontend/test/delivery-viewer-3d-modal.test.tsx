@@ -19,7 +19,11 @@ vi.mock('@/lib/db/actions/annotations', () => ({
 }));
 
 vi.mock('@/lib/db/actions/cases', () => ({
-  getSignedUrlAction: vi.fn().mockResolvedValue('http://test/model.stl'),
+  getDeliverySignedFilesAction: vi.fn().mockResolvedValue({
+    success: true,
+    scans: ['http://test/model.stl'],
+    attachments: [],
+  }),
 }));
 
 vi.mock('@/components/DentalViewer3D', () => ({

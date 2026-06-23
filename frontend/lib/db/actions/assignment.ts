@@ -965,7 +965,7 @@ export async function assignCaseAction(
       payload: { technicianId, expiresAt: expiresAt.toISOString(), visibleTo: 'sistema' },
     });
 
-    if (created?.id) {
+    if (created?.id && !opts?.isReassignment) {
       await logCaseEvent({
         caseId,
         userId: technicianId,

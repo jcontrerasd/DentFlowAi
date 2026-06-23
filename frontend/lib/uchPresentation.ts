@@ -61,15 +61,6 @@ export function shouldPresentUchEventAsFauchard(
     return true;
   }
 
-  /** Invitación a cotizar: orquestación; en BD userId puede ser el técnico sin presentationAuthor. */
-  if (
-    viewer.role === 'tecnico' &&
-    event.action === CASE_EVENTS.INVITACION_RECIBIDA &&
-    (payload.visibleTo === 'tecnico' || payload.visibleTo === undefined)
-  ) {
-    return true;
-  }
-
   const persistedActorId = event.userId;
   if (persistedActorId && String(persistedActorId) === String(viewer.id)) return false;
 

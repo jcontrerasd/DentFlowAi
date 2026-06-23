@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { technicianSkill, user, caseAssignment, technicianAvailability } from '@/lib/db/schema';
 import { eq, and, gt } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
+import { auth } from '@/auth';
 import { WORK_TYPES } from '@/lib/constants/dental';
 import { ensureTechnicianAvailabilityAction } from './availability';
 
@@ -173,8 +174,9 @@ export async function toggleAvailabilityAction() {
 
 // S1-09 — Admin: ver skills de cualquier técnico
 export async function getAdminTechnicianSkillsAction(technicianId: string) {
-  const identity = await getServerIdentity();
-  if (!identity?.isSystemAdmin && identity?.role !== 'admin') {
+  const session = await auth();
+  const caller = session?.user as any;
+  if (caller?.role !== 'admin') {
     return { success: false, error: 'No autorizado', data: null };
   }
 
@@ -213,6 +215,36 @@ export async function getAdminTechnicianSkillsAction(technicianId: string) {
   } catch (error) {
     console.error('[getAdminTechnicianSkillsAction] Error:', error);
     return { success: false, error: 'Error al obtener habilidades', data: null };
+  }
+}
+
+// S1-10 — Admin: actualizar skills de cualquier técnico
+export async function updateTechnicianSkillsAdmin(technicianId: string, skills: SkillInput[]) {
+  const session = await auth();
+  const caller = session?.user as any;
+  if (caller?.role !== 'admin') {
+    return { success: false, error: 'No autorizado' };
+  }
+  try {
+    for (const skill of skills) {
+      if (skill.designLevel === 0) {
+        await db.delete(technicianSkill).where(
+          and(eq(technicianSkill.userId, technicianId), eq(technicianSkill.workType, skill.workType))
+        );
+      } else {
+        await db.insert(technicianSkill)
+          .values({ userId: technicianId, workType: skill.workType, designLevel: skill.designLevel, fabricationLevel: 0, updatedAt: new Date() })
+          .onConflictDoUpdate({
+            target: [technicianSkill.userId, technicianSkill.workType],
+            set: { designLevel: skill.designLevel, fabricationLevel: 0, updatedAt: new Date() },
+          });
+      }
+    }
+    try { await ensureTechnicianAvailabilityAction(technicianId); } catch {}
+    return { success: true };
+  } catch (error) {
+    console.error('[updateTechnicianSkillsAdmin] Error:', error);
+    return { success: false, error: 'Error al guardar las habilidades' };
   }
 }
 

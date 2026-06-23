@@ -108,72 +108,7 @@ export async function acceptProposalAction(caseId: string, invitationId: string)
         .set({ consecutiveNoResponse: 0 })
         .where(eq(user.id, inv.technicianId));
 
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'sistema',
-        action: CASE_EVENTS.OFERTA_ACEPTADA,
-        content: 'He aceptado una oferta. Esperando que el laboratorio confirme el inicio del trabajo.',
-        payload: {
-          visibleTo: 'dentista',
-          invitationId: inv.id,
-        },
-        stateChange: { from: CASE_STATUSES.PROPUESTA_LISTA, to: CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO },
-        skipActivityUpdate: true,
-      }, tx);
-
-      await logCaseEvent({
-        caseId,
-        userId: inv.technicianId,
-        type: 'sistema',
-        action: CASE_EVENTS.OFERTA_GANADORA,
-        content:
-          '¡Tu oferta fue seleccionada! El solicitante aceptó tu propuesta. Confirma el inicio cuando estés listo.',
-        payload: { visibleTo: 'tecnico', invitationId: inv.id, ...UCH_PAYLOAD_PRESENTATION_FAUCHARD },
-        skipActivityUpdate: true,
-      }, tx);
-
       for (const loser of losers) {
-        const qp = loser.compensation != null ? Number(loser.compensation) : NaN;
-        const qd = loser.deadlineDays != null ? Math.trunc(Number(loser.deadlineDays)) : NaN;
-        const qh = loser.deadlineHours != null ? Math.trunc(Number(loser.deadlineHours)) : NaN;
-        const compensationPayload = Number.isFinite(qp) && qp >= 0 ? qp : null;
-        const deadlineDaysPayload = Number.isFinite(qd) && qd > 0 ? qd : null;
-        const deadlineHoursPayload = Number.isFinite(qh) && qh > 0 ? qh : null;
-
-        await logCaseEvent({
-          caseId,
-          userId: loser.technicianId,
-          type: 'sistema',
-          action: CASE_EVENTS.OFERTA_NO_SELECCIONADA,
-          content: 'Este caso fue asignado a otro laboratorio. ¡Gracias por tu oferta!',
-          payload: {
-            visibleTo: 'tecnico',
-            invitationId: loser.id,
-            compensation: compensationPayload,
-            deadlineDays: deadlineDaysPayload,
-            deadlineHours: deadlineHoursPayload,
-            ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
-          },
-          skipActivityUpdate: true,
-        }, tx);
-
-        await logCaseEvent({
-          caseId,
-          userId: identity.id as string,
-          type: 'sistema',
-          action: CASE_EVENTS.OFERTA_NO_SELECCIONADA,
-          content: 'Esta oferta quedó fuera al elegir otra propuesta para el caso.',
-          payload: {
-            visibleTo: 'dentista',
-            invitationId: loser.id,
-            compensation: compensationPayload,
-            deadlineDays: deadlineDaysPayload,
-            deadlineHours: deadlineHoursPayload,
-          },
-          skipActivityUpdate: true,
-        }, tx);
-
         await notifyUser(loser.technicianId, 'CASO_ASIGNADO_OTRO', { caseId, caseNumber: cCase.caseNumber });
       }
 
@@ -245,41 +180,6 @@ export async function rejectInvitationOfferAction(
         })
         .where(eq(caseAssignment.id, invitationId));
 
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'sistema',
-        action: CASE_EVENTS.OFERTA_RECHAZADA,
-        content: `Rechazaste una oferta. Tu comentario fue enviado al laboratorio.`,
-        payload: {
-          visibleTo: 'dentista',
-          invitationId: inv.id,
-          feedback: fb,
-          compensation:
-            inv.compensation != null && Number.isFinite(Number(inv.compensation))
-              ? Number(inv.compensation)
-              : null,
-          deadlineDays:
-            inv.deadlineDays != null && Number.isFinite(Number(inv.deadlineDays))
-              ? Math.trunc(Number(inv.deadlineDays))
-              : null,
-        },
-      }, tx);
-
-      await logCaseEvent({
-        caseId,
-        userId: inv.technicianId,
-        type: 'sistema',
-        action: CASE_EVENTS.OFERTA_RECHAZADA,
-        content: `Tu oferta no fue seleccionada en esta ocasión.`,
-        payload: {
-          visibleTo: 'tecnico',
-          invitationId: inv.id,
-          feedbackDentista: fb,
-          ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
-        },
-      }, tx);
-
       await notifyUser(inv.technicianId, 'PROPUESTA_RECHAZADA_DENTISTA', { caseId, caseNumber: cCase.caseNumber });
 
       const stillQuoted = await tx
@@ -294,16 +194,6 @@ export async function rejectInvitationOfferAction(
           currentResponsibility: null,
           updatedAt: new Date(),
         }).where(eq(clinicalCase.id, caseId));
-
-        await logCaseEvent({
-          caseId,
-          userId: identity.id as string,
-          type: 'sistema',
-          action: CASE_EVENTS.CASO_OFERTAS_TODAS_RECHAZADAS,
-          content:
-            'He rechazado todas las ofertas disponibles. El caso quedó cerrado. Puedes crear un nuevo caso si lo necesitas.',
-          payload: { visibleTo: 'dentista' },
-        }, tx);
 
         return { success: true as const, closedCase: true };
       }
@@ -360,16 +250,6 @@ export async function expireDentistComparativeWindowAction(caseId: string): Prom
           updatedAt: now,
         })
         .where(eq(clinicalCase.id, caseId));
-
-      await logCaseEvent({
-        caseId,
-        userId: 'sistema',
-        type: 'sistema',
-        action: CASE_EVENTS.PROPUESTA_EXPIRADA,
-        content:
-          'Venció el plazo para elegir una oferta. El caso se cerró automáticamente. Puedes publicar uno nuevo si corresponde.',
-        payload: { visibleTo: 'dentista' },
-      }, tx);
 
       for (const row of affected) {
         await notifyUser(row.technicianId, 'PROPUESTA_RECHAZADA_DENTISTA', { caseId, caseNumber: cCase.caseNumber });

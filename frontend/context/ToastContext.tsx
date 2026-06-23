@@ -51,11 +51,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   initial={{ opacity: 0, y: -15, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -15, scale: 0.95, transition: { duration: 0.2 } }}
-                  className={`px-5 py-2 rounded-full font-semibold text-[13px] shadow-xl border flex items-center gap-2.5 pointer-events-auto ${
-                    t.type === 'success'
-                      ? 'bg-teal-600 border-teal-700 text-white dark:bg-teal-500/20 dark:border-teal-500/30 dark:text-teal-300'
-                      : 'bg-rose-600 border-rose-700 text-white dark:bg-rose-500/20 dark:border-rose-500/30 dark:text-rose-300'
-                  }`}
+                  className="px-5 py-2 rounded-full font-semibold text-[13px] shadow-xl border flex items-center gap-2.5 pointer-events-auto text-white"
+                  style={t.type === 'success'
+                    ? { backgroundColor: '#0d9488', borderColor: '#0f766e' }
+                    : { backgroundColor: '#e11d48', borderColor: '#be123c' }
+                  }
                 >
                   {t.type === 'success' ? (
                     <CheckCircle className="w-4 h-4 flex-shrink-0" />

@@ -201,47 +201,6 @@ export async function getCaseEventsAction(
       currentInvitationId,
     );
 
-    /** OFERTA_RECHAZADA / OFERTA_NO_SELECCIONADA (solo dentista): snapshot desde invitación si el JSON omitió números. */
-    const rejectedOfferInvitationSnapshots = new Map<
-      string,
-      { compensation: number | null; deadlineDays: number | null }
-    >();
-    if (identity.role === 'dentista') {
-      const invIds = [
-        ...new Set(
-          filteredEvents
-            .filter((e) => {
-              if (e.action === CASE_EVENTS.OFERTA_RECHAZADA) return true;
-              if (e.action === CASE_EVENTS.OFERTA_NO_SELECCIONADA) {
-                const vt = (e.payload as Record<string, unknown> | null)?.visibleTo;
-                return vt === 'dentista';
-              }
-              return false;
-            })
-            .map((e) => (e.payload as Record<string, unknown> | null)?.invitationId)
-            .filter((id): id is string => typeof id === 'string' && id.length > 0),
-        ),
-      ];
-      if (invIds.length > 0) {
-        const rows = await db
-          .select({
-            id: caseAssignment.id,
-            compensation: caseAssignment.compensation,
-            deadlineDays: caseAssignment.deadlineDays,
-          })
-          .from(caseAssignment)
-          .where(and(eq(caseAssignment.clinicalCaseId, caseId), inArray(caseAssignment.id, invIds)));
-        for (const r of rows) {
-          const qp = r.compensation != null ? Number(r.compensation) : NaN;
-          const qd = r.deadlineDays != null ? Math.trunc(Number(r.deadlineDays)) : NaN;
-          rejectedOfferInvitationSnapshots.set(r.id, {
-            compensation: Number.isFinite(qp) && qp >= 0 ? qp : null,
-            deadlineDays: Number.isFinite(qd) && qd > 0 ? qd : null,
-          });
-        }
-      }
-    }
-
     // Firmar URLs de avatares (deduplicado por ruta).
     // Incluye la imagen del viewer actual (fallback para burbujas self-lane sin user.image).
     const viewerOwnImagePath = filteredEvents.find(
@@ -266,45 +225,6 @@ export async function getCaseEventsAction(
     const signedEvents = filteredEvents.map((event) => {
       try {
       let mapped: (typeof filteredEvents)[number] = event;
-
-      if (
-        identity.role === 'dentista' &&
-        (event.action === CASE_EVENTS.OFERTA_RECHAZADA ||
-          (event.action === CASE_EVENTS.OFERTA_NO_SELECCIONADA &&
-            (event.payload as Record<string, unknown> | null | undefined)?.visibleTo === 'dentista'))
-      ) {
-        const p = event.payload as Record<string, unknown> | null | undefined;
-        const invId = p?.invitationId;
-        if (p && typeof invId === 'string') {
-          const snap = rejectedOfferInvitationSnapshots.get(invId);
-          if (snap) {
-            const pickPrice = (): number | null => {
-              const raw = p.compensation;
-              if (raw != null && raw !== '') {
-                const n = Number(raw as number | string);
-                if (Number.isFinite(n) && n >= 0) return n;
-              }
-              return snap.compensation;
-            };
-            const pickDays = (): number | null => {
-              const raw = p.deadlineDays;
-              if (raw != null && raw !== '') {
-                const n = Math.trunc(Number(raw as number | string));
-                if (Number.isFinite(n) && n > 0) return n;
-              }
-              return snap.deadlineDays;
-            };
-            mapped = {
-              ...event,
-              payload: {
-                ...p,
-                compensation: pickPrice(),
-                deadlineDays: pickDays(),
-              },
-            };
-          }
-        }
-      }
 
       const orig = mapped.user?.image;
       if (orig && signedMap.has(orig)) {
@@ -838,24 +758,8 @@ export async function getCaseDetails(caseId: string) {
       }
     }
 
-    // 5. Firmar URLs de las entregas (Deliveries)
-    if (cCase.deliveries && cCase.deliveries.length > 0) {
-      for (const delivery of cCase.deliveries) {
-        if (delivery.files && Array.isArray(delivery.files)) {
-          const signedFiles = await Promise.all(
-            (delivery.files as string[]).map(async (path) => {
-              try {
-                return await getSignedUrl(path);
-              } catch (err) {
-                console.error("[getCaseDetails] Error signing delivery file:", path, err);
-                return path;
-              }
-            })
-          );
-          (delivery as any).files = signedFiles;
-        }
-      }
-    }
+    // 5. Archivos de entregas: se firman on-demand en getDeliverySignedFilesAction
+    //    (no se pre-firman aquí para evitar N×M llamadas GCS al cargar la ficha).
 
     // 6. Avatares de eventos: ya se firman dentro de getCaseEventsAction.
 
@@ -1025,30 +929,7 @@ export async function acceptBidAction(caseId: string, bidId: string, technicianI
           .where(inArray(bid.id, rejectedBids.map(rb => rb.id)));
       }
 
-      // 4. Registrar evento de aceptación en UCH (visible para el técnico ganador)
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'negociacion',
-        action: 'OFERTA_ACEPTADA',
-        content: '¡Tu oferta fue seleccionada! El caso te ha sido asignado. Cuando estés listo, inicia el proceso de diseño desde este panel.',
-        payload: { bidId, technicianId, visibleTo: 'tecnico' },
-        stateChange: { from: 'publicado', to: 'aceptado' }
-      }, tx);
-
-      // 5. Registrar evento de rechazo en el hilo de cada técnico perdedor
-      for (const rb of rejectedBids) {
-        await logCaseEvent({
-          caseId,
-          userId: identity.id as string,
-          type: 'negociacion',
-          action: 'OFERTA_RECHAZADA',
-          content: 'Gracias por tu propuesta. En esta ocasión el caso fue asignado a otro laboratorio. ¡Sigue participando en nuevos casos del marketplace!',
-          payload: { bidId: rb.id, technicianId: rb.technicianId, visibleTo: 'tecnico' }
-        }, tx);
-      }
-
-      // 6. Asignar técnico y actualizar estado del caso a 'aceptado'
+      // 4. Asignar técnico y actualizar estado del caso a 'aceptado'
       await tx.update(clinicalCase)
         .set({
           assignedTechnicianId: technicianId,
@@ -1301,6 +1182,59 @@ export async function getDeliveryFilesAction(deliveryId: string) {
   } catch (error) {
     console.error("[getDeliveryFilesAction] Error:", error);
     return { success: false, error: "Error de seguridad al acceder a archivos" };
+  }
+}
+
+/**
+ * Obtiene las URLs firmadas de los archivos de una entrega, clasificadas por tipo.
+ * Firma on-demand solo cuando el visor o la descarga lo necesitan.
+ */
+export async function getDeliverySignedFilesAction(deliveryId: string) {
+  const identity = await getServerIdentity();
+  if (!identity?.id) return { success: false as const, error: 'No autorizado' };
+
+  try {
+    const delivery = await db.query.clinicalCaseDelivery.findFirst({
+      where: eq(sql`id`, deliveryId),
+      with: { clinicalCase: true },
+    });
+
+    if (!delivery) return { success: false as const, error: 'Entrega no encontrada' };
+
+    const isOwner = delivery.clinicalCase.doctorId === identity.id;
+    const isAssignedTech = delivery.clinicalCase.assignedTechnicianId === identity.id;
+    const isQualityReviewer = (delivery.clinicalCase as any).qualityReviewerId === identity.id;
+
+    if (!isOwner && !isAssignedTech && !isQualityReviewer && !identity.isSystemAdmin) {
+      return { success: false as const, error: 'Acceso denegado' };
+    }
+
+    const paths = (delivery.files as string[]) ?? [];
+
+    const signed = await Promise.all(
+      paths.map(async (path) => {
+        try {
+          return { path, url: await getSignedUrl(path) };
+        } catch {
+          return { path, url: null };
+        }
+      }),
+    );
+
+    const scans = signed
+      .filter((f) => f.path.includes('/scans/') && f.url)
+      .map((f) => f.url as string);
+
+    const attachments = signed
+      .filter((f) => !f.path.includes('/scans/') && f.url)
+      .map((f) => f.url as string);
+
+    // Paths legacy (sin subfolder /scans/ ni /attachments/) se tratan como attachments
+    // El visor usa solo scans; la descarga usa scans + attachments
+    return { success: true as const, scans, attachments };
+  } catch (error) {
+    console.error('[getDeliverySignedFilesAction] Error:', error);
+    return { success: false as const, error: 'Error al firmar archivos' };
   }
 }
 
@@ -2369,21 +2303,6 @@ export async function republishCaseAction(caseId: string, changeSummary?: string
         })
         .where(and(eq(clinicalCase.id, caseId), eq(clinicalCase.organizationId, identity.orgId)));
 
-      // Registrar en la nueva tabla (UCH)
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'negociacion',
-        action: 'REPUBLICACION',
-        content: changeSummary || 'Caso republicado con nuevas condiciones.',
-        payload: {
-          roundNumber: nextRoundNumber,
-          version: nextVersion,
-          visibleTo: 'dentista'
-        },
-        stateChange: { from: 'borrador', to: 'enEvaluacion' }
-      });
-
       // 4. Crear nueva ronda con snapshot (BL-034)
       const snapshot = {
         internalName: cCase.internalName,
@@ -2774,16 +2693,6 @@ export async function republicarCaseAction(caseId: string): Promise<ActionResult
         lastActivityAt: new Date(),
       })
       .where(eq(clinicalCase.id, caseId));
-
-    await logCaseEvent({
-      caseId,
-      userId: identity.id as string,
-      type: 'sistema',
-      action: CASE_EVENTS.CASO_REPUBLICADO,
-      content: 'He vuelto a publicar el caso. Estamos buscando técnicos disponibles.',
-      payload: { visibleTo: 'dentista', ...UCH_PAYLOAD_PRESENTATION_FAUCHARD },
-      stateChange: { from: INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO, to: CASE_STATUSES.EN_EVALUACION },
-    });
 
     const { classifyCaseAction } = await import('./fauchard');
     const { runAssignmentAction, assignCaseAction } = await import('./assignment');

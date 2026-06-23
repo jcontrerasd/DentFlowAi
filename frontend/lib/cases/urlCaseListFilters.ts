@@ -35,6 +35,9 @@ export function parseCaseListSearchParams(params: {
     offerDateEnd: params.get('offerEnd') ?? '',
     techPreset,
     sortOrder: params.get('sort') === 'old' ? 'old' : 'recent',
+    qualityRatingState: (params.get('qrs') === 'pending' || params.get('qrs') === 'rated')
+      ? (params.get('qrs') as 'pending' | 'rated')
+      : undefined,
   };
 }
 
@@ -56,6 +59,7 @@ export function serializeCaseListFilters(filters: CaseListQueryFilters): string 
   if (filters.offerDateEnd) p.set('offerEnd', filters.offerDateEnd);
   if (filters.techPreset) p.set('preset', filters.techPreset);
   if (filters.sortOrder === 'old') p.set('sort', 'old');
+  if (filters.qualityRatingState) p.set('qrs', filters.qualityRatingState);
   const s = p.toString();
   return s ? `?${s}` : '';
 }

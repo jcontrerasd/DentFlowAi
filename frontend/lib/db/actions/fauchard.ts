@@ -384,19 +384,6 @@ export async function expirePendingInvitationsForCase(caseId: string) {
       .set({ status: 'expired', updatedAt: new Date() })
       .where(eq(caseAssignment.id, inv.id));
 
-    await logCaseEvent({
-      caseId: inv.clinicalCaseId,
-      userId: inv.technicianId,
-      type: 'sistema',
-      action: CASE_EVENTS.INVITACION_EXPIRADA,
-      content: 'Se venció el plazo para cotizar sin respuesta.',
-      payload: {
-        invitationId: inv.id,
-        visibleTo: 'tecnico',
-        ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
-      },
-    });
-
     await penalizeNoResponseAction(inv.technicianId, inv.id);
   }
 

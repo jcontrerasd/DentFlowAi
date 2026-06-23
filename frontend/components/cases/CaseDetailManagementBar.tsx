@@ -5,6 +5,7 @@ import {
   Archive,
   ArchiveRestore,
   Copy,
+  Download,
   Edit,
   Globe,
   RefreshCw,
@@ -32,6 +33,9 @@ type Props = {
   /** v5.0 — republicar caso que agotó el pool (sin_cotizaciones_fallo). */
   onRepublicar?: () => void;
   isRepublishing?: boolean;
+  /** Descarga el caso completo como ZIP estructurado. Siempre habilitado. */
+  onDownloadCase?: () => void;
+  isDownloadingCase?: boolean;
 };
 
 function iconBtnClass(
@@ -120,6 +124,8 @@ export default function CaseDetailManagementBar({
   onCreateCopy,
   onRepublicar,
   isRepublishing,
+  onDownloadCase,
+  isDownloadingCase,
 }: Props) {
   const showDraftGroup =
     actions.edit.visible ||
@@ -238,6 +244,19 @@ export default function CaseDetailManagementBar({
               accent="teal"
             />
           )}
+        </>
+      )}
+
+      {onDownloadCase && (
+        <>
+          {(showDraftGroup || showRepublicar || showArchiveGroup) && <BarSeparator />}
+          <ManagementIconButton
+            icon={Download}
+            tooltip="Descargar caso completo"
+            enabled={true}
+            loading={isDownloadingCase}
+            onClick={onDownloadCase}
+          />
         </>
       )}
     </div>

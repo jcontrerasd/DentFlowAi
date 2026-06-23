@@ -161,6 +161,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { name: 'Financiero', icon: CreditCard, href: '/dashboard/finance' },
     ] : []),
     
+    // Rutas para Calidad
+    ...(userProfile?.role === 'calidad' ? [
+      { name: 'Casos', icon: FileText, href: '/dashboard/cases' },
+    ] : []),
+
     // Rutas para Admin (bajo "Observabilidad"). La "Zona de Alta Peligrosidad"
     // se renderiza aparte, al pie del sidebar.
     ...(userProfile?.role === 'admin' ? [
@@ -262,7 +267,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </button>
 
       {/* Main Content */}
-      <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'pl-64' : 'pl-0'}`}>
+      <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'pl-64' : 'pl-20'}`}>
         <header className="h-20 border-b border-divider/50 flex items-center justify-between px-10 bg-surface shadow-sm border border-divider sticky top-0 z-40">
           <div className="flex items-center gap-4" />
 

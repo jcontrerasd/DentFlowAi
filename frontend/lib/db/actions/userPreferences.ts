@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { user } from '@/lib/db/schema';
 import { getServerIdentity } from '@/lib/db/actions/impersonation';
+import type { EmailNotificationPrefs } from '@/lib/services/notifications';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -51,5 +52,34 @@ export async function getThemePreferenceAction(): Promise<ThemeMode> {
     return isValidMode(v) ? v : 'system';
   } catch {
     return 'system';
+  }
+}
+
+export async function getEmailNotificationPrefsAction(): Promise<{ success: boolean; data?: EmailNotificationPrefs; error?: string }> {
+  try {
+    const me = await getServerIdentity();
+    if (!me?.id) return { success: false, error: 'No autorizado' };
+    const [row] = await db.select({ prefs: user.emailNotificationPrefs })
+      .from(user).where(eq(user.id, me.id as string)).limit(1);
+    return { success: true, data: (row?.prefs ?? {}) as EmailNotificationPrefs };
+  } catch (e) {
+    console.error('[getEmailNotificationPrefsAction]', e);
+    return { success: false, error: 'No se pudo leer las preferencias.' };
+  }
+}
+
+export async function updateEmailNotificationPrefsAction(
+  prefs: EmailNotificationPrefs
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const me = await getServerIdentity();
+    if (!me?.id) return { success: false, error: 'No autorizado' };
+    await db.update(user)
+      .set({ emailNotificationPrefs: prefs })
+      .where(eq(user.id, me.id as string));
+    return { success: true };
+  } catch (e) {
+    console.error('[updateEmailNotificationPrefsAction]', e);
+    return { success: false, error: 'No se pudo guardar las preferencias.' };
   }
 }

@@ -4,58 +4,13 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import {
-  Activity, AlertCircle, Box, CheckCircle2, ChevronDown, Download, Eye, FileCheck2, FileText, GitBranch, Hammer, MessageSquareWarning, Send, ShieldAlert, Star, Undo2, User, XCircle,
+  Activity, AlertCircle, Box, CheckCircle2, ChevronDown, Download, Eye, FileCheck2, FileText, GitBranch, Hammer, MessageSquareWarning, ShieldAlert, Star, User, XCircle,
 } from 'lucide-react';
 import UchDeriveQualityDialog from '@/components/cases/uch/UchDeriveQualityDialog';
 import { resolveUchThreadLane } from '@/lib/uchThreadLane';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { shouldUseUchNeutralSystemPill } from '@/lib/constants/uchEmitterMatrix';
-import UchQuoteBreakdown from '@/components/cases/uch/UchQuoteBreakdown';
-import { quoteDisplayFromPayload } from '@/lib/uchQuoteDisplay';
 import type { UchCaseEventLite } from './uchTimelineTypes';
-import type { UchQuoteBreakdownTone } from '@/components/cases/uch/UchQuoteBreakdown';
-
-function EventOfferQuoteDetail({
-  raw,
-  tone,
-  showCostLabels = false,
-  commentLabel,
-  emptyComment,
-}: {
-  raw: Record<string, unknown>;
-  tone: UchQuoteBreakdownTone;
-  showCostLabels?: boolean;
-  commentLabel: string;
-  emptyComment: string;
-}) {
-  const quote = quoteDisplayFromPayload(raw);
-  const tn = raw.techNotes;
-  const techNotes = typeof tn === 'string' ? tn.trim() : '';
-  const detailBorder = tone === 'self' ? 'border-primary/30' : 'border-divider';
-  const labelMuted = tone === 'self' ? 'text-foreground' : 'text-faint';
-  const valueText = tone === 'self' ? 'text-foreground' : 'text-muted/95';
-
-  return (
-    <div className={`space-y-2 pt-1 border-t ${detailBorder}`}>
-      <UchQuoteBreakdown
-        quote={quote}
-        variant="detail"
-        tone={tone}
-        showCostLabels={showCostLabels}
-      />
-      <div className="space-y-0.5">
-        <p className={`text-[10px] font-medium ${labelMuted}`}>{commentLabel}</p>
-        {techNotes ? (
-          <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${valueText}`}>{techNotes}</p>
-        ) : (
-          <p className={`text-[11px] italic ${tone === 'self' ? 'text-foreground' : 'text-faint/80'}`}>
-            {emptyComment}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
 
 type DentistRejectionContext = {
   deliveryId: string;
@@ -74,6 +29,8 @@ function QualityReviewControls({
   comment,
   setComment,
   dentistRejectionContext,
+  attachments = [],
+  setAttachments,
 }: {
   isSelfLane: boolean;
   onCertifyQuality?: (comment: string) => Promise<boolean | void>;
@@ -84,6 +41,8 @@ function QualityReviewControls({
   comment: string;
   setComment: (v: string) => void;
   dentistRejectionContext?: DentistRejectionContext;
+  attachments?: File[];
+  setAttachments?: (files: File[]) => void;
 }) {
   const [certifyStep, setCertifyStep] = React.useState<'choose' | 'confirm'>('choose');
   const [changesStep, setChangesStep] = React.useState<'choose' | 'confirm'>('choose');
@@ -171,6 +130,35 @@ function QualityReviewControls({
             onChange={(e) => setComment(e.target.value)}
             disabled={busy !== null}
           />
+          {setAttachments && (
+            <div className="space-y-1">
+              <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-primary hover:underline w-fit">
+                <FileText className="w-3 h-3" aria-hidden />
+                Adjuntar referencias ({attachments.length}/5)
+                <input
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.pdf,.docx"
+                  className="hidden"
+                  onChange={(e) => {
+                    const incoming = Array.from(e.target.files ?? []);
+                    e.target.value = '';
+                    setAttachments([...attachments, ...incoming].slice(0, 5));
+                  }}
+                />
+              </label>
+              {attachments.length > 0 && (
+                <ul className="space-y-0.5">
+                  {attachments.map((f, i) => (
+                    <li key={i} className="flex items-center justify-between text-[10px] bg-white/5 rounded px-2 py-1">
+                      <span className="truncate max-w-[80%] text-foreground">{f.name}</span>
+                      <button type="button" onClick={() => setAttachments(attachments.filter((_, j) => j !== i))} className="text-error hover:text-error/70 ml-1"><XCircle className="w-3 h-3" /></button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <button
               type="button"
@@ -276,6 +264,12 @@ type UchEventBubbleProps = {
   caseId?: string;
   /** Contexto del último rechazo del dentista — visible solo para calidad en re-entregas post-ajuste. */
   dentistRejectionContext?: DentistRejectionContext;
+  /** Adjuntos opcionales para la revisión del dentista (subidos en página, no aquí). */
+  revisionAttachments?: File[];
+  setRevisionAttachments?: (files: File[]) => void;
+  /** Adjuntos opcionales para la revisión de calidad. */
+  qualityAttachments?: File[];
+  setQualityAttachments?: (files: File[]) => void;
   /** Abre el visor 3D de la entrega rechazada por el dentista (en modo solo lectura). */
   onViewRejectedDelivery?: (deliveryId: string, version: number, files: string[]) => void;
 };
@@ -309,8 +303,11 @@ export default function UchEventBubble({
   caseId,
   dentistRejectionContext,
   onViewRejectedDelivery,
+  revisionAttachments = [],
+  setRevisionAttachments,
+  qualityAttachments = [],
+  setQualityAttachments,
 }: UchEventBubbleProps) {
-  const payloadVisibleTo = (event.payload as Record<string, unknown> | undefined)?.visibleTo;
   const { lane, showAsFauchard } = resolveUchThreadLane(event, {
     actingAsDentista,
     actingAsTecnico,
@@ -320,10 +317,6 @@ export default function UchEventBubble({
   });
   const isSelfLane = lane === 'self';
 
-  const isOutcomeNotice =
-    event.action === 'OFERTA_NO_SELECCIONADA' ||
-    event.action === 'OFERTA_RECHAZADA';
-
   /** Píldora gris solo para ruido interno allowlist (ver `UCH_NEUTRAL_SYSTEM_PILL_ALLOWLIST`). */
   const isNeutralSystemPill =
     lane === 'thread' &&
@@ -331,10 +324,8 @@ export default function UchEventBubble({
     shouldUseUchNeutralSystemPill({
       eventType: event.type,
       eventAction: event.action,
-      isOutcomeNotice,
+      isOutcomeNotice: false,
     });
-
-  const isInvitationReceivedQuote = event.action === CASE_EVENTS.INVITACION_RECIBIDA;
 
   const isRightLane = isSelfLane;
   const showHeaderAsYou = isSelfLane && !showAsFauchard;
@@ -352,10 +343,6 @@ export default function UchEventBubble({
   if (isNeutralSystemPill) {
     bubbleShell =
       'bg-surface-off border border-divider text-muted text-[10px] py-1.5 px-3 rounded-full self-start max-w-[min(100%,24rem)]';
-  } else if (isOutcomeNotice) {
-    bubbleShell = isSelfLane
-      ? `${bubbleSelfBase} max-w-[min(100%,24rem)] shadow-sm`
-      : `${bubbleFauchardBase} max-w-[min(100%,24rem)] shadow-sm`;
   } else if (isSelfLane) {
     bubbleShell = bubbleSelfBase;
   } else {
@@ -370,7 +357,7 @@ export default function UchEventBubble({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.15 }}
-      className={`flex flex-col w-full ${isRightLane ? 'items-end' : 'items-start'}${isInvitationReceivedQuote ? ' pl-4' : ''}`}
+      className={`flex flex-col w-full ${isRightLane ? 'items-end' : 'items-start'}`}
     >
       {showFauchardSystemTimestamp && (
         <span className="text-[10px] text-faint mb-1 tabular-nums self-start">
@@ -405,146 +392,11 @@ export default function UchEventBubble({
       <div className={`relative max-w-[78%] transition-all ${bubbleShell}`}>
         <div className="space-y-2">
           <>
-            {!['TRABAJO_INICIADO', 'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO', 'COMENTARIO_TECNICO', CASE_EVENTS.CALIFICACION_ENVIADA, CASE_EVENTS.CALIFICACION_ENVIADA_CALIDAD, CASE_EVENTS.OFERTA_ENVIADA, CASE_EVENTS.OFERTA_RETIRADA, CASE_EVENTS.OFERTA_RECHAZADA_POR_TECNICO, CASE_EVENTS.REVISION_ENVIADA_CALIDAD, CASE_EVENTS.CALIDAD_CERTIFICADA].includes(event.action) &&
-              !isOutcomeNotice &&
+            {!['TRABAJO_INICIADO', 'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO', 'COMENTARIO_TECNICO', CASE_EVENTS.CALIFICACION_ENVIADA, CASE_EVENTS.CALIFICACION_ENVIADA_CALIDAD, CASE_EVENTS.OFERTA_RECHAZADA_POR_TECNICO, CASE_EVENTS.REVISION_ENVIADA_CALIDAD, CASE_EVENTS.CALIDAD_CERTIFICADA, CASE_EVENTS.REVISION_SOLICITADA_CALIDAD].includes(event.action) &&
               event.content && (
               <p className="text-xs leading-relaxed whitespace-pre-wrap">{event.content}</p>
             )}
           </>
-
-          {isOutcomeNotice && event.content?.trim() && (
-            <div className="space-y-1.5">
-              <div
-                className={`flex items-center gap-2 ${
-                  isSelfLane ? 'text-foreground' : 'text-muted'
-                }`}
-              >
-                <XCircle
-                  className={`w-3.5 h-3.5 flex-shrink-0 ${isSelfLane ? 'text-foreground' : 'text-error/55'}`}
-                />
-                <span className="text-[11px] font-semibold tracking-tight">
-                  {event.action === CASE_EVENTS.OFERTA_RECHAZADA && actingAsDentista
-                    ? 'Oferta rechazada'
-                    : event.action === CASE_EVENTS.OFERTA_NO_SELECCIONADA && actingAsDentista && payloadVisibleTo === 'dentista'
-                      ? 'Oferta no seleccionada'
-                      : 'Otra oferta fue elegida'}
-                </span>
-              </div>
-              <p
-                className={`text-[11px] leading-relaxed whitespace-pre-wrap pl-5 ${
-                  isSelfLane ? 'text-foreground' : 'text-muted/95'
-                }`}
-              >
-                {event.content}
-              </p>
-              {((event.action === CASE_EVENTS.OFERTA_RECHAZADA && actingAsDentista) ||
-                (event.action === CASE_EVENTS.OFERTA_NO_SELECCIONADA &&
-                  actingAsDentista &&
-                  payloadVisibleTo === 'dentista')) &&
-                (() => {
-                  const raw =
-                    event.payload && typeof event.payload === 'object'
-                      ? (event.payload as Record<string, unknown>)
-                      : {};
-                  return (
-                    <div className="pl-5 pt-1.5 mt-1">
-                      <EventOfferQuoteDetail
-                        raw={raw}
-                        tone={isSelfLane ? 'self' : 'thread'}
-                        showCostLabels
-                        commentLabel="Comentario del oferente"
-                        emptyComment="Sin comentario del oferente."
-                      />
-                    </div>
-                  );
-                })()}
-              {(() => {
-                if (event.action !== 'OFERTA_RECHAZADA' || actingAsDentista) return null;
-                // El payload llega sanitizado para el técnico: `feedbackDentista` se
-                // renombra a `comentarioDelSolicitante` (uchPresentation). Fallback a la
-                // clave cruda para vistas no sanitizadas (p. ej. admin).
-                const p = event.payload as
-                  | { comentarioDelSolicitante?: unknown; feedbackDentista?: unknown }
-                  | null;
-                const raw = p?.comentarioDelSolicitante ?? p?.feedbackDentista;
-                const fb = typeof raw === 'string' ? raw.trim() : '';
-                if (!fb) return null;
-                const detailBorder = isSelfLane ? 'border-primary/30' : 'border-divider';
-                const labelMuted = isSelfLane ? 'text-foreground' : 'text-faint';
-                const valueText = isSelfLane ? 'text-foreground' : 'text-muted/95';
-                return (
-                  <div className={`pl-5 pt-1.5 mt-1 space-y-0.5 border-t ${detailBorder}`}>
-                    <p className={`text-[10px] font-medium ${labelMuted}`}>Comentario del solicitante</p>
-                    <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${valueText}`}>{fb}</p>
-                  </div>
-                );
-              })()}
-              {/* En el descarte por aceptarse otra oferta (OFERTA_NO_SELECCIONADA), el
-                  técnico NO necesita ver su propio snapshot (costo/plazo/comentario):
-                  es info que ya tiene y el comentario propio no aporta. Basta el aviso. */}
-            </div>
-          )}
-
-          {event.action === CASE_EVENTS.OFERTA_ENVIADA && (
-            <div className={`space-y-1.5 ${isSelfLane ? 'text-foreground' : 'text-foreground'}`}>
-              <div className="flex items-center gap-2">
-                <Send className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="text-[11px] font-bold">Cotización enviada</span>
-              </div>
-              {event.content?.trim() ? (
-                <p
-                  className={`text-[11px] leading-relaxed whitespace-pre-wrap ${
-                    isSelfLane ? 'text-foreground' : 'text-foreground/95'
-                  }`}
-                >
-                  {event.content}
-                </p>
-              ) : null}
-              <EventOfferQuoteDetail
-                raw={
-                  event.payload && typeof event.payload === 'object'
-                    ? (event.payload as Record<string, unknown>)
-                    : {}
-                }
-                tone={isSelfLane ? 'self' : 'thread'}
-                showCostLabels={actingAsDentista}
-                commentLabel={
-                  actingAsDentista ? 'Comentario del oferente' : 'Comentario para el solicitante'
-                }
-                emptyComment={
-                  actingAsDentista ? 'Sin comentario del oferente.' : 'Sin comentario en la oferta.'
-                }
-              />
-            </div>
-          )}
-
-          {event.action === CASE_EVENTS.OFERTA_RETIRADA && (
-            <div className={`space-y-1.5 ${isSelfLane ? 'text-foreground' : 'text-error'}`}>
-              <div className="flex items-center gap-2">
-                <Undo2 className="w-3.5 h-3.5 flex-shrink-0" />
-                <span className="text-[11px] font-bold">Oferta retirada</span>
-              </div>
-              {event.content?.trim() ? (
-                <p
-                  className={`text-[11px] leading-relaxed whitespace-pre-wrap ${
-                    isSelfLane ? 'text-foreground' : 'text-foreground/95'
-                  }`}
-                >
-                  {event.content}
-                </p>
-              ) : null}
-              <EventOfferQuoteDetail
-                raw={
-                  event.payload && typeof event.payload === 'object'
-                    ? (event.payload as Record<string, unknown>)
-                    : {}
-                }
-                tone={isSelfLane ? 'self' : 'thread'}
-                commentLabel="Comentario que tenía la oferta"
-                emptyComment="Sin comentario en la oferta."
-              />
-            </div>
-          )}
 
           {event.action === CASE_EVENTS.OFERTA_RECHAZADA_POR_TECNICO && (
             <div className={`space-y-1.5 ${isSelfLane ? 'text-foreground' : 'text-error'}`}>
@@ -714,6 +566,36 @@ export default function UchEventBubble({
                           value={reviewComment}
                           onChange={(e) => setReviewComment?.(e.target.value)}
                         />
+                        {setRevisionAttachments && (
+                          <div className="space-y-1">
+                            <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-primary hover:underline w-fit">
+                              <FileText className="w-3 h-3" aria-hidden />
+                              Adjuntar referencias ({revisionAttachments.length}/5)
+                              <input
+                                type="file"
+                                multiple
+                                accept=".jpg,.jpeg,.png,.pdf,.docx"
+                                className="hidden"
+                                onChange={(e) => {
+                                  const incoming = Array.from(e.target.files ?? []);
+                                  e.target.value = '';
+                                  const next = [...revisionAttachments, ...incoming].slice(0, 5);
+                                  setRevisionAttachments(next);
+                                }}
+                              />
+                            </label>
+                            {revisionAttachments.length > 0 && (
+                              <ul className="space-y-0.5">
+                                {revisionAttachments.map((f, i) => (
+                                  <li key={i} className="flex items-center justify-between text-[10px] bg-white/5 rounded px-2 py-1">
+                                    <span className="truncate max-w-[80%] text-foreground">{f.name}</span>
+                                    <button type="button" onClick={() => setRevisionAttachments(revisionAttachments.filter((_, j) => j !== i))} className="text-error hover:text-error/70 ml-1"><XCircle className="w-3 h-3" /></button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
                         <div className="flex flex-col gap-1.5">
                           <button
                             type="button"
@@ -774,6 +656,8 @@ export default function UchEventBubble({
                     comment={qualityComment}
                     setComment={setQualityComment ?? (() => {})}
                     dentistRejectionContext={dentistRejectionContext}
+                    attachments={qualityAttachments}
+                    setAttachments={setQualityAttachments}
                   />
                 )}
               </div>

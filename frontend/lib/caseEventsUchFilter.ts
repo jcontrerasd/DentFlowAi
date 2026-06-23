@@ -3,12 +3,10 @@ import { tecnicoSeesVisibleToTecnicoEvent } from '@/lib/uchEventVisibility';
 /** Eventos internos del algoritmo ocultos al dentista en UCH (alineado con getCaseEventsAction). */
 export const LEGACY_DENTIST_HIDDEN = new Set([
   'CASO_CLASIFICADO',
-  'INVITACION_ENVIADA',
   'COTIZACION_RECIBIDA',
   'SELECCION_FALLIDA',
   'FAUCHARD_PRESENTACION_CERRADA',
   'REINTENTO_SELECCION',
-  'OFERTAS_COMPARATIVAS_LISTAS',
   'PROPUESTA_GENERADA',
 ]);
 

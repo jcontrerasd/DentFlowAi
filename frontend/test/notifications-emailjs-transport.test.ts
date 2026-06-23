@@ -45,7 +45,7 @@ describe('notifyUser — transport EmailJS', () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => 'OK' });
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await notifyUser('u1', 'NUEVA_INVITACION', { caseId: 'c1', deadline: '12:00' });
+    const res = await notifyUser('u1', 'NUEVA_ASIGNACION', { caseId: 'c1', deadline: '12:00' });
     expect(res.success).toBe(true);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -98,7 +98,7 @@ describe('notifyUser — transport EmailJS', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await notifyUser('u1', 'NUEVA_INVITACION', { caseId: 'c1', deadline: '12:00' });
+    const res = await notifyUser('u1', 'NUEVA_ASIGNACION', { caseId: 'c1', deadline: '12:00' });
     expect(res.success).toBe(true);
     expect(fetchMock).not.toHaveBeenCalled(); // aunque haya credenciales válidas
   });

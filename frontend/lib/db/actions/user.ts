@@ -133,7 +133,15 @@ export async function createUserAction(data: {
  * Actualiza el perfil de un usuario.
  */
 export async function updateUserAction(id: string, data: Partial<typeof user.$inferInsert>) {
+  if (infraPromise) await infraPromise;
   try {
+    const session = await auth();
+    const caller = session?.user as any;
+    const callerId = caller?.id as string | undefined;
+    if (!callerId) return { success: false, error: 'No autenticado' };
+    const isAdmin = caller?.role === 'admin';
+    if (callerId !== id && !isAdmin) return { success: false, error: 'Sin permiso para modificar este perfil' };
+
     const [updated] = await db
       .update(user)
       .set({

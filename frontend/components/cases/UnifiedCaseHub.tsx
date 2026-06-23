@@ -256,6 +256,8 @@ export default function UnifiedCaseHub({
   const [fileProgress, setFileProgress] = useState<Record<number, number>>({});
   const [reviewComment, setReviewComment] = useState('');
   const [qualityComment, setQualityComment] = useState('');
+  const [revisionAttachments, setRevisionAttachments] = useState<File[]>([]);
+  const [qualityAttachments, setQualityAttachments] = useState<File[]>([]);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
   const [viewer3DState, setViewer3DState] = useState<{ deliveryId: string; version: number; files: string[]; dentistNote?: string; readonly?: boolean } | null>(null);
@@ -298,16 +300,11 @@ export default function UnifiedCaseHub({
     // v2 activo: publicación, asignación directa, inicio de trabajo
     // Legacy: todo el flujo de cotización múltiple y comparativo
     asignacion: [
-      'CASO_PUBLICADO', 'CASO_EN_COLA', 'CASO_REPUBLICADO', 'REPUBLICACION',
+      'CASO_PUBLICADO', 'CASO_EN_COLA',
       'ASIGNACION_ENVIADA', 'ASIGNACION_RECIBIDA', 'ASIGNACION_ACEPTADA',
       'ASIGNACION_RECHAZADA', 'ASIGNACION_EXPIRADA', 'ASIGNACION_REASIGNADA',
       'OFERTA_RECHAZADA_POR_TECNICO', 'TRABAJO_INICIADO',
       'ASIGNACION_CALIDAD', 'CASO_DERIVADO_CALIDAD',
-      // Legacy cotización/comparativo
-      'INVITACION_RECIBIDA', 'INVITACION_EXPIRADA', 'OFERTA_ENVIADA',
-      'PROPUESTA_ACEPTADA', 'OFERTA_ACEPTADA', 'OFERTA_RECHAZADA',
-      'OFERTA_GANADORA', 'OFERTA_NO_SELECCIONADA', 'CASO_OFERTAS_TODAS_RECHAZADAS',
-      'CASO_SIN_OFERTAS_CERRADO', 'OFERTAS_COMPARATIVAS_LISTAS', 'PROPUESTA_GENERADA',
       'SOLICITUD_CAMBIO_FLUJO', 'SOLICITUD_CAMBIO_FLUJO_RECHAZADA',
       'CASO_PAUSADO', 'CASO_CANCELADO', 'CREACION', 'CASO_CREADO', 'CASO_COPIA',
     ],
@@ -416,7 +413,7 @@ export default function UnifiedCaseHub({
 
           if (
             actingAsDentista &&
-            (e.action === 'OFERTAS_COMPARATIVAS_LISTAS' || e.action === 'PROPUESTA_GENERADA')
+            e.action === 'PROPUESTA_GENERADA'
           ) {
             return false;
           }
@@ -471,16 +468,7 @@ export default function UnifiedCaseHub({
           if (actingAsTecnico && techOfferRejectedView && selectedTechnicianId && e.type === 'sistema') {
             const p = e.payload as any;
             const invId = p?.invitationId;
-            if (!invId) {
-              const allowUnscopedSistema = [
-                'OFERTA_RECHAZADA',
-                'OFERTA_NO_SELECCIONADA',
-                'INVITACION_EXPIRADA',
-                'CASO_OFERTAS_TODAS_RECHAZADAS',
-                'CASO_SIN_OFERTAS_CERRADO',
-              ];
-              if (!allowUnscopedSistema.includes(e.action)) return false;
-            }
+            if (!invId) return false;
           }
 
           if (actingAsTecnico && techOfferRejectedView && selectedTechnicianId) {
@@ -512,14 +500,12 @@ export default function UnifiedCaseHub({
     ],
   );
 
-  /** Técnico: el hilo ya muestra cierre de oferta (perdedor u otro rechazo visible); evita pie duplicado. */
+  /** Técnico: el hilo ya muestra cierre de oferta (rechazo explícito visible); evita pie duplicado. */
   const timelineHasTechOfferClosureEvent = useMemo(
     () =>
       roleScopedEvents.some(
         (e) =>
-          e.action === 'OFERTA_NO_SELECCIONADA' ||
-          (actingAsTecnico &&
-            (e.action === 'OFERTA_RECHAZADA' || e.action === 'OFERTA_RECHAZADA_POR_TECNICO')),
+          actingAsTecnico && e.action === 'OFERTA_RECHAZADA_POR_TECNICO',
       ),
     [roleScopedEvents, actingAsTecnico],
   );
@@ -1156,20 +1142,24 @@ export default function UnifiedCaseHub({
                         if (!reviewComment.trim()) return;
                         setIsSubmittingRevision(true);
                         try {
-                          const ok = await onActionTriggered?.('request_revision', { reason: reviewComment });
-                          if (ok) setReviewComment('');
+                          const ok = await onActionTriggered?.('request_revision', { reason: reviewComment, attachments: revisionAttachments });
+                          if (ok) { setReviewComment(''); setRevisionAttachments([]); }
                         } finally {
                           setIsSubmittingRevision(false);
                         }
                       }}
                       reviewComment={reviewComment}
                       setReviewComment={setReviewComment}
+                      revisionAttachments={revisionAttachments}
+                      setRevisionAttachments={setRevisionAttachments}
                       isSubmittingReview={isSubmittingReview}
                       isSubmittingRevision={isSubmittingRevision}
                       caseId={caseId}
                       actingAsCalidad={actingAsCalidad}
                       qualityComment={qualityComment}
                       setQualityComment={setQualityComment}
+                      qualityAttachments={qualityAttachments}
+                      setQualityAttachments={setQualityAttachments}
                       isPendingQualityDelivery={(() => {
                         if (!pendingDeliveryForReview || !actingAsCalidad || caseStatus !== 'enRevisionCalidad') return false;
                         const p = (row.event.payload as Record<string, unknown> | undefined) ?? {};
@@ -1182,8 +1172,8 @@ export default function UnifiedCaseHub({
                         return ok;
                       }}
                       onQualityRequestChanges={async (reason) => {
-                        const ok = await onActionTriggered?.('request_quality_revision', { reason });
-                        if (ok) setQualityComment('');
+                        const ok = await onActionTriggered?.('request_quality_revision', { reason, attachments: qualityAttachments });
+                        if (ok) { setQualityComment(''); setQualityAttachments([]); }
                         return ok;
                       }}
                       onDeriveQuality={() => { onInvitationUpdate?.(); }}
