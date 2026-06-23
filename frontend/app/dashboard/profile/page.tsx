@@ -24,16 +24,17 @@ import { REGIONS_BY_COUNTRY, SUPPORTED_COUNTRIES } from '@/lib/constants/address
 import { useAuth, UserProfile } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { updateUserAction } from '@/lib/db/actions/user';
-import { updateOrganizationDetailsAction } from '@/lib/db/actions/organization';
+import { updateOrganizationDetailsAction, createOrganizationAction } from '@/lib/db/actions/organization';
 import { getUploadUrlAction, getSignedUrlAction } from '@/lib/db/actions/cases';
 import Image from 'next/image';
 import { formatPhone } from '@/lib/formatPhone';
 import SkillMatrixForm, { type SkillMatrixFormHandle } from '@/components/profile/SkillMatrixForm';
 import AvailabilityToggle from '@/components/profile/AvailabilityToggle';
 import ThemeSelector from '@/components/profile/ThemeSelector';
+import { EmailNotificationPrefsSection } from '@/components/profile/EmailNotificationPrefsSection';
 
 export default function ProfilePage() {
-  const { user, userProfile, updateProfileOptimistically } = useAuth();
+  const { user, userProfile, isSimulating, updateProfileOptimistically } = useAuth();
   const { showSuccess } = useToast();
   const router = useRouter();
   const skillFormRef = useRef<SkillMatrixFormHandle>(null);
@@ -41,6 +42,7 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const formInitialized = useRef(false);
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -57,9 +59,9 @@ export default function ProfilePage() {
     bio: '',
   });
 
-  // Datos de la organización (clínica / laboratorio). RUT se muestra pero no se edita.
   const [orgData, setOrgData] = useState({
     name: '',
+    rut: '',
     giro: '',
     legalAddress: '',
   });
@@ -78,7 +80,8 @@ export default function ProfilePage() {
   const BIO_MAX_LENGTH = 500;
 
   useEffect(() => {
-    if (userProfile) {
+    if (userProfile && !formInitialized.current) {
+      formInitialized.current = true;
       setFormData({
         fullName: userProfile.fullName || '',
         phone: userProfile.phone || '',
@@ -96,6 +99,7 @@ export default function ProfilePage() {
 
       setOrgData({
         name: userProfile.organization?.name || '',
+        rut: userProfile.organization?.rut || '',
         giro: userProfile.organization?.giro || '',
         legalAddress: userProfile.organization?.legalAddress || '',
       });
@@ -156,9 +160,37 @@ export default function ProfilePage() {
       const result = await updateUserAction(userProfile.id, formData);
       if (!result.success) throw new Error(result.error);
 
-      const orgId = userProfile.organization?.id;
-      if (orgId) {
-        const orgResult = await updateOrganizationDetailsAction(orgId, orgData);
+      let orgId = userProfile.organization?.id ?? null;
+
+      if (!orgId) {
+        // Sin org vinculada: crear solo si el usuario llenó algo
+        const hasOrgData = orgData.name.trim() || orgData.giro.trim() || orgData.legalAddress.trim();
+        if (hasOrgData) {
+          if (!orgData.rut.trim()) throw new Error('El RUT es obligatorio para registrar la organización');
+          const orgType = userProfile.role === 'tecnico' ? 'laboratorio' : 'clinica';
+          const createResult = await createOrganizationAction({
+            name: orgData.name.trim() || 'Sin nombre',
+            type: orgType,
+            rut: orgData.rut.trim(),
+          });
+          if (!createResult.success) throw new Error(createResult.error);
+          orgId = (createResult.data as any)?.id ?? null;
+          if (orgId) {
+            await updateUserAction(userProfile.id, { organizationId: orgId });
+            if (orgData.giro.trim() || orgData.legalAddress.trim()) {
+              await updateOrganizationDetailsAction(orgId, {
+                giro: orgData.giro.trim() || undefined,
+                legalAddress: orgData.legalAddress.trim() || undefined,
+              });
+            }
+          }
+        }
+      } else {
+        const orgResult = await updateOrganizationDetailsAction(orgId, {
+          name: orgData.name,
+          giro: orgData.giro,
+          legalAddress: orgData.legalAddress,
+        });
         if (!orgResult.success) throw new Error(orgResult.error);
       }
 
@@ -167,6 +199,9 @@ export default function ProfilePage() {
         if (!skillsResult.success) throw new Error(skillsResult.error);
       }
 
+      const savedOrg = orgId
+        ? { ...(userProfile.organization ?? {}), ...orgData, id: orgId }
+        : userProfile.organization;
       updateProfileOptimistically({
         ...formData,
         region: formData.region || null,
@@ -174,10 +209,16 @@ export default function ProfilePage() {
         address: formData.address || null,
         addressNumber: formData.addressNumber || null,
         addressOffice: formData.addressOffice || null,
-        organization: userProfile.organization
-          ? { ...userProfile.organization, ...orgData }
-          : userProfile.organization,
+        organization: savedOrg as any,
       });
+      if (savedOrg) {
+        setOrgData({
+          name: (savedOrg as any).name || '',
+          rut: (savedOrg as any).rut || '',
+          giro: (savedOrg as any).giro || '',
+          legalAddress: (savedOrg as any).legalAddress || '',
+        });
+      }
       showSuccess('Perfil actualizado con éxito');
     } catch (err: any) {
       setError(err.message || "Error al actualizar el perfil");
@@ -482,15 +523,26 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-faint ml-1">RUT</label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-faint ml-1">
+                    RUT{!userProfile?.organization?.id && ' *'}
+                  </label>
                   <div className="relative">
                     <Fingerprint className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
-                    <input
-                      disabled
-                      readOnly
-                      className="w-full bg-surface-2 border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-muted cursor-not-allowed"
-                      value={userProfile?.organization?.rut || '—'}
-                    />
+                    {userProfile?.organization?.id ? (
+                      <input
+                        disabled
+                        readOnly
+                        className="w-full bg-surface-2 border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-muted cursor-not-allowed"
+                        value={userProfile.organization.rut || '—'}
+                      />
+                    ) : (
+                      <input
+                        placeholder="12.345.678-9"
+                        className="w-full bg-surface border border-divider rounded-xl pl-12 pr-4 py-3 text-sm text-foreground focus:border-primary/30 focus:outline-none transition-all"
+                        value={orgData.rut}
+                        onChange={e => setOrgData({...orgData, rut: e.target.value})}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -540,6 +592,13 @@ export default function ProfilePage() {
         <ThemeSelector />
       </div>
 
+      {/* Notificaciones por email */}
+      {userProfile?.role && (
+        <div className="max-w-4xl mx-auto mt-4">
+          <EmailNotificationPrefsSection role={userProfile.role} />
+        </div>
+      )}
+
       {/* S1-06: Secciones exclusivas para técnicos */}
       {userProfile?.role === 'tecnico' && (
         <div className="max-w-4xl mx-auto space-y-6">
@@ -565,6 +624,7 @@ export default function ProfilePage() {
             <SkillMatrixForm
               ref={skillFormRef}
               hideButton
+              targetUserId={isSimulating && userProfile ? userProfile.id : undefined}
             />
           </div>
         </div>
