@@ -34,6 +34,7 @@ export async function getUserProfileDirect(userId: string) {
         subRoles: user.subRoles,
         isActive: user.isActive,
         image: user.image,
+        emailVerified: user.emailVerified,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
         organization: {
@@ -162,20 +163,25 @@ export async function getGoogleOAuthEnabledAction(): Promise<{ enabled: boolean 
   return { enabled: process.env.GOOGLE_OAUTH_ENABLED === 'true' };
 }
 
+/** Fase 3 (ajuste login): expone el flag server-only EMAIL_VERIFICATION_ENABLED a la UI (login). */
+export async function getEmailVerificationEnabledAction(): Promise<{ enabled: boolean }> {
+  return { enabled: process.env.EMAIL_VERIFICATION_ENABLED === 'true' };
+}
+
 export async function checkUserStatusAction(email: string) {
   try {
     const cleanEmail = email.toLowerCase().trim();
     const [existingUser] = await db
-      .select({ isActive: user.isActive })
+      .select({ isActive: user.isActive, emailVerified: user.emailVerified })
       .from(user)
       .where(sql`LOWER(${user.email}) = ${cleanEmail}`)
       .limit(1);
 
-    if (!existingUser) return { exists: false, active: false };
-    return { exists: true, active: existingUser.isActive };
+    if (!existingUser) return { exists: false, active: false, emailVerified: false };
+    return { exists: true, active: existingUser.isActive, emailVerified: !!existingUser.emailVerified };
   } catch (error) {
     console.error("[checkUserStatusAction] Error crítico DB:", error);
-    return { exists: false, active: false };
+    return { exists: false, active: false, emailVerified: false };
   }
 }
 

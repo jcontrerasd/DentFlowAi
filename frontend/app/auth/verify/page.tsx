@@ -1,24 +1,49 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect, Suspense } from 'react';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import Link from 'next/link';
+import { confirmEmailVerificationAction, requestEmailVerificationAction } from '@/lib/db/actions/auth';
 
 function VerifyHandler() {
   const router = useRouter();
-  const [status, setStatus] = useState<'verifying' | 'success'>('verifying');
-  const [message] = useState('Tu identidad ha sido verificada exitosamente.');
+  const searchParams = useSearchParams();
+  const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'pending'>('verifying');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [resendEmail, setResendEmail] = useState('');
+  const [resent, setResent] = useState(false);
 
   useEffect(() => {
-    // En el modo nativo, llegamos aquí ya verificados o auto-verificados
-    const timer = setTimeout(() => {
-      setStatus('success');
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 1500);
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [router]);
+    const token = searchParams.get('token');
+    // Fase 3 (ajuste login): dashboard/layout.tsx redirige aquí con ?pending=true cuando la
+    // sesión ya está creada pero el email todavía no está verificado (sin token que confirmar).
+    if (!token) {
+      if (searchParams.get('pending') === 'true') {
+        setStatus('pending');
+        return;
+      }
+      setStatus('error');
+      setErrorMessage('Falta el token de verificación en el enlace.');
+      return;
+    }
+
+    confirmEmailVerificationAction(token).then((result) => {
+      if (result.success) {
+        setStatus('success');
+        setTimeout(() => router.push('/dashboard'), 1500);
+      } else {
+        setStatus('error');
+        setErrorMessage(result.error || 'No se pudo verificar el correo.');
+      }
+    });
+  }, [searchParams, router]);
+
+  const handleResend = async () => {
+    if (!resendEmail) return;
+    await requestEmailVerificationAction(resendEmail);
+    setResent(true);
+  };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -48,12 +73,84 @@ function VerifyHandler() {
             </div>
             <div>
               <h1 className="text-3xl font-black text-foreground mb-2 serif-font italic">Acceso Habilitado.</h1>
-              <p className="text-muted text-sm">{message}</p>
+              <p className="text-muted text-sm">Tu correo fue verificado exitosamente.</p>
             </div>
             <div className="flex items-center justify-center gap-2 text-primary text-xs font-bold">
               <div className="w-3 h-3 border-2 border-teal-400/30 border-t-teal-400 rounded-full animate-spin" />
               Redirigiendo al Dashboard...
             </div>
+          </div>
+        )}
+
+        {status === 'pending' && (
+          <div className="space-y-6">
+            <div className="relative w-20 h-20 mx-auto">
+              <div className="relative w-full h-full bg-primary-hl rounded-full flex items-center justify-center border border-primary/20">
+                <Loader2 className="w-10 h-10 text-primary" />
+              </div>
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-foreground mb-2 serif-font italic">Revisa tu correo.</h1>
+              <p className="text-muted text-sm">Te enviamos un enlace de verificación cuando creaste tu cuenta. Confírmalo para poder usar DentFlowAi.</p>
+            </div>
+
+            {resent ? (
+              <p className="text-jade text-sm">Te enviamos un nuevo enlace de verificación.</p>
+            ) : (
+              <div className="space-y-3">
+                <input
+                  type="email"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  placeholder="tu@correo.com"
+                  className="w-full bg-surface/30 border border-divider rounded-xl px-4 py-3 text-foreground placeholder:text-faint outline-none focus:border-primary/30 transition-all text-sm"
+                />
+                <button
+                  onClick={handleResend}
+                  className="w-full h-12 bg-surface border border-divider rounded-xl font-bold text-foreground text-sm hover:bg-white/5 transition-all"
+                >
+                  Reenviar enlace de verificación
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div className="space-y-6">
+            <div className="relative w-20 h-20 mx-auto">
+              <div className="relative w-full h-full bg-error-hl rounded-full flex items-center justify-center border border-error/20">
+                <AlertCircle className="w-10 h-10 text-red-400" />
+              </div>
+            </div>
+            <div>
+              <h1 className="text-2xl font-black text-foreground mb-2 serif-font italic">No pudimos verificar tu correo.</h1>
+              <p className="text-muted text-sm">{errorMessage}</p>
+            </div>
+
+            {resent ? (
+              <p className="text-jade text-sm">Si tu correo existe y no está verificado, te enviamos un nuevo enlace.</p>
+            ) : (
+              <div className="space-y-3">
+                <input
+                  type="email"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  placeholder="tu@correo.com"
+                  className="w-full bg-surface/30 border border-divider rounded-xl px-4 py-3 text-foreground placeholder:text-faint outline-none focus:border-primary/30 transition-all text-sm"
+                />
+                <button
+                  onClick={handleResend}
+                  className="w-full h-12 bg-surface border border-divider rounded-xl font-bold text-foreground text-sm hover:bg-white/5 transition-all"
+                >
+                  Reenviar enlace de verificación
+                </button>
+              </div>
+            )}
+
+            <Link href="/auth/login" className="block text-primary hover:text-primary text-xs font-bold uppercase tracking-wider transition-colors">
+              Volver al login
+            </Link>
           </div>
         )}
 

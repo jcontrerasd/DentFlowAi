@@ -255,6 +255,22 @@ export async function ensureIncrementalInfrastructure(db: any) {
   } catch (e) {
     console.error("[Infrastructure] Error creando tablas NextAuth (v5.21):", e);
   }
+
+  // v5.21 — password_reset_token (Fase 3.5 ajuste login, recuperación de contraseña real).
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS password_reset_token (
+        token TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
+        expires TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS password_reset_token_email_idx ON password_reset_token(email);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando password_reset_token (v5.21):", e);
+  }
 }
 
 /**

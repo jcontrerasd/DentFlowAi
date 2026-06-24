@@ -22,6 +22,7 @@ import {
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 import { useAuth } from '@/context/AuthContext';
+import { getEmailVerificationEnabledAction } from '@/lib/db/actions/user';
 import { getSignedUrlAction } from '@/lib/db/actions/cases';
 import { getMyInvitationsAction } from '@/lib/db/actions/invitations';
 import { getMyHubUnreadTotalAction } from '@/lib/db/actions/hubRead';
@@ -132,6 +133,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (userProfile.onboardingStep !== 100) {
       // Solo redirigir si no estamos ya en proceso de registro
       router.push('/auth/register');
+      return;
+    }
+
+    // Fase 3 (ajuste login): bloquea el dashboard si el correo no está verificado. Cubre
+    // Credentials sin verificar; los usuarios de Google ya llegan con emailVerified poblado
+    // por el adapter, así que esta misma condición los excluye sin lógica adicional.
+    if (!userProfile.emailVerified) {
+      getEmailVerificationEnabledAction().then(({ enabled }) => {
+        if (enabled) router.push('/auth/verify?pending=true');
+      });
     }
   }, [loading, user, userProfile, router]);
 

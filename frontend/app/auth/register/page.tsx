@@ -29,6 +29,7 @@ import AuthNavbar from '@/components/auth/AuthNavbar';
 
 // NATIVE SERVER ACTIONS
 import { createUserAction, updateUserAction, getUserProfileDirect, discardOnboardingAccountAction, getGoogleOAuthEnabledAction } from '@/lib/db/actions/user';
+import { requestEmailVerificationAction } from '@/lib/db/actions/auth';
 import SkillMatrixForm from '@/components/profile/SkillMatrixForm';
 import {
   createOrganizationAction,
@@ -245,8 +246,12 @@ export default function RegisterPage() {
       });
       
       if (!newUser?.success || !newUser.data) throw new Error(newUser?.error || 'Error al crear usuario.');
-      
-      setFormData(prev => ({ 
+
+      // Fase 3 (ajuste login): dispara el correo de verificación. No bloquea el auto-login de
+      // abajo — el gate real vive en dashboard/layout.tsx (preserva el flujo de registro actual).
+      requestEmailVerificationAction(email).catch(() => {});
+
+      setFormData(prev => ({
         ...prev, 
         userId: newUser.data.id,
         orgId: newUser.data.organizationId || ''

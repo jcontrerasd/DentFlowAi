@@ -71,6 +71,48 @@ async function sendViaEmailJS(params: { subject: string; toEmail: string; body: 
   }
 }
 
+/**
+ * Fase 3/3.5 (ajuste login): envío de emails transaccionales de cuenta (verificación,
+ * reset de contraseña) — NO pasa por `notifyUser()` ni por `notificationsLive()`. Esos
+ * emails son de negocio (asignaciones, revisiones) y por diseño se silencian fuera de
+ * producción para no spamear con datos clonados; verificación/reset son distintos: el
+ * usuario los necesita para poder operar su cuenta. Reusa exactamente las mismas
+ * credenciales EmailJS (`emailJsConfig()`) — el único gate que se mantiene es la falta
+ * de credenciales (`isStubMode`), que es un fallback técnico, no un flag de producto.
+ */
+export async function sendCriticalAuthEmail(params: { toEmail: string; subject: string; body: string }): Promise<{ ok: boolean; error?: string }> {
+  pushEmailPreview({ to: params.toEmail, subject: params.subject, body: params.body, type: 'AUTH_CRITICAL' });
+
+  const cfg = emailJsConfig();
+  if (isStubMode(cfg)) {
+    console.log(`[STUB-EMAIL] (sin credenciales) To: ${params.toEmail} | Subject: ${params.subject}`);
+    return { ok: true };
+  }
+
+  try {
+    const response = await fetch(EMAILJS_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service_id: cfg.serviceId,
+        template_id: cfg.templateId,
+        user_id: cfg.publicKey,
+        accessToken: cfg.privateKey,
+        template_params: { subject: params.subject, to_email: params.toEmail, body: params.body },
+      }),
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      console.error(`[EmailJS] HTTP ${response.status}: ${text}`);
+      return { ok: false, error: `EmailJS HTTP ${response.status}` };
+    }
+    return { ok: true };
+  } catch (error) {
+    console.error('[EmailJS] Error de red (sendCriticalAuthEmail):', error);
+    return { ok: false, error: String(error) };
+  }
+}
+
 // ─── Preferencias de notificaciones por email ────────────────────────────────
 
 export type EmailNotifCategory =

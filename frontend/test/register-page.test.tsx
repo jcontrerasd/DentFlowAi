@@ -54,6 +54,10 @@ vi.mock('@/lib/db/actions/organization', () => ({
   updateOrganizationDetailsAction: (...a: unknown[]) => updateOrganizationDetailsActionMock(...a),
 }));
 
+vi.mock('@/lib/db/actions/auth', () => ({
+  requestEmailVerificationAction: async () => ({ success: true }),
+}));
+
 import RegisterPage from '@/app/auth/register/page';
 
 describe('RegisterPage', () => {

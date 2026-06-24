@@ -7,7 +7,8 @@ import { AlertCircle, Mail, Lock } from 'lucide-react';
 import { signIn, useSession } from 'next-auth/react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { checkUserStatusAction, getGoogleOAuthEnabledAction } from '@/lib/db/actions/user';
+import { checkUserStatusAction, getGoogleOAuthEnabledAction, getEmailVerificationEnabledAction } from '@/lib/db/actions/user';
+import { requestEmailVerificationAction } from '@/lib/db/actions/auth';
 import AuthNavbar from '@/components/auth/AuthNavbar';
 import { useAuth } from '@/context/AuthContext';
 
@@ -49,10 +50,19 @@ function LoginContent() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [emailVerificationEnabled, setEmailVerificationEnabled] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendSent, setResendSent] = useState(false);
 
   useEffect(() => {
     getGoogleOAuthEnabledAction().then((r) => setGoogleEnabled(r.enabled));
+    getEmailVerificationEnabledAction().then((r) => setEmailVerificationEnabled(r.enabled));
   }, []);
+
+  const handleResendVerification = async () => {
+    await requestEmailVerificationAction(email);
+    setResendSent(true);
+  };
 
   // Fase 2 (ajuste login): errores de NextAuth (ej. signIn callback de Google rechazó la cuenta)
   // llegan acá vía ?error= porque la config ahora declara pages.error: '/auth/login'.
@@ -73,11 +83,13 @@ function LoginContent() {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+    setNeedsVerification(false);
+    setResendSent(false);
+
     try {
       // 1. Pre-check de existencia y estado (Bloqueo Admin)
       const status = await checkUserStatusAction(email);
-      
+
       if (!status.exists) {
         setError('Este correo electrónico no está registrado en nuestro sistema.');
         setLoading(false);
@@ -86,6 +98,16 @@ function LoginContent() {
 
       if (!status.active) {
         setError('Tu cuenta ha sido desactivada por un administrador. Contacta a soporte para más detalles.');
+        setLoading(false);
+        return;
+      }
+
+      // Fase 3 (ajuste login): bloquea el login si el correo no está verificado. Excluye
+      // master/@dentflow.ai (mismo criterio que auth.config.ts) — el backfill de verificación
+      // debería cubrirlos de todas formas, esto es defensa adicional.
+      const isAdminEmail = email.toLowerCase() === 'jaime.contreras.d@gmail.com' || email.toLowerCase().endsWith('@dentflow.ai');
+      if (emailVerificationEnabled && !status.emailVerified && !isAdminEmail) {
+        setNeedsVerification(true);
         setLoading(false);
         return;
       }
@@ -132,6 +154,22 @@ function LoginContent() {
           <div className="mb-8 p-4 bg-red-900/10 border border-error/30 rounded-2xl flex items-center gap-3 text-red-200 text-xs font-medium">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             {error}
+          </div>
+        )}
+
+        {needsVerification && (
+          <div className="mb-8 p-4 bg-primary-hl border border-primary/20 rounded-2xl text-xs font-medium space-y-3">
+            <div className="flex items-center gap-3 text-foreground">
+              <Mail className="w-4 h-4 flex-shrink-0" />
+              Verifica tu correo electrónico para poder iniciar sesión.
+            </div>
+            {resendSent ? (
+              <p className="text-jade">Te enviamos un nuevo enlace de verificación.</p>
+            ) : (
+              <button type="button" onClick={handleResendVerification} className="text-primary hover:text-primary font-bold uppercase tracking-wider transition-colors">
+                Reenviar enlace de verificación
+              </button>
+            )}
           </div>
         )}
 

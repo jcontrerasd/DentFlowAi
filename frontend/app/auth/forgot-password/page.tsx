@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Mail, ArrowLeft, Send, CheckCircle2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
+import { requestPasswordResetAction } from '@/lib/db/actions/auth';
 
 export default function ForgotPasswordPage() {
   return (
@@ -31,12 +32,9 @@ function ForgotPasswordContent() {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Simular proceso nativo (Pendiente integración de Mailer en Backend)
-    setTimeout(() => {
-      setSent(true);
-      setLoading(false);
-    }, 1000);
+    await requestPasswordResetAction(email);
+    setSent(true);
+    setLoading(false);
   };
 
   return (
@@ -66,7 +64,7 @@ function ForgotPasswordContent() {
             </div>
             <h2 className="text-2xl font-bold text-foreground mb-4">Solicitud Recibida</h2>
             <p className="text-muted mb-8 leading-relaxed">
-              Estamos migrando a nuestro nuevo sistema de seguridad nativo. Si necesitas asistencia inmediata, contacta a <span className="text-primary font-bold">soporte@dentflow.ai</span>.
+              Si el correo <span className="text-primary font-bold">{email}</span> está registrado, te enviamos un enlace para restablecer tu contraseña. Revisa tu bandeja de entrada (y spam).
             </p>
             <Link 
               href={`/auth/login?email=${encodeURIComponent(email)}`}

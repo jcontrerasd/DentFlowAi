@@ -10,6 +10,10 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => ({ get: searchParamsGetMock }),
 }));
 
+vi.mock('@/lib/db/actions/auth', () => ({
+  requestPasswordResetAction: vi.fn(async () => ({ success: true })),
+}));
+
 import ForgotPasswordPage from '@/app/auth/forgot-password/page';
 
 describe('ForgotPasswordPage', () => {

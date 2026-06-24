@@ -513,6 +513,17 @@ export const verificationToken = pgTable(
   ]
 )
 
+// Fase 3.5 (ajuste login) — recuperación de contraseña real. Tabla propia, separada de
+// `verificationToken` (NextAuth) a propósito: mezclar "verificar email" con "resetear clave"
+// en la misma tabla mezclaría dos flujos con garantías de seguridad distintas.
+export const passwordResetToken = pgTable("password_reset_token", {
+  token: text("token").primaryKey(),
+  email: text("email").notNull(),
+  expires: timestamp("expires", { withTimezone: true, mode: "date" }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true, mode: "date" }),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+});
+
 // RELATIONS
 export const clinicalCaseRelations = relations(clinicalCase, ({ one, many }) => ({
   organization: one(organization, {

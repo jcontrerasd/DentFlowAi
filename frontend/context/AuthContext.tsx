@@ -32,6 +32,7 @@ export interface UserProfile {
   image?: string | null;
   experienceYears?: number | null;
   bio?: string | null;
+  emailVerified?: string | Date | null;
 }
 
 interface AuthContextType {
