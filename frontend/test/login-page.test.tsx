@@ -24,6 +24,7 @@ vi.mock('next-auth/react', () => ({
 
 vi.mock('@/lib/db/actions/user', () => ({
   checkUserStatusAction: (...args: unknown[]) => checkUserStatusActionMock(...args),
+  getGoogleOAuthEnabledAction: async () => ({ enabled: false }),
 }));
 
 vi.mock('@/context/AuthContext', () => ({

@@ -1,9 +1,12 @@
 import type { NextAuthConfig } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import Google from "next-auth/providers/google"
 import * as bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { user, sessions } from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
+
+const isGoogleOAuthEnabled = process.env.GOOGLE_OAUTH_ENABLED === 'true';
 
 export default {
   providers: [
@@ -80,15 +83,86 @@ export default {
         }
       },
     }),
+    // Fase 2 (ajuste login): solo se agrega el provider si el flag está activo — con el flag
+    // off, el array de providers queda exactamente igual que hoy (solo Credentials).
+    ...(isGoogleOAuthEnabled ? [Google({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      // Google ya verificó el email — permitimos vincular con una cuenta existente (Credentials)
+      // que use el mismo email, en vez de fallar con OAuthAccountNotLinked.
+      allowDangerousEmailAccountLinking: true,
+    })] : []),
   ],
+  // Sin esto, errores de OAuth (ej. cuenta bloqueada) caen en la página de error genérica de
+  // NextAuth en vez de quedarse en la UI de la app. Con Credentials puro esto nunca importó
+  // porque signIn('credentials', { redirect: false }) nunca navega a una página de NextAuth.
+  pages: {
+    signIn: '/auth/login',
+    error: '/auth/login',
+  },
   callbacks: {
+    // Fase 2 (ajuste login): solo aplica a Google — Credentials ya resuelve todo esto dentro de
+    // su propio authorize() de arriba. Replica las mismas 3 reglas para que el método de login
+    // no abra una vía de bypass: bloqueo de cuenta inactiva, reset de rol admin para el dueño/
+    // dominio @dentflow.ai, y lastLoginAt (lo usa el cron de inactividad de disponibilidad).
+    async signIn({ user: authUser, account }) {
+      if (account?.provider !== 'google') return true;
+      if (!authUser.email) return false;
+
+      const [existingUser] = await db
+        .select()
+        .from(user)
+        .where(eq(user.id, authUser.id as string))
+        .limit(1);
+      if (!existingUser) return false;
+
+      const isMaster = existingUser.email === 'jaime.contreras.d@gmail.com';
+      const isAdminDomain = existingUser.email?.endsWith('@dentflow.ai');
+      const isSystemAdmin = isMaster || isAdminDomain;
+
+      let currentUser = existingUser;
+      if (isSystemAdmin) {
+        const [resetUser] = await db
+          .update(user)
+          .set({ role: 'admin', onboardingStep: 100, updatedAt: new Date() })
+          .where(eq(user.id, existingUser.id))
+          .returning();
+        currentUser = resetUser;
+      } else if (existingUser.onboardingStep === 0) {
+        // Usuario nuevo creado recién por el adapter (createUser en auth.ts ya le puso
+        // role:'dentista' como placeholder) — avanza al paso de selección de rol del wizard.
+        const [updated] = await db
+          .update(user)
+          .set({ onboardingStep: 20, updatedAt: new Date() })
+          .where(eq(user.id, existingUser.id))
+          .returning();
+        currentUser = updated;
+      }
+
+      if (!currentUser.isActive) return false;
+
+      await db.update(user)
+        .set({ lastLoginAt: new Date() })
+        .where(eq(user.id, currentUser.id));
+
+      // Mutar el objeto en el lugar para que el callback jwt (mismo ciclo de request) reciba
+      // los valores frescos — patrón estándar de NextAuth para pasar datos entre estos callbacks.
+      (authUser as any).role = currentUser.role;
+      (authUser as any).organizationId = currentUser.organizationId;
+
+      return true;
+    },
     async jwt({ token, user: authUser }) {
       if (authUser) {
         token.id = authUser.id;
         token.email = authUser.email; // Aseguramos el email en el token
         token.role = (authUser as any).role;
         token.organizationId = (authUser as any).organizationId;
-        token.isSystemAdmin = (authUser as any).isSystemAdmin;
+        // Provider-agnóstico (Credentials ya lo trae en authUser.isSystemAdmin desde authorize();
+        // Google no, así que lo recalculamos aquí para los dos por igual — mismo criterio).
+        const isMasterOrAdminDomain = authUser.email === 'jaime.contreras.d@gmail.com'
+          || !!authUser.email?.endsWith('@dentflow.ai');
+        token.isSystemAdmin = (authUser as any).isSystemAdmin ?? isMasterOrAdminDomain;
 
         // Fase 1 (ajuste login): tracking de sesión propia. NextAuth nunca toca la tabla
         // `sessions` en modo jwt (eso solo ocurre con strategy:"database", que es incompatible

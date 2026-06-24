@@ -46,6 +46,7 @@ vi.mock('@/lib/db/actions/user', () => ({
   createUserAction: (...a: unknown[]) => createUserActionMock(...a),
   updateUserAction: (...a: unknown[]) => updateUserActionMock(...a),
   getUserProfileDirect: (...a: unknown[]) => getUserProfileDirectMock(...a),
+  getGoogleOAuthEnabledAction: async () => ({ enabled: false }),
 }));
 
 vi.mock('@/lib/db/actions/organization', () => ({

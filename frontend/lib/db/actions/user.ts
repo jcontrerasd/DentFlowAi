@@ -157,6 +157,11 @@ export async function updateUserAction(id: string, data: Partial<typeof user.$in
   }
 }
 
+/** Fase 2 (ajuste login): expone el flag server-only GOOGLE_OAUTH_ENABLED a la UI (login/registro). */
+export async function getGoogleOAuthEnabledAction(): Promise<{ enabled: boolean }> {
+  return { enabled: process.env.GOOGLE_OAUTH_ENABLED === 'true' };
+}
+
 export async function checkUserStatusAction(email: string) {
   try {
     const cleanEmail = email.toLowerCase().trim();

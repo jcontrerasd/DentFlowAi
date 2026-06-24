@@ -28,7 +28,7 @@ import { useAuth } from '@/context/AuthContext';
 import AuthNavbar from '@/components/auth/AuthNavbar';
 
 // NATIVE SERVER ACTIONS
-import { createUserAction, updateUserAction, getUserProfileDirect, discardOnboardingAccountAction } from '@/lib/db/actions/user';
+import { createUserAction, updateUserAction, getUserProfileDirect, discardOnboardingAccountAction, getGoogleOAuthEnabledAction } from '@/lib/db/actions/user';
 import SkillMatrixForm from '@/components/profile/SkillMatrixForm';
 import {
   createOrganizationAction,
@@ -121,6 +121,18 @@ export default function RegisterPage() {
   const [hasSyncLoaded, setHasSyncLoaded] = useState(false);
   const [isAwaitingVerification, setIsAwaitingVerification] = useState(false);
   const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    getGoogleOAuthEnabledAction().then((r) => setGoogleEnabled(r.enabled));
+  }, []);
+
+  const handleGoogleSignUp = async () => {
+    setGoogleLoading(true);
+    setError(null);
+    await signIn('google', { callbackUrl: '/dashboard' });
+  };
 
   const router = useRouter();
   const { data: session, status: authStatus } = useSession();
@@ -618,6 +630,37 @@ export default function RegisterPage() {
                     {loading ? <RefreshCcw className="w-5 h-5 animate-spin" /> : <>Registrarme <ArrowRight className="w-5 h-5" /></>}
                   </button>
                 </form>
+
+                {googleEnabled && (
+                  <>
+                    <div className="flex items-center gap-3 mt-8">
+                      <div className="flex-1 h-px bg-divider" />
+                      <span className="text-[10px] uppercase tracking-widest font-black text-faint">o continúa con</span>
+                      <div className="flex-1 h-px bg-divider" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGoogleSignUp}
+                      disabled={googleLoading}
+                      className="w-full h-14 mt-6 bg-surface border border-divider rounded-2xl font-bold text-foreground flex items-center justify-center gap-3 hover:bg-white/5 transition-all disabled:opacity-50"
+                    >
+                      {googleLoading ? (
+                        <RefreshCcw className="w-5 h-5 animate-spin" />
+                      ) : (
+                        <>
+                          <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.07-1.8 2.71v2.26h2.9c1.7-1.57 2.7-3.88 2.7-6.61z" fill="#4285F4"/>
+                            <path d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.55-1.84.87-3.06.87-2.35 0-4.34-1.58-5.05-3.71H.92v2.33C2.4 15.98 5.45 18 9 18z" fill="#34A853"/>
+                            <path d="M3.95 10.72A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.18.27-1.72V4.95H.92A8.96 8.96 0 0 0 0 9c0 1.45.35 2.82.92 4.05l3.03-2.33z" fill="#FBBC05"/>
+                            <path d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.57-2.57C13.46.89 11.43 0 9 0 5.45 0 2.4 2.02.92 4.95l3.03 2.33C4.66 5.16 6.65 3.58 9 3.58z" fill="#EA4335"/>
+                          </svg>
+                          Registrarme con Google
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
+
                 <div className="mt-12 text-center text-[10px] uppercase tracking-widest font-black">
                   <span className="text-faint">¿Ya tienes cuenta? </span>
                   <Link href="/auth/login" className="text-primary hover:text-primary transition-colors ml-1">
