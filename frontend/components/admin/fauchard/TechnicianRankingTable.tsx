@@ -6,11 +6,7 @@ import {
   User,
   Trophy,
   Clock,
-  CheckCircle2,
-  XCircle,
-  ExternalLink,
   Search,
-  Filter,
   Activity,
   Medal,
   TrendingUp

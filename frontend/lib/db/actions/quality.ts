@@ -20,7 +20,7 @@
 
 import { db } from '@/lib/db';
 import { clinicalCase, clinicalCaseDelivery, clinicalCaseEvent, user, caseQualityAssignment, review, qualityDerivationReason } from '@/lib/db/schema';
-import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, eq, sql } from 'drizzle-orm';
 import type { ActionResult } from '@/lib/types/actions';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { CASE_STATUSES } from '@/lib/constants/dental';

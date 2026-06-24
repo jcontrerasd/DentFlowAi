@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, useEffect, Suspense } from 'react';
-import { Loader2, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Loader2, CheckCircle2 } from 'lucide-react';
 
 function VerifyHandler() {
   const router = useRouter();

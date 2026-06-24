@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Info, AlertCircle, TrendingUp, Settings } from 'lucide-react';
+import { AlertTriangle, AlertCircle, TrendingUp, Settings } from 'lucide-react';
 import Link from 'next/link';
 
 interface ConcentrationAlertProps {

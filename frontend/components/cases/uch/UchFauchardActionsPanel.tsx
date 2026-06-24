@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import {
   AlertCircle, Ban, CheckCircle2, Clock, Hammer, XCircle,
 } from 'lucide-react';

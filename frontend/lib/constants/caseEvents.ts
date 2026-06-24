@@ -66,4 +66,3 @@ export const CASE_EVENTS = {
   COMENTARIO_TECNICO: 'COMENTARIO_TECNICO',
 } as const;
 
-export type CaseEvent = typeof CASE_EVENTS[keyof typeof CASE_EVENTS];

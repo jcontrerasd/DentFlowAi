@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Plus } from 'lucide-react';
 
-export const CREATE_CASE_PATH = '/dashboard/cases/new';
+const CREATE_CASE_PATH = '/dashboard/cases/new';
 
 const buttonClass =
   'px-8 py-4 bg-primary hover:bg-primary text-inverse rounded-2xl inline-flex items-center gap-3 transition-colors shadow-xl shadow-sm relative overflow-hidden group';

@@ -190,14 +190,6 @@ export function resolveScenario(input: CaseClassificationInput): ResolvedScenari
   };
 }
 
-/** @deprecated Usar resolveWorkType */
-export function getWorkTypeForCase(
-  restorationLabel: string,
-  teeth: number[] = [],
-  replacesMissingTeeth?: boolean | null,
-): string {
-  return resolveWorkType({ restorationLabel, teeth, replacesMissingTeeth });
-}
 
 /** @deprecated Usar resolveCategory */
 export function categoryForWorkType(workType: string): WorkCategory {

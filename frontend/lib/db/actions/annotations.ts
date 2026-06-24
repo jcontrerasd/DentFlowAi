@@ -155,18 +155,3 @@ export async function listDeliveryAnnotationsAction(deliveryId: string): Promise
   }
 }
 
-export async function deleteDeliveryAnnotationAction(annotationId: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const identity = await getServerIdentity();
-    if (!identity?.id) return { success: false, error: 'No autenticado' };
-
-    await db
-      .delete(annotation)
-      .where(and(eq(annotation.id, annotationId), eq(annotation.userId, identity.id)));
-
-    return { success: true };
-  } catch (error) {
-    console.error("[deleteDeliveryAnnotationAction] Error:", error);
-    return { success: false, error: 'Error al eliminar anotación' };
-  }
-}

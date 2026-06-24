@@ -14,28 +14,20 @@ import {
   caseAssignment,
   fauchardConfig,
   fauchardConfigLog,
-  technicianSkill,
   user,
-  review,
-  clinicalCaseEvent,
   restorationType as restorationTypeTable,
   technicianAvailability,
 } from '@/lib/db/schema';
-import { eq, and, sql, inArray, lt, gt, lte, ne, isNotNull, gte, count, avg, desc } from 'drizzle-orm';
+import { eq, and, inArray, lt, gte, count, desc } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { logCaseEvent } from './cases';
 import { notifyUser } from '../../services/notifications';
 import { subDays } from 'date-fns';
-import { CASE_COMPLEXITY, CASE_STATUSES, INTERNAL_CASE_STATUSES, SERVICE_TYPES, WORK_TYPE_LABELS, WORK_CATEGORY_LABELS, type CaseComplexity } from '@/lib/constants/dental';
-import { resolveScenario, categoryForWorkType, MIN_SKILL_FOR_CATEGORY } from '@/lib/fauchard/caseWorkType';
+import { CASE_STATUSES, INTERNAL_CASE_STATUSES, SERVICE_TYPES, WORK_TYPE_LABELS, WORK_CATEGORY_LABELS, type CaseComplexity } from '@/lib/constants/dental';
+import { resolveScenario, categoryForWorkType } from '@/lib/fauchard/caseWorkType';
 import type { ActionResult } from '@/lib/types/actions';
-import { CASE_EVENTS } from '@/lib/constants/caseEvents';
-import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
-import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
-import { isCompletedOnTime } from '@/lib/cases/workDeadline';
 // ─── v5.0 — Modelo de disponibilidad / sanción rolling (gated por flag) ───
-import { isAvailabilityEnabled, isLeagueEngineEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
-import { applyLeagueTransitionPenalty } from '@/lib/leagueScore';
+import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
 import { levelToScoreN, POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { computeEligibleAction, ensureTechnicianAvailabilityAction, type Capacity } from './availability';
 import { computeLevelForTechnicianAction, recordNoResponseEventAction } from './noResponseEvents';
@@ -273,24 +265,6 @@ export async function isTechnicianEligibleForCaseAction(caseId: string, technici
 }
 
 /**
- * Selecciona el mejor candidato de reemplazo (§3.3): técnico elegible no excluido,
- * con skill suficiente, AND triple cumplido (si el modelo está on), mayor score.
- * Devuelve `technicianId` undefined si no hay candidato disponible.
- */
-export async function selectReplacementCandidateAction(
-  caseId: string,
-  excludeTechIds: string[],
-): Promise<{ success: boolean; technicianId?: string; error?: string }> {
-  try {
-    const { rankAssignmentCandidates } = await import('./assignment');
-    const ranked = await rankAssignmentCandidates(caseId, excludeTechIds);
-    return { success: true, technicianId: ranked[0]?.technicianId };
-  } catch (error) {
-    return { success: false, error: String(error) };
-  }
-}
-
-/**
  * Reactivación de cola (§5.2): re-corre la selección completa para un caso en
  * `pendiente_pool`. Si ahora hay elegibles, invita y limpia la marca; si no, el
  * caso permanece en cola (runFauchard no re-incrementa el ciclo si ya está pooled).
@@ -430,49 +404,11 @@ export async function tryEvaluateQuotesIfReady(caseId: string) {
   };
 }
 
-/** Expira invitaciones vencidas y, si corresponde, evalúa (submitQuote, cron). */
-export async function checkAndExpireInvitationsAction(caseId: string) {
-  const { expired } = await expirePendingInvitationsForCase(caseId);
-  const evalOut = await tryEvaluateQuotesIfReady(caseId);
-  return {
-    expired,
-    evaluated: evalOut.evaluated,
-    evaluateResult: evalOut.evaluated ? evalOut.evaluateResult : undefined,
-  };
-}
-
 // ─── Evaluación comparativo (eliminado) ───────────────────────────────────────
 
 /** @deprecated — el comparativo ya no existe. */
 export async function evaluateQuotesAction(_caseId: string) {
   return { success: true, skipped: true };
-}
-
-// ─── S8-04: Expiración de Propuestas (Dentista no respondió) ──────────────────
-
-export async function checkAndExpireProposalsAction() {
-  const now = new Date();
-  try {
-    const expiredProposals = await db
-      .select()
-      .from(clinicalCase)
-      .where(
-        and(
-          eq(clinicalCase.status, 'propuestaLista'),
-          lt(clinicalCase.proposalExpiresAt, now)
-        )
-      );
-
-    for (const c of expiredProposals) {
-      const { expireDentistComparativeWindowAction } = await import('./proposal');
-      await expireDentistComparativeWindowAction(c.id);
-    }
-
-    return { success: true, expired: expiredProposals.length };
-  } catch (error) {
-    console.error('[checkAndExpireProposalsAction] Error:', error);
-    return { success: false, error: String(error) };
-  }
 }
 
 // ─── S2-10: Penalizar técnico por no responder ───────────────────────────────

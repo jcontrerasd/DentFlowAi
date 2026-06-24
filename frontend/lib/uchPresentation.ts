@@ -4,7 +4,6 @@
  * admin sigue viendo identidades reales.
  */
 
-import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 
 export const UCH_FAUCHARD_PUBLIC_USER = {
   id: '__fauchard__',

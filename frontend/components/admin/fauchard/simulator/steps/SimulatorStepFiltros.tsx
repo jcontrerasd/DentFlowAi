@@ -3,7 +3,6 @@ import { PARAM_GROUPS_BY_STEP } from '../simulatorConstants';
 import type { SimulationResult } from '@/lib/fauchard/simulationTypes';
 import { buildPoolEmptyExplanation } from '@/lib/fauchard/simulationHelpers';
 import SimulatorActiveConfigRows from '../shared/SimulatorActiveConfigRows';
-import SimulatorFunnelSummary from '../results/SimulatorFunnelSummary';
 import SimulatorFilterFunnel from '../results/SimulatorFilterFunnel';
 import SimulatorExclusionChips from '../shared/SimulatorExclusionChips';
 

@@ -1,4 +1,3 @@
-import type { PriceDimensionIds } from '@/lib/pricing/resolveListPrice';
 
 export type PriceRuleDimensionInput = {
   restorationTypeId?: string | null;
@@ -196,21 +195,3 @@ export function formToDimensionInput(
   };
 }
 
-export function dimensionInputToPriceDimensionIds(
-  dims: PriceRuleDimensionInput,
-): PriceDimensionIds | null {
-  if (
-    !isSet(dims.restorationTypeId) ||
-    !isSet(dims.materialId) ||
-    !isSet(dims.shadeId) ||
-    !isSet(dims.urgencyId)
-  ) {
-    return null;
-  }
-  return {
-    restorationTypeId: dims.restorationTypeId!,
-    materialId: dims.materialId!,
-    shadeId: dims.shadeId!,
-    urgencyId: dims.urgencyId!,
-  };
-}

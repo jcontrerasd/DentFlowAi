@@ -376,21 +376,3 @@ export async function notifyUser(userId: string, type: NotificationType, data: a
   }
 }
 
-/**
- * Notifica a todos los dentistas de una organización
- */
-export async function notifyOrganizationDentists(orgId: string, type: NotificationType, data: any) {
-  try {
-    const dentists = await db
-      .select({ id: user.id })
-      .from(user)
-      .where(eq(user.organizationId, orgId));
-
-    for (const d of dentists) {
-      await notifyUser(d.id, type, data);
-    }
-    return { success: true };
-  } catch (error) {
-    return { success: false };
-  }
-}

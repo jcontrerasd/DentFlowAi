@@ -47,7 +47,6 @@ export default function DashboardHome() {
   const [isSuspended, setIsSuspended] = useState(false);
   const [suspendedUntil, setSuspendedUntil] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [deletingBidId, setDeletingBidId] = useState<string | null>(null);
   const [hubUnreadByCase, setHubUnreadByCase] = useState<Record<string, number>>({});
   const [listServerClock, setListServerClock] = useState<ServerClockAnchor | null>(null);
 

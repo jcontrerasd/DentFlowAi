@@ -42,19 +42,6 @@ export async function updateThemePreferenceAction(value: ThemeMode) {
   }
 }
 
-export async function getThemePreferenceAction(): Promise<ThemeMode> {
-  try {
-    const me = await getServerIdentity();
-    if (!me?.id) return 'system';
-    const rows = await db.select({ p: user.themePreference })
-      .from(user).where(eq(user.id, me.id)).limit(1);
-    const v = rows[0]?.p;
-    return isValidMode(v) ? v : 'system';
-  } catch {
-    return 'system';
-  }
-}
-
 export async function getEmailNotificationPrefsAction(): Promise<{ success: boolean; data?: EmailNotificationPrefs; error?: string }> {
   try {
     const me = await getServerIdentity();

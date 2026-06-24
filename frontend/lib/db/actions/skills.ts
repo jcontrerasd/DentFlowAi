@@ -2,7 +2,7 @@
 import { canActAsTecnico } from "@/lib/auth-helpers";
 import { db } from '@/lib/db';
 import { technicianSkill, user, caseAssignment, technicianAvailability } from '@/lib/db/schema';
-import { eq, and, gt } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { auth } from '@/auth';
 import { WORK_TYPES } from '@/lib/constants/dental';
@@ -248,18 +248,3 @@ export async function updateTechnicianSkillsAdmin(technicianId: string, skills: 
   }
 }
 
-// Función auxiliar: verificar si un técnico tiene al menos una habilidad declarada (CAD y/o CAM)
-export async function technicianHasSkills(userId: string): Promise<boolean> {
-  const [positiveRow] = await db
-    .select({ id: technicianSkill.id })
-    .from(technicianSkill)
-    .where(
-      and(
-        eq(technicianSkill.userId, userId),
-        gt(technicianSkill.designLevel, 0),
-      ),
-    )
-    .limit(1);
-
-  return !!positiveRow;
-}

@@ -102,7 +102,3 @@ export function hydrateOnboardingFormData(
   };
 }
 
-export function hasCadCapability(profile: OnboardingProfile): boolean {
-  const caps = profile.organization?.technicalCapabilities;
-  return Array.isArray(caps) && caps.includes('CAD');
-}

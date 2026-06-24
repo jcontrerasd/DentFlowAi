@@ -37,7 +37,6 @@ import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
 import { logError } from '@/lib/logger';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 
-type CasesTab = 'active' | 'archived';
 
 const PAGE_SIZE = 24;
 

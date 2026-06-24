@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { List, Kanban as KanbanIcon, Loader2, Info } from 'lucide-react';
 import { listCasesByOrganization } from '@/lib/db/actions/cases';
 import KanbanBoard from '@/components/cases/KanbanBoard';

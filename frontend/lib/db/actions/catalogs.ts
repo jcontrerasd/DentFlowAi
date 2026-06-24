@@ -1,10 +1,9 @@
 'use server';
 import { db } from '@/lib/db';
 import { vitaShade, restorationType, dentalMaterial, urgencyLevel, invitationRejectionReason, bulkRejectionReason, qualityDerivationReason } from '@/lib/db/schema';
-import { asc, eq, inArray } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 
-const SLUG_RE = /^[a-z0-9_]+$/;
 
 const TABLE_CODE_PREFIX: Record<CatalogTableKey, string> = {
   vita_shade: 'vita',

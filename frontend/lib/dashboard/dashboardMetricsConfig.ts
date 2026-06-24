@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { FileText, ShieldCheck, BadgeCheck, Hammer, Layers, ClipboardCheck } from 'lucide-react';
+import { FileText, ShieldCheck, BadgeCheck, Hammer, Layers } from 'lucide-react';
 import {
   getDentistKpiFichaPresentation,
   getTechKpiFichaPresentation,

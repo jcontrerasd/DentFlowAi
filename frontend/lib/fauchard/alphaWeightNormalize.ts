@@ -8,9 +8,9 @@ export const ACTIVE_ALPHA_KEYS = [
   'alphaNoResponse',
 ] as const;
 
-export type ActiveAlphaKey = (typeof ACTIVE_ALPHA_KEYS)[number];
+type ActiveAlphaKey = (typeof ACTIVE_ALPHA_KEYS)[number];
 
-export const NUMERIC_TOLERANCE = 0.001;
+const NUMERIC_TOLERANCE = 0.001;
 
 export function sumActiveAlphas(weights: Partial<Record<ActiveAlphaKey, number>>): number {
   return ACTIVE_ALPHA_KEYS.reduce((acc, k) => acc + (weights[k] ?? 0), 0);

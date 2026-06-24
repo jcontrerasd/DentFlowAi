@@ -1,11 +1,10 @@
 'use client';
 
 import {
-  CreditCard, 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  Wallet, 
-  Download, 
+  ArrowUpRight,
+  ArrowDownLeft,
+  Wallet,
+  Download,
   TrendingUp,
   Clock,
   CheckCircle2

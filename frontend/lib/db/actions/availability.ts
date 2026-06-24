@@ -226,27 +226,3 @@ export async function computeEligibleAction(
   return Boolean(row.levelGlobal && row.levelCad && row[catKey]);
 }
 
-/**
- * Retorna los `userId` de técnicos elegibles para una (categoría, capacidad).
- * Usado por la reactivación de cola y para diagnóstico. Aplica el AND triple en SQL.
- */
-export async function getAllEligibleForCategoryCapacityAction(
-  categoria: WorkCategory,
-  capacidad: Capacity,
-): Promise<string[]> {
-  if (!WORK_CATEGORIES.includes(categoria)) return [];
-  const rows = await db
-    .select({ userId: technicianAvailability.userId })
-    .from(technicianAvailability)
-    .innerJoin(user, eq(user.id, technicianAvailability.userId))
-    .where(
-      and(
-        eq(user.isActive, true),
-        eq(user.role, 'tecnico'),
-        eq(technicianAvailability.levelGlobal, true),
-        eq(capacityColumn(capacidad), true),
-        eq(CATEGORY_COL[categoria][capacidad] as never, true),
-      ),
-    );
-  return rows.map((r) => r.userId);
-}

@@ -7,7 +7,6 @@
  * `uchThreadLane.ts` y con `presentationAuthor` / payloads en `logCaseEvent` (cases, fauchard, proposal).
  */
 
-import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 
 /** Fila de referencia producto; no sustituye la lógica en runtime (ver `resolveUchThreadLane`). */
 export type UchEmitterMatrixRow = {
@@ -22,35 +21,6 @@ export type UchEmitterMatrixRow = {
   notes?: string;
 };
 
-/** Subconjunto representativo; ampliar cuando cambie producto. */
-export const UCH_EMITTER_MATRIX: readonly UchEmitterMatrixRow[] = [
-  {
-    action: CASE_EVENTS.CASO_CREADO,
-    viewer: 'dentista',
-    lane: 'self',
-    header: 'yo',
-    fullBubble: true,
-    notes: 'Borrador; sin presentationAuthor en payload',
-  },
-  {
-    action: CASE_EVENTS.CASO_PUBLICADO,
-    visibleTo: 'dentista',
-    viewer: 'dentista',
-    lane: 'thread',
-    header: 'fauchard',
-    fullBubble: true,
-    notes: 'Orquestación publicar+búsqueda; payload presentationAuthor fauchard',
-  },
-  {
-    action: CASE_EVENTS.TRABAJO_INICIADO,
-    visibleTo: 'dentista',
-    viewer: 'dentista',
-    lane: 'thread',
-    header: 'fauchard',
-    fullBubble: true,
-    notes: 'Inicio hacia solicitante; presentationAuthor fauchard',
-  },
-];
 
 /** Píldora compacta solo para ruido interno legacy (pestaña "Todos"). */
 export const UCH_NEUTRAL_SYSTEM_PILL_ALLOWLIST = new Set<string>([

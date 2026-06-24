@@ -5,7 +5,6 @@ import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard,
-  ShoppingBag,
   FileText,
   LogOut,
   ChevronLeft,
@@ -15,7 +14,6 @@ import {
   Users,
   ListChecks,
   AlertTriangle,
-  Inbox,
   Settings2,
   Bell,
   CreditCard,

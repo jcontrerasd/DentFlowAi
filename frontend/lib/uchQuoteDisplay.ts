@@ -55,14 +55,6 @@ export function parseQuotePositiveDays(v: unknown): number | null {
   return null;
 }
 
-export function quoteDisplayFromPayload(raw: Record<string, unknown>): UchQuoteDisplay {
-  const price = raw.compensation ?? raw.quotedPrice;
-  return {
-    totalPrice: parseQuoteNumber(price),
-    totalDays: parseQuotePositiveDays(raw.deadlineDays),
-    totalHours: parseQuotePositiveHours(raw.deadlineHours),
-  };
-}
 
 export function quoteDisplayFromInvitation(inv: {
   compensation?: number | null;
@@ -77,14 +69,3 @@ export function quoteDisplayFromInvitation(inv: {
   };
 }
 
-export function quoteDisplayFromComparativeOffer(o: {
-  totalPriceCLP: number;
-  deadlineDays: number | null;
-  deadlineHours?: number | null;
-}): UchQuoteDisplay {
-  return {
-    totalPrice: o.totalPriceCLP,
-    totalDays: o.deadlineDays,
-    totalHours: o.deadlineHours ?? null,
-  };
-}

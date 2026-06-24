@@ -11,7 +11,7 @@ import {
   restorationType,
   urgencyLevel,
 } from '@/lib/db/schema';
-import { eq, and, desc, ne, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { getSignedUrl } from '@/lib/gcs';
 import { getArchivedCaseIdsForUser } from '@/lib/db/caseUserArchiveHelpers';
@@ -277,5 +277,3 @@ export async function getAssignmentDetailsAction(assignmentId: string) {
   }
 }
 
-/** @deprecated */
-export const getInvitationDetailsAction = getAssignmentDetailsAction;

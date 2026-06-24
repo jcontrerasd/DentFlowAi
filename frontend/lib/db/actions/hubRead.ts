@@ -7,7 +7,7 @@ import {
   caseAssignment,
   clinicalCaseHubRead,
 } from '@/lib/db/schema';
-import { and, desc, eq, inArray, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { filterCaseEventsForUchViewer } from '@/lib/caseEventsUchFilter';
 import { totalUchHubUnread, type UchUnreadEvent } from '@/lib/uchUnread';

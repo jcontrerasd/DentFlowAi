@@ -3,7 +3,7 @@
 import { auth } from "@/auth";
 import { db, infraPromise } from "@/lib/db";
 import { organization, user } from "@/lib/db/schema";
-import { eq, ilike, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 /**
  * Crea una nueva organización (clínica o laboratorio).
@@ -72,36 +72,3 @@ export async function updateOrganizationDetailsAction(id: string, data: Partial<
   }
 }
 
-/**
- * Busca una organización por su RUT.
- */
-export async function getOrganizationByRutAction(rut: string) {
-  try {
-    const result = await db
-      .select()
-      .from(organization)
-      .where(eq(organization.rut, rut))
-      .limit(1);
-    return { success: true, data: result[0] || null };
-  } catch (error) {
-    console.error("[getOrganizationByRutAction] Error:", error);
-    return { success: false, error: (error as Error).message };
-  }
-}
-
-/**
- * Busca organizaciones por coincidencia de nombre (para autocompletado).
- */
-export async function searchOrganizationByNameAction(name: string) {
-  try {
-    const results = await db
-      .select()
-      .from(organization)
-      .where(ilike(organization.name, `%${name}%`))
-      .limit(10);
-    return { success: true, data: results };
-  } catch (error) {
-    console.error("[searchOrganizationByNameAction] Error:", error);
-    return { success: false, error: (error as Error).message };
-  }
-}

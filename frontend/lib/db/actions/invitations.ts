@@ -4,7 +4,6 @@ export {
   getAssignmentDetailsAction,
   getMyInvitationsAction,
   getMyInvitationForCaseAction,
-  getInvitationDetailsAction,
   type AssignmentItem,
   type AssignmentStatus,
   type InvitationItem,

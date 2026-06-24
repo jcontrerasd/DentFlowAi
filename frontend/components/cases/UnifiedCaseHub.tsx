@@ -18,7 +18,7 @@ import { buildUchTimelineRows, primaryUchActionId } from '@/components/cases/uch
 import { computeIncludeCaseActionTimeline } from '@/components/cases/uch/uchHubActionVisibility';
 import type { UchActionRowId, UchCaseEventLite } from '@/components/cases/uch/uchTimelineTypes';
 import UchEventBubble from '@/components/cases/uch/UchEventBubble';
-import UchDeliveryPanel, { newDeliveryEntry } from '@/components/cases/uch/UchDeliveryPanel';
+import UchDeliveryPanel from '@/components/cases/uch/UchDeliveryPanel';
 import type { DeliveryFileEntry } from '@/components/cases/uch/UchDeliveryPanel';
 import DeliveryViewer3DModal from '@/components/cases/uch/DeliveryViewer3DModal';
 import UchFauchardActionsPanel from '@/components/cases/uch/UchFauchardActionsPanel';
@@ -196,7 +196,6 @@ export default function UnifiedCaseHub({
     setEvents(initialEvents);
   }, [initialEvents]);
 
-  const [isProcessing, setIsProcessing] = useState(false);
   const [downloadingVersionId, setDownloadingVersionId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -264,12 +263,13 @@ export default function UnifiedCaseHub({
   };
 
   // Estados del formulario de cotización (técnico invitado)
-  type PhaseTab = 'todos' | 'asignacion' | 'entrega' | 'calificacion';
+  type PhaseTab = 'todos' | 'asignacion' | 'entrega' | 'calificacion' | 'derivacion';
   const [phaseTab, setPhaseTab] = useState<PhaseTab>('todos');
 
   useEffect(() => {
     if (techOfferRejectedView) setPhaseTab('todos');
   }, [techOfferRejectedView]);
+
 
   const [deliveryNotes, setDeliveryNotes] = useState('');
   const [deliveryFiles, setDeliveryFiles] = useState<DeliveryFileEntry[]>([]);
@@ -290,11 +290,6 @@ export default function UnifiedCaseHub({
   const [isSubmittingQuote, setIsSubmittingQuote] = useState(false);
   const [isStartingWork, setIsStartingWork] = useState(false);
   const [elapsedLabel, setElapsedLabel] = useState('');
-
-  const [isAcceptingProposal, setIsAcceptingProposal] = useState(false);
-  const [isRejectingProposal, setIsRejectingProposal] = useState(false);
-  const [proposalRejectReason, setProposalRejectReason] = useState('');
-  const [showProposalRejectForm, setShowProposalRejectForm] = useState(false);
 
   function formatElapsed(date: Date | null | undefined): string {
     if (!date) return '';
@@ -326,7 +321,7 @@ export default function UnifiedCaseHub({
       'ASIGNACION_ENVIADA', 'ASIGNACION_RECIBIDA', 'ASIGNACION_ACEPTADA',
       'ASIGNACION_RECHAZADA', 'ASIGNACION_EXPIRADA', 'ASIGNACION_REASIGNADA',
       'OFERTA_RECHAZADA_POR_TECNICO', 'TRABAJO_INICIADO',
-      'ASIGNACION_CALIDAD', 'CASO_DERIVADO_CALIDAD',
+      'ASIGNACION_CALIDAD',
       'SOLICITUD_CAMBIO_FLUJO', 'SOLICITUD_CAMBIO_FLUJO_RECHAZADA',
       'CASO_PAUSADO', 'CASO_CANCELADO', 'CREACION', 'CASO_CREADO', 'CASO_COPIA',
     ],
@@ -338,6 +333,11 @@ export default function UnifiedCaseHub({
     calificacion: [
       'CALIFICACION_ENVIADA',
       'CALIFICACION_ENVIADA_CALIDAD',
+    ],
+    derivacion: [
+      'CASO_DERIVADO_CALIDAD',
+      'DERIVACION_CALIDAD_ACEPTADA',
+      'DERIVACION_CALIDAD_RECHAZADA',
     ],
   };
 
@@ -546,6 +546,16 @@ export default function UnifiedCaseHub({
     viewingAsAdmin ||
     uchPresentationRole === 'dentista' ||
     (actingAsDentista && !actingAsTecnico);
+
+  useEffect(() => {
+    if (phaseTab === 'derivacion') {
+      const hasDerivacionEvents = roleScopedEvents.some((e) =>
+        (PHASE_ACTIONS['derivacion'] ?? []).includes(e.action),
+      );
+      if (!hasDerivacionEvents) setPhaseTab('todos');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleScopedEvents, phaseTab]);
 
   const filteredEvents = useMemo(() => {
     const allowed = phaseTab === 'todos' ? null : (PHASE_ACTIONS[phaseTab] ?? []);
@@ -927,14 +937,20 @@ export default function UnifiedCaseHub({
               <div className="flex items-center gap-2">
                 <span className="text-[9px] uppercase tracking-wide text-faint flex-shrink-0">Fase</span>
                 <div className="flex flex-1 gap-0.5 bg-surface-2 rounded-md p-0.5">
-                  {(['todos', 'asignacion', 'entrega', 'calificacion'] as PhaseTab[]).map((tab) => {
+                  {(() => {
+                    const hasDerivacionEvents = roleScopedEvents.some((e) =>
+                      (PHASE_ACTIONS['derivacion'] ?? []).includes(e.action),
+                    );
+                    const visibleTabs: PhaseTab[] = ['todos', 'asignacion', 'entrega', 'calificacion'];
+                    if (hasDerivacionEvents) visibleTabs.push('derivacion');
                     const labels: Record<PhaseTab, string> = {
                       todos: 'Todos',
                       asignacion: 'Asignación',
                       entrega: 'Entrega',
                       calificacion: 'Calificación',
+                      derivacion: 'Derivación',
                     };
-                    return (
+                    return visibleTabs.map((tab) => (
                       <button
                         key={tab}
                         type="button"
@@ -945,8 +961,8 @@ export default function UnifiedCaseHub({
                       >
                         {labels[tab]}
                       </button>
-                    );
-                  })}
+                    ));
+                  })()}
                 </div>
               </div>
             </div>

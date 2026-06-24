@@ -3,7 +3,7 @@ import { toDeadlineMs } from '@/lib/deadlineMs';
 
 type CaseEventLike = { action: string };
 
-export function timelineEventsInclude(events: CaseEventLike[], actions: string[]): boolean {
+function timelineEventsInclude(events: CaseEventLike[], actions: string[]): boolean {
   return events.some((e) => actions.includes(e.action));
 }
 
@@ -29,8 +29,6 @@ export type ComputeIncludeCaseActionTimelineInput = {
   proposalExpiresAt?: string | Date | null;
 };
 
-/** @deprecated Usar ComputeIncludeCaseActionTimelineInput */
-export type ComputeIncludeFauchardTimelineInput = ComputeIncludeCaseActionTimelineInput;
 
 /**
  * Fila de acciones en el hilo: solo mientras haya una acción pendiente del flujo.

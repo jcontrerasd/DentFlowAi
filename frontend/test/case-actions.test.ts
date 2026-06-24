@@ -7,13 +7,11 @@ const {
   dbSelectMock,
   dbTransactionMock,
   notifyUserMock,
-  logCaseEventMock,
 } = vi.hoisted(() => ({
   identityMock: vi.fn(),
   dbSelectMock: vi.fn(),
   dbTransactionMock: vi.fn(),
   notifyUserMock: vi.fn(),
-  logCaseEventMock: vi.fn(),
 }));
 
 vi.mock('@/lib/db/actions/impersonation', () => ({

@@ -270,11 +270,6 @@ export async function expireDentistComparativeWindowAction(caseId: string): Prom
   }
 }
 
-// Legacy: compat tests / llamadas indirectas previas — redirige a expiración del comparativo
-export async function rejectProposalAction(caseId: string, _reason?: string): Promise<ActionResult> {
-  return expireDentistComparativeWindowAction(caseId);
-}
-
 // S3-04 — Técnico inicia el trabajo
 export async function startWorkAction(caseId: string): Promise<ActionResult> {
   const identity = await getServerIdentity();

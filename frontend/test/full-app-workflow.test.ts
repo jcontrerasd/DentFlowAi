@@ -15,7 +15,6 @@ import {
   startWorkAction,
   withdrawQuoteAction,
 } from '@/lib/db/actions/proposal';
-import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { forceIdentity, clearForcedIdentity } from './helpers/test-identity';
 
 // ─── Mocks globales ──────────────────────────────────────────────────────────

@@ -1,13 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
-  AlertCircle,
   CheckCircle2,
-  Eye,
-  FileText,
-  Package,
-  Pause,
-  Truck,
   X,
 } from 'lucide-react';
 import { statusIcon, statusLabel } from '@/components/ui/StatusBadge';
@@ -25,11 +19,6 @@ export const TECH_FICHA_STRIPE = {
   esperandoOfertas: { label: 'Esperando asignación', icon: Activity },
 } as const;
 
-/** Franjas con countdown del dentista en ficha (no sustituyen `STATUS_MAP` en KPI agregado). */
-export const DENTIST_FICHA_STRIPE = {
-  evaluandoCaso: { label: 'Evaluando Caso', icon: Activity },
-  elegirOferta: { label: 'Elegir oferta', icon: Activity },
-} as const;
 
 export type CaseFichaPresentation = {
   label: string;

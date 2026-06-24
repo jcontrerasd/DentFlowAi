@@ -101,21 +101,6 @@ export async function deleteCaseFileAction(fileId: string) {
 }
 
 /**
- * Actualiza la ruta de la miniatura de un archivo (BL-042).
- */
-export async function updateFileThumbnailAction(fileId: string, thumbnailPath: string) {
-  try {
-    await db.update(file)
-      .set({ thumbnailPath })
-      .where(eq(file.id, fileId));
-    return { success: true };
-  } catch (error) {
-    console.error("[updateFileThumbnailAction] Error:", error);
-    return { success: false, error };
-  }
-}
-
-/**
  * Registra en auditoría la descarga de un archivo (BL-041).
  */
 export async function logFileDownloadAction(data: {

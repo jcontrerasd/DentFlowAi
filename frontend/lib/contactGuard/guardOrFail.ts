@@ -4,9 +4,6 @@ import { eq, inArray } from 'drizzle-orm';
 import { checkContactExposure, type GuardViolation } from './index';
 import { ALL_SUPPORTED_COUNTRY_CODES } from './phonePatterns';
 
-export const CONTACT_GUARD_BLOCK_MESSAGE =
-  'Fauchard detectó un intento de comunicación indebido. El mensaje debe cambiar; de lo contrario no podrá ser enviado. Fauchard ha registrado este evento en su historial.';
-
 // Helpers de detección (prefix + isContactGuardError) se exportan desde
 // './clientHelpers' para que Client Components puedan importarlos sin arrastrar
 // dependencias de DB.

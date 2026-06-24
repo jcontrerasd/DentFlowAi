@@ -256,26 +256,6 @@ export async function listCourierAllowlistAction(): Promise<ActionResult<Courier
   };
 }
 
-/**
- * Lista los couriers activos para que el técnico los elija al registrar un despacho
- * externo (desplegable). No requiere admin: cualquier usuario autenticado puede leerla,
- * pero solo expone los activos. Sustituye el texto libre del "Transportista / medio"
- * para cerrar una vía de desintermediación.
- */
-export async function listActiveCouriersAction(): Promise<ActionResult<CourierEntry[]>> {
-  const identity = await getServerIdentity();
-  if (!identity?.id) return { success: false, error: 'No autenticado' };
-  const rows = await db
-    .select()
-    .from(contactGuardCourierAllowlist)
-    .where(eq(contactGuardCourierAllowlist.isActive, true))
-    .orderBy(contactGuardCourierAllowlist.label, contactGuardCourierAllowlist.domain);
-  return {
-    success: true,
-    data: rows.map((r) => ({ id: r.id, domain: r.domain, label: r.label, isActive: r.isActive })),
-  };
-}
-
 export async function createCourierAllowlistAction(input: {
   domain: string;
   label?: string;

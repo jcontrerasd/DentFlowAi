@@ -3,9 +3,6 @@ import { CASE_COMPLEXITY, type CaseComplexity } from '@/lib/constants/dental';
 import type { SimulationResult } from '@/lib/fauchard/simulationTypes';
 import type { LiveScenario, SimulatorFunnelStep } from './simulatorTypes';
 
-export const SELECT_CLASS =
-  'w-full bg-background border border-divider rounded-2xl px-4 py-3 text-sm text-foreground outline-none focus:border-primary/30';
-
 /** Controles densos del paso Caso (sin scroll en viewport estándar). */
 export const COMPACT_SELECT_CLASS =
   'w-full bg-background border border-divider rounded-xl px-3 py-2 text-xs text-foreground outline-none focus:border-primary/30';

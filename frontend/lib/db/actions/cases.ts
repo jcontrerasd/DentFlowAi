@@ -5,12 +5,10 @@ import { notifyUser } from "../../services/notifications";
 import GCPStorageService from '@/lib/services/gcp-storage';
 import { db } from "@/lib/db";
 import { perfLog, perfStart } from '@/lib/perfLog';
-import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseAssignment, caseUserArchive, caseQualityAssignment, qualityDerivationReason } from "@/lib/db/schema";
-import { eq, desc, and, or, ne, not, sql, inArray, avg, exists, gt } from "drizzle-orm";
+import { clinicalCase, user, file, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, technicianSkill, caseAssignment, caseUserArchive, caseQualityAssignment, qualityDerivationReason } from "@/lib/db/schema";
+import { eq, desc, and, ne, sql, inArray, avg } from "drizzle-orm";
 import {
-  archiveVisibilityForUser,
   assertUserMayArchiveCase,
-  getArchivedCaseIdsForUser,
   isCaseArchivedByUser,
 } from '@/lib/db/caseUserArchiveHelpers';
 import { isTerminalCaseStatus } from '@/lib/constants/dental';
@@ -18,7 +16,7 @@ import { collectCaseStoragePaths } from '@/lib/cases/caseStoragePaths';
 import { archiveCaseFilesBestEffort } from '@/lib/db/archiveCaseFiles';
 import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
 import { getSignedUrl, getUploadUrl } from "@/lib/gcs";
-import { canActAsTecnico, canActAsDentista } from "@/lib/auth-helpers";
+import { canActAsTecnico } from "@/lib/auth-helpers";
 import { isQualityGateEnabled } from "@/lib/constants/qualityFlags";
 import { getServerIdentity } from "./impersonation";
 import { resolveCatalogCodesToIds } from "@/lib/db/catalogResolver";
@@ -51,7 +49,6 @@ import {
 import {
   buildCaseListFilterWhere,
   buildCaseListOrderBy,
-  buildTechFacetCondition,
 } from '@/lib/db/caseListQueryBuilder';
 import { pickInvitationStatusForKpi } from '@/lib/cases/technicianInvitationForKpi';
 import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt, getCaseReviewDeadlineAt, getCaseQualityReviewDeadlineAt } from '@/lib/db/caseDeadlines';
@@ -571,44 +568,6 @@ export async function listCasesByOrganization(
   }
 }
 
-export type CaseListFacetCounts = {
-  nuevas: number;
-  cotizaciones: number;
-  progreso: number;
-};
-
-export async function getCaseListFacetCountsAction(
-  showArchived = false,
-): Promise<CaseListFacetCounts | null> {
-  const identity = await getServerIdentity();
-  if (!identity?.id || !canActAsTecnico(identity.role)) return null;
-
-  const listIdentity = {
-    id: identity.id as string,
-    role: identity.role as string,
-    orgId: identity.orgId ?? null,
-  };
-
-  const visibilityWhere = await buildActiveCaseVisibilityWhere(listIdentity, showArchived);
-  if (!visibilityWhere) return { nuevas: 0, cotizaciones: 0, progreso: 0 };
-
-  const facets: CaseListFacetCounts = { nuevas: 0, cotizaciones: 0, progreso: 0 };
-  const keys = ['nuevas', 'cotizaciones', 'progreso'] as const;
-
-  await Promise.all(
-    keys.map(async (key) => {
-      const facetWhere = buildTechFacetCondition(listIdentity, key);
-      const whereClause = and(visibilityWhere, facetWhere);
-      const row = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(clinicalCase)
-        .where(whereClause);
-      facets[key] = Number(row[0]?.count ?? 0);
-    }),
-  );
-
-  return facets;
-}
 export async function getCaseDetails(caseId: string) {
   const t0details = perfStart();
   const identity = await getServerIdentity();
@@ -1099,15 +1058,6 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
       `);
       const nextVersion = (lastDelivery?.version || 0) + 1;
 
-      const userName = identity.fullName || 'Técnico';
-      const newHistoryEntry = {
-        action: 'REVISION_ENVIADA',
-        timestamp: new Date().toISOString(),
-        userName: userName,
-        comment: notes,
-        metadata: { deliveryVersion: nextVersion }
-      };
-
       // 2. Crear registro de entrega
       const [newDelivery] = await tx.insert(clinicalCaseDelivery as any).values({
         clinicalCaseId: caseId,
@@ -1204,19 +1154,7 @@ export async function addTechnicalCommentAction(caseId: string, comment: string,
   if (!identity?.id) return { success: false, error: "No autorizado" };
 
   try {
-    const userName = identity.fullName || identity.fullName || 'Usuario';
     const actionType = isRevisionRequest ? CASE_EVENTS.REVISION_SOLICITADA : CASE_EVENTS.COMENTARIO_TECNICO;
-
-    const newHistoryEntry = {
-      action: actionType,
-      timestamp: new Date().toISOString(),
-      userName: userName,
-      comment: comment,
-      metadata: { 
-        userId: identity.id,
-        role: identity.role
-      }
-    };
 
     const updateData: any = {
       lastActivityAt: new Date(),
@@ -1248,35 +1186,6 @@ export async function addTechnicalCommentAction(caseId: string, comment: string,
   } catch (error) {
     console.error("Error adding technical comment:", error);
     return { success: false, error: "Fallo al enviar comentario" };
-  }
-}
-
-/**
- * Obtiene los archivos de una entrega con auditoría de seguridad.
- */
-export async function getDeliveryFilesAction(deliveryId: string) {
-  const identity = await getServerIdentity();
-  if (!identity?.id) throw new Error("No autorizado");
-
-  try {
-    const delivery = await db.query.clinicalCaseDelivery.findFirst({
-      where: eq(sql`id`, deliveryId),
-      with: { clinicalCase: true }
-    });
-
-    if (!delivery) throw new Error("Entrega no encontrada");
-
-    const isOwner = delivery.clinicalCase.doctorId === identity.id;
-    const isAssignedTech = delivery.clinicalCase.assignedTechnicianId === identity.id;
-
-    if (!isOwner && !isAssignedTech && !identity.isSystemAdmin) {
-      throw new Error("Acceso denegado a archivos de entrega");
-    }
-
-    return { success: true, files: delivery.files || [] };
-  } catch (error) {
-    console.error("[getDeliveryFilesAction] Error:", error);
-    return { success: false, error: "Error de seguridad al acceder a archivos" };
   }
 }
 
@@ -1452,10 +1361,6 @@ export async function submitUserRatingAction(data: { caseId: string, revieweeId:
   }
 }
 
-export async function releaseEscrowAction(caseId: string) {
-  return { success: true, transactionId: `TX-${Date.now()}` };
-}
-
 export async function approveWorkAction(
   caseId: string,
   dentistComment?: string,
@@ -1469,17 +1374,6 @@ export async function approveWorkAction(
 
   try {
     const txResult = await db.transaction(async (tx) => {
-      const userName = identity.fullName || 'Dentista';
-
-      const newHistoryEntry = {
-        action: 'TRABAJO_APROBADO',
-        timestamp: new Date().toISOString(),
-        userName: userName,
-        comment: approvalNote
-          ? `Trabajo aprobado por el dentista. Comentario: ${approvalNote}`
-          : 'Trabajo aprobado satisfactoriamente por el dentista.',
-      };
-
       // 1. Marcar la última entrega como aprobada
       await tx.execute(sql`
         UPDATE clinical_case_delivery 
@@ -1574,15 +1468,6 @@ export async function requestRevisionAction(caseId: string, reason: string): Pro
 
   try {
     return await db.transaction(async (tx) => {
-      const userName = identity.fullName || 'Dentista';
-
-      const newHistoryEntry = {
-        action: 'REVISION_SOLICITADA',
-        timestamp: new Date().toISOString(),
-        userName: userName,
-        comment: reason
-      };
-
       // 1. Capturar la entrega pending antes de rechazarla (para incluirla en el payload del evento)
       const [pendingDelivery] = await tx
         .select({ id: (clinicalCaseDelivery as any).id, files: (clinicalCaseDelivery as any).files, version: (clinicalCaseDelivery as any).version })
@@ -1797,15 +1682,6 @@ export async function resumeWorkAction(caseId: string, comment: string, isRevisi
   if (!guarded.ok) return { success: false, error: guarded.error };
 
   try {
-    const userName = identity.fullName || 'Usuario';
-    const newHistoryEntry = {
-      action: 'REANUDADO',
-      timestamp: new Date().toISOString(),
-      userName: userName,
-      comment: comment || 'El trabajo se ha reanudado satisfactoriamente.',
-      metadata: { isRevisionRequest }
-    };
-
     await db.update(clinicalCase)
       .set({
         status: 'enEjecucion',
@@ -2258,28 +2134,6 @@ export async function deleteClinicalCaseAction(caseId: string): Promise<ActionRe
 
 
 /**
- * Obtiene casos asignados a un técnico asegurando que solo vea los suyos.
- */
-export async function listTechnicianAssignedCases() {
-  const identity = await getServerIdentity();
-  if (!identity?.id) return [];
-
-  try {
-    return await db.query.clinicalCase.findMany({
-      where: eq(clinicalCase.assignedTechnicianId, identity.id as string),
-      with: {
-        organization: true,
-        files: true,
-      },
-      orderBy: [desc(clinicalCase.createdAt)],
-    });
-  } catch (error) {
-    console.error("[listTechnicianAssignedCases] Error:", error);
-    return [];
-  }
-}
-
-/**
  * Retira un caso de publicación (BL-019, BL-020, BL-021).
  */
 export async function withdrawCaseAction(caseId: string): Promise<ActionResult> {
@@ -2330,130 +2184,6 @@ export async function withdrawCaseAction(caseId: string): Promise<ActionResult> 
   } catch (error) {
     console.error("[withdrawCaseAction] Error:", error);
     return { success: false, error: "No se pudo retirar el caso" };
-  }
-}
-
-/**
- * Republica un caso, abriendo una nueva ronda comercial (BL-022, BL-023).
- */
-export async function republishCaseAction(caseId: string, changeSummary?: string): Promise<ActionResult> {
-  const identity = await getServerIdentity();
-  if (!identity?.orgId) return { success: false, error: "No autorizado" };
-
-  try {
-    const result = await db.transaction(async (tx) => {
-      // 0. Guard: el caso debe estar en estado 'borrador'
-      const [guard] = await tx
-        .select({ status: clinicalCase.status })
-        .from(clinicalCase)
-        .where(and(eq(clinicalCase.id, caseId), eq(clinicalCase.organizationId, identity.orgId)))
-        .limit(1);
-      if (!guard) return { success: false, error: "Caso no encontrado" };
-      if (guard.status !== 'borrador') return { success: false, error: "Solo se puede republicar un caso en borrador" };
-
-      // 1. Obtener última ronda para incrementar el número
-      const [lastRound]: any = await tx.execute(sql`
-        SELECT round_number, version_at_start FROM commercial_round
-        WHERE clinical_case_id = ${caseId}
-        ORDER BY round_number DESC LIMIT 1
-      `);
-
-      const nextRoundNumber = (lastRound?.round_number || 0) + 1;
-      
-      // 2. Incrementar versión comercial del caso
-      const [cCase] = await tx.select({
-        currentVersion: clinicalCase.commercialVersion,
-        internalName: clinicalCase.internalName,
-        patientIdAnon: clinicalCase.patientIdAnon,
-        teeth: clinicalCase.teeth,
-        restorationType: restorationTypeTable.label,
-        material: dentalMaterial.label,
-        shade: vitaShade.label,
-        notesEsthetic: clinicalCase.notesEsthetic,
-        notesOclusal: clinicalCase.notesOclusal,
-        doctorNotes: clinicalCase.doctorNotes,
-        specialInstructions: clinicalCase.specialInstructions,
-        urgency: urgencyLevel.label,
-      })
-        .from(clinicalCase)
-        .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
-        .leftJoin(dentalMaterial, eq(dentalMaterial.id, clinicalCase.materialId))
-        .leftJoin(vitaShade, eq(vitaShade.id, clinicalCase.shadeId))
-        .leftJoin(urgencyLevel, eq(urgencyLevel.id, clinicalCase.urgencyId))
-        .where(eq(clinicalCase.id, caseId)).limit(1);
-      
-      const nextVersion = (cCase?.currentVersion || 1) + 1;
-
-      // 3. Actualizar caso
-
-      await tx.update(clinicalCase)
-        .set({ 
-          status: 'enEvaluacion',
-          internalStatus: 'caso_recibido',
-          canBeDeleted: false,
-          commercialVersion: nextVersion,
-          changeSummary: changeSummary || null,
-          updatedAt: new Date(),
-          lastActivityAt: new Date()
-        })
-        .where(and(eq(clinicalCase.id, caseId), eq(clinicalCase.organizationId, identity.orgId)));
-
-      // 4. Crear nueva ronda con snapshot (BL-034)
-      const snapshot = {
-        internalName: cCase.internalName,
-        patientIdAnon: cCase.patientIdAnon,
-        teeth: cCase.teeth,
-        restorationType: cCase.restorationType,
-        material: cCase.material,
-        shade: cCase.shade,
-        notesEsthetic: cCase.notesEsthetic,
-        notesOclusal: cCase.notesOclusal,
-        doctorNotes: cCase.doctorNotes,
-        specialInstructions: cCase.specialInstructions,
-        urgency: cCase.urgency
-      };
-
-      await tx.insert(commercialRound as any).values({
-        clinicalCaseId: caseId,
-        roundNumber: nextRoundNumber,
-        status: 'active',
-        startDate: new Date(),
-        versionAtStart: nextVersion,
-        specsSnapshot: snapshot
-      });
-
-      return { success: true };
-    });
-    
-    // Si la transacción falló (guards o error interno), retornamos el resultado
-    if (!result.success) return result as ActionResult;
-
-    // Run Fauchard outside the transaction
-    const { classifyCaseAction } = await import('./fauchard');
-    const { runAssignmentAction, assignCaseAction } = await import('./assignment');
-    await classifyCaseAction(caseId);
-    const selectionResult = await runAssignmentAction(caseId);
-    if (selectionResult.pooled) {
-      return { success: true };
-    }
-    if (!selectionResult.success || !selectionResult.technicianId || !selectionResult.fauchardConfigId) {
-      await db.update(clinicalCase)
-        .set({ status: 'borrador', internalStatus: null, canBeDeleted: true, updatedAt: new Date(), lastActivityAt: new Date() })
-        .where(eq(clinicalCase.id, caseId));
-      return { success: false, error: selectionResult.error || 'No se encontraron técnicos disponibles para la republicación' };
-    }
-    const assignResult = await assignCaseAction(caseId, selectionResult.technicianId, {
-      fauchardConfigId: selectionResult.fauchardConfigId,
-      pinCaseToConfig: true,
-    });
-    if (!assignResult.success) {
-      return { success: false, error: assignResult.error || 'No se pudo asignar el caso' };
-    }
-
-    return { success: true };
-  } catch (error) {
-    console.error("[republishCaseAction] Error:", error);
-    return { success: false, error: "No se pudo republicar el caso" };
   }
 }
 

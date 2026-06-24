@@ -1,6 +1,5 @@
 import { db } from '@/lib/db';
-import { clinicalCase, caseAssignment, organization } from '@/lib/db/schema';
-import { alias } from 'drizzle-orm/pg-core';
+import { clinicalCase, caseAssignment } from '@/lib/db/schema';
 import {
   and,
   asc,

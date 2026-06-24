@@ -25,7 +25,6 @@ import { notifyUser } from '@/lib/services/notifications';
 import {
   CASE_STATUSES,
   INTERNAL_CASE_STATUSES,
-  SERVICE_TYPES,
 } from '@/lib/constants/dental';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
@@ -38,12 +37,11 @@ import {
   computeAssignmentScore,
   parseAssignmentWeights,
 } from '@/lib/fauchard/assignmentScore';
-import { levelToScoreN, POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
+import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { isAvailabilityEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
 import { computeEligibleAction, ensureTechnicianAvailabilityAction } from './availability';
 import { computeLevelForTechnicianAction } from './noResponseEvents';
 import {
-  classifyCaseAction,
   getActiveConfig,
   getConfigForCase,
   loadFauchardConfigById,
@@ -1096,9 +1094,6 @@ export async function batchExpireAssignmentsForCases(caseIds: string[]): Promise
     await expirePendingAssignmentsForCase(id);
   }
 }
-
-/** @deprecated alias */
-export const batchExpireInvitationsForCases = batchExpireAssignmentsForCases;
 
 function mergeConfig(base: FauchardConfigRow, override?: Record<string, unknown>): FauchardConfigRow {
   if (!override) return base;

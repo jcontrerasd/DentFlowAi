@@ -7,27 +7,17 @@ import {
   ArrowLeft,
   Clock,
   FileText,
-  User,
-  CheckCircle,
   AlertCircle,
   Shield,
   Activity,
   Download,
   XCircle,
   Stethoscope,
-  Layers,
-  Edit,
   Trash2,
   Upload,
-  Eye,
-  Save,
   RotateCcw,
-  X,
   Globe,
-  Star,
-  Sparkles,
 } from 'lucide-react';
-import Image from 'next/image';
 import { creationInstructionsText } from '@/lib/cases/instructions';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
 import {
@@ -40,10 +30,7 @@ import {
   submitReviewAction,
   approveWorkAction,
   requestRevisionAction,
-  requestFlowChangeAction,
   resolveFlowRequestAction,
-  resumeWorkAction,
-  submitUserRatingAction,
   getCaseEventsAction,
   archiveCaseForUserAction,
   unarchiveCaseForUserAction,
@@ -304,7 +291,6 @@ function CaseDetailPageContent() {
   }, [id]);
   const [loading, setLoading] = useState(true);
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  const actionLoading = loadingAction !== null;
   const setActionLoading = (v: boolean, key = 'generic') => setLoadingAction(v ? key : null);
 
   // Estados para el visor 3D y Archivos
@@ -366,7 +352,6 @@ function CaseDetailPageContent() {
   const [stagedAnnotationRemovals, setStagedAnnotationRemovals] = useState<Set<string>>(new Set());
   const [newAnnotationText, setNewAnnotationText] = useState('');
   const [savingAnnotation, setSavingAnnotation] = useState(false);
-  const [isDeliveryManagementOpen, setIsDeliveryManagementOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
   const [isDownloadingCase, setIsDownloadingCase] = useState(false);
@@ -375,10 +360,9 @@ function CaseDetailPageContent() {
   const [republicarOpen, setRepublicarOpen] = useState(false);
   const [checkInOpen, setCheckInOpen] = useState(false);
   const [checkInDismissed, setCheckInDismissed] = useState(false);
-  const [deleteStep, setDeleteStep] = useState(1);
   const [deleteInput, setDeleteInput] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSavingLabNotes, setIsSavingLabNotes] = useState(false);
+  const [, setIsUploading] = useState(false);
+  const [, setIsSavingLabNotes] = useState(false);
   const [labNotes, setLabNotes] = useState('');
   const [isHubOpen, setIsHubOpen] = useState(false);
   /** Tras abrir el Centro de control una vez, el panel permanece montado (oculto al cerrar) para no reiniciar cuentas regresivas. */
@@ -393,7 +377,7 @@ function CaseDetailPageContent() {
   /** Hay más eventos en BD anteriores al lote cargado (paginación UCH). */
   const [uchHasMoreOlder, setUchHasMoreOlder] = useState(false);
   const [myInvitation, setMyInvitation] = useState<InvitationItem | null>(null);
-  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [, setIsLoadingEvents] = useState(false);
 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any | null>(null);
@@ -402,15 +386,13 @@ function CaseDetailPageContent() {
   const [draftListPriceChecked, setDraftListPriceChecked] = useState(false);
 
   const [revisionNotes, setRevisionNotes] = useState('');
-  const [isRequestingFlowChange, setIsRequestingFlowChange] = useState(false);
+  const [, setIsRequestingFlowChange] = useState(false);
   const [flowChangeReason, setFlowChangeReason] = useState('');
   const [flowChangeType, setFlowChangeType] = useState<'pausa' | 'cancelacion' | null>(null);
   const [technicalComment, setTechnicalComment] = useState('');
   const [pendingDeliveryFiles, setPendingDeliveryFiles] = useState<File[]>([]);
-  const [isUploadingDelivery, setIsUploadingDelivery] = useState(false);
+  const [, setIsUploadingDelivery] = useState(false);
 
-  const [authLoading, setAuthLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [userRating, setUserRating] = useState(0);
   const [userReview, setUserReview] = useState('');
 
@@ -656,8 +638,6 @@ function CaseDetailPageContent() {
       return false;
     }
   };
-  const deliveries = clinicalCase?.deliveries || [];
-
   const unreadTechMessages = useMemo(() => {
     if (!caseEvents?.length || !authUserProfile?.id || !hubServerReads) return 0;
     return countUnreadTechChannel(caseEvents as UchUnreadEvent[], authUserProfile.id, hubServerReads.lastReadTech);
@@ -1151,28 +1131,6 @@ function CaseDetailPageContent() {
     setIsEditing(false);
   };
 
-  const handleStatusUpdate = async (newStatus: 'borrador' | 'publicado') => {
-    setActionLoading(true, newStatus === 'publicado' ? 'publish' : 'withdraw');
-    try {
-      await updateClinicalCaseAction(id as string, { status: newStatus });
-      setClinicalCase((prev: any) => ({ ...prev, status: newStatus }));
-
-      // Sincronizamos el estado en el formulario de edición si está abierto
-      if (editForm) {
-        setEditForm((prev: any) => ({ ...prev, status: newStatus }));
-      }
-
-      showSuccessToastMessage(newStatus === 'publicado' ? 'Caso publicado exitosamente' : 'Caso retirado a borrador');
-
-      setIsPublishing(false);
-    } catch (err) {
-      logError('Error updating status', err, { caseId: id, status: newStatus });
-      showErrorToast('Error al actualizar el estado del caso');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const handlePublish = async (opts?: { saveFirst?: boolean }) => {
     if (opts?.saveFirst) {
       const saved = await handleSaveChanges();
@@ -1254,164 +1212,6 @@ function CaseDetailPageContent() {
     setLayerOpacity(prev => ({ ...prev, [subType]: opacity }));
   };
 
-  const handleSaveLabNotes = async () => {
-    if (!clinicalCase) return;
-    setIsSavingLabNotes(true);
-    try {
-      await updateClinicalCaseAction(id as string, { labNotes: labNotes });
-      setClinicalCase((prev: any) => prev ? ({ ...prev, labNotes }) : prev);
-      showSuccessToastMessage('Oferta retirada');
-    } catch (error) {
-      showErrorToast('Error al guardar las notas de laboratorio');
-    } finally {
-      setIsSavingLabNotes(false);
-    }
-  };
-
-  const handleStartWork = async () => {
-    setActionLoading(true, 'start_work');
-    try {
-      const res = await startWorkAction(id as string);
-      if (res.success) {
-        setClinicalCase((prev: any) => {
-          const newHistory = {
-            action: 'TRABAJO_INICIADO',
-            timestamp: new Date().toISOString(),
-            userName: authUserProfile?.fullName || 'Técnico',
-            comment: 'El laboratorio ha iniciado formalmente la producción.',
-            metadata: { technicianId: authUserProfile?.id }
-          };
-          return {
-            ...prev,
-            status: 'enEjecucion'
-          };
-        });
-        showSuccessToastMessage('Diseño iniciado');
-      } else {
-        showErrorToast('Error al iniciar el trabajo');
-      }
-    } catch (error) {
-      showErrorToast('Error de conexión');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleTechnicalIteration = async (mode: 'comment' | 'delivery' | 'revision') => {
-    if (!clinicalCase) return;
-    if (mode === 'comment' && !technicalComment.trim()) return;
-    if (mode === 'revision' && !technicalComment.trim()) {
-      showErrorToast('Debes explicar por qué solicitas cambios');
-      return;
-    }
-    if (mode === 'delivery' && pendingDeliveryFiles.length === 0) {
-      showErrorToast('Debes adjuntar al menos un archivo de entrega');
-      return;
-    }
-
-    setIsUploadingDelivery(true);
-    try {
-      if (mode === 'comment' || mode === 'revision') {
-        const res = await addTechnicalCommentAction(id as string, technicalComment, mode === 'revision');
-        if (res.success) {
-          showSuccessToastMessage(mode === 'revision' ? 'Cambios solicitados' : 'Comentario enviado');
-          setTechnicalComment('');
-          const updatedCase = await getCaseDetails(id as string);
-          if (updatedCase && !(updatedCase as any)._error) ingestCasePayloadFromServer(updatedCase);
-        }
-      } else if (mode === 'delivery') {
-        const uploadedPaths: string[] = [];
-        for (const fileObj of pendingDeliveryFiles) {
-          const fileName = `organizations/${clinicalCase.organizationId}/cases/${id}/deliveries/v${(clinicalCase.deliveries?.length || 0) + 1}/${Date.now()}_${fileObj.name}`;
-          const { body: uploadBody, contentEncoding } = await maybeGzipForUpload(fileObj);
-          const uploadUrl = await getUploadUrlAction(
-            fileName,
-            fileObj.type,
-            contentEncoding ? { contentEncoding } : undefined,
-          );
-          if (!uploadUrl) throw new Error("No se pudo obtener la URL de subida");
-          await fetch(uploadUrl, {
-            method: 'PUT',
-            body: uploadBody,
-            headers: {
-              'Content-Type': fileObj.type,
-              ...(contentEncoding ? { 'Content-Encoding': contentEncoding } : {}),
-            },
-          });
-          uploadedPaths.push(fileName);
-        }
-
-        const res = await submitReviewAction(id as string, technicalComment || 'Nueva versión de entrega', uploadedPaths);
-        if (res.success) {
-          showSuccessToastMessage('Entrega enviada');
-          setTechnicalComment('');
-          setPendingDeliveryFiles([]);
-          const updatedCase = await getCaseDetails(id as string);
-          if (updatedCase && !(updatedCase as any)._error) ingestCasePayloadFromServer(updatedCase);
-        }
-      }
-    } catch (error) {
-      console.error("Technical iteration error:", error);
-      showErrorToast('Error en la operación técnica');
-    } finally {
-      setIsUploadingDelivery(false);
-    }
-  };
-
-  const handleRequestRevision = async () => {
-    if (!revisionNotes.trim()) {
-      showErrorToast('Por favor, indica qué ajustes son necesarios.');
-      return;
-    }
-    setActionLoading(true, 'request_revision');
-    try {
-      const res = await requestRevisionAction(id as string, revisionNotes);
-      if (res.success) {
-        const refreshed = await getCaseDetails(id as string);
-        if (refreshed && !(refreshed as any)._error) {
-          ingestCasePayloadFromServer(refreshed);
-        } else {
-          setClinicalCase((prev: any) => (prev ? { ...prev, status: 'enEjecucion' } : prev));
-        }
-        setRevisionNotes('');
-        showSuccessToastMessage('Ajustes solicitados al técnico');
-      } else {
-        showErrorToast('Error al solicitar revisión');
-      }
-    } catch (error) {
-      showErrorToast('Error de conexión');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleRequestFlowChange = async () => {
-    if (!flowChangeType || !flowChangeReason.trim()) {
-      showErrorToast('Debes indicar el motivo del cambio.');
-      return;
-    }
-    setActionLoading(true);
-    try {
-      const res = await requestFlowChangeAction(id as string, flowChangeType, flowChangeReason);
-      if (res.success) {
-        setClinicalCase((prev: any) => ({
-          ...prev,
-          pendingActionRequest: flowChangeType,
-          pendingActionActor: user?.id
-        }));
-        setIsRequestingFlowChange(false);
-        setFlowChangeReason('');
-        showSuccessToastMessage('Solicitud de cambio enviada');
-      } else {
-        showErrorToast('Error al solicitar el cambio');
-      }
-    } catch (error) {
-      showErrorToast('Error de conexión');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const handleResolveFlowRequest = async (approve: boolean) => {
     setActionLoading(true);
     try {
@@ -1442,113 +1242,10 @@ function CaseDetailPageContent() {
     }
   };
 
-  const handleResumeWork = async () => {
-    setActionLoading(true);
-    try {
-      const res = await resumeWorkAction(id as string, 'El trabajo se ha reanudado satisfactoriamente.');
-      if (res.success) {
-        setClinicalCase((prev: any) => ({ ...prev, status: 'enEjecucion' }));
-        showSuccessToastMessage('Trabajo reanudado');
-      } else {
-        showErrorToast('Error al reanudar el trabajo');
-      }
-    } catch (error) {
-      showErrorToast('Error de conexión');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleSubmitRating = async () => {
-    if (userRating === 0) {
-      showErrorToast('Por favor selecciona una calificación');
-      return;
-    }
-    setActionLoading(true);
-    try {
-      const revieweeId = actingAsDentista ? assignedTechnicianIdStr : clinicalCase.doctorId;
-      const res = await submitUserRatingAction({ caseId: id as string, revieweeId: revieweeId as string, rating: userRating, comment: userReview });
-      if (res.success) {
-        setClinicalCase((prev: any) => ({ ...prev, status: 'completado', rating: userRating, review: userReview }));
-        showSuccessToastMessage('¡Gracias por tu evaluación! Caso finalizado.');
-      } else {
-        showErrorToast(res.error || 'Error al enviar evaluación');
-      }
-    } catch (error) {
-      showErrorToast('Error de conexión');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUpdateStatus = async (newStatus: string) => {
-    setActionLoading(true);
-    try {
-      await updateClinicalCaseAction(id as string, { status: newStatus });
-      setClinicalCase((prev: any) => prev ? ({ ...prev, status: newStatus }) : prev);
-      showSuccessToastMessage('Estado actualizado');
-    } catch (error) {
-      showErrorToast('Error al actualizar el estado del caso');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDesignUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !clinicalCase || !user) return;
-
-    setIsUploading(true);
-    try {
-      const gcsPath = `organizations/${clinicalCase.organizationId}/cases/${id}/designs/${Date.now()}_${file.name}`;
-
-      const { body: uploadBody, contentEncoding } = await maybeGzipForUpload(file);
-      const uploadUrl = await getUploadUrlAction(
-        gcsPath,
-        file.type,
-        contentEncoding ? { contentEncoding } : undefined,
-      );
-      if (!uploadUrl) throw new Error("No se pudo obtener URL de subida");
-
-      const res = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: uploadBody,
-        headers: {
-          'Content-Type': file.type,
-          ...(contentEncoding ? { 'Content-Encoding': contentEncoding } : {}),
-        },
-      });
-
-      if (!res.ok) throw new Error("Fallo en la subida a GCS");
-
-      await registerFileAction({
-        caseId: id as string,
-        organizationId: clinicalCase.organizationId,
-        uploaderId: user.id || (user as any).uid,
-        filename: file.name,
-        category: 'design',
-        subType: 'final_design',
-        size: file.size,
-        mimeType: file.type,
-        gcsPath: gcsPath
-      });
-
-      const updatedCase = await getCaseDetails(id as string);
-      if (updatedCase && !(updatedCase as any)._error) ingestCasePayloadFromServer(updatedCase);
-      showSuccessToastMessage('Archivo registrado correctamente');
-    } catch (error) {
-      logError('Error uploading design', error, { caseId: id });
-      showErrorToast('Error al subir el diseño');
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
   const MAX_CLINICAL_FILES = 3;
   const ALLOWED_CLINICAL_EXTS = ['stl', 'ply', 'obj', 'jpg', 'jpeg', 'png'];
 
   const MAX_COMPLEMENTARY_FILES = 10;
-  const MAX_REVISION_ATTACHMENTS = 5;
   const ALLOWED_COMPLEMENTARY_EXTS = ['jpg', 'jpeg', 'png', 'pdf', 'docx', 'stl', 'ply', 'obj'];
   const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
 
@@ -2284,8 +1981,6 @@ function CaseDetailPageContent() {
   }, [showPendingPoolBanner, clinicalCase?.pendingPoolCheckinSentAt, checkInDismissed]);
 
   const isEditingStatus = fieldsEditable && editForm ? editForm.status : caseStatus;
-
-  const canToggleEdit = actingAsDentista;
 
   if (!loading && (!clinicalCase || clinicalCase._error)) {
     const debug = clinicalCase?._debug;

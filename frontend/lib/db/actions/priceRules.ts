@@ -333,20 +333,6 @@ export async function listPriceRulesAction(): Promise<ActionResult<PriceRuleDisp
   return { success: true, data: withLabels };
 }
 
-export async function countCasesLinkedToPriceRuleAction(
-  ruleId: string,
-): Promise<ActionResult<{ count: number }>> {
-  const guard = await ensureAdmin();
-  if (!guard.ok) return { success: false, error: guard.error };
-
-  const [row] = await db
-    .select({ cnt: count(clinicalCase.id) })
-    .from(clinicalCase)
-    .where(eq(clinicalCase.listPriceRuleId, ruleId));
-
-  return { success: true, data: { count: Number(row?.cnt ?? 0) } };
-}
-
 export async function deletePriceRuleAction(
   id: string,
   changeReason: string,

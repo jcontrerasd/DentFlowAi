@@ -21,7 +21,7 @@ import {
   Fingerprint
 } from 'lucide-react';
 import { REGIONS_BY_COUNTRY, SUPPORTED_COUNTRIES } from '@/lib/constants/addressData';
-import { useAuth, UserProfile } from '@/context/AuthContext';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 import { updateUserAction } from '@/lib/db/actions/user';
 import { updateOrganizationDetailsAction, createOrganizationAction } from '@/lib/db/actions/organization';

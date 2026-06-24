@@ -4,9 +4,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Pause, RotateCcw, ChevronRight, ChevronLeft,
-  CheckCircle2, XCircle, Clock, Bell, Star, Zap,
-  Trophy, AlertTriangle, User, Microscope, Timer,
-  BadgeCheck, ArrowRight, Sparkles,
+  XCircle, Bell, Star, Zap,
+  Trophy, User, Microscope,
+  ArrowRight, Sparkles,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -143,8 +143,8 @@ export default function GuidedDemoClient() {
   const [phase, setPhase] = useState(0);
   const [autoPlay, setAutoPlay] = useState(false);
   const [scoreReveal, setScoreReveal] = useState<Record<string, number>>({});
-  const [selectedWinner, setSelectedWinner] = useState<string | null>(null);
-  const [timerSec, setTimerSec] = useState(90 * 60); // 90 min countdown
+  const [, setSelectedWinner] = useState<string | null>(null);
+  const [, setTimerSec] = useState(90 * 60); // 90 min countdown
   const [timerRunning, setTimerRunning] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoPlayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -226,18 +226,9 @@ export default function GuidedDemoClient() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [timerRunning]);
 
-  const fmtTimer = (sec: number) => {
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
   const currentPhase = PHASES[phase];
   const invited = TECHNICIANS.filter(t => t.invited);
   const excluded = TECHNICIANS.filter(t => t.excluded);
-  const eligibleInvited = invited.filter(t => t.invited && !t.excluded);
-
   return (
     <div className="space-y-8">
 
@@ -420,7 +411,6 @@ export default function GuidedDemoClient() {
             <div className="space-y-3">
               {TECHNICIANS.map((t, i) => {
                 const rev = scoreReveal[t.id] ?? 0;
-                const pct = (rev / 1) * 100;
                 return (
                   <motion.div
                     key={t.id}

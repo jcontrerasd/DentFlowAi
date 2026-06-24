@@ -34,11 +34,6 @@ export type CaseListQueryFilters = {
   qualityRatingState?: 'pending' | 'rated';
 };
 
-export const TECH_ACTIVE_CASE_STATUSES = [
-  CASE_STATUSES.EN_EJECUCION,
-  CASE_STATUSES.EN_REVISION,
-  CASE_STATUSES.CAMBIOS_EN_PROCESO,
-] as const;
 
 const TECH_PROGRESS_KPI_STATUSES: TechKpiId[] = [
   'enEjecucion',
