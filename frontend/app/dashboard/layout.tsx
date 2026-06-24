@@ -34,6 +34,7 @@ import AvailabilityBadge from '@/components/availability/AvailabilityBadge';
 import { AvailabilityProvider } from '@/components/availability/AvailabilityContext';
 import RolloutBanner from '@/components/availability/RolloutBanner';
 import DemoEmailPreviewListener from '@/components/demo/DemoEmailPreviewListener';
+import SessionHeartbeat from '@/components/auth/SessionHeartbeat';
 import Image from 'next/image';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -350,6 +351,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </section>
       </main>
       <DemoEmailPreviewListener />
+      <SessionHeartbeat />
     </div>
   );
 

@@ -497,6 +497,9 @@ export const sessions = pgTable("sessions", {
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
   expires: timestamp("expires", { mode: "date" }).notNull(),
+  // Fase 5 (ajuste login, TAB_CLOSE_LOGOUT_ENABLED) — último heartbeat del cliente; el cron
+  // de limpieza borra filas con lastSeenAt vencido cuando sendBeacon no llegó a disparar.
+  lastSeenAt: timestamp("lastSeenAt", { mode: "date" }),
 })
 
 export const verificationToken = pgTable(

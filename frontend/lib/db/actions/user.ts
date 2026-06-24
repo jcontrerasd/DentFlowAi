@@ -168,6 +168,14 @@ export async function getEmailVerificationEnabledAction(): Promise<{ enabled: bo
   return { enabled: process.env.EMAIL_VERIFICATION_ENABLED === 'true' };
 }
 
+/** Fase 5 (ajuste login): expone el flag server-only TAB_CLOSE_LOGOUT_ENABLED a la UI (dashboard). */
+export async function getTabCloseLogoutEnabledAction(): Promise<{ enabled: boolean; heartbeatSeconds: number }> {
+  return {
+    enabled: process.env.TAB_CLOSE_LOGOUT_ENABLED === 'true',
+    heartbeatSeconds: Number(process.env.SESSION_HEARTBEAT_SECONDS) || 30,
+  };
+}
+
 export async function checkUserStatusAction(email: string) {
   try {
     const cleanEmail = email.toLowerCase().trim();

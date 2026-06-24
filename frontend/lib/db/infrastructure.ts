@@ -271,6 +271,13 @@ export async function ensureIncrementalInfrastructure(db: any) {
   } catch (e) {
     console.error("[Infrastructure] Error creando password_reset_token (v5.21):", e);
   }
+
+  // v5.21 — sessions.lastSeenAt (Fase 5 ajuste login, TAB_CLOSE_LOGOUT_ENABLED).
+  try {
+    await db.execute(sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP;`);
+  } catch (e) {
+    console.error("[Infrastructure] Error añadiendo sessions.lastSeenAt (v5.21):", e);
+  }
 }
 
 /**
