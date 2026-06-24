@@ -223,6 +223,20 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
         return;
       }
 
+      const scanSlots = (['superior', 'inferior', 'bite'] as const).filter(k => k !== key);
+      const isDupeInScans = scanSlots.some(k => {
+        const f = files[k];
+        return f && f.name === selectedFile.name && f.size === selectedFile.size;
+      });
+      const isDupeInComplementary = files.complementary.some(
+        f => f.name === selectedFile.name && f.size === selectedFile.size,
+      );
+      if (isDupeInScans || isDupeInComplementary) {
+        setFileError(`${selectedFile.name}: este archivo ya fue agregado.`);
+        e.currentTarget.value = '';
+        return;
+      }
+
       setFileError(null);
       setFiles(prev => ({ ...prev, [key]: selectedFile }));
     }
@@ -249,8 +263,11 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
       const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
       if (!ALLOWED_COMPLEMENTARY_EXTS_WIZ.includes(ext)) { errors.push(`${f.name}: formato no permitido`); continue; }
       if (f.size > MAX_UPLOAD_SIZE_BYTES) { errors.push(`${f.name}: supera 20 MB`); continue; }
-      const isDupe = files.complementary.some(existing => existing.name === f.name && existing.size === f.size);
-      if (isDupe) { errors.push(`${f.name}: ya está en la lista`); continue; }
+      const isDupeComp = files.complementary.some(existing => existing.name === f.name && existing.size === f.size);
+      const isDupeScan = (['superior', 'inferior', 'bite'] as const).some(k => {
+        const s = files[k]; return s && s.name === f.name && s.size === f.size;
+      });
+      if (isDupeComp || isDupeScan) { errors.push(`${f.name}: ya está en la lista`); continue; }
       valid.push(f);
     }
     if (errors.length > 0) setFileError(errors[0]);

@@ -763,23 +763,6 @@ export async function getCaseDetails(caseId: string) {
 
     // 6. Avatares de eventos: ya se firman dentro de getCaseEventsAction.
 
-    let evaluationExpiresAt: Date | null = null;
-    if (cCase.status === 'enEvaluacion') {
-      // getCaseQuoteDeadlineAt imported statically at top of file
-      evaluationExpiresAt = await getCaseQuoteDeadlineAt(caseId);
-    }
-
-    // v5.0 — Etapa 3: plazo de revisión del dentista (solo en enRevision, flag on).
-    let reviewDeadlineAt: Date | null = null;
-    if (cCase.status === 'enRevision') {
-      reviewDeadlineAt = await getCaseReviewDeadlineAt(caseId);
-    }
-
-    // v5.19 — SLA de la etapa de Calidad (solo en enRevisionCalidad, flag on).
-    let qualityReviewDeadlineAt: Date | null = null;
-    if (cCase.status === 'enRevisionCalidad') {
-      qualityReviewDeadlineAt = await getCaseQualityReviewDeadlineAt(caseId);
-    }
     // Calculamos qualityGateActive ANTES de anonimizar qualityReviewerId.
     // El técnico necesita saber si su entrega va a Calidad, pero sin ver la identidad del revisor.
     const qualityGateActive =
@@ -810,49 +793,55 @@ export async function getCaseDetails(caseId: string) {
       (cCase as any).technician = undefined;
     }
 
-    const archivedByCurrentUser = await isCaseArchivedByUser(caseId, userId as string);
+    // Queries independientes en paralelo: deadlines, archivo, asignación, copia, permisos, calificaciones.
+    const [
+      evaluationExpiresAt,
+      reviewDeadlineAt,
+      qualityReviewDeadlineAt,
+      archivedByCurrentUser,
+      myAssignmentRow,
+      copiedFromSource,
+      canDelete,
+      reviewedRows,
+    ] = await Promise.all([
+      cCase.status === 'enEvaluacion' ? getCaseQuoteDeadlineAt(caseId) : Promise.resolve(null),
+      cCase.status === 'enRevision' ? getCaseReviewDeadlineAt(caseId) : Promise.resolve(null),
+      cCase.status === 'enRevisionCalidad' ? getCaseQualityReviewDeadlineAt(caseId) : Promise.resolve(null),
+      isCaseArchivedByUser(caseId, userId as string),
+      userRole === 'tecnico'
+        ? db
+            .select({ status: caseAssignment.status })
+            .from(caseAssignment)
+            .where(
+              and(
+                eq(caseAssignment.clinicalCaseId, caseId),
+                eq(caseAssignment.technicianId, userId as string),
+              ),
+            )
+            .orderBy(desc(caseAssignment.assignedAt))
+            .limit(1)
+        : Promise.resolve([] as { status: string }[]),
+      cCase.copiedFromCaseId
+        ? db
+            .select({ caseNumber: clinicalCase.caseNumber })
+            .from(clinicalCase)
+            .where(eq(clinicalCase.id, cCase.copiedFromCaseId))
+            .limit(1)
+        : Promise.resolve([] as { caseNumber: number }[]),
+      canDeleteCase(caseId),
+      userId
+        ? db
+            .select({ dimension: review.dimension })
+            .from(review)
+            .where(and(eq(review.clinicalCaseId, caseId), eq(review.reviewerId, userId as string)))
+        : Promise.resolve([] as { dimension: string }[]),
+    ]);
 
-    let myAssignmentStatus: string | null = null;
-    if (userRole === 'tecnico') {
-      const [canonical] = await db
-        .select({ status: caseAssignment.status })
-        .from(caseAssignment)
-        .where(
-          and(
-            eq(caseAssignment.clinicalCaseId, caseId),
-            eq(caseAssignment.technicianId, userId as string),
-          ),
-        )
-        .orderBy(desc(caseAssignment.assignedAt))
-        .limit(1);
-      myAssignmentStatus = canonical?.status ?? null;
-    }
-
+    const myAssignmentStatus: string | null = myAssignmentRow[0]?.status ?? null;
     /** @deprecated alias */
     const myInvitationStatus = myAssignmentStatus;
-
-    let copiedFromCaseNumber: string | null = null;
-    if (cCase.copiedFromCaseId) {
-      const [source] = await db
-        .select({ caseNumber: clinicalCase.caseNumber })
-        .from(clinicalCase)
-        .where(eq(clinicalCase.id, cCase.copiedFromCaseId))
-        .limit(1);
-      copiedFromCaseNumber = source?.caseNumber ?? null;
-    }
-
-    const canDelete = await canDeleteCase(caseId);
-
-    // v5.3 — Dimensiones (CAD/CAM) que el viewer ya calificó en este caso.
-    // Permite al UCH mostrar/ocultar el panel de calificación de cada fase.
-    let myReviewedDimensions: string[] = [];
-    if (userId) {
-      const reviewedRows = await db
-        .select({ dimension: review.dimension })
-        .from(review)
-        .where(and(eq(review.clinicalCaseId, caseId), eq(review.reviewerId, userId as string)));
-      myReviewedDimensions = reviewedRows.map(r => r.dimension);
-    }
+    const copiedFromCaseNumber: string | null = copiedFromSource[0]?.caseNumber?.toString() ?? null;
+    const myReviewedDimensions: string[] = reviewedRows.map((r) => r.dimension);
 
     perfLog('getCaseDetails.total', Date.now() - t0details, { caseId });
     return {

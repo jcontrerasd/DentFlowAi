@@ -1,14 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Settings2 } from 'lucide-react';
-import { getMyAvailabilityStatusAction } from '@/lib/db/actions/availability';
+import { useAvailability } from './AvailabilityContext';
 import GlobalAvailabilitySwitch from './GlobalAvailabilitySwitch';
 import ResponseStatusStepper from './ResponseStatusStepper';
-
-type Status = Awaited<ReturnType<typeof getMyAvailabilityStatusAction>>;
 
 /**
  * Badge global de disponibilidad en el header (v5.0, §1.6 + §2.6.2).
@@ -16,15 +14,8 @@ type Status = Awaited<ReturnType<typeof getMyAvailabilityStatusAction>>;
  * vía `enabled` en la action). Punto de aviso ámbar/rojo en Nivel 2/3.
  */
 export default function AvailabilityBadge() {
-  const [status, setStatus] = useState<Status | null>(null);
+  const { status, refresh } = useAvailability();
   const [open, setOpen] = useState(false);
-
-  const refresh = useCallback(async () => {
-    const res = await getMyAvailabilityStatusAction();
-    setStatus(res);
-  }, []);
-
-  useEffect(() => { refresh(); }, [refresh]);
 
   if (!status || !status.success || !status.enabled || !status.availability) return null;
 

@@ -23,9 +23,11 @@ import {
   updateUserOrgAdmin,
 } from '@/lib/db/actions/admin';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 
 export default function AdminUsersPage() {
   const { userProfile, user } = useAuth();
+  const { showSuccess, showError } = useToast();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -61,12 +63,12 @@ export default function AdminUsersPage() {
     if (!adminPassword) return;
     const res = await createCoAdminAction(adminPassword);
     if (res.success && res.data) {
-      alert(`¡Admin creado con éxito!\nNombre: ${res.data.name}\nEmail: ${res.data.email}`);
+      showSuccess(`Admin creado — ${res.data.name} (${res.data.email})`);
       setShowCreateAdmin(false);
       setAdminPassword('');
       fetchUsers();
     } else {
-      alert(res.error || 'Error al crear administrador.');
+      showError(res.error || 'Error al crear administrador.');
     }
   };
 
@@ -74,19 +76,19 @@ export default function AdminUsersPage() {
     if (!calidadForm.fullName || !calidadForm.email || !calidadForm.password) return;
     const res = await createCalidadUserAction(calidadForm);
     if (res.success && res.data) {
-      alert(`¡Revisor de Calidad creado!\nNombre: ${res.data.name}\nEmail: ${res.data.email}`);
+      showSuccess(`Revisor de Calidad creado — ${res.data.name} (${res.data.email})`);
       setShowCreateCalidad(false);
       setCalidadForm({ fullName: '', email: '', password: '' });
       fetchUsers();
     } else {
-      alert(res.error || 'Error al crear revisor de Calidad.');
+      showError(res.error || 'Error al crear revisor de Calidad.');
     }
   };
 
   const openEditModal = async (u: any) => {
     const res = await getUserForEditAdmin(u.id);
     if (!res.success || !res.data) {
-      alert('No se pudo cargar el perfil del usuario.');
+      showError('No se pudo cargar el perfil del usuario.');
       return;
     }
     const d = res.data;
@@ -125,7 +127,7 @@ export default function AdminUsersPage() {
         experienceYears: editForm.experienceYears ? parseInt(editForm.experienceYears) : null,
       });
       if (!res.success) {
-        alert('Error: ' + (res.error || 'No se pudo actualizar el usuario.'));
+        showError(res.error || 'No se pudo actualizar el usuario.');
         return;
       }
       if (actionModal.userData.organizationId && (orgForm.name || orgForm.giro || orgForm.legalAddress)) {
@@ -134,14 +136,14 @@ export default function AdminUsersPage() {
       if (editForm.role === 'tecnico' && skillFormRef.current) {
         const skillRes = await skillFormRef.current.save();
         if (!skillRes.success) {
-          alert('Error al guardar habilidades: ' + skillRes.error);
+          showError('Error al guardar habilidades: ' + skillRes.error);
           return;
         }
       }
       await fetchUsers();
       setActionModal({ show: false, type: 'toggle', userData: null });
     } catch {
-      alert('Error de conexión con el servidor');
+      showError('Error de conexión con el servidor');
     } finally {
       setProcessing(false);
     }
@@ -167,11 +169,11 @@ export default function AdminUsersPage() {
         await fetchUsers(); // Recargar datos reales
         setActionModal({ show: false, type: 'toggle', userData: null });
       } else {
-        alert("Error: " + (res?.error || "No se pudo completar la acción"));
+        showError(res?.error || "No se pudo completar la acción");
       }
     } catch (error) {
        console.error("Error executing action:", error);
-       alert("Error de conexión con el servidor");
+       showError("Error de conexión con el servidor");
     } finally {
       setProcessing(false);
       setActionModal({ show: false, type: 'toggle', userData: null });
@@ -464,7 +466,7 @@ export default function AdminUsersPage() {
                   <button onClick={async () => {
                     const res = await changeUserPasswordAdmin(actionModal.userData.id, newPassword);
                     if (res.success) {
-                      alert('Contraseña actualizada');
+                      showSuccess('Contraseña actualizada');
                       setActionModal({ show: false, type: 'toggle', userData: null });
                       setNewPassword('');
                     }
