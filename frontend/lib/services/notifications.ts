@@ -114,6 +114,8 @@ export const NOTIFICATION_CATEGORY_MAP: Record<NotificationType, EmailNotifCateg
   // Calidad
   REVISION_PENDIENTE_CALIDAD:     'entregas_pendientes',
   CASO_DERIVADO_CALIDAD:          'entregas_pendientes',
+  DERIVACION_CALIDAD_ACEPTADA:    'entregas_pendientes',
+  DERIVACION_CALIDAD_RECHAZADA:   'entregas_pendientes',
   QUALITY_PLAZO_POR_VENCER:       'plazos_revision',
   QUALITY_PLAZO_VENCIDO:          'plazos_revision',
   CALIDAD_POR_CALIFICAR:          'calificacion_pendiente',
@@ -161,7 +163,11 @@ export type NotificationType =
   | 'QUALITY_PLAZO_POR_VENCER'
   | 'QUALITY_PLAZO_VENCIDO'
   /** Calidad: el caso se completó y queda pendiente la calificación del técnico. */
-  | 'CALIDAD_POR_CALIFICAR';
+  | 'CALIDAD_POR_CALIFICAR'
+  /** Calidad (origen): el destino aceptó la derivación. */
+  | 'DERIVACION_CALIDAD_ACEPTADA'
+  /** Calidad (origen): el destino rechazó la derivación. */
+  | 'DERIVACION_CALIDAD_RECHAZADA';
 
 const baseUrl = () => process.env.NEXT_PUBLIC_APP_URL || '';
 
@@ -309,6 +315,14 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   CALIDAD_POR_CALIFICAR: {
     subject: 'Calidad: tienes un caso por calificar',
     body: (data) => `Hola,\n\nEl caso ${data.caseNumber || data.caseId} se completó y queda pendiente tu calificación de Calidad al técnico. Ingresa al Hub del caso para enviarla.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  DERIVACION_CALIDAD_ACEPTADA: {
+    subject: 'Calidad: tu derivación fue aceptada',
+    body: (data) => `Hola,\n\nLa derivación del caso ${data.caseNumber || data.caseId} fue aceptada. El nuevo revisor asumirá la revisión de Calidad.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  DERIVACION_CALIDAD_RECHAZADA: {
+    subject: 'Calidad: tu derivación fue rechazada',
+    body: (data) => `Hola,\n\nLa derivación del caso ${data.caseNumber || data.caseId} fue rechazada. El caso permanece contigo para su revisión. Ingresa al Hub para ver el motivo.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
 };
 

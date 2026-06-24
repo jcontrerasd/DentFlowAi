@@ -42,6 +42,10 @@ export const CASE_EVENTS = {
   ASIGNACION_CALIDAD: 'ASIGNACION_CALIDAD',
   /** Calidad derivó el caso a otro revisor de Calidad con motivo + comentario (visibleTo calidad) */
   CASO_DERIVADO_CALIDAD: 'CASO_DERIVADO_CALIDAD',
+  /** Destino aceptó la derivación; el caso pasa oficialmente al nuevo revisor (visibleTo calidad) */
+  DERIVACION_CALIDAD_ACEPTADA: 'DERIVACION_CALIDAD_ACEPTADA',
+  /** Destino rechazó la derivación; el caso permanece con el origen (visibleTo calidad — solo el origen) */
+  DERIVACION_CALIDAD_RECHAZADA: 'DERIVACION_CALIDAD_RECHAZADA',
   /** SLA de Calidad por vencer / vencido (escalación por cron, sin auto-acción) */
   QUALITY_PLAZO_POR_VENCER: 'QUALITY_PLAZO_POR_VENCER',
   QUALITY_PLAZO_VENCIDO: 'QUALITY_PLAZO_VENCIDO',

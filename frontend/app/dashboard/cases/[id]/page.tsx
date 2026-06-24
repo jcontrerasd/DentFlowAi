@@ -468,12 +468,15 @@ function CaseDetailPageContent() {
   );
   const viewerIdStr = authUserProfile?.id ? String(authUserProfile.id) : null;
 
-  // v5.19 — El viewer es el revisor de Calidad asignado al caso (o admin supervisando).
+  // v5.19 — El viewer es el revisor de Calidad asignado (active) o el destino de una
+  // derivación pendiente (pending_derivation) que aún no ha aceptado.
   const actingAsCalidad =
     String(userRole) === 'calidad' &&
     !!viewerIdStr &&
-    clinicalCase?.qualityReviewerId != null &&
-    String(clinicalCase.qualityReviewerId) === viewerIdStr;
+    (
+      (clinicalCase?.qualityReviewerId != null && String(clinicalCase.qualityReviewerId) === viewerIdStr) ||
+      !!clinicalCase?.hasPendingDerivationForMe
+    );
 
   // Rol del viewer para presentación de estado (enmascara la etapa de Calidad al dentista).
   const viewerRole: CaseViewerRole = viewingAsAdmin
@@ -3146,6 +3149,14 @@ function CaseDetailPageContent() {
                   serverClockAnchor={serverClockAnchor}
                   newMessageCount={unreadTechMessages + unreadNegotiationMessages}
                   onAcknowledgeNew={acknowledgeNewHubMessages}
+                  derivedFromCalidadName={clinicalCase?.derivedFromCalidadName ?? null}
+                  hasPendingDerivationForMe={clinicalCase?.hasPendingDerivationForMe ?? false}
+                  pendingDerivationFromName={clinicalCase?.pendingDerivationFromName ?? null}
+                  pendingDerivationReasonLabel={clinicalCase?.pendingDerivationReasonLabel ?? null}
+                  pendingDerivationComment={clinicalCase?.pendingDerivationComment ?? null}
+                  hasPendingDerivationOutgoing={clinicalCase?.hasPendingDerivationOutgoing ?? false}
+                  myQualityAssignmentStatus={clinicalCase?.myQualityAssignmentStatus ?? null}
+                  onDerivationRejected={() => router.push('/dashboard/cases')}
                 />
               </motion.div>
             )}

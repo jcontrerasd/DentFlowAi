@@ -5,7 +5,7 @@ import { notifyUser } from "../../services/notifications";
 import GCPStorageService from '@/lib/services/gcp-storage';
 import { db } from "@/lib/db";
 import { perfLog, perfStart } from '@/lib/perfLog';
-import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseAssignment, caseUserArchive } from "@/lib/db/schema";
+import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseAssignment, caseUserArchive, caseQualityAssignment, qualityDerivationReason } from "@/lib/db/schema";
 import { eq, desc, and, or, ne, not, sql, inArray, avg, exists, gt } from "drizzle-orm";
 import {
   archiveVisibilityForUser,
@@ -843,6 +843,105 @@ export async function getCaseDetails(caseId: string) {
     const copiedFromCaseNumber: string | null = copiedFromSource[0]?.caseNumber?.toString() ?? null;
     const myReviewedDimensions: string[] = reviewedRows.map((r) => r.dimension);
 
+    // Calidad: campos de derivación (aceptada y pendiente).
+    let derivedFromCalidadName: string | null = null;
+    let hasPendingDerivationForMe = false;
+    let pendingDerivationFromName: string | null = null;
+    let pendingDerivationReasonLabel: string | null = null;
+    let pendingDerivationComment: string | null = null;
+    let hasPendingDerivationOutgoing = false;
+    let myQualityAssignmentStatus: 'active' | 'pending_derivation' | null = null;
+
+    if (userRole === 'calidad' && userId) {
+      // Estado de la fila del viewer para este caso.
+      const [myQaRow] = await db
+        .select({ status: caseQualityAssignment.status })
+        .from(caseQualityAssignment)
+        .where(
+          and(
+            eq(caseQualityAssignment.clinicalCaseId, caseId),
+            eq(caseQualityAssignment.calidadUserId, userId as string),
+            inArray(caseQualityAssignment.status, ['active', 'pending_derivation']),
+          ),
+        )
+        .limit(1);
+      myQualityAssignmentStatus = (myQaRow?.status as 'active' | 'pending_derivation') ?? null;
+
+      if (myQualityAssignmentStatus === 'active') {
+        // ¿Hay una derivación pendiente outgoing (alguien que aún no responde)?
+        const [outgoingRow] = await db
+          .select({ id: caseQualityAssignment.id })
+          .from(caseQualityAssignment)
+          .where(
+            and(
+              eq(caseQualityAssignment.clinicalCaseId, caseId),
+              eq(caseQualityAssignment.status, 'pending_derivation'),
+            ),
+          )
+          .limit(1);
+        hasPendingDerivationOutgoing = !!outgoingRow;
+
+        // ¿Este caso llegó vía derivación aceptada? Nombre del QA que lo derivó.
+        const [derivedRow] = await db
+          .select({ fromName: user.fullName })
+          .from(caseQualityAssignment)
+          .innerJoin(user, eq(user.id, caseQualityAssignment.calidadUserId))
+          .where(
+            and(
+              eq(caseQualityAssignment.clinicalCaseId, caseId),
+              eq(caseQualityAssignment.status, 'derived'),
+              eq(caseQualityAssignment.derivedToId, userId as string),
+            ),
+          )
+          .orderBy(desc(caseQualityAssignment.updatedAt))
+          .limit(1);
+        derivedFromCalidadName = derivedRow?.fromName ?? null;
+      }
+
+      if (myQualityAssignmentStatus === 'pending_derivation') {
+        // El viewer es el destino de una derivación pendiente — cargar contexto para el panel.
+        hasPendingDerivationForMe = true;
+        const [pendingRow] = await db
+          .select({
+            comment: caseQualityAssignment.derivationComment,
+            reasonId: caseQualityAssignment.derivationReasonId,
+          })
+          .from(caseQualityAssignment)
+          .where(
+            and(
+              eq(caseQualityAssignment.clinicalCaseId, caseId),
+              eq(caseQualityAssignment.calidadUserId, userId as string),
+              eq(caseQualityAssignment.status, 'pending_derivation'),
+            ),
+          )
+          .limit(1);
+        pendingDerivationComment = pendingRow?.comment ?? null;
+
+        if (pendingRow?.reasonId) {
+          const [reasonRow] = await db
+            .select({ label: qualityDerivationReason.label })
+            .from(qualityDerivationReason)
+            .where(eq(qualityDerivationReason.id, pendingRow.reasonId))
+            .limit(1);
+          pendingDerivationReasonLabel = reasonRow?.label ?? null;
+        }
+
+        // Nombre del origen (fila 'active' del mismo caso).
+        const [originRow] = await db
+          .select({ fromName: user.fullName })
+          .from(caseQualityAssignment)
+          .innerJoin(user, eq(user.id, caseQualityAssignment.calidadUserId))
+          .where(
+            and(
+              eq(caseQualityAssignment.clinicalCaseId, caseId),
+              eq(caseQualityAssignment.status, 'active'),
+            ),
+          )
+          .limit(1);
+        pendingDerivationFromName = originRow?.fromName ?? null;
+      }
+    }
+
     perfLog('getCaseDetails.total', Date.now() - t0details, { caseId });
     return {
       ...cCase,
@@ -857,6 +956,13 @@ export async function getCaseDetails(caseId: string) {
       copiedFromCaseNumber,
       canDelete,
       myReviewedDimensions,
+      derivedFromCalidadName,
+      hasPendingDerivationForMe,
+      pendingDerivationFromName,
+      pendingDerivationReasonLabel,
+      pendingDerivationComment,
+      hasPendingDerivationOutgoing,
+      myQualityAssignmentStatus,
     };
   } catch (error: any) {
     perfLog('getCaseDetails.error', Date.now() - t0details, { caseId, error: String(error?.message) });

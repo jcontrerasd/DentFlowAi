@@ -53,7 +53,7 @@ export async function userCanAccessClinicalCase(
     return !!inv;
   }
 
-  // Calidad accede a los casos donde es (o fue) el revisor asignado.
+  // Calidad accede a casos con asignación activa O con derivación pendiente de su respuesta.
   if (role === 'calidad') {
     const [row] = await db
       .select({ id: caseQualityAssignment.id })
@@ -62,6 +62,7 @@ export async function userCanAccessClinicalCase(
         and(
           eq(caseQualityAssignment.clinicalCaseId, caseId),
           eq(caseQualityAssignment.calidadUserId, userId),
+          inArray(caseQualityAssignment.status, ['active', 'pending_derivation']),
         ),
       )
       .limit(1);
@@ -144,12 +145,17 @@ export async function buildActiveCaseVisibilityWhere(
     );
   }
 
-  // Calidad: casos donde es (o fue) revisor asignado (cross-org, sin filtro de organización).
+  // Calidad: casos con asignación activa O con derivación pendiente de su respuesta.
   if (role === 'calidad') {
     const rows = await db
       .select({ caseId: caseQualityAssignment.clinicalCaseId })
       .from(caseQualityAssignment)
-      .where(eq(caseQualityAssignment.calidadUserId, userId));
+      .where(
+        and(
+          eq(caseQualityAssignment.calidadUserId, userId),
+          inArray(caseQualityAssignment.status, ['active', 'pending_derivation']),
+        ),
+      );
     const ids = rows.map((r) => r.caseId);
     return and(
       archiveFilter,
