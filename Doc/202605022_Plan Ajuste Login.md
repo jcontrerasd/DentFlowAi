@@ -438,6 +438,30 @@ Los 5 requisitos comparten una misma cirugía base: migrar de **JWT sessions** a
 
 ---
 
+## 12. Estado de ejecución (rama `tmp-login`) y checklist Fase 6 (cross-browser)
+
+**Actualizado durante la ejecución del plan vigente** (ver `/Users/jaimecontreras/.claude/plans/jaunty-exploring-dolphin.md` para el detalle técnico completo — este plan de mayo quedó como contexto histórico, el diseño real cambió en varios puntos, el más importante: NextAuth no permite `Credentials` + `strategy:"database"`, así que Fases 1/4/5 usan una tabla de sesión propia gestionada a mano, no el adapter de NextAuth).
+
+Fases implementadas, testeadas (type-check + suite completa sin regresión + smoke HTTP real contra el dev server) y commiteadas en `tmp-login`:
+- ✅ Fase 0 — Baseline
+- ✅ Fase 1 — Infraestructura de sesión propia
+- ✅ Fase 2 — Google OAuth (código completo; el flujo OAuth real con Google no se probó end-to-end por falta de credenciales GCP Console)
+- ✅ Fase 3 — Verificación de email obligatoria
+- ✅ Fase 3.5 — Recuperación de contraseña real
+- ✅ Fase 4 — Una sola sesión por usuario
+- ✅ Fase 5 — Logout real al cerrar pestaña
+
+**Fase 6 — Checklist cross-browser (pendiente de ejecución manual, no automatizable desde este entorno):**
+
+| Browser | Login Credentials | Login Google | Logout | Registro + verificación email | Recuperar contraseña |
+|---|---|---|---|---|---|
+| Chrome 109+ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Firefox 115+ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Safari 16.4+ | ☐ | ☐ | ☐ | ☐ | ☐ |
+| Edge 109+ | ☐ | ☐ | ☐ | ☐ | ☐ |
+
+Marcar cada celda al validar manualmente con los flags correspondientes en `ON` (uno por vez, en local o staging). Fase 7 (rollout) no debería iniciar en producción sin esta tabla completa.
+
 ## 11. Referencias
 
 - Plan extendido: `/Users/jaimecontreras/.claude/plans/glittery-moseying-perlis.md`

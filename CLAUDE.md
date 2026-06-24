@@ -143,6 +143,17 @@ Moderación de campos libres (notas, trackingId) — bloquea intentos de saltars
 
 Configurador Fauchard admin: **3 espacios** — Parámetros · Categorías · Historial (`TabClient`).
 
+## Matriz de browsers soportados (ajuste login, Fase 6)
+
+Matriz oficial mínima para validar el flujo de auth (login Credentials, login Google, logout, registro + verificación de email) — checklist manual, sin Playwright en este repo (ver `Doc/202605022_Plan Ajuste Login.md` para el detalle de fases y el seguimiento del checklist):
+
+| Browser | Versión mínima |
+|---|---|
+| Chrome | 109+ |
+| Firefox | 115+ |
+| Safari | 16.4+ |
+| Edge | 109+ |
+
 ## Comandos
 ```bash
 cd frontend && npm run dev              # desarrollo (Turbopack, puerto 3000)
