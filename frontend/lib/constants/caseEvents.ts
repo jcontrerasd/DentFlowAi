@@ -8,34 +8,14 @@ export const CASE_EVENTS = {
   CASO_COPIA: 'CASO_COPIA',
   PUBLICACION: 'PUBLICACION',
   CASO_PUBLICADO: 'CASO_PUBLICADO',
-  PROPUESTA_RECIBIDA: 'PROPUESTA_RECIBIDA',
-  REPUBLICACION: 'REPUBLICACION',
   RETIRO_PUBLICACION: 'RETIRO_PUBLICACION',
   CASO_ACTUALIZADO: 'CASO_ACTUALIZADO',
 
-  // Flujo de ofertas
-  OFERTA_RECIBIDA: 'OFERTA_RECIBIDA',
-  OFERTA_ACEPTADA: 'OFERTA_ACEPTADA',
-  OFERTA_RECHAZADA: 'OFERTA_RECHAZADA',
-  OFERTA_RETIRADA: 'OFERTA_RETIRADA',
-  PROPUESTA_ACEPTADA: 'PROPUESTA_ACEPTADA',
-  OFERTA_GANADORA: 'OFERTA_GANADORA',
-  OFERTA_NO_SELECCIONADA: 'OFERTA_NO_SELECCIONADA',
-  INVITACION_ENVIADA: 'INVITACION_ENVIADA',
-  INVITACION_RECIBIDA: 'INVITACION_RECIBIDA',
-  INVITACION_EXPIRADA: 'INVITACION_EXPIRADA',
-  /** Técnico envió cotización (visible técnico) */
-  OFERTA_ENVIADA: 'OFERTA_ENVIADA',
+  // Asignación directa
   /** Técnico rechazó explícitamente su invitación (v5.0, visibleTo sistema; el dentista no lo ve) */
   OFERTA_RECHAZADA_POR_TECNICO: 'OFERTA_RECHAZADA_POR_TECNICO',
-  /** Caso re-publicado tras sin_cotizaciones_fallo (v5.0) */
-  CASO_REPUBLICADO: 'CASO_REPUBLICADO',
   /** Caso entró a cola pendiente_pool por 0 técnicos elegibles (v5.0) */
   CASO_EN_COLA: 'CASO_EN_COLA',
-  CASO_SIN_OFERTAS_CERRADO: 'CASO_SIN_OFERTAS_CERRADO',
-  OFERTAS_COMPARATIVAS_LISTAS: 'OFERTAS_COMPARATIVAS_LISTAS',
-  CASO_OFERTAS_TODAS_RECHAZADAS: 'CASO_OFERTAS_TODAS_RECHAZADAS',
-  PROPUESTA_EXPIRADA: 'PROPUESTA_EXPIRADA',
 
   /** Asignación directa (v5.9) */
   ASIGNACION_ENVIADA: 'ASIGNACION_ENVIADA',
@@ -62,6 +42,10 @@ export const CASE_EVENTS = {
   ASIGNACION_CALIDAD: 'ASIGNACION_CALIDAD',
   /** Calidad derivó el caso a otro revisor de Calidad con motivo + comentario (visibleTo calidad) */
   CASO_DERIVADO_CALIDAD: 'CASO_DERIVADO_CALIDAD',
+  /** Destino aceptó la derivación; el caso pasa oficialmente al nuevo revisor (visibleTo calidad) */
+  DERIVACION_CALIDAD_ACEPTADA: 'DERIVACION_CALIDAD_ACEPTADA',
+  /** Destino rechazó la derivación; el caso permanece con el origen (visibleTo calidad — solo el origen) */
+  DERIVACION_CALIDAD_RECHAZADA: 'DERIVACION_CALIDAD_RECHAZADA',
   /** SLA de Calidad por vencer / vencido (escalación por cron, sin auto-acción) */
   QUALITY_PLAZO_POR_VENCER: 'QUALITY_PLAZO_POR_VENCER',
   QUALITY_PLAZO_VENCIDO: 'QUALITY_PLAZO_VENCIDO',

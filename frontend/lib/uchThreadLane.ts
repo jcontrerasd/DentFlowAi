@@ -137,29 +137,15 @@ function resolveDentistaTableA(
     return { lane: 'thread', showAsFauchard: true };
   }
 
-  // A — Emitido por el dentista (comparativo / cierres solo dentista)
-  if (
-    (action === CASE_EVENTS.OFERTA_RECHAZADA || action === CASE_EVENTS.OFERTA_NO_SELECCIONADA) &&
-    visibleTo === 'dentista'
-  ) {
-    return { lane: 'self', showAsFauchard: false };
-  }
-  if (action === CASE_EVENTS.CASO_OFERTAS_TODAS_RECHAZADAS && visibleTo === 'dentista') {
-    return { lane: 'self', showAsFauchard: false };
-  }
-
   // A — Ciclo de vida y decisiones propias del doctor en su carril
   const dentistaSelfActions = new Set<string>([
     CASE_EVENTS.CASO_CREADO,
     CASE_EVENTS.CREACION,
     CASE_EVENTS.PUBLICACION,
     CASE_EVENTS.CASO_PUBLICADO,
-    CASE_EVENTS.OFERTA_ACEPTADA,
-    CASE_EVENTS.PROPUESTA_ACEPTADA,
     CASE_EVENTS.TRABAJO_APROBADO,
     CASE_EVENTS.REVISION_SOLICITADA,
     CASE_EVENTS.CASO_ACTUALIZADO,
-    CASE_EVENTS.REPUBLICACION,
     CASE_EVENTS.RETIRO_PUBLICACION,
   ]);
   if (dentistaSelfActions.has(action) && samePersistedAuthor) {
@@ -192,29 +178,16 @@ function resolveTecnicoTableB(
 ): { lane: UchThreadLane; showAsFauchard: boolean } {
   const { visibleTo, presentationAuthor, samePersistedAuthor, maskedUserIsFauchard, authorRole } = ctx;
 
-  // B — Asignación/invitación recibida: siempre hilo y voz Fauchard.
+  // B — Asignación recibida: siempre hilo y voz Fauchard.
   if (
-    action === CASE_EVENTS.INVITACION_RECIBIDA ||
     action === CASE_EVENTS.ASIGNACION_RECIBIDA ||
     action === CASE_EVENTS.ASIGNACION_REASIGNADA
   ) {
     return { lane: 'thread', showAsFauchard: true };
   }
 
-  // B — Cierres comparativa / ganador visibles solo al técnico afectado
-  if (
-    (action === CASE_EVENTS.OFERTA_RECHAZADA ||
-      action === CASE_EVENTS.OFERTA_NO_SELECCIONADA ||
-      action === CASE_EVENTS.OFERTA_GANADORA) &&
-    visibleTo === 'tecnico'
-  ) {
-    return { lane: 'thread', showAsFauchard: true };
-  }
-
   // B — Emisiones claras del técnico en carril propio
   const tecnicoSelfEmitActions = new Set<string>([
-    CASE_EVENTS.OFERTA_ENVIADA,
-    CASE_EVENTS.OFERTA_RETIRADA,
     CASE_EVENTS.REVISION_ENVIADA,
     CASE_EVENTS.REVISION_ENVIADA_CALIDAD,
     CASE_EVENTS.COMENTARIO_TECNICO,

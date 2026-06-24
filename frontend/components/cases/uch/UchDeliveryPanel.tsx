@@ -119,7 +119,9 @@ export default function UchDeliveryPanel({
       </div>
 
       <p className="text-xs text-muted leading-relaxed">
-        Sube al menos un archivo del diseño (STL, imágenes, PDF). El dentista debe poder descargarlos antes de aprobar o pedir ajustes.
+        {qualityGateActive
+          ? 'Sube al menos un archivo de diseño CAD (STL, PLY u OBJ) para revisión de Calidad.'
+          : 'Sube al menos un archivo del diseño (STL, imágenes, PDF). El dentista debe poder descargarlos antes de aprobar o pedir ajustes.'}
       </p>
 
       <div className="space-y-2">
@@ -127,15 +129,43 @@ export default function UchDeliveryPanel({
         {!isUploadingFiles && !isSendingDelivery && (
           <label className="flex items-center gap-2 cursor-pointer text-sm text-primary font-medium hover:text-primary transition-colors w-fit">
             <Paperclip className="w-4 h-4" />
-            Elegir archivos ({deliveryFiles.length}/5)
+            Elegir archivos ({deliveryFiles.length}/13)
             <input
               type="file"
               multiple
               className="hidden"
-              accept=".stl,.ply,.obj,.jpg,.jpeg,.png,.pdf"
+              accept={qualityGateActive ? '.stl,.ply,.obj' : '.stl,.ply,.obj,.jpg,.jpeg,.png,.pdf'}
               onChange={(e) => {
                 const newFiles = Array.from(e.target.files || []);
-                setDeliveryFiles((prev) => [...prev, ...newFiles.map(newDeliveryEntry)].slice(0, 5));
+                const MAX_MODEL_MB = 100;
+                const MAX_DOC_MB = 20;
+                const oversized = newFiles.filter((f) => {
+                  const limitMb = isGzipCompressible(f.name) ? MAX_MODEL_MB : MAX_DOC_MB;
+                  return f.size > limitMb * 1024 * 1024;
+                });
+                if (oversized.length > 0) {
+                  showError(
+                    `Archivos demasiado grandes: ${oversized.map((f) => `${f.name} (${(f.size / 1024 / 1024).toFixed(0)} MB)`).join(', ')}. Máx: ${MAX_MODEL_MB} MB para modelos 3D, ${MAX_DOC_MB} MB para documentos.`,
+                  );
+                  e.target.value = '';
+                  return;
+                }
+                setDeliveryFiles((prev) => {
+                  const existingKeys = new Set(prev.map((e) => `${e.file.name}|${e.file.size}`));
+                  const dedupedNew = newFiles.filter((f) => !existingKeys.has(`${f.name}|${f.size}`));
+                  return [...prev, ...dedupedNew.map(newDeliveryEntry)].slice(0, 13);
+                });
+                const existingKeysSnap = new Set(
+                  deliveryFiles.map((e) => `${e.file.name}|${e.file.size}`),
+                );
+                const duplicates = newFiles.filter((f) =>
+                  existingKeysSnap.has(`${f.name}|${f.size}`),
+                ).length;
+                if (duplicates > 0) {
+                  showError(
+                    `${duplicates} archivo${duplicates > 1 ? 's' : ''} ya ${duplicates > 1 ? 'están' : 'está'} en la lista.`,
+                  );
+                }
                 e.target.value = '';
               }}
             />
@@ -252,19 +282,27 @@ export default function UchDeliveryPanel({
                   }
                   setIsUploadingFiles(true);
                   const uploadedPaths: string[] = [];
-                  for (let i = 0; i < deliveryFiles.length; i++) {
-                    const file = deliveryFiles[i].file;
-                    const safeName = file.name.replace(/[^\w.\-()+]/g, '_');
-                    const stamp = `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 10)}`;
-                    const gcsPath = `organizations/${organizationId}/cases/${caseId}/deliveries/${stamp}_${safeName}`;
-                    const url = await getUploadUrlAction(
-                      gcsPath,
-                      file.type,
-                      isGzipCompressible(file.name) ? { contentEncoding: 'gzip' } : undefined,
-                    );
-                    if (!url) throw new Error(`No se pudo obtener URL para ${file.name}`);
-                    await uploadFileWithProgress(file, url, i);
-                    uploadedPaths.push(gcsPath);
+                  // Paso 1: obtener todas las URLs de subida en paralelo
+                  const uploadEntries = await Promise.all(
+                    deliveryFiles.map(async ({ file }, i) => {
+                      const safeName = file.name.replace(/[^\w.\-()+]/g, '_');
+                      const stamp = `${Date.now()}_${i}_${Math.random().toString(36).slice(2, 10)}`;
+                      const subfolder = isGzipCompressible(file.name) ? 'scans' : 'attachments';
+                      const gcsPath = `organizations/${organizationId}/cases/${caseId}/deliveries/${subfolder}/${stamp}_${safeName}`;
+                      const url = await getUploadUrlAction(
+                        gcsPath,
+                        file.type,
+                        isGzipCompressible(file.name) ? { contentEncoding: 'gzip' } : undefined,
+                      );
+                      if (!url) throw new Error(`No se pudo obtener URL para ${file.name}`);
+                      return { file, url, gcsPath, i };
+                    }),
+                  );
+                  // Paso 2: subir en lotes de 3 simultáneos
+                  for (let ci = 0; ci < uploadEntries.length; ci += 3) {
+                    const chunk = uploadEntries.slice(ci, ci + 3);
+                    await Promise.all(chunk.map(({ file, url, i }) => uploadFileWithProgress(file, url, i)));
+                    uploadedPaths.push(...chunk.map((e) => e.gcsPath));
                   }
                   setIsUploadingFiles(false);
                   setIsSendingDelivery(true);

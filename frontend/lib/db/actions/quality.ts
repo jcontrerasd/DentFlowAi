@@ -19,8 +19,8 @@
  */
 
 import { db } from '@/lib/db';
-import { clinicalCase, clinicalCaseDelivery, clinicalCaseEvent, user, caseQualityAssignment, review } from '@/lib/db/schema';
-import { and, count, eq, sql } from 'drizzle-orm';
+import { clinicalCase, clinicalCaseDelivery, clinicalCaseEvent, user, caseQualityAssignment, review, qualityDerivationReason } from '@/lib/db/schema';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { ActionResult } from '@/lib/types/actions';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
 import { CASE_STATUSES } from '@/lib/constants/dental';
@@ -505,24 +505,30 @@ export async function deriveQualityReviewAction(
         return { success: false, error: 'El destino no es un revisor de Calidad válido' };
       }
 
-      // Cerrar fila activa actual (si existe) registrando la derivación.
-      await tx.execute(sql`
-        UPDATE case_quality_assignment
-        SET status = 'derived', derived_to_id = ${targetCalidadId},
-            derivation_reason_id = ${reasonId}, derivation_comment = ${note || null}, updated_at = now()
-        WHERE clinical_case_id = ${caseId} AND status = 'active'
-      `);
+      // Verificar que no haya ya una derivación pendiente para este caso.
+      const existingPending = await tx
+        .select({ id: caseQualityAssignment.id })
+        .from(caseQualityAssignment)
+        .where(and(
+          eq(caseQualityAssignment.clinicalCaseId, caseId),
+          eq(caseQualityAssignment.status, 'pending_derivation'),
+        ))
+        .limit(1);
+      if (existingPending.length > 0) {
+        return { success: false, error: 'Ya existe una derivación pendiente de respuesta para este caso' };
+      }
 
-      // Abrir nueva fila para el destino.
+      // La fila origen permanece 'active'; se abre una fila destino con 'pending_derivation'
+      // que almacena el motivo y comentario para que el destino tenga contexto al decidir.
       await tx.insert(caseQualityAssignment).values({
         clinicalCaseId: caseId,
         calidadUserId: targetCalidadId,
-        status: 'active',
+        status: 'pending_derivation',
+        derivationReasonId: reasonId as any,
+        derivationComment: note || null,
       });
 
-      await tx.update(clinicalCase)
-        .set({ qualityReviewerId: targetCalidadId, qualityAssignedAt: new Date(), updatedAt: new Date() })
-        .where(eq(clinicalCase.id, caseId));
+      // clinical_case.quality_reviewer_id NO se actualiza todavía — el origen sigue siendo el revisor.
 
       await logCaseEvent({
         caseId,
@@ -530,8 +536,8 @@ export async function deriveQualityReviewAction(
         type: 'sistema',
         action: CASE_EVENTS.CASO_DERIVADO_CALIDAD,
         content: note
-          ? `Caso derivado a otro revisor de Calidad.\n\nComentario:\n${note}`
-          : 'Caso derivado a otro revisor de Calidad.',
+          ? `Solicitud de derivación enviada a ${target.fullName ?? 'otro revisor'}.\n\nComentario:\n${note}`
+          : `Solicitud de derivación enviada a ${target.fullName ?? 'otro revisor'}.`,
         payload: {
           visibleTo: 'calidad',
           reasonId,
@@ -548,5 +554,184 @@ export async function deriveQualityReviewAction(
   } catch (error) {
     console.error('Error deriving quality review:', error);
     return { success: false, error: 'Fallo al derivar el caso' };
+  }
+}
+
+/**
+ * El QA destino acepta la derivación pendiente.
+ * Cierra la fila origen (active → derived) y activa la fila destino (pending_derivation → active).
+ */
+export async function acceptDerivedQualityReviewAction(caseId: string): Promise<ActionResult> {
+  const identity = await getServerIdentity();
+  if (!identity?.id) return { success: false, error: 'No autorizado' };
+  if (!canActAsCalidad(identity.role)) return { success: false, error: 'Solo Calidad puede aceptar una derivación' };
+
+  try {
+    return await db.transaction(async (tx) => {
+      // Verificar que el viewer tiene una fila pending_derivation para este caso.
+      const [pendingRow] = await tx
+        .select({ id: caseQualityAssignment.id })
+        .from(caseQualityAssignment)
+        .where(and(
+          eq(caseQualityAssignment.clinicalCaseId, caseId),
+          eq(caseQualityAssignment.calidadUserId, identity.id as string),
+          eq(caseQualityAssignment.status, 'pending_derivation'),
+        ))
+        .limit(1);
+      if (!pendingRow) return { success: false, error: 'No tienes una derivación pendiente para este caso' };
+
+      // Obtener la fila activa actual (el origen) para registrar derived_to_id.
+      const [activeRow] = await tx
+        .select({ id: caseQualityAssignment.id, calidadUserId: caseQualityAssignment.calidadUserId })
+        .from(caseQualityAssignment)
+        .where(and(
+          eq(caseQualityAssignment.clinicalCaseId, caseId),
+          eq(caseQualityAssignment.status, 'active'),
+        ))
+        .limit(1);
+
+      if (activeRow) {
+        await tx.execute(sql`
+          UPDATE case_quality_assignment
+          SET status = 'derived', derived_to_id = ${identity.id}, updated_at = now()
+          WHERE id = ${activeRow.id}
+        `);
+      }
+
+      // Activar la fila destino.
+      await tx.execute(sql`
+        UPDATE case_quality_assignment
+        SET status = 'active', updated_at = now()
+        WHERE id = ${pendingRow.id}
+      `);
+
+      // Actualizar el revisor del caso.
+      await tx.update(clinicalCase)
+        .set({ qualityReviewerId: identity.id as string, qualityAssignedAt: new Date(), updatedAt: new Date() })
+        .where(eq(clinicalCase.id, caseId));
+
+      await logCaseEvent({
+        caseId,
+        userId: identity.id as string,
+        type: 'sistema',
+        action: CASE_EVENTS.DERIVACION_CALIDAD_ACEPTADA,
+        content: 'Derivación aceptada. El caso ha sido transferido.',
+        payload: {
+          visibleTo: 'calidad',
+          fromCalidadId: activeRow?.calidadUserId ?? null,
+          toCalidadId: identity.id,
+        },
+      }, tx);
+
+      if (activeRow?.calidadUserId) {
+        await notifyUser(activeRow.calidadUserId, 'DERIVACION_CALIDAD_ACEPTADA', { caseId });
+      }
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error('Error accepting derived quality review:', error);
+    return { success: false, error: 'Fallo al aceptar la derivación' };
+  }
+}
+
+/**
+ * El QA destino rechaza la derivación pendiente.
+ * La fila destino pasa a 'derivation_rejected'; el origen permanece 'active'.
+ */
+export async function rejectDerivedQualityReviewAction(
+  caseId: string,
+  reasonId: string,
+  comment?: string,
+): Promise<ActionResult> {
+  const identity = await getServerIdentity();
+  if (!identity?.id) return { success: false, error: 'No autorizado' };
+  if (!canActAsCalidad(identity.role)) return { success: false, error: 'Solo Calidad puede rechazar una derivación' };
+
+  const note = typeof comment === 'string' ? comment.trim() : '';
+  if (note) {
+    const guarded = await guardTextOrFail({
+      actionName: 'rejectDerivedQualityReviewAction',
+      caseId,
+      identity: { id: identity.id, orgId: identity.orgId, role: identity.role },
+      fields: [{ text: note, field: 'qualityDerivationRejectionComment' }],
+    });
+    if (!guarded.ok) return { success: false, error: guarded.error };
+  }
+
+  try {
+    return await db.transaction(async (tx) => {
+      // Verificar que el viewer tiene una fila pending_derivation para este caso.
+      const [pendingRow] = await tx
+        .select({ id: caseQualityAssignment.id })
+        .from(caseQualityAssignment)
+        .where(and(
+          eq(caseQualityAssignment.clinicalCaseId, caseId),
+          eq(caseQualityAssignment.calidadUserId, identity.id as string),
+          eq(caseQualityAssignment.status, 'pending_derivation'),
+        ))
+        .limit(1);
+      if (!pendingRow) return { success: false, error: 'No tienes una derivación pendiente para este caso' };
+
+      // Obtener la fila activa (origen) para saber a quién notificar.
+      const [activeRow] = await tx
+        .select({ id: caseQualityAssignment.id, calidadUserId: caseQualityAssignment.calidadUserId })
+        .from(caseQualityAssignment)
+        .where(and(
+          eq(caseQualityAssignment.clinicalCaseId, caseId),
+          eq(caseQualityAssignment.status, 'active'),
+        ))
+        .limit(1);
+
+      // Resolver el label del motivo para incluirlo en el evento.
+      const [reasonRow] = await tx
+        .select({ label: qualityDerivationReason.label })
+        .from(qualityDerivationReason)
+        .where(eq(qualityDerivationReason.id, reasonId as any))
+        .limit(1);
+
+      // Marcar la fila destino como rechazada (audit trail).
+      await tx.execute(sql`
+        UPDATE case_quality_assignment
+        SET status = 'derivation_rejected',
+            derivation_reason_id = ${reasonId},
+            derivation_comment = ${note || null},
+            updated_at = now()
+        WHERE id = ${pendingRow.id}
+      `);
+
+      // La fila origen permanece 'active' — el caso sigue con el revisor original.
+
+      const reasonLabel = reasonRow?.label ?? '';
+      const content = note
+        ? `Derivación rechazada. Motivo: ${reasonLabel}.\n\nComentario:\n${note}`
+        : `Derivación rechazada. Motivo: ${reasonLabel}.`;
+
+      await logCaseEvent({
+        caseId,
+        userId: identity.id as string,
+        type: 'sistema',
+        action: CASE_EVENTS.DERIVACION_CALIDAD_RECHAZADA,
+        content,
+        payload: {
+          visibleTo: 'calidad',
+          // toCalidadId es el origen (quien recibe la notificación de rechazo).
+          toCalidadId: activeRow?.calidadUserId ?? null,
+          fromCalidadId: identity.id,
+          reasonId,
+          reasonLabel,
+          comment: note || null,
+        },
+      }, tx);
+
+      if (activeRow?.calidadUserId) {
+        await notifyUser(activeRow.calidadUserId, 'DERIVACION_CALIDAD_RECHAZADA', { caseId });
+      }
+
+      return { success: true };
+    });
+  } catch (error) {
+    console.error('Error rejecting derived quality review:', error);
+    return { success: false, error: 'Fallo al rechazar la derivación' };
   }
 }

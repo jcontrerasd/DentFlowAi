@@ -45,12 +45,12 @@ describe('shouldPresentUchEventAsFauchard', () => {
     ).toBe(true);
   });
 
-  it('INVITACION_RECIBIDA técnico mismo userId sin presentationAuthor → Fauchard (legacy BD)', () => {
+  it('ASIGNACION_RECIBIDA técnico mismo userId sin presentationAuthor → Fauchard (legacy BD)', () => {
     expect(
       shouldPresentUchEventAsFauchard(
         {
           userId: 'u-tech',
-          action: CASE_EVENTS.INVITACION_RECIBIDA,
+          action: CASE_EVENTS.ASIGNACION_RECIBIDA,
           user: { id: 'u-tech', fullName: 'Lab', role: 'tecnico' },
           payload: { visibleTo: 'tecnico' },
         },

@@ -1,7 +1,8 @@
 'use server';
 
-import { db } from "@/lib/db";
-import { organization } from "@/lib/db/schema";
+import { auth } from "@/auth";
+import { db, infraPromise } from "@/lib/db";
+import { organization, user } from "@/lib/db/schema";
 import { eq, ilike, or } from "drizzle-orm";
 
 /**
@@ -11,6 +12,7 @@ export async function createOrganizationAction(data: {
   id?: string;
   name: string;
   type: string;
+  rut?: string;
   isActive?: boolean;
 }) {
   try {
@@ -20,6 +22,7 @@ export async function createOrganizationAction(data: {
         id: data.id || crypto.randomUUID(),
         name: data.name,
         type: data.type as 'clinica' | 'laboratorio',
+        rut: data.rut ?? '',
         isActive: data.isActive ?? true,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -36,15 +39,32 @@ export async function createOrganizationAction(data: {
  * Actualiza los detalles legales de una organización.
  */
 export async function updateOrganizationDetailsAction(id: string, data: Partial<typeof organization.$inferInsert>) {
+  if (infraPromise) await infraPromise;
   try {
+    const session = await auth();
+    const caller = session?.user as any;
+    const callerId = caller?.id as string | undefined;
+    if (!callerId) return { success: false, error: 'No autenticado' };
+
+    // Verificar que el caller pertenece a esta organización o es admin
+    const isAdmin = caller?.role === 'admin';
+    if (!isAdmin) {
+      const [callerRow] = await db
+        .select({ organizationId: user.organizationId })
+        .from(user)
+        .where(eq(user.id, callerId))
+        .limit(1);
+      if (!callerRow || callerRow.organizationId !== id) {
+        return { success: false, error: 'Sin permiso para modificar esta organización' };
+      }
+    }
+
     const [updated] = await db
       .update(organization)
-      .set({
-        ...data,
-        updatedAt: new Date(),
-      })
+      .set({ ...data, updatedAt: new Date() })
       .where(eq(organization.id, id))
       .returning();
+    if (!updated) return { success: false, error: 'Organización no encontrada' };
     return { success: true, data: updated };
   } catch (error) {
     console.error("[updateOrganizationDetailsAction] Error:", error);

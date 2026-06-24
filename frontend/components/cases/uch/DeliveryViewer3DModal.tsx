@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { X, Download, Activity, AlertCircle, CheckCircle, FileCheck2, GitBranch, MessageSquareWarning } from 'lucide-react';
 import DentalViewer3D from '@/components/DentalViewer3D';
 import NewAnnotationOverlay from '@/components/cases/NewAnnotationOverlay';
-import { getSignedUrlAction } from '@/lib/db/actions/cases';
+import { getDeliverySignedFilesAction } from '@/lib/db/actions/cases';
 import {
   createDeliveryAnnotationAction,
   listDeliveryAnnotationsAction,
@@ -28,6 +28,7 @@ interface DentalModel {
   url: string;
   subType: string;
   visible: boolean;
+  opacity?: number;
 }
 
 type ApproveStep = 'choose' | 'confirm';
@@ -102,6 +103,7 @@ export default function DeliveryViewer3DModal({
   const [approveStep, setApproveStep] = useState<ApproveStep>('choose');
   const [revisionStep, setRevisionStep] = useState<ApproveStep>('choose');
   const [qualityRevisionStep, setQualityRevisionStep] = useState<ApproveStep>('choose');
+  const [qualityCertifyStep, setQualityCertifyStep] = useState<ApproveStep>('choose');
   const qualityComment = qualityCommentProp;
   const setQualityComment = setQualityCommentProp ?? (() => {});
   const [isBusyQuality, setIsBusyQuality] = useState(false);
@@ -121,46 +123,47 @@ export default function DeliveryViewer3DModal({
 
     async function load() {
       try {
-        const MODEL_EXTS = ['.stl', '.ply', '.obj'];
         const inferSubType = (path: string) => {
-          const lower = pathOf(path).toLowerCase();
+          const lower = path.toLowerCase().split('?')[0] ?? path;
           if (lower.includes('superior')) return 'superior';
           if (lower.includes('inferior')) return 'inferior';
           if (lower.includes('oclusal')) return 'oclusal';
           return 'modelo';
         };
 
-        // Los archivos son rutas GCS individuales (STL/PLY/OBJ), no un ZIP.
-        // Pueden venir como paths GCS o como URLs ya firmadas (getCaseDetails pre-firma deliveries).
-        // Normalizar: extraer el path sin query params para el filtro de extensión.
-        const pathOf = (f: string) => f.startsWith('http') ? (f.split('?')[0] ?? f) : f;
-
-        // Filtrar por extensión de modelo 3D y obtener URLs firmadas.
-        const modelPaths = zipFiles.filter((f) =>
-          MODEL_EXTS.some((ext) => pathOf(f).toLowerCase().endsWith(ext))
-        );
-
-        if (modelPaths.length === 0) {
-          setLoadState('error');
-          return;
-        }
-
-        // Si el archivo ya es una URL firmada (https://...), usarla directamente.
-        const [signedUrls, annotationsResult] = await Promise.all([
-          Promise.all(modelPaths.map((p) =>
-            p.startsWith('http') ? Promise.resolve(p) : getSignedUrlAction(p)
-          )),
+        // Firmar on-demand: obtener solo los archivos de esta entrega cuando el visor abre.
+        const [signedResult, annotationsResult] = await Promise.all([
+          getDeliverySignedFilesAction(deliveryId),
           listDeliveryAnnotationsAction(deliveryId),
         ]);
 
         if (cancelled) return;
 
+        if (!signedResult.success) {
+          setLoadState('error');
+          return;
+        }
+
+        // scans = STL/PLY/OBJ con ruta /scans/ (nuevos)
+        // Para paths legacy sin /scans/, filtrar por extensión desde attachments como fallback
+        const MODEL_EXTS = ['.stl', '.ply', '.obj'];
+        const pathOf = (url: string) => url.split('?')[0] ?? url;
+        const legacyScans = (signedResult.attachments ?? []).filter((url) =>
+          MODEL_EXTS.some((ext) => pathOf(url).toLowerCase().endsWith(ext)),
+        );
+        const signedUrls = [...(signedResult.scans ?? []), ...legacyScans];
+
+        if (signedUrls.length === 0) {
+          setLoadState('error');
+          return;
+        }
+
         // subType must be unique per model (used as React key in DentalViewer3D)
         const subtypeCounts: Record<string, number> = {};
         const loadedModels: DentalModel[] = signedUrls
-          .map((url, i) => {
+          .map((url) => {
             if (!url) return null;
-            const base = inferSubType(modelPaths[i]);
+            const base = inferSubType(url);
             subtypeCounts[base] = (subtypeCounts[base] ?? 0) + 1;
             const subType = subtypeCounts[base] === 1 ? base : `${base}_${subtypeCounts[base]}`;
             return { url, subType, visible: true };
@@ -195,7 +198,7 @@ export default function DeliveryViewer3DModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, deliveryId, zipFiles, viewerRole]);
+  }, [isOpen, deliveryId]);
 
 
   const handleAnnotate = (coords: { x: number; y: number; z: number }) => {
@@ -306,6 +309,16 @@ export default function DeliveryViewer3DModal({
               annotations={annotations}
               onAnnotate={canAnnotate ? handleAnnotate : undefined}
               canAnnotate={canAnnotate}
+              onToggleLayer={(subType) =>
+                setModels((prev) =>
+                  prev.map((m) => (m.subType === subType ? { ...m, visible: !m.visible } : m))
+                )
+              }
+              onOpacityChange={(subType, opacity) =>
+                setModels((prev) =>
+                  prev.map((m) => (m.subType === subType ? { ...m, opacity } : m))
+                )
+              }
             >
               {/* Overlay nueva anotación — dentro del visor para seguir visible en pantalla completa */}
               {pendingCoords && (
@@ -494,18 +507,40 @@ export default function DeliveryViewer3DModal({
                 Solicitar ajustes
               </button>
             )}
-            <button
-              type="button"
-              onClick={async () => {
-                setIsBusyQuality(true);
-                try { await onCertifyQuality?.(qualityComment); } finally { setIsBusyQuality(false); }
-              }}
-              disabled={isBusyQuality}
-              className="inline-flex items-center gap-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded disabled:opacity-40"
-            >
-              {isBusyQuality ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <FileCheck2 className="w-3 h-3" aria-hidden />}
-              Certificar entrega
-            </button>
+            {qualityCertifyStep === 'confirm' ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted">¿Confirmas la certificación?</span>
+                <button
+                  type="button"
+                  onClick={() => setQualityCertifyStep('choose')}
+                  className="text-xs text-muted hover:text-foreground"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsBusyQuality(true);
+                    try { await onCertifyQuality?.(qualityComment); } finally { setIsBusyQuality(false); setQualityCertifyStep('choose'); }
+                  }}
+                  disabled={isBusyQuality}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded disabled:opacity-40"
+                >
+                  {isBusyQuality ? <Activity className="w-3 h-3 animate-spin" aria-hidden /> : <FileCheck2 className="w-3 h-3" aria-hidden />}
+                  Confirmar certificación
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setQualityCertifyStep('confirm')}
+                disabled={isBusyQuality}
+                className="inline-flex items-center gap-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded disabled:opacity-40"
+              >
+                <FileCheck2 className="w-3 h-3" aria-hidden />
+                Certificar entrega
+              </button>
+            )}
           </div>
         </div>
       )}

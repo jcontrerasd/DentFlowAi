@@ -58,6 +58,7 @@ export const user = pgTable("user", {
   suspendedUntil: timestamp("suspended_until", { withTimezone: true, mode: 'date' }),
   consecutiveNoResponse: integer("consecutive_no_response").default(0),
   themePreference: text("theme_preference").default('system').notNull(),
+  emailNotificationPrefs: jsonb("email_notification_prefs"),
 }, (table) => [
   uniqueIndex("user_email_uidx").on(table.email),
   index("user_organizationId_idx").on(table.organizationId),

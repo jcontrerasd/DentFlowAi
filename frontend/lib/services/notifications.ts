@@ -71,34 +71,82 @@ async function sendViaEmailJS(params: { subject: string; toEmail: string; body: 
   }
 }
 
+// ─── Preferencias de notificaciones por email ────────────────────────────────
+
+export type EmailNotifCategory =
+  | 'actividad_caso'       // Dentista: entregas, plazos, inicio
+  | 'resolucion'           // Dentista: trabajo aprobado / comparativo expirado
+  | 'gestion_busqueda'     // Dentista: pool check-in
+  | 'nuevas_asignaciones'  // Técnico: NUEVA_ASIGNACION
+  | 'progreso_caso'        // Técnico: cambios, aprobación, calidad
+  | 'disponibilidad'       // Técnico: sanciones, auto-OFF, recordatorios
+  | 'entregas_pendientes'  // Calidad: certificar, derivación
+  | 'plazos_revision'      // Calidad: SLA por vencer / vencido
+  | 'calificacion_pendiente' // Calidad: caso completado sin calificar
+  | 'alertas_operativas';  // Admin: fallos de asignación
+
+export type EmailNotificationPrefs = Partial<Record<EmailNotifCategory, boolean>>;
+
+export const NOTIFICATION_CATEGORY_MAP: Record<NotificationType, EmailNotifCategory> = {
+  // Dentista
+  ASIGNACION_ACEPTADA:            'actividad_caso',
+  FAUCHARD_INICIO_PLAZO_DENTISTA: 'actividad_caso',
+  REVISION_PENDIENTE:             'actividad_caso',
+  REVISION_PLAZO_POR_VENCER:      'actividad_caso',
+  REVISION_PLAZO_VENCIDO:         'actividad_caso',
+  COMPARATIVO_EXPIRADO_DENTISTA:  'resolucion',
+  CHECK_IN_DENTISTA:              'gestion_busqueda',
+  // Técnico
+  NUEVA_ASIGNACION:               'nuevas_asignaciones',
+  TRABAJO_CONFIRMADO:             'progreso_caso',
+  CAMBIOS_SOLICITADOS:            'progreso_caso',
+  TRABAJO_APROBADO:               'progreso_caso',
+  CALIDAD_CERTIFICO:              'progreso_caso',
+  CALIDAD_SOLICITO_AJUSTES:       'progreso_caso',
+  PROPUESTA_RECHAZADA_DENTISTA:   'progreso_caso',
+  CASO_ASIGNADO_OTRO:             'progreso_caso',
+  SUSPENSION_TEMPORAL:            'disponibilidad',
+  NIVEL_2_ALCANZADO:              'disponibilidad',
+  NIVEL_3_AUTO_OFF:               'disponibilidad',
+  AUTO_OFF_PREVENTIVO:            'disponibilidad',
+  RECORDATORIO_ACTIVIDAD:         'disponibilidad',
+  PERDON_ADMIN:                   'disponibilidad',
+  // Calidad
+  REVISION_PENDIENTE_CALIDAD:     'entregas_pendientes',
+  CASO_DERIVADO_CALIDAD:          'entregas_pendientes',
+  DERIVACION_CALIDAD_ACEPTADA:    'entregas_pendientes',
+  DERIVACION_CALIDAD_RECHAZADA:   'entregas_pendientes',
+  QUALITY_PLAZO_POR_VENCER:       'plazos_revision',
+  QUALITY_PLAZO_VENCIDO:          'plazos_revision',
+  CALIDAD_POR_CALIFICAR:          'calificacion_pendiente',
+  // Admin
+  SIN_COTIZACIONES_FALLO:         'alertas_operativas',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export type NotificationType =
-  | 'NUEVA_INVITACION'
   | 'NUEVA_ASIGNACION'
   | 'ASIGNACION_ACEPTADA'
   | 'TRABAJO_CONFIRMADO'
   /** Dentista: Fauchard confirma que la contraparte técnica inició el plazo (no usar TRABAJO_CONFIRMADO, es plantilla de técnico). */
   | 'FAUCHARD_INICIO_PLAZO_DENTISTA'
-  | 'PROPUESTA_LISTA'
   | 'REVISION_PENDIENTE'
   | 'CAMBIOS_SOLICITADOS'
   | 'TRABAJO_APROBADO'
-  | 'CASO_DESPACHADO'
-  | 'RECEPCION_CONFIRMADA'
   | 'PROPUESTA_RECHAZADA_DENTISTA'
   /** Dentista: ventana comparativa venció (no confundir con rechazo de oferta hacia laboratorio). */
   | 'COMPARATIVO_EXPIRADO_DENTISTA'
   | 'SUSPENSION_TEMPORAL'
-  | 'FALLO_SELECCION_DENTISTA'
   | 'SIN_COTIZACIONES_FALLO'
   | 'CASO_ASIGNADO_OTRO'
-  // ─── v5.0 — Disponibilidad, sanción rolling y cola pool (tono informativo, no punitivo) ───
+  // ─── v5.0 — Disponibilidad y sanción rolling (tono informativo, no punitivo) ───
   | 'NIVEL_2_ALCANZADO'
   | 'NIVEL_3_AUTO_OFF'
   | 'AUTO_OFF_PREVENTIVO'
   | 'RECORDATORIO_ACTIVIDAD'
   | 'PERDON_ADMIN'
   | 'CHECK_IN_DENTISTA'
-  | 'REPUBLICAR_DISPONIBLE'
   /** Dentista: plazo de revisión de entrega por vencer / vencido (§4.2, sin auto-acción). */
   | 'REVISION_PLAZO_POR_VENCER'
   | 'REVISION_PLAZO_VENCIDO'
@@ -116,9 +164,10 @@ export type NotificationType =
   | 'QUALITY_PLAZO_VENCIDO'
   /** Calidad: el caso se completó y queda pendiente la calificación del técnico. */
   | 'CALIDAD_POR_CALIFICAR'
-  /** Técnico: comunicación de rollout del modelo de disponibilidad (Fase 7). */
-  | 'ROLLOUT_PROXIMO'
-  | 'ROLLOUT_ACTIVADO';
+  /** Calidad (origen): el destino aceptó la derivación. */
+  | 'DERIVACION_CALIDAD_ACEPTADA'
+  /** Calidad (origen): el destino rechazó la derivación. */
+  | 'DERIVACION_CALIDAD_RECHAZADA';
 
 const baseUrl = () => process.env.NEXT_PUBLIC_APP_URL || '';
 
@@ -142,7 +191,6 @@ const NOTIFICATION_CHANNELS: Partial<Record<NotificationType, NotificationChanne
   RECORDATORIO_ACTIVIDAD: { email: true, inApp: true },
   PERDON_ADMIN: { email: true, inApp: true },
   CHECK_IN_DENTISTA: { email: true, inApp: true },
-  REPUBLICAR_DISPONIBLE: { email: true, inApp: true },
   REVISION_PLAZO_POR_VENCER: { email: true, inApp: true },
   REVISION_PLAZO_VENCIDO: { email: true, inApp: true },
   REVISION_PENDIENTE_CALIDAD: { email: true, inApp: true },
@@ -152,8 +200,6 @@ const NOTIFICATION_CHANNELS: Partial<Record<NotificationType, NotificationChanne
   QUALITY_PLAZO_POR_VENCER: { email: true, inApp: true },
   QUALITY_PLAZO_VENCIDO: { email: true, inApp: true },
   CALIDAD_POR_CALIFICAR: { email: true, inApp: true },
-  ROLLOUT_PROXIMO: { email: true, inApp: true },
-  ROLLOUT_ACTIVADO: { email: true, inApp: true },
 };
 
 export function channelsForNotification(type: NotificationType): NotificationChannels {
@@ -161,10 +207,6 @@ export function channelsForNotification(type: NotificationType): NotificationCha
 }
 
 const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) => string }> = {
-  NUEVA_INVITACION: {
-    subject: 'Fauchard: nueva asignación de trabajo',
-    body: (data) => `Hola ${data.name},\n\nFauchard te informa que tienes una nueva asignación de diseño en DentFlowAi. Responde antes de las ${data.deadline}.\n\nVer casos: ${baseUrl()}/dashboard/cases?preset=nuevas`,
-  },
   NUEVA_ASIGNACION: {
     subject: 'Fauchard: nueva asignación de trabajo',
     body: (data) => `Hola ${data.name},\n\nFauchard te informa que tienes una nueva asignación de diseño en DentFlowAi. Responde antes de las ${data.deadline}.\n\nVer casos: ${baseUrl()}/dashboard/cases?preset=nuevas`,
@@ -181,10 +223,6 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
     subject: 'Fauchard: inicio formal del trabajo en tu caso',
     body: (data) => `Hola,\n\nFauchard te informa que la contraparte técnica confirmó el inicio formal del trabajo en el caso ${data.caseNumber || data.caseId}. El plazo acordado comienza a regir; revisa el Hub del caso para los hitos.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
-  PROPUESTA_LISTA: {
-    subject: 'Fauchard: comparativo listo para tu revisión',
-    body: (data) => `Hola,\n\nFauchard te informa que tu caso ${data.caseId} ya tiene ofertas comparativas listas para revisión. Ingresa al panel para evaluarlas.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
-  },
   REVISION_PENDIENTE: {
     subject: 'Fauchard: nueva entrega lista para revisión',
     body: (data) => `Hola,\n\nFauchard te informa que hay una nueva versión del diseño lista para revisión en el caso ${data.caseId}. Ingresa al Hub del caso para aprobar o solicitar ajustes.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
@@ -196,14 +234,6 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   TRABAJO_APROBADO: {
     subject: 'Fauchard: diseño aprobado por el solicitante',
     body: (data) => `Hola ${data.name},\n\nFauchard confirma que el solicitante aprobó el diseño del caso ${data.caseId}. Revisa los próximos pasos en tu panel.\n\nVer caso: ${baseUrl()}/dashboard/bids/${data.caseId}`,
-  },
-  CASO_DESPACHADO: {
-    subject: 'Fauchard: envío registrado en tu caso',
-    body: (data) => `Hola,\n\nFauchard te informa que se registró el envío del caso ${data.caseId}. Tracking: ${data.trackingNumber ?? data.trackingId ?? '—'}.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
-  },
-  RECEPCION_CONFIRMADA: {
-    subject: 'Fauchard: recepción confirmada por el solicitante',
-    body: (data) => `Hola ${data.name},\n\nFauchard confirma que el solicitante registró la recepción del trabajo para el caso ${data.caseId}.`,
   },
   PROPUESTA_RECHAZADA_DENTISTA: {
     subject: 'Fauchard: actualización en tu invitación',
@@ -220,10 +250,6 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   SIN_COTIZACIONES_FALLO: {
     subject: '⚠️ Alerta: Caso sin cotizaciones disponibles',
     body: (data) => `Atención Admin,\n\nEl caso ${data.caseId} no ha podido ser asignado por falta de técnicos disponibles en el pool. Requiere intervención manual.`,
-  },
-  FALLO_SELECCION_DENTISTA: {
-    subject: 'Fauchard: sin cotizaciones en esta ronda',
-    body: (data) => `Hola,\n\nFauchard te informa que no se recibieron ofertas válidas para avanzar el caso ${data.caseId} en este momento. Un administrador revisará el caso para ayudarte.\n\nTe notificaremos pronto con una solución.`,
   },
   CASO_ASIGNADO_OTRO: {
     subject: 'Fauchard: caso asignado a otra oferta',
@@ -253,10 +279,6 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   CHECK_IN_DENTISTA: {
     subject: 'Fauchard: tu caso sigue buscando técnicos',
     body: (data) => `Hola,\n\nTu caso ${data.caseNumber || data.caseId} lleva un tiempo esperando técnicos disponibles. ¿Sigues necesitándolo? Si no haces nada, seguiremos buscando; también puedes cancelar la publicación.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
-  },
-  REPUBLICAR_DISPONIBLE: {
-    subject: 'Fauchard: técnicos disponibles para tu caso',
-    body: (data) => `Hola,\n\nHay nuevos técnicos disponibles que podrían atender tu caso ${data.caseNumber || data.caseId}. Fauchard reanudó la búsqueda automáticamente.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
   REVISION_PLAZO_POR_VENCER: {
     subject: 'Fauchard: tienes una entrega por revisar',
@@ -294,13 +316,13 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
     subject: 'Calidad: tienes un caso por calificar',
     body: (data) => `Hola,\n\nEl caso ${data.caseNumber || data.caseId} se completó y queda pendiente tu calificación de Calidad al técnico. Ingresa al Hub del caso para enviarla.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
-  ROLLOUT_PROXIMO: {
-    subject: 'DentFlowAi: pronto tendrás más control sobre tus invitaciones',
-    body: (data) => `Hola ${data.name},\n\nPróximamente vas a poder decidir cuándo y para qué tipo de trabajo recibes invitaciones en DentFlowAi. Te avisaremos cuando esté disponible.`,
+  DERIVACION_CALIDAD_ACEPTADA: {
+    subject: 'Calidad: tu derivación fue aceptada',
+    body: (data) => `Hola,\n\nLa derivación del caso ${data.caseNumber || data.caseId} fue aceptada. El nuevo revisor asumirá la revisión de Calidad.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
-  ROLLOUT_ACTIVADO: {
-    subject: 'DentFlowAi: ya puedes gestionar tu disponibilidad',
-    body: (data) => `Hola ${data.name},\n\nYa puedes gestionar tu disponibilidad. Por defecto estás activo en todas las categorías que ya manejas; puedes pausar o ajustar cuando quieras.\n\nGestionar disponibilidad: ${baseUrl()}/dashboard/profile/availability`,
+  DERIVACION_CALIDAD_RECHAZADA: {
+    subject: 'Calidad: tu derivación fue rechazada',
+    body: (data) => `Hola,\n\nLa derivación del caso ${data.caseNumber || data.caseId} fue rechazada. El caso permanece contigo para su revisión. Ingresa al Hub para ver el motivo.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
 };
 
@@ -311,7 +333,7 @@ export async function notifyUser(userId: string, type: NotificationType, data: a
   try {
     // 1. Obtener email del usuario
     const [userData] = await db
-      .select({ email: user.email, fullName: user.fullName })
+      .select({ email: user.email, fullName: user.fullName, emailNotificationPrefs: user.emailNotificationPrefs })
       .from(user)
       .where(eq(user.id, userId))
       .limit(1);
@@ -325,6 +347,15 @@ export async function notifyUser(userId: string, type: NotificationType, data: a
     //      solo en el canal in-app / badge).
     if (!channelsForNotification(type).email) {
       return { success: true };
+    }
+
+    // 1.c Preferencias del usuario: si la categoría del tipo está desactivada, no se envía.
+    const userPrefs = userData.emailNotificationPrefs as EmailNotificationPrefs | null;
+    if (userPrefs) {
+      const category = NOTIFICATION_CATEGORY_MAP[type];
+      if (category && userPrefs[category] === false) {
+        return { success: true };
+      }
     }
 
     const subject = `Fauchard · DentFlowAi: ${template.subject}`;

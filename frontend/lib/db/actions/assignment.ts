@@ -965,7 +965,7 @@ export async function assignCaseAction(
       payload: { technicianId, expiresAt: expiresAt.toISOString(), visibleTo: 'sistema' },
     });
 
-    if (created?.id) {
+    if (created?.id && !opts?.isReassignment) {
       await logCaseEvent({
         caseId,
         userId: technicianId,
@@ -1140,7 +1140,11 @@ export async function getSimulatorSeedFromCaseAction(caseId: string): Promise<
       .leftJoin(dentalMaterial, eq(dentalMaterial.id, clinicalCase.materialId))
       .leftJoin(vitaShade, eq(vitaShade.id, clinicalCase.shadeId))
       .leftJoin(urgencyLevel, eq(urgencyLevel.id, clinicalCase.urgencyId))
-      .where(eq(clinicalCase.id, caseId))
+      .where(
+        caseId.toUpperCase().startsWith('DF-')
+          ? eq(clinicalCase.caseNumber, caseId.toUpperCase())
+          : eq(clinicalCase.id, caseId),
+      )
       .limit(1);
 
     if (!row?.restorationCode || !row.materialCode || !row.shadeCode || !row.urgencyLabel) {

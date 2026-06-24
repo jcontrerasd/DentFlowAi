@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Activity, AlertCircle, Clock, X, XCircle, ArrowUp } from 'lucide-react';
+import { Activity, AlertCircle, ArrowRightLeft, Clock, X, XCircle, ArrowUp } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { getSignedUrlAction } from '@/lib/db/actions/cases';
@@ -28,6 +28,7 @@ import QualityIterationHistory from '@/components/cases/uch/QualityIterationHist
 import { CaseDesiredDeliveryChip } from '@/components/cases/CaseDesiredDeliveryChip';
 import { shouldShowDesiredDeliveryInUch } from '@/lib/cases/caseDeliveryPresentation';
 import UchRatingPanel from '@/components/cases/uch/UchRatingPanel';
+import UchDerivationRequestPanel from '@/components/cases/uch/UchDerivationRequestPanel';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { useRemainingMsUntil, formatCountdownHMS } from '@/lib/hooks/useRemainingUntil';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
@@ -93,6 +94,19 @@ interface UnifiedCaseHubProps {
   newMessageCount?: number;
   /** Reconoce los mensajes nuevos (marca leído + sincroniza campana/listados). */
   onAcknowledgeNew?: () => void;
+  /** Nombre del QA que derivó el caso al viewer actual (derivación ya aceptada). */
+  derivedFromCalidadName?: string | null;
+  /** El viewer es el QA destino de una derivación pendiente de respuesta. */
+  hasPendingDerivationForMe?: boolean;
+  pendingDerivationFromName?: string | null;
+  pendingDerivationReasonLabel?: string | null;
+  pendingDerivationComment?: string | null;
+  /** El viewer (QA origen) tiene una derivación pendiente de aceptación por el destino. */
+  hasPendingDerivationOutgoing?: boolean;
+  /** Status de la fila case_quality_assignment del viewer para este caso. */
+  myQualityAssignmentStatus?: 'active' | 'pending_derivation' | null;
+  /** Callback cuando el QA destino rechaza la derivación (para redirigir fuera del caso). */
+  onDerivationRejected?: () => void;
 }
 
 /** Actividad (chat): más reciente arriba; `id` desempata si `createdAt` coincide. */
@@ -127,6 +141,14 @@ export default function UnifiedCaseHub({
   serverClockAnchor,
   newMessageCount = 0,
   onAcknowledgeNew,
+  derivedFromCalidadName,
+  hasPendingDerivationForMe = false,
+  pendingDerivationFromName,
+  pendingDerivationReasonLabel,
+  pendingDerivationComment,
+  hasPendingDerivationOutgoing = false,
+  myQualityAssignmentStatus,
+  onDerivationRejected,
 }: UnifiedCaseHubProps) {
   const { showSuccess, showError } = useToast();
   const [events, setEvents] = useState<CaseEvent[]>(initialEvents);
@@ -256,6 +278,8 @@ export default function UnifiedCaseHub({
   const [fileProgress, setFileProgress] = useState<Record<number, number>>({});
   const [reviewComment, setReviewComment] = useState('');
   const [qualityComment, setQualityComment] = useState('');
+  const [revisionAttachments, setRevisionAttachments] = useState<File[]>([]);
+  const [qualityAttachments, setQualityAttachments] = useState<File[]>([]);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
   const [viewer3DState, setViewer3DState] = useState<{ deliveryId: string; version: number; files: string[]; dentistNote?: string; readonly?: boolean } | null>(null);
@@ -298,16 +322,11 @@ export default function UnifiedCaseHub({
     // v2 activo: publicación, asignación directa, inicio de trabajo
     // Legacy: todo el flujo de cotización múltiple y comparativo
     asignacion: [
-      'CASO_PUBLICADO', 'CASO_EN_COLA', 'CASO_REPUBLICADO', 'REPUBLICACION',
+      'CASO_PUBLICADO', 'CASO_EN_COLA',
       'ASIGNACION_ENVIADA', 'ASIGNACION_RECIBIDA', 'ASIGNACION_ACEPTADA',
       'ASIGNACION_RECHAZADA', 'ASIGNACION_EXPIRADA', 'ASIGNACION_REASIGNADA',
       'OFERTA_RECHAZADA_POR_TECNICO', 'TRABAJO_INICIADO',
       'ASIGNACION_CALIDAD', 'CASO_DERIVADO_CALIDAD',
-      // Legacy cotización/comparativo
-      'INVITACION_RECIBIDA', 'INVITACION_EXPIRADA', 'OFERTA_ENVIADA',
-      'PROPUESTA_ACEPTADA', 'OFERTA_ACEPTADA', 'OFERTA_RECHAZADA',
-      'OFERTA_GANADORA', 'OFERTA_NO_SELECCIONADA', 'CASO_OFERTAS_TODAS_RECHAZADAS',
-      'CASO_SIN_OFERTAS_CERRADO', 'OFERTAS_COMPARATIVAS_LISTAS', 'PROPUESTA_GENERADA',
       'SOLICITUD_CAMBIO_FLUJO', 'SOLICITUD_CAMBIO_FLUJO_RECHAZADA',
       'CASO_PAUSADO', 'CASO_CANCELADO', 'CREACION', 'CASO_CREADO', 'CASO_COPIA',
     ],
@@ -377,6 +396,7 @@ export default function UnifiedCaseHub({
     !reviewedDims.includes('design');
   const showQualityRatingPanel =
     actingAsCalidad &&
+    myQualityAssignmentStatus !== 'pending_derivation' &&
     caseStatus === 'completado' &&
     !reviewedDims.includes('quality');
   const showAnyRatingPanel = showRateDesignPanel || showQualityRatingPanel;
@@ -393,9 +413,13 @@ export default function UnifiedCaseHub({
 
           // Calidad ve solo eventos de su circuito QA.
           if (actingAsCalidad) {
+            // El QA destino (pending_derivation) no ve la burbuja — la info aparece en el panel de acción.
+            if (e.action === CASE_EVENTS.CASO_DERIVADO_CALIDAD && myQualityAssignmentStatus === 'pending_derivation') return false;
             const CALIDAD_ALLOWED = new Set([
               CASE_EVENTS.ASIGNACION_CALIDAD,
               CASE_EVENTS.CASO_DERIVADO_CALIDAD,
+              CASE_EVENTS.DERIVACION_CALIDAD_ACEPTADA,
+              CASE_EVENTS.DERIVACION_CALIDAD_RECHAZADA,
               CASE_EVENTS.REVISION_ENVIADA_CALIDAD,
               CASE_EVENTS.REVISION_SOLICITADA_CALIDAD,
               CASE_EVENTS.CALIDAD_CERTIFICADA,
@@ -416,7 +440,7 @@ export default function UnifiedCaseHub({
 
           if (
             actingAsDentista &&
-            (e.action === 'OFERTAS_COMPARATIVAS_LISTAS' || e.action === 'PROPUESTA_GENERADA')
+            e.action === 'PROPUESTA_GENERADA'
           ) {
             return false;
           }
@@ -471,16 +495,7 @@ export default function UnifiedCaseHub({
           if (actingAsTecnico && techOfferRejectedView && selectedTechnicianId && e.type === 'sistema') {
             const p = e.payload as any;
             const invId = p?.invitationId;
-            if (!invId) {
-              const allowUnscopedSistema = [
-                'OFERTA_RECHAZADA',
-                'OFERTA_NO_SELECCIONADA',
-                'INVITACION_EXPIRADA',
-                'CASO_OFERTAS_TODAS_RECHAZADAS',
-                'CASO_SIN_OFERTAS_CERRADO',
-              ];
-              if (!allowUnscopedSistema.includes(e.action)) return false;
-            }
+            if (!invId) return false;
           }
 
           if (actingAsTecnico && techOfferRejectedView && selectedTechnicianId) {
@@ -512,14 +527,12 @@ export default function UnifiedCaseHub({
     ],
   );
 
-  /** Técnico: el hilo ya muestra cierre de oferta (perdedor u otro rechazo visible); evita pie duplicado. */
+  /** Técnico: el hilo ya muestra cierre de oferta (rechazo explícito visible); evita pie duplicado. */
   const timelineHasTechOfferClosureEvent = useMemo(
     () =>
       roleScopedEvents.some(
         (e) =>
-          e.action === 'OFERTA_NO_SELECCIONADA' ||
-          (actingAsTecnico &&
-            (e.action === 'OFERTA_RECHAZADA' || e.action === 'OFERTA_RECHAZADA_POR_TECNICO')),
+          actingAsTecnico && e.action === 'OFERTA_RECHAZADA_POR_TECNICO',
       ),
     [roleScopedEvents, actingAsTecnico],
   );
@@ -627,8 +640,10 @@ export default function UnifiedCaseHub({
   }, [clinicalCase?.deliveries]);
 
   // Último rechazo del dentista — disponible para calidad en re-entregas post-ajuste.
+  // Solo el QA con asignación activa puede actuar; el destino pending no puede hasta aceptar.
   const lastDentistRejection = useMemo(() => {
     if (!actingAsCalidad || caseStatus !== 'enRevisionCalidad') return null;
+    if (myQualityAssignmentStatus === 'pending_derivation') return null;
     type Delivery = { id?: string; status?: string; reviewComment?: string; files?: string[] | unknown; version?: number };
     const deliveriesList = (clinicalCase?.deliveries as Delivery[] | undefined) ?? [];
     const rejected = deliveriesList
@@ -768,6 +783,18 @@ export default function UnifiedCaseHub({
             <div>
               <h3 className="text-sm font-semibold text-foreground tracking-tight">Centro de control</h3>
               <p className="text-[10px] text-faint mt-0.5">Actividad del caso — flujo guiado</p>
+              {actingAsCalidad && derivedFromCalidadName && (
+                <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-hl border border-primary/20 w-fit">
+                  <ArrowRightLeft className="w-2.5 h-2.5 text-primary shrink-0" />
+                  <span className="text-[9px] font-medium text-primary">Derivado de {derivedFromCalidadName}</span>
+                </div>
+              )}
+              {actingAsCalidad && hasPendingDerivationOutgoing && (
+                <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning-hl border border-warning/20 w-fit">
+                  <Clock className="w-2.5 h-2.5 text-warning shrink-0" />
+                  <span className="text-[9px] font-medium text-warning">Derivación pendiente de respuesta</span>
+                </div>
+              )}
               {shouldShowDesiredDeliveryInUch(caseStatus, clinicalCase?.workDeadline) &&
                 clinicalCase?.desiredDeliveryAt && (
                 <div className="mt-2">
@@ -1025,6 +1052,20 @@ export default function UnifiedCaseHub({
               </div>
             )}
 
+            {/* Panel de solicitud de derivación: solo para el QA destino mientras la derivación está pendiente. */}
+            {actingAsCalidad && hasPendingDerivationForMe && (
+              <div className="px-3 pt-2 pb-2 flex-shrink-0 border-b border-divider bg-background">
+                <UchDerivationRequestPanel
+                  caseId={caseId}
+                  fromName={pendingDerivationFromName ?? null}
+                  reasonLabel={pendingDerivationReasonLabel ?? null}
+                  comment={pendingDerivationComment ?? null}
+                  onAccepted={async () => { await onInvitationUpdate?.(); }}
+                  onRejected={() => { onDerivationRejected?.(); }}
+                />
+              </div>
+            )}
+
             <div
               ref={scrollRef}
               data-testid="uch-timeline-scroll"
@@ -1156,22 +1197,26 @@ export default function UnifiedCaseHub({
                         if (!reviewComment.trim()) return;
                         setIsSubmittingRevision(true);
                         try {
-                          const ok = await onActionTriggered?.('request_revision', { reason: reviewComment });
-                          if (ok) setReviewComment('');
+                          const ok = await onActionTriggered?.('request_revision', { reason: reviewComment, attachments: revisionAttachments });
+                          if (ok) { setReviewComment(''); setRevisionAttachments([]); }
                         } finally {
                           setIsSubmittingRevision(false);
                         }
                       }}
                       reviewComment={reviewComment}
                       setReviewComment={setReviewComment}
+                      revisionAttachments={revisionAttachments}
+                      setRevisionAttachments={setRevisionAttachments}
                       isSubmittingReview={isSubmittingReview}
                       isSubmittingRevision={isSubmittingRevision}
                       caseId={caseId}
                       actingAsCalidad={actingAsCalidad}
                       qualityComment={qualityComment}
                       setQualityComment={setQualityComment}
+                      qualityAttachments={qualityAttachments}
+                      setQualityAttachments={setQualityAttachments}
                       isPendingQualityDelivery={(() => {
-                        if (!pendingDeliveryForReview || !actingAsCalidad || caseStatus !== 'enRevisionCalidad') return false;
+                        if (!pendingDeliveryForReview || !actingAsCalidad || caseStatus !== 'enRevisionCalidad' || myQualityAssignmentStatus === 'pending_derivation') return false;
                         const p = (row.event.payload as Record<string, unknown> | undefined) ?? {};
                         if (p.deliveryId) return p.deliveryId === pendingDeliveryForReview.id;
                         return p.deliveryVersion === pendingDeliveryForReview.version;
@@ -1182,8 +1227,8 @@ export default function UnifiedCaseHub({
                         return ok;
                       }}
                       onQualityRequestChanges={async (reason) => {
-                        const ok = await onActionTriggered?.('request_quality_revision', { reason });
-                        if (ok) setQualityComment('');
+                        const ok = await onActionTriggered?.('request_quality_revision', { reason, attachments: qualityAttachments });
+                        if (ok) { setQualityComment(''); setQualityAttachments([]); }
                         return ok;
                       }}
                       onDeriveQuality={() => { onInvitationUpdate?.(); }}

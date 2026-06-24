@@ -3,17 +3,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  FileText, 
-  Stethoscope, 
-  Upload, 
-  ArrowRight, 
-  Save, 
+  FileText,
+  Stethoscope,
+  Upload,
+  ArrowRight,
+  Save,
   CheckCircle2,
   Trash2,
   Palette,
   ChevronLeft,
   DollarSign,
   AlertTriangle,
+  X,
 } from 'lucide-react';
 import { TeethSelector } from './TeethSelector';
 import {
@@ -60,6 +61,7 @@ export interface CaseFiles {
   superior: File | null;
   inferior: File | null;
   bite: File | null;
+  complementary: File[];
 }
 
 const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
@@ -132,6 +134,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
     superior: null,
     inferior: null,
     bite: null,
+    complementary: [],
   });
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [fileError, setFileError] = useState<string | null>(null);
@@ -220,6 +223,20 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
         return;
       }
 
+      const scanSlots = (['superior', 'inferior', 'bite'] as const).filter(k => k !== key);
+      const isDupeInScans = scanSlots.some(k => {
+        const f = files[k];
+        return f && f.name === selectedFile.name && f.size === selectedFile.size;
+      });
+      const isDupeInComplementary = files.complementary.some(
+        f => f.name === selectedFile.name && f.size === selectedFile.size,
+      );
+      if (isDupeInScans || isDupeInComplementary) {
+        setFileError(`${selectedFile.name}: este archivo ya fue agregado.`);
+        e.currentTarget.value = '';
+        return;
+      }
+
       setFileError(null);
       setFiles(prev => ({ ...prev, [key]: selectedFile }));
     }
@@ -234,6 +251,35 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
     });
   };
 
+  const ALLOWED_COMPLEMENTARY_EXTS_WIZ = ['jpg', 'jpeg', 'png', 'pdf', 'docx', 'stl', 'ply', 'obj'];
+  const MAX_COMPLEMENTARY_WIZ = 10;
+
+  const handleComplementaryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const incoming = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    const errors: string[] = [];
+    const valid: File[] = [];
+    for (const f of incoming) {
+      const ext = f.name.split('.').pop()?.toLowerCase() ?? '';
+      if (!ALLOWED_COMPLEMENTARY_EXTS_WIZ.includes(ext)) { errors.push(`${f.name}: formato no permitido`); continue; }
+      if (f.size > MAX_UPLOAD_SIZE_BYTES) { errors.push(`${f.name}: supera 20 MB`); continue; }
+      const isDupeComp = files.complementary.some(existing => existing.name === f.name && existing.size === f.size);
+      const isDupeScan = (['superior', 'inferior', 'bite'] as const).some(k => {
+        const s = files[k]; return s && s.name === f.name && s.size === f.size;
+      });
+      if (isDupeComp || isDupeScan) { errors.push(`${f.name}: ya está en la lista`); continue; }
+      valid.push(f);
+    }
+    if (errors.length > 0) setFileError(errors[0]);
+    setFiles(prev => {
+      const next = [...prev.complementary, ...valid].slice(0, MAX_COMPLEMENTARY_WIZ);
+      return { ...prev, complementary: next };
+    });
+  };
+
+  const removeComplementary = (idx: number) => {
+    setFiles(prev => ({ ...prev, complementary: prev.complementary.filter((_, i) => i !== idx) }));
+  };
 
   const nextStep = () => setStep(s => s + 1);
   const prevStep = () => setStep(s => s - 1);
@@ -616,7 +662,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               </div>
               <div>
                 <h2 className="text-xl font-bold dark:text-foreground">Archivos de Escaneo (CAD)</h2>
-                <p className="text-sm text-faint">Cargue los archivos STL o PLY del paciente</p>
+                <p className="text-sm text-faint">Cargue los archivos STL, PLY u OBJ del paciente</p>
               </div>
             </div>
 
@@ -689,6 +735,36 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               })}
             </div>
 
+
+            {/* Documentación complementaria */}
+            <div className="border border-divider rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold dark:text-foreground">Documentación complementaria</p>
+                  <p className="text-xs text-faint mt-0.5">Imágenes de referencia, radiografías, PDFs u otros (JPG, PNG, PDF, DOCX · máx. 20 MB · hasta 10 archivos)</p>
+                </div>
+                <span className="text-xs text-faint">{files.complementary.length}/10</span>
+              </div>
+              {files.complementary.length < MAX_COMPLEMENTARY_WIZ && (
+                <label className="flex items-center gap-2 cursor-pointer text-xs text-primary font-semibold hover:underline">
+                  <Upload size={14} />
+                  Agregar archivos
+                  <input type="file" className="hidden" multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.stl,.ply,.obj" onChange={handleComplementaryChange} />
+                </label>
+              )}
+              {files.complementary.length > 0 && (
+                <ul className="space-y-1">
+                  {files.complementary.map((f, i) => (
+                    <li key={i} className="flex items-center justify-between text-xs bg-white/5 rounded-lg px-3 py-1.5">
+                      <span className="truncate max-w-[80%] dark:text-foreground">{f.name}</span>
+                      <button type="button" onClick={() => removeComplementary(i)} className="text-error hover:text-error/70 transition-colors ml-2">
+                        <X size={12} />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             {fileError && (
               <div className="rounded-xl border border-error/20 bg-error-hl px-4 py-3 text-sm font-medium text-error">

@@ -260,8 +260,8 @@ export default function SimulatorWorkspace({ currentConfig, catalogOptions }: Si
             type="text"
             value={seedCaseId}
             onChange={(e) => setSeedCaseId(e.target.value)}
-            placeholder="case_id (UUID) — cargar escenario real"
-            title="Copia los parámetros clínicos de un caso publicado al formulario del simulador."
+            placeholder="DF-0001 o UUID — cargar escenario real"
+            title="Acepta el número de caso (DF-XXXX) o el UUID interno. Copia los parámetros clínicos del caso al simulador."
             className="flex-1 min-w-[10rem] bg-surface border border-divider rounded-lg px-2 py-1 text-foreground"
           />
           <Button

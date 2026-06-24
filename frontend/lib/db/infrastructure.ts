@@ -3,8 +3,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-/** v5.18 — Visor 3D de revisión: delivery_id en annotation para anotaciones por entrega. */
-export const INFRA_VERSION = 'v5.19';
+/** v5.20 — Preferencias de notificaciones por email en perfil de usuario. */
+export const INFRA_VERSION = 'v5.20';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -1574,6 +1574,13 @@ export async function ensureInfrastructure(db: any) {
       CREATE INDEX IF NOT EXISTS annotation_delivery_id_idx ON annotation(delivery_id);
     `);
     console.log('[DB] v5.18 annotation.delivery_id + índice.');
+
+    // v5.20 — Preferencias de notificaciones por email (columna JSONB en user)
+    await db.execute(sql`
+      ALTER TABLE "user"
+        ADD COLUMN IF NOT EXISTS email_notification_prefs JSONB;
+    `);
+    console.log('[DB] v5.20 email_notification_prefs en user.');
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
     console.log("[DB] Infraestructura verificada con éxito.");

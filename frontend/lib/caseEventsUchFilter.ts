@@ -3,12 +3,10 @@ import { tecnicoSeesVisibleToTecnicoEvent } from '@/lib/uchEventVisibility';
 /** Eventos internos del algoritmo ocultos al dentista en UCH (alineado con getCaseEventsAction). */
 export const LEGACY_DENTIST_HIDDEN = new Set([
   'CASO_CLASIFICADO',
-  'INVITACION_ENVIADA',
   'COTIZACION_RECIBIDA',
   'SELECCION_FALLIDA',
   'FAUCHARD_PRESENTACION_CERRADA',
   'REINTENTO_SELECCION',
-  'OFERTAS_COMPARATIVAS_LISTAS',
   'PROPUESTA_GENERADA',
 ]);
 
@@ -37,8 +35,17 @@ export function filterCaseEventsForUchViewer<T extends UchFilterableEvent>(
 ): T[] {
   return events.filter((event) => {
     if (identity.role === 'admin') return true;
-    // Calidad ve todo el hilo de su caso asignado (el acceso ya está restringido a sus casos).
-    if (identity.role === 'calidad') return true;
+
+    // Calidad ve todo el hilo de su caso asignado, con excepciones específicas.
+    if (identity.role === 'calidad') {
+      // El rechazo de una derivación solo lo ve el QA origen (quien recibe la notificación).
+      if (event.action === 'DERIVACION_CALIDAD_RECHAZADA') {
+        const payload = event.payload as Record<string, unknown> | null | undefined;
+        const toCalidadId = payload?.toCalidadId as string | undefined;
+        return toCalidadId != null && String(toCalidadId) === String(identity.id);
+      }
+      return true;
+    }
 
     const payload = event.payload as Record<string, unknown> | null | undefined;
     const visibleTo = payload?.visibleTo as string | undefined;

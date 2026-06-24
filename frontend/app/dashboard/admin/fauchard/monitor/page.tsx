@@ -63,7 +63,7 @@ function Header({ days }: { days: number }) {
           <div className="w-10 h-10 rounded-2xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary">
             <Activity className="w-5 h-5" />
           </div>
-          <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter">Observabilidad</h1>
+          <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter">Monitoreo y Equidad</h1>
         </div>
         <p className="text-faint text-sm font-medium">Monitoreo de equidad y desempeño — asignación directa.</p>
       </div>

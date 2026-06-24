@@ -217,6 +217,26 @@ export async function createCalidadUserAction(input: { fullName: string; email: 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    // Lookup-or-create la org interna "DentFlowAi"
+    const [existingOrg] = await db
+      .select({ id: organization.id })
+      .from(organization)
+      .where(eq(organization.name, 'DentFlowAi'))
+      .limit(1);
+
+    let dentflowOrgId = existingOrg?.id;
+    if (!dentflowOrgId) {
+      const [newOrg] = await db.insert(organization).values({
+        name: 'DentFlowAi',
+        rut: '00.000.000-0',
+        type: 'plataforma',
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }).returning({ id: organization.id });
+      dentflowOrgId = newOrg.id;
+    }
+
     await db.insert(user).values({
       id: crypto.randomUUID(),
       email: email.trim().toLowerCase(),
@@ -226,6 +246,7 @@ export async function createCalidadUserAction(input: { fullName: string; email: 
       isActive: true,
       isAvailable: true,
       onboardingStep: 100,
+      organizationId: dentflowOrgId,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -257,6 +278,109 @@ export async function switchMyRoleAdmin(newRole: 'dentista' | 'tecnico' | 'admin
     return { success: true, data: updated };
   } catch (error) {
     return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * Lee el perfil completo de un usuario para pre-cargar el modal de edición.
+ */
+export async function getUserForEditAdmin(userId: string) {
+  await ensureAdmin();
+  try {
+    const [u] = await db
+      .select({
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        specialty: user.specialty,
+        registrationNumber: user.registrationNumber,
+        experienceYears: user.experienceYears,
+        bio: user.bio,
+        country: user.country,
+        region: user.region,
+        comuna: user.comuna,
+        address: user.address,
+        addressNumber: user.addressNumber,
+        addressOffice: user.addressOffice,
+        isActive: user.isActive,
+        isAvailable: user.isAvailable,
+        organizationId: user.organizationId,
+        organizationName: organization.name,
+        organizationRut: organization.rut,
+        organizationGiro: organization.giro,
+        organizationLegalAddress: organization.legalAddress,
+      })
+      .from(user)
+      .leftJoin(organization, eq(user.organizationId, organization.id))
+      .where(eq(user.id, userId))
+      .limit(1);
+
+    if (!u) return { success: false as const, error: 'Usuario no encontrado.' };
+    return { success: true as const, data: u };
+  } catch (error) {
+    return { success: false as const, error: (error as Error).message };
+  }
+}
+
+export async function updateUserOrgAdmin(
+  userId: string,
+  orgData: { name?: string; giro?: string; legalAddress?: string }
+) {
+  await ensureAdmin();
+  try {
+    const [u] = await db.select({ organizationId: user.organizationId }).from(user).where(eq(user.id, userId)).limit(1);
+    if (!u?.organizationId) return { success: false as const, error: 'El usuario no tiene organización asignada.' };
+    await db.update(organization).set({ ...orgData, updatedAt: new Date() }).where(eq(organization.id, u.organizationId));
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, error: (error as Error).message };
+  }
+}
+
+/**
+ * Actualiza el perfil completo de un usuario desde el panel admin.
+ * Email y contraseña están explícitamente excluidos — tienen sus propios modales.
+ */
+export async function updateUserProfileAdmin(
+  userId: string,
+  data: {
+    fullName?: string;
+    phone?: string;
+    specialty?: string;
+    registrationNumber?: string;
+    experienceYears?: number | null;
+    bio?: string;
+    country?: string;
+    region?: string;
+    comuna?: string;
+    address?: string;
+    addressNumber?: string;
+    addressOffice?: string;
+    role?: string;
+    isActive?: boolean;
+    isAvailable?: boolean;
+  }
+) {
+  await ensureAdmin();
+  try {
+    if (!userId) return { success: false as const, error: 'userId requerido.' };
+    if (data.fullName !== undefined && !data.fullName?.trim()) {
+      return { success: false as const, error: 'El nombre no puede estar vacío.' };
+    }
+
+    const [updated] = await db
+      .update(user)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(user.id, userId))
+      .returning();
+
+    if (!updated) return { success: false as const, error: 'Usuario no encontrado.' };
+    return { success: true as const, data: updated };
+  } catch (error) {
+    console.error('[updateUserProfileAdmin] Error:', error);
+    return { success: false as const, error: (error as Error).message };
   }
 }
 

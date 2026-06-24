@@ -5,7 +5,7 @@ import { notifyUser } from "../../services/notifications";
 import GCPStorageService from '@/lib/services/gcp-storage';
 import { db } from "@/lib/db";
 import { perfLog, perfStart } from '@/lib/perfLog';
-import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseAssignment, caseUserArchive } from "@/lib/db/schema";
+import { clinicalCase, user, file, annotation, bid, review, commercialRound, clinicalCaseDelivery, clinicalCaseEvent, organization, technicianSkill, caseAssignment, caseUserArchive, caseQualityAssignment, qualityDerivationReason } from "@/lib/db/schema";
 import { eq, desc, and, or, ne, not, sql, inArray, avg, exists, gt } from "drizzle-orm";
 import {
   archiveVisibilityForUser,
@@ -201,47 +201,6 @@ export async function getCaseEventsAction(
       currentInvitationId,
     );
 
-    /** OFERTA_RECHAZADA / OFERTA_NO_SELECCIONADA (solo dentista): snapshot desde invitación si el JSON omitió números. */
-    const rejectedOfferInvitationSnapshots = new Map<
-      string,
-      { compensation: number | null; deadlineDays: number | null }
-    >();
-    if (identity.role === 'dentista') {
-      const invIds = [
-        ...new Set(
-          filteredEvents
-            .filter((e) => {
-              if (e.action === CASE_EVENTS.OFERTA_RECHAZADA) return true;
-              if (e.action === CASE_EVENTS.OFERTA_NO_SELECCIONADA) {
-                const vt = (e.payload as Record<string, unknown> | null)?.visibleTo;
-                return vt === 'dentista';
-              }
-              return false;
-            })
-            .map((e) => (e.payload as Record<string, unknown> | null)?.invitationId)
-            .filter((id): id is string => typeof id === 'string' && id.length > 0),
-        ),
-      ];
-      if (invIds.length > 0) {
-        const rows = await db
-          .select({
-            id: caseAssignment.id,
-            compensation: caseAssignment.compensation,
-            deadlineDays: caseAssignment.deadlineDays,
-          })
-          .from(caseAssignment)
-          .where(and(eq(caseAssignment.clinicalCaseId, caseId), inArray(caseAssignment.id, invIds)));
-        for (const r of rows) {
-          const qp = r.compensation != null ? Number(r.compensation) : NaN;
-          const qd = r.deadlineDays != null ? Math.trunc(Number(r.deadlineDays)) : NaN;
-          rejectedOfferInvitationSnapshots.set(r.id, {
-            compensation: Number.isFinite(qp) && qp >= 0 ? qp : null,
-            deadlineDays: Number.isFinite(qd) && qd > 0 ? qd : null,
-          });
-        }
-      }
-    }
-
     // Firmar URLs de avatares (deduplicado por ruta).
     // Incluye la imagen del viewer actual (fallback para burbujas self-lane sin user.image).
     const viewerOwnImagePath = filteredEvents.find(
@@ -266,45 +225,6 @@ export async function getCaseEventsAction(
     const signedEvents = filteredEvents.map((event) => {
       try {
       let mapped: (typeof filteredEvents)[number] = event;
-
-      if (
-        identity.role === 'dentista' &&
-        (event.action === CASE_EVENTS.OFERTA_RECHAZADA ||
-          (event.action === CASE_EVENTS.OFERTA_NO_SELECCIONADA &&
-            (event.payload as Record<string, unknown> | null | undefined)?.visibleTo === 'dentista'))
-      ) {
-        const p = event.payload as Record<string, unknown> | null | undefined;
-        const invId = p?.invitationId;
-        if (p && typeof invId === 'string') {
-          const snap = rejectedOfferInvitationSnapshots.get(invId);
-          if (snap) {
-            const pickPrice = (): number | null => {
-              const raw = p.compensation;
-              if (raw != null && raw !== '') {
-                const n = Number(raw as number | string);
-                if (Number.isFinite(n) && n >= 0) return n;
-              }
-              return snap.compensation;
-            };
-            const pickDays = (): number | null => {
-              const raw = p.deadlineDays;
-              if (raw != null && raw !== '') {
-                const n = Math.trunc(Number(raw as number | string));
-                if (Number.isFinite(n) && n > 0) return n;
-              }
-              return snap.deadlineDays;
-            };
-            mapped = {
-              ...event,
-              payload: {
-                ...p,
-                compensation: pickPrice(),
-                deadlineDays: pickDays(),
-              },
-            };
-          }
-        }
-      }
 
       const orig = mapped.user?.image;
       if (orig && signedMap.has(orig)) {
@@ -838,44 +758,11 @@ export async function getCaseDetails(caseId: string) {
       }
     }
 
-    // 5. Firmar URLs de las entregas (Deliveries)
-    if (cCase.deliveries && cCase.deliveries.length > 0) {
-      for (const delivery of cCase.deliveries) {
-        if (delivery.files && Array.isArray(delivery.files)) {
-          const signedFiles = await Promise.all(
-            (delivery.files as string[]).map(async (path) => {
-              try {
-                return await getSignedUrl(path);
-              } catch (err) {
-                console.error("[getCaseDetails] Error signing delivery file:", path, err);
-                return path;
-              }
-            })
-          );
-          (delivery as any).files = signedFiles;
-        }
-      }
-    }
+    // 5. Archivos de entregas: se firman on-demand en getDeliverySignedFilesAction
+    //    (no se pre-firman aquí para evitar N×M llamadas GCS al cargar la ficha).
 
     // 6. Avatares de eventos: ya se firman dentro de getCaseEventsAction.
 
-    let evaluationExpiresAt: Date | null = null;
-    if (cCase.status === 'enEvaluacion') {
-      // getCaseQuoteDeadlineAt imported statically at top of file
-      evaluationExpiresAt = await getCaseQuoteDeadlineAt(caseId);
-    }
-
-    // v5.0 — Etapa 3: plazo de revisión del dentista (solo en enRevision, flag on).
-    let reviewDeadlineAt: Date | null = null;
-    if (cCase.status === 'enRevision') {
-      reviewDeadlineAt = await getCaseReviewDeadlineAt(caseId);
-    }
-
-    // v5.19 — SLA de la etapa de Calidad (solo en enRevisionCalidad, flag on).
-    let qualityReviewDeadlineAt: Date | null = null;
-    if (cCase.status === 'enRevisionCalidad') {
-      qualityReviewDeadlineAt = await getCaseQualityReviewDeadlineAt(caseId);
-    }
     // Calculamos qualityGateActive ANTES de anonimizar qualityReviewerId.
     // El técnico necesita saber si su entrega va a Calidad, pero sin ver la identidad del revisor.
     const qualityGateActive =
@@ -906,48 +793,153 @@ export async function getCaseDetails(caseId: string) {
       (cCase as any).technician = undefined;
     }
 
-    const archivedByCurrentUser = await isCaseArchivedByUser(caseId, userId as string);
+    // Queries independientes en paralelo: deadlines, archivo, asignación, copia, permisos, calificaciones.
+    const [
+      evaluationExpiresAt,
+      reviewDeadlineAt,
+      qualityReviewDeadlineAt,
+      archivedByCurrentUser,
+      myAssignmentRow,
+      copiedFromSource,
+      canDelete,
+      reviewedRows,
+    ] = await Promise.all([
+      cCase.status === 'enEvaluacion' ? getCaseQuoteDeadlineAt(caseId) : Promise.resolve(null),
+      cCase.status === 'enRevision' ? getCaseReviewDeadlineAt(caseId) : Promise.resolve(null),
+      cCase.status === 'enRevisionCalidad' ? getCaseQualityReviewDeadlineAt(caseId) : Promise.resolve(null),
+      isCaseArchivedByUser(caseId, userId as string),
+      userRole === 'tecnico'
+        ? db
+            .select({ status: caseAssignment.status })
+            .from(caseAssignment)
+            .where(
+              and(
+                eq(caseAssignment.clinicalCaseId, caseId),
+                eq(caseAssignment.technicianId, userId as string),
+              ),
+            )
+            .orderBy(desc(caseAssignment.assignedAt))
+            .limit(1)
+        : Promise.resolve([] as { status: string }[]),
+      cCase.copiedFromCaseId
+        ? db
+            .select({ caseNumber: clinicalCase.caseNumber })
+            .from(clinicalCase)
+            .where(eq(clinicalCase.id, cCase.copiedFromCaseId))
+            .limit(1)
+        : Promise.resolve([] as { caseNumber: number }[]),
+      canDeleteCase(caseId),
+      userId
+        ? db
+            .select({ dimension: review.dimension })
+            .from(review)
+            .where(and(eq(review.clinicalCaseId, caseId), eq(review.reviewerId, userId as string)))
+        : Promise.resolve([] as { dimension: string }[]),
+    ]);
 
-    let myAssignmentStatus: string | null = null;
-    if (userRole === 'tecnico') {
-      const [canonical] = await db
-        .select({ status: caseAssignment.status })
-        .from(caseAssignment)
-        .where(
-          and(
-            eq(caseAssignment.clinicalCaseId, caseId),
-            eq(caseAssignment.technicianId, userId as string),
-          ),
-        )
-        .orderBy(desc(caseAssignment.assignedAt))
-        .limit(1);
-      myAssignmentStatus = canonical?.status ?? null;
-    }
-
+    const myAssignmentStatus: string | null = myAssignmentRow[0]?.status ?? null;
     /** @deprecated alias */
     const myInvitationStatus = myAssignmentStatus;
+    const copiedFromCaseNumber: string | null = copiedFromSource[0]?.caseNumber?.toString() ?? null;
+    const myReviewedDimensions: string[] = reviewedRows.map((r) => r.dimension);
 
-    let copiedFromCaseNumber: string | null = null;
-    if (cCase.copiedFromCaseId) {
-      const [source] = await db
-        .select({ caseNumber: clinicalCase.caseNumber })
-        .from(clinicalCase)
-        .where(eq(clinicalCase.id, cCase.copiedFromCaseId))
+    // Calidad: campos de derivación (aceptada y pendiente).
+    let derivedFromCalidadName: string | null = null;
+    let hasPendingDerivationForMe = false;
+    let pendingDerivationFromName: string | null = null;
+    let pendingDerivationReasonLabel: string | null = null;
+    let pendingDerivationComment: string | null = null;
+    let hasPendingDerivationOutgoing = false;
+    let myQualityAssignmentStatus: 'active' | 'pending_derivation' | null = null;
+
+    if (userRole === 'calidad' && userId) {
+      // Estado de la fila del viewer para este caso.
+      const [myQaRow] = await db
+        .select({ status: caseQualityAssignment.status })
+        .from(caseQualityAssignment)
+        .where(
+          and(
+            eq(caseQualityAssignment.clinicalCaseId, caseId),
+            eq(caseQualityAssignment.calidadUserId, userId as string),
+            inArray(caseQualityAssignment.status, ['active', 'pending_derivation']),
+          ),
+        )
         .limit(1);
-      copiedFromCaseNumber = source?.caseNumber ?? null;
-    }
+      myQualityAssignmentStatus = (myQaRow?.status as 'active' | 'pending_derivation') ?? null;
 
-    const canDelete = await canDeleteCase(caseId);
+      if (myQualityAssignmentStatus === 'active') {
+        // ¿Hay una derivación pendiente outgoing (alguien que aún no responde)?
+        const [outgoingRow] = await db
+          .select({ id: caseQualityAssignment.id })
+          .from(caseQualityAssignment)
+          .where(
+            and(
+              eq(caseQualityAssignment.clinicalCaseId, caseId),
+              eq(caseQualityAssignment.status, 'pending_derivation'),
+            ),
+          )
+          .limit(1);
+        hasPendingDerivationOutgoing = !!outgoingRow;
 
-    // v5.3 — Dimensiones (CAD/CAM) que el viewer ya calificó en este caso.
-    // Permite al UCH mostrar/ocultar el panel de calificación de cada fase.
-    let myReviewedDimensions: string[] = [];
-    if (userId) {
-      const reviewedRows = await db
-        .select({ dimension: review.dimension })
-        .from(review)
-        .where(and(eq(review.clinicalCaseId, caseId), eq(review.reviewerId, userId as string)));
-      myReviewedDimensions = reviewedRows.map(r => r.dimension);
+        // ¿Este caso llegó vía derivación aceptada? Nombre del QA que lo derivó.
+        const [derivedRow] = await db
+          .select({ fromName: user.fullName })
+          .from(caseQualityAssignment)
+          .innerJoin(user, eq(user.id, caseQualityAssignment.calidadUserId))
+          .where(
+            and(
+              eq(caseQualityAssignment.clinicalCaseId, caseId),
+              eq(caseQualityAssignment.status, 'derived'),
+              eq(caseQualityAssignment.derivedToId, userId as string),
+            ),
+          )
+          .orderBy(desc(caseQualityAssignment.updatedAt))
+          .limit(1);
+        derivedFromCalidadName = derivedRow?.fromName ?? null;
+      }
+
+      if (myQualityAssignmentStatus === 'pending_derivation') {
+        // El viewer es el destino de una derivación pendiente — cargar contexto para el panel.
+        hasPendingDerivationForMe = true;
+        const [pendingRow] = await db
+          .select({
+            comment: caseQualityAssignment.derivationComment,
+            reasonId: caseQualityAssignment.derivationReasonId,
+          })
+          .from(caseQualityAssignment)
+          .where(
+            and(
+              eq(caseQualityAssignment.clinicalCaseId, caseId),
+              eq(caseQualityAssignment.calidadUserId, userId as string),
+              eq(caseQualityAssignment.status, 'pending_derivation'),
+            ),
+          )
+          .limit(1);
+        pendingDerivationComment = pendingRow?.comment ?? null;
+
+        if (pendingRow?.reasonId) {
+          const [reasonRow] = await db
+            .select({ label: qualityDerivationReason.label })
+            .from(qualityDerivationReason)
+            .where(eq(qualityDerivationReason.id, pendingRow.reasonId))
+            .limit(1);
+          pendingDerivationReasonLabel = reasonRow?.label ?? null;
+        }
+
+        // Nombre del origen (fila 'active' del mismo caso).
+        const [originRow] = await db
+          .select({ fromName: user.fullName })
+          .from(caseQualityAssignment)
+          .innerJoin(user, eq(user.id, caseQualityAssignment.calidadUserId))
+          .where(
+            and(
+              eq(caseQualityAssignment.clinicalCaseId, caseId),
+              eq(caseQualityAssignment.status, 'active'),
+            ),
+          )
+          .limit(1);
+        pendingDerivationFromName = originRow?.fromName ?? null;
+      }
     }
 
     perfLog('getCaseDetails.total', Date.now() - t0details, { caseId });
@@ -964,6 +956,13 @@ export async function getCaseDetails(caseId: string) {
       copiedFromCaseNumber,
       canDelete,
       myReviewedDimensions,
+      derivedFromCalidadName,
+      hasPendingDerivationForMe,
+      pendingDerivationFromName,
+      pendingDerivationReasonLabel,
+      pendingDerivationComment,
+      hasPendingDerivationOutgoing,
+      myQualityAssignmentStatus,
     };
   } catch (error: any) {
     perfLog('getCaseDetails.error', Date.now() - t0details, { caseId, error: String(error?.message) });
@@ -1025,30 +1024,7 @@ export async function acceptBidAction(caseId: string, bidId: string, technicianI
           .where(inArray(bid.id, rejectedBids.map(rb => rb.id)));
       }
 
-      // 4. Registrar evento de aceptación en UCH (visible para el técnico ganador)
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'negociacion',
-        action: 'OFERTA_ACEPTADA',
-        content: '¡Tu oferta fue seleccionada! El caso te ha sido asignado. Cuando estés listo, inicia el proceso de diseño desde este panel.',
-        payload: { bidId, technicianId, visibleTo: 'tecnico' },
-        stateChange: { from: 'publicado', to: 'aceptado' }
-      }, tx);
-
-      // 5. Registrar evento de rechazo en el hilo de cada técnico perdedor
-      for (const rb of rejectedBids) {
-        await logCaseEvent({
-          caseId,
-          userId: identity.id as string,
-          type: 'negociacion',
-          action: 'OFERTA_RECHAZADA',
-          content: 'Gracias por tu propuesta. En esta ocasión el caso fue asignado a otro laboratorio. ¡Sigue participando en nuevos casos del marketplace!',
-          payload: { bidId: rb.id, technicianId: rb.technicianId, visibleTo: 'tecnico' }
-        }, tx);
-      }
-
-      // 6. Asignar técnico y actualizar estado del caso a 'aceptado'
+      // 4. Asignar técnico y actualizar estado del caso a 'aceptado'
       await tx.update(clinicalCase)
         .set({
           assignedTechnicianId: technicianId,
@@ -1301,6 +1277,59 @@ export async function getDeliveryFilesAction(deliveryId: string) {
   } catch (error) {
     console.error("[getDeliveryFilesAction] Error:", error);
     return { success: false, error: "Error de seguridad al acceder a archivos" };
+  }
+}
+
+/**
+ * Obtiene las URLs firmadas de los archivos de una entrega, clasificadas por tipo.
+ * Firma on-demand solo cuando el visor o la descarga lo necesitan.
+ */
+export async function getDeliverySignedFilesAction(deliveryId: string) {
+  const identity = await getServerIdentity();
+  if (!identity?.id) return { success: false as const, error: 'No autorizado' };
+
+  try {
+    const delivery = await db.query.clinicalCaseDelivery.findFirst({
+      where: eq(sql`id`, deliveryId),
+      with: { clinicalCase: true },
+    });
+
+    if (!delivery) return { success: false as const, error: 'Entrega no encontrada' };
+
+    const isOwner = delivery.clinicalCase.doctorId === identity.id;
+    const isAssignedTech = delivery.clinicalCase.assignedTechnicianId === identity.id;
+    const isQualityReviewer = (delivery.clinicalCase as any).qualityReviewerId === identity.id;
+
+    if (!isOwner && !isAssignedTech && !isQualityReviewer && !identity.isSystemAdmin) {
+      return { success: false as const, error: 'Acceso denegado' };
+    }
+
+    const paths = (delivery.files as string[]) ?? [];
+
+    const signed = await Promise.all(
+      paths.map(async (path) => {
+        try {
+          return { path, url: await getSignedUrl(path) };
+        } catch {
+          return { path, url: null };
+        }
+      }),
+    );
+
+    const scans = signed
+      .filter((f) => f.path.includes('/scans/') && f.url)
+      .map((f) => f.url as string);
+
+    const attachments = signed
+      .filter((f) => !f.path.includes('/scans/') && f.url)
+      .map((f) => f.url as string);
+
+    // Paths legacy (sin subfolder /scans/ ni /attachments/) se tratan como attachments
+    // El visor usa solo scans; la descarga usa scans + attachments
+    return { success: true as const, scans, attachments };
+  } catch (error) {
+    console.error('[getDeliverySignedFilesAction] Error:', error);
+    return { success: false as const, error: 'Error al firmar archivos' };
   }
 }
 
@@ -2369,21 +2398,6 @@ export async function republishCaseAction(caseId: string, changeSummary?: string
         })
         .where(and(eq(clinicalCase.id, caseId), eq(clinicalCase.organizationId, identity.orgId)));
 
-      // Registrar en la nueva tabla (UCH)
-      await logCaseEvent({
-        caseId,
-        userId: identity.id as string,
-        type: 'negociacion',
-        action: 'REPUBLICACION',
-        content: changeSummary || 'Caso republicado con nuevas condiciones.',
-        payload: {
-          roundNumber: nextRoundNumber,
-          version: nextVersion,
-          visibleTo: 'dentista'
-        },
-        stateChange: { from: 'borrador', to: 'enEvaluacion' }
-      });
-
       // 4. Crear nueva ronda con snapshot (BL-034)
       const snapshot = {
         internalName: cCase.internalName,
@@ -2774,16 +2788,6 @@ export async function republicarCaseAction(caseId: string): Promise<ActionResult
         lastActivityAt: new Date(),
       })
       .where(eq(clinicalCase.id, caseId));
-
-    await logCaseEvent({
-      caseId,
-      userId: identity.id as string,
-      type: 'sistema',
-      action: CASE_EVENTS.CASO_REPUBLICADO,
-      content: 'He vuelto a publicar el caso. Estamos buscando técnicos disponibles.',
-      payload: { visibleTo: 'dentista', ...UCH_PAYLOAD_PRESENTATION_FAUCHARD },
-      stateChange: { from: INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO, to: CASE_STATUSES.EN_EVALUACION },
-    });
 
     const { classifyCaseAction } = await import('./fauchard');
     const { runAssignmentAction, assignCaseAction } = await import('./assignment');

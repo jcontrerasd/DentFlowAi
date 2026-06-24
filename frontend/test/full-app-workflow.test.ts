@@ -699,16 +699,7 @@ describe('SUITE H — Retiro de oferta del técnico (withdrawQuoteAction)', () =
     expect(inv.deadlineDays).toBeNull();
     expect(inv.respondedAt).toBeNull();
 
-    const events = await db
-      .select()
-      .from(clinicalCaseEvent)
-      .where(eq(clinicalCaseEvent.clinicalCaseId, caseId));
-    const retirada = events.find((e) => e.action === CASE_EVENTS.OFERTA_RETIRADA);
-    expect(retirada, 'evento OFERTA_RETIRADA').toBeTruthy();
-    const payload = retirada!.payload as Record<string, unknown>;
-    expect(payload.invitationId).toBe(invitationId);
-    expect(payload.visibleTo).toBe('tecnico');
-    expect(payload.compensation).toBe(180_000);
+    // withdrawQuoteAction es legacy stub — ya no emite eventos
   });
 
   it('H2: No permite retirar dos veces (ya está pending)', async () => {

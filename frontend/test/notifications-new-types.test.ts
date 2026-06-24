@@ -1,7 +1,7 @@
 /**
  * Unit — reglas de canal de notificación (v5.0, Fase 6, §9.5).
- * Los 7 tipos nuevos del modelo de disponibilidad usan email + in-app; los tipos
- * no listados caen al default (email + in-app).
+ * Los tipos del modelo de disponibilidad usan email + in-app; los tipos
+ * no listados explícitamente caen al default (email + in-app).
  */
 import { describe, it, expect } from 'vitest';
 import { channelsForNotification, type NotificationType } from '@/lib/services/notifications';
@@ -13,11 +13,8 @@ const V50_TYPES: NotificationType[] = [
   'RECORDATORIO_ACTIVIDAD',
   'PERDON_ADMIN',
   'CHECK_IN_DENTISTA',
-  'REPUBLICAR_DISPONIBLE',
   'REVISION_PLAZO_POR_VENCER',
   'REVISION_PLAZO_VENCIDO',
-  'ROLLOUT_PROXIMO',
-  'ROLLOUT_ACTIVADO',
 ];
 
 describe('channelsForNotification (Fase 6 §9.5)', () => {
@@ -29,7 +26,7 @@ describe('channelsForNotification (Fase 6 §9.5)', () => {
     }
   });
 
-  it('un tipo legacy cae al default email + in-app', () => {
-    expect(channelsForNotification('NUEVA_INVITACION')).toEqual({ email: true, inApp: true });
+  it('un tipo sin entrada explícita cae al default email + in-app', () => {
+    expect(channelsForNotification('NUEVA_ASIGNACION')).toEqual({ email: true, inApp: true });
   });
 });

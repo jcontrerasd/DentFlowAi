@@ -109,7 +109,7 @@ import {
   responsibilityAttentionBump,
   isHubInboxSuppressedForCompletedCase,
 } from '@/lib/caseResponsibilityAttention';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { normalizedAssignedTechnicianId } from '@/lib/caseViewUtils';
 import { useDeadlineMs, useRemainingMsUntil, splitCountdownParts } from '@/lib/hooks/useRemainingUntil';
@@ -347,7 +347,7 @@ function CaseDetailPageContent() {
   type StagedFileAdd = {
     tempId: string;
     file: File;
-    category: 'scan' | 'design_upload';
+    category: 'scan' | 'design_upload' | 'complementary';
     subType: string;
     previewUrl: string;
     filename: string;
@@ -369,6 +369,7 @@ function CaseDetailPageContent() {
   const [isDeliveryManagementOpen, setIsDeliveryManagementOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
+  const [isDownloadingCase, setIsDownloadingCase] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   // v5.0 — pendiente_pool / republicar (modelo de disponibilidad).
   const [republicarOpen, setRepublicarOpen] = useState(false);
@@ -467,12 +468,15 @@ function CaseDetailPageContent() {
   );
   const viewerIdStr = authUserProfile?.id ? String(authUserProfile.id) : null;
 
-  // v5.19 — El viewer es el revisor de Calidad asignado al caso (o admin supervisando).
+  // v5.19 — El viewer es el revisor de Calidad asignado (active) o el destino de una
+  // derivación pendiente (pending_derivation) que aún no ha aceptado.
   const actingAsCalidad =
     String(userRole) === 'calidad' &&
     !!viewerIdStr &&
-    clinicalCase?.qualityReviewerId != null &&
-    String(clinicalCase.qualityReviewerId) === viewerIdStr;
+    (
+      (clinicalCase?.qualityReviewerId != null && String(clinicalCase.qualityReviewerId) === viewerIdStr) ||
+      !!clinicalCase?.hasPendingDerivationForMe
+    );
 
   // Rol del viewer para presentación de estado (enmascara la etapa de Calidad al dentista).
   const viewerRole: CaseViewerRole = viewingAsAdmin
@@ -584,6 +588,14 @@ function CaseDetailPageContent() {
           showErrorToast("Indica qué ajustes necesitas antes de enviar.");
           return false;
         }
+        const attachments: File[] = Array.isArray(data?.attachments) ? data.attachments : [];
+        if (attachments.length > 0) {
+          try {
+            await uploadComplementaryFiles(attachments, 'revision_reference');
+          } catch (uploadErr: any) {
+            showErrorToast(uploadErr.message || 'Error al subir adjuntos');
+          }
+        }
         const res = await requestRevisionAction(id as string, reason);
         if (res.success) {
           showSuccessToastMessage('Ajustes solicitados al técnico');
@@ -604,6 +616,14 @@ function CaseDetailPageContent() {
         if (!reason.trim()) {
           showErrorToast('Indica qué ajustes necesita la entrega antes de certificar.');
           return false;
+        }
+        const qualityAttachments: File[] = Array.isArray(data?.attachments) ? data.attachments : [];
+        if (qualityAttachments.length > 0) {
+          try {
+            await uploadComplementaryFiles(qualityAttachments, 'quality_reference');
+          } catch (uploadErr: any) {
+            showErrorToast(uploadErr.message || 'Error al subir adjuntos');
+          }
         }
         const res = await requestQualityRevisionAction(id as string, reason);
         if (!res?.success) {
@@ -943,8 +963,9 @@ function CaseDetailPageContent() {
     // Validación: el caso debe quedar con al menos un archivo tras grabar.
     if (clinicalCase.status === 'borrador') {
       const existingKept = ((clinicalCase.files ?? []) as any[])
-        .filter((f: any) => !stagedFileRemovals.has(f.id)).length;
-      const finalFileCount = existingKept + stagedFileAdds.length;
+        .filter((f: any) => !stagedFileRemovals.has(f.id) && f.category !== 'complementary').length;
+      const stagedClinical = stagedFileAdds.filter(s => s.category !== 'complementary').length;
+      const finalFileCount = existingKept + stagedClinical;
       if (finalFileCount < 1) {
         showErrorToast('El caso debe tener al menos un archivo clínico.');
         return false;
@@ -957,7 +978,7 @@ function CaseDetailPageContent() {
 
       // 1) Subir archivos staged a GCS y registrar en DB.
       for (const staged of stagedFileAdds) {
-        const folder = staged.category === 'design_upload' ? 'design' : 'scans';
+        const folder = staged.category === 'design_upload' ? 'design' : staged.category === 'complementary' ? 'complementary' : 'scans';
         const gcsPath = `organizations/${clinicalCase.organizationId}/cases/${id}/${folder}/${Date.now()}_${staged.filename}`;
 
         const { body: uploadBody, contentEncoding } = await maybeGzipForUpload(staged.file);
@@ -1526,6 +1547,414 @@ function CaseDetailPageContent() {
   const MAX_CLINICAL_FILES = 3;
   const ALLOWED_CLINICAL_EXTS = ['stl', 'ply', 'obj', 'jpg', 'jpeg', 'png'];
 
+  const MAX_COMPLEMENTARY_FILES = 10;
+  const MAX_REVISION_ATTACHMENTS = 5;
+  const ALLOWED_COMPLEMENTARY_EXTS = ['jpg', 'jpeg', 'png', 'pdf', 'docx', 'stl', 'ply', 'obj'];
+  const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
+
+  const uploadComplementaryFiles = async (files: File[], subType: 'general' | 'revision_reference' | 'quality_reference') => {
+    if (!clinicalCase || !user) return;
+    const uploaderId = (user as any).id || (user as any).uid;
+    const folder = subType === 'general' ? 'complementary'
+      : subType === 'revision_reference' ? 'revision-attachments'
+      : 'quality-attachments';
+    for (const file of files) {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      if (!ALLOWED_COMPLEMENTARY_EXTS.includes(ext)) throw new Error(`Formato no permitido: ${file.name}`);
+      if (file.size > MAX_UPLOAD_SIZE_BYTES) throw new Error(`Archivo demasiado grande: ${file.name}`);
+      const gcsPath = `organizations/${clinicalCase.organizationId}/cases/${id}/${folder}/${Date.now()}_${file.name}`;
+      const uploadUrl = await getUploadUrlAction(gcsPath, file.type, undefined);
+      if (!uploadUrl) throw new Error(`No se pudo obtener URL de subida para ${file.name}`);
+      const res = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+      if (!res.ok) throw new Error(`Fallo en la subida de ${file.name}`);
+      await registerFileAction({
+        caseId: id as string,
+        organizationId: clinicalCase.organizationId,
+        uploaderId,
+        filename: file.name,
+        category: 'complementary',
+        subType,
+        size: file.size,
+        mimeType: file.type,
+        gcsPath,
+      });
+    }
+  };
+
+  const handleDownloadCase = async () => {
+    if (!clinicalCase) return;
+    setIsDownloadingCase(true);
+    try {
+      const [JSZip, { PDFDocument, rgb, StandardFonts }] = await Promise.all([
+        import('jszip').then(m => m.default),
+        import('pdf-lib'),
+      ]);
+
+      const zip = new JSZip();
+      const folder1 = zip.folder('1_Caso')!;
+      const folder2 = zip.folder('2_Entrega')!;
+      const folder3 = zip.folder('3_Adicionales')!;
+      // Fecha local explícita para evitar que JSZip use UTC y muestre "hora futura" en Finder
+      const zipFileDate = new Date();
+
+      const allFiles: any[] = clinicalCase.files ?? [];
+
+      // 1_Caso — scans (category: scan)
+      const scanFiles = allFiles.filter((f: any) => f.category === 'scan' || (!f.category && f.subType && ['superior','inferior','bite'].includes(f.subType)));
+      for (const f of scanFiles) {
+        try {
+          const url = await getSignedUrlAction(f.gcsPath);
+          if (!url) continue;
+          const blob = await fetch(url).then(r => r.blob());
+          folder1.file(f.filename, blob, { date: zipFileDate });
+        } catch {}
+      }
+
+      // 2_Entrega — última entrega dentista-técnico (no rechazada por calidad)
+      const deliveries: any[] = clinicalCase.deliveries ?? [];
+      const finalDelivery = [...deliveries]
+        .sort((a, b) => (b.version ?? 0) - (a.version ?? 0))
+        .find((d: any) => d.qualityStatus !== 'rejected');
+      if (finalDelivery) {
+        const deliveryFiles: string[] = finalDelivery.files ?? [];
+        for (const rawEntry of deliveryFiles) {
+          try {
+            // getCaseDetails ya firmó las URLs — rawEntry es una URL firmada o una ruta GCS
+            let fetchUrl: string;
+            let fname: string;
+
+            if (rawEntry.startsWith('http')) {
+              // Ya es URL firmada: fetchear directamente
+              fetchUrl = rawEntry;
+              // Extraer nombre del archivo desde el path de la URL (antes del ?)
+              const urlPath = new URL(rawEntry).pathname; // ej: /bucket/organizations/.../file.ply
+              // Para Firebase Storage, el path incluye %2F codificado en el segmento 'o/'
+              const decoded = decodeURIComponent(urlPath);
+              fname = decoded.split('/').pop() ?? 'archivo';
+            } else {
+              // Es ruta GCS sin firmar: pedir URL firmada
+              const decoded = decodeURIComponent(rawEntry).split('?')[0];
+              const gcsPathMatch = decoded.match(/organizations\/.+/);
+              const gcsPath = gcsPathMatch ? gcsPathMatch[0] : decoded;
+              const signed = await getSignedUrlAction(gcsPath);
+              if (!signed) continue;
+              fetchUrl = signed;
+              fname = gcsPath.split('/').pop() ?? 'archivo';
+            }
+
+            const blob = await fetch(fetchUrl).then(r => r.blob());
+            folder2.file(fname, blob, { date: zipFileDate });
+          } catch {}
+        }
+      }
+
+      // 3_Adicionales — complementarios
+      const compFiles = allFiles.filter((f: any) => f.category === 'complementary');
+      for (const f of compFiles) {
+        try {
+          const url = await getSignedUrlAction(f.gcsPath);
+          if (!url) continue;
+          const blob = await fetch(url).then(r => r.blob());
+          folder3.file(f.filename, blob, { date: zipFileDate });
+        } catch {}
+      }
+
+      // PDF informe profesional
+      const pdfDoc = await PDFDocument.create();
+      const W = 595, H = 842;
+      const page = pdfDoc.addPage([W, H]);
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+      const TEAL = rgb(0.04, 0.53, 0.53);
+      const DARK = rgb(0.08, 0.08, 0.12);
+      const MUTED = rgb(0.42, 0.42, 0.48);
+      const LIGHT = rgb(0.94, 0.96, 0.96);
+      const WHITE = rgb(1, 1, 1);
+
+      const L = 44, R = W - 44;
+      const HEADER_H = 80;
+      let y = H - 44;
+
+      // ── Logo: fetch and embed ────────────────────────────────────────────
+      let logoImage: Awaited<ReturnType<typeof pdfDoc.embedPng>> | null = null;
+      try {
+        const logoRes = await fetch('/dentflowai.jpg');
+        const logoBytes = await logoRes.arrayBuffer();
+        logoImage = await pdfDoc.embedPng(new Uint8Array(logoBytes));
+      } catch { /* logo no crítico */ }
+
+      // ── Header bar ────────────────────────────────────────────────────────
+      page.drawRectangle({ x: 0, y: H - HEADER_H, width: W, height: HEADER_H, color: TEAL });
+
+      // Logo top-right (56×56 pts con padding)
+      const LOGO_SIZE = 56;
+      const LOGO_X = W - 44 - LOGO_SIZE;
+      const LOGO_Y = H - HEADER_H + (HEADER_H - LOGO_SIZE) / 2;
+      if (logoImage) {
+        page.drawImage(logoImage, { x: LOGO_X, y: LOGO_Y, width: LOGO_SIZE, height: LOGO_SIZE });
+      }
+
+      // Title + case number (left, max width up to logo)
+      const caseLabel = clinicalCase.caseNumber ?? '—';
+      const genDate = format(new Date(), "dd/MM/yyyy 'a las' HH:mm");
+      page.drawText('INFORME DEL CASO', { x: L, y: H - 28, size: 8, font: bold, color: rgb(0.75, 0.97, 0.97) });
+      page.drawText(caseLabel, { x: L, y: H - 50, size: 22, font: bold, color: WHITE });
+      page.drawText(`Generado el ${genDate}`, { x: L, y: H - 68, size: 8, font, color: rgb(0.75, 0.97, 0.97) });
+
+      y = H - HEADER_H - 16;
+
+      // ── Helper: draw a section heading ─────────────────────────────────────
+      const sectionHeading = (label: string) => {
+        y -= 6;
+        page.drawRectangle({ x: L, y: y - 2, width: R - L, height: 18, color: LIGHT });
+        page.drawRectangle({ x: L, y: y - 2, width: 3, height: 18, color: TEAL });
+        page.drawText(label.toUpperCase(), { x: L + 8, y: y + 3, size: 8, font: bold, color: TEAL });
+        y -= 20;
+      };
+
+      // ── Helper: labeled field row ──────────────────────────────────────────
+      const field = (label: string, value: string, x = L, colW = R - L) => {
+        page.drawText(label + ':', { x, y, size: 8, font: bold, color: MUTED });
+        const valX = x + bold.widthOfTextAtSize(label + ': ', 8) + 2;
+        const maxW = colW - (valX - x) - 4;
+        // Truncate if too long
+        let val = value;
+        while (val.length > 0 && font.widthOfTextAtSize(val, 9) > maxW) val = val.slice(0, -1);
+        if (val !== value) val = val.slice(0, -1) + '…';
+        page.drawText(val, { x: valX, y, size: 9, font, color: DARK });
+        y -= 15;
+      };
+
+      // ── Helper: multiline text block ───────────────────────────────────────
+      const multiLine = (text: string, maxWidth: number, fontSize = 9) => {
+        const words = text.split(' ');
+        let line = '';
+        for (const w of words) {
+          const test = line ? line + ' ' + w : w;
+          if (font.widthOfTextAtSize(test, fontSize) > maxWidth && line) {
+            page.drawText(line, { x: L + 8, y, size: fontSize, font, color: DARK });
+            y -= fontSize + 4;
+            line = w;
+          } else { line = test; }
+        }
+        if (line) { page.drawText(line, { x: L + 8, y, size: fontSize, font, color: DARK }); y -= fontSize + 4; }
+      };
+
+      // ── Helper: horizontal rule ────────────────────────────────────────────
+      const rule = () => {
+        y -= 4;
+        page.drawLine({ start: { x: L, y }, end: { x: R, y }, thickness: 0.5, color: rgb(0.88, 0.9, 0.92) });
+        y -= 8;
+      };
+
+      // ── SECCIÓN 1: IDENTIFICACIÓN ──────────────────────────────────────────
+      sectionHeading('Identificación del caso');
+      const halfW = (R - L) / 2 - 6;
+      const col2X = L + halfW + 12;
+
+      // Row 1: case number | status
+      const statusLabels: Record<string, string> = {
+        borrador: 'Borrador', enEvaluacion: 'En evaluación', esperandoInicio: 'Esperando inicio',
+        enEjecucion: 'En ejecución', enRevision: 'En revisión', completado: 'Completado',
+        rechazado: 'Rechazado', cerrado: 'Cerrado', enFabricacion: 'En fabricación',
+        disenoAprobado: 'Diseño aprobado', propuestaLista: 'Propuesta lista',
+      };
+      const statusLabel = statusLabels[clinicalCase.status ?? ''] ?? (clinicalCase.status ?? '—');
+      field('Número de caso', caseLabel, L, halfW);
+      const savedY1 = y; y = savedY1 + 15;
+      field('Estado', statusLabel, col2X, halfW);
+      y = savedY1;
+
+      // Row 2: service type | urgency
+      const svcLabels: Record<string, string> = { solo_diseno: 'Solo diseño', solo_fabricacion: 'Solo fabricación', integral: 'Diseño + Fabricación' };
+      field('Tipo de servicio', svcLabels[clinicalCase.serviceType ?? ''] ?? (clinicalCase.serviceType ?? '—'), L, halfW);
+      const savedY2 = y; y = savedY2 + 15;
+      field('Urgencia', clinicalCase.urgency ?? '—', col2X, halfW);
+      y = savedY2;
+
+      // Row 3: publication date | desired delivery
+      const pubDate = clinicalCase.publishedAt ? format(new Date(clinicalCase.publishedAt), 'dd/MM/yyyy') : '—';
+      const delDate = clinicalCase.desiredDeliveryAt ? format(new Date(clinicalCase.desiredDeliveryAt), 'dd/MM/yyyy HH:mm') : '—';
+      field('Fecha de publicación', pubDate, L, halfW);
+      const savedY3 = y; y = savedY3 + 15;
+      field('Entrega solicitada', delDate, col2X, halfW);
+      y = savedY3;
+      rule();
+
+      // ── SECCIÓN 2: PARTES ─────────────────────────────────────────────────
+      sectionHeading('Partes del caso');
+      field('Solicitante (dentista)', clinicalCase.doctor?.fullName ?? '—');
+      if (clinicalCase.patientIdAnon) {
+        field('ID de paciente (anon.)', clinicalCase.patientIdAnon, L, halfW);
+        if (clinicalCase.internalName) {
+          const savedYP = y; y = savedYP + 15;
+          field('Nombre interno', clinicalCase.internalName, col2X, halfW);
+          y = savedYP;
+        }
+      }
+      rule();
+
+      // ── SECCIÓN 3: PRESCRIPCIÓN CLÍNICA ───────────────────────────────────
+      sectionHeading('Prescripción clínica');
+      field('Tipo de restauración', clinicalCase.restorationType ?? '—', L, halfW);
+      const savedYC = y; y = savedYC + 15;
+      field('Material', clinicalCase.material ?? '—', col2X, halfW);
+      y = savedYC;
+      field('Color VITA (shade)', clinicalCase.shade ?? '—', L, halfW);
+      const savedYC2 = y; y = savedYC2 + 15;
+      field('Pónticos (reemplaza piezas faltantes)', clinicalCase.replacesMissingTeeth ? 'Sí' : 'No', col2X, halfW);
+      y = savedYC2;
+      rule();
+
+      // ── SECCIÓN 4: ODONTOGRAMA ────────────────────────────────────────────
+      sectionHeading('Piezas dentales comprometidas');
+      const teeth: number[] = (clinicalCase.teeth as number[]) ?? [];
+
+      // FDI odontogram layout: 4 quadrants, 8 teeth each
+      // Q1: 11-18 (upper right, shown left→right as 18..11)
+      // Q2: 21-28 (upper left, shown left→right as 21..28)
+      // Q3: 31-38 (lower left, shown left→right as 31..38)
+      // Q4: 41-48 (lower right, shown left→right as 48..41)
+      const CELL = 22, GAP = 2, MIDGAP = 8;
+      const totalW = 8 * CELL + 7 * GAP; // one quadrant width
+      const startX = (W - (totalW * 2 + MIDGAP)) / 2;
+
+      y -= 4;
+      const oY = y; // top of odontogram
+
+      // Draw one row of 8 teeth
+      const drawTeethRow = (quadrantNumbers: number[], rowY: number, labelAbove: boolean) => {
+        quadrantNumbers.forEach((num, i) => {
+          const cx = startX + i * (CELL + GAP);
+          const affected = teeth.includes(num);
+          // Box
+          page.drawRectangle({ x: cx, y: rowY - CELL, width: CELL, height: CELL, color: affected ? TEAL : LIGHT, borderColor: affected ? TEAL : rgb(0.78, 0.82, 0.86), borderWidth: 0.8, borderOpacity: 1 });
+          // Tooth number
+          const numStr = String(num);
+          const tw = (affected ? bold : font).widthOfTextAtSize(numStr, 7);
+          page.drawText(numStr, { x: cx + (CELL - tw) / 2, y: rowY - CELL + 7, size: 7, font: affected ? bold : font, color: affected ? WHITE : MUTED });
+        });
+      };
+
+      // Upper jaw: Q1 right (18..11) | Q2 left (21..28)
+      const upperRight = [18, 17, 16, 15, 14, 13, 12, 11];
+      const upperLeft = [21, 22, 23, 24, 25, 26, 27, 28];
+      // Lower jaw: Q4 right (48..41) | Q3 left (31..38)
+      const lowerRight = [48, 47, 46, 45, 44, 43, 42, 41];
+      const lowerLeft = [31, 32, 33, 34, 35, 36, 37, 38];
+
+      drawTeethRow(upperRight, oY, true);
+      const upperLeftStart = startX + 8 * (CELL + GAP) + MIDGAP;
+      upperLeft.forEach((num, i) => {
+        const cx = upperLeftStart + i * (CELL + GAP);
+        const affected = teeth.includes(num);
+        page.drawRectangle({ x: cx, y: oY - CELL, width: CELL, height: CELL, color: affected ? TEAL : LIGHT, borderColor: affected ? TEAL : rgb(0.78, 0.82, 0.86), borderWidth: 0.8, borderOpacity: 1 });
+        const numStr = String(num);
+        const tw = (affected ? bold : font).widthOfTextAtSize(numStr, 7);
+        page.drawText(numStr, { x: cx + (CELL - tw) / 2, y: oY - CELL + 7, size: 7, font: affected ? bold : font, color: affected ? WHITE : MUTED });
+      });
+
+      // Midline separator
+      const midX = startX + 8 * (CELL + GAP) + MIDGAP / 2;
+      page.drawLine({ start: { x: midX, y: oY + 4 }, end: { x: midX, y: oY - CELL * 2 - 12 }, thickness: 0.8, color: rgb(0.7, 0.75, 0.78), dashArray: [3, 2], dashPhase: 0 });
+
+      // Arch separator (between upper and lower)
+      const archY = oY - CELL - 6;
+      page.drawLine({ start: { x: startX - 4, y: archY }, end: { x: startX + totalW * 2 + MIDGAP + 4, y: archY }, thickness: 0.5, color: rgb(0.78, 0.82, 0.86), dashArray: [4, 3], dashPhase: 0 });
+
+      const lowerY = archY - 6;
+      drawTeethRow(lowerRight, lowerY, false);
+      lowerLeft.forEach((num, i) => {
+        const cx = upperLeftStart + i * (CELL + GAP);
+        const affected = teeth.includes(num);
+        page.drawRectangle({ x: cx, y: lowerY - CELL, width: CELL, height: CELL, color: affected ? TEAL : LIGHT, borderColor: affected ? TEAL : rgb(0.78, 0.82, 0.86), borderWidth: 0.8, borderOpacity: 1 });
+        const numStr = String(num);
+        const tw = (affected ? bold : font).widthOfTextAtSize(numStr, 7);
+        page.drawText(numStr, { x: cx + (CELL - tw) / 2, y: lowerY - CELL + 7, size: 7, font: affected ? bold : font, color: affected ? WHITE : MUTED });
+      });
+
+      // Quadrant labels (above upper row, below lower row)
+      page.drawText('Superior derecho', { x: startX, y: oY + 4, size: 7, font, color: MUTED });
+      page.drawText('Superior izquierdo', { x: upperLeftStart, y: oY + 4, size: 7, font, color: MUTED });
+      page.drawText('Inferior derecho', { x: startX, y: lowerY - CELL - 4, size: 7, font, color: MUTED });
+      page.drawText('Inferior izquierdo', { x: upperLeftStart, y: lowerY - CELL - 4, size: 7, font, color: MUTED });
+
+      // Legend — centrado debajo del odontograma para no solaparse con piezas
+      y = lowerY - CELL - 20;
+      const legendBaseY = y;
+      const legendBlockW = 10 + 4 + font.widthOfTextAtSize('Comprometida', 7) + 20 + 10 + 4 + font.widthOfTextAtSize('Sana', 7);
+      const legendStartX = (W - legendBlockW) / 2;
+      page.drawRectangle({ x: legendStartX, y: legendBaseY - 9, width: 10, height: 10, color: TEAL });
+      page.drawText('Comprometida', { x: legendStartX + 13, y: legendBaseY - 7, size: 7, font, color: MUTED });
+      const legend2X = legendStartX + 13 + font.widthOfTextAtSize('Comprometida', 7) + 16;
+      page.drawRectangle({ x: legend2X, y: legendBaseY - 9, width: 10, height: 10, color: LIGHT, borderColor: rgb(0.78, 0.82, 0.86), borderWidth: 0.8, borderOpacity: 1 });
+      page.drawText('Sana', { x: legend2X + 13, y: legendBaseY - 7, size: 7, font, color: MUTED });
+      y -= 16;
+
+      // Tooth list text
+      if (teeth.length > 0) {
+        const teethStr = `Piezas comprometidas: ${[...teeth].sort((a, b) => a - b).join(', ')}`;
+        const teethStrW = font.widthOfTextAtSize(teethStr, 8);
+        page.drawText(teethStr, { x: (W - teethStrW) / 2, y, size: 8, font, color: DARK });
+        y -= 12;
+      }
+      rule();
+
+      // ── SECCIÓN 5: INSTRUCCIONES Y NOTAS ─────────────────────────────────
+      sectionHeading('Instrucciones clínicas');
+      const notes = clinicalCase.specialInstructions ?? clinicalCase.doctorNotes ?? '';
+      const notesEsthetic = clinicalCase.notesEsthetic ?? '';
+      const notesOclusal = clinicalCase.notesOclusal ?? '';
+
+      if (notes) {
+        page.drawText('Notas generales:', { x: L + 8, y, size: 8, font: bold, color: MUTED }); y -= 12;
+        multiLine(notes.slice(0, 400), R - L - 16);
+        y -= 4;
+      }
+      if (notesEsthetic) {
+        page.drawText('Notas estéticas:', { x: L + 8, y, size: 8, font: bold, color: MUTED }); y -= 12;
+        multiLine(notesEsthetic.slice(0, 300), R - L - 16);
+        y -= 4;
+      }
+      if (notesOclusal) {
+        page.drawText('Notas oclusales:', { x: L + 8, y, size: 8, font: bold, color: MUTED }); y -= 12;
+        multiLine(notesOclusal.slice(0, 300), R - L - 16);
+      }
+      if (!notes && !notesEsthetic && !notesOclusal) {
+        page.drawText('Sin instrucciones adicionales.', { x: L + 8, y, size: 9, font, color: MUTED });
+        y -= 14;
+      }
+
+      // ── FOOTER ─────────────────────────────────────────────────────────────
+      const footerY = 28;
+      page.drawLine({ start: { x: L, y: footerY + 14 }, end: { x: R, y: footerY + 14 }, thickness: 0.4, color: rgb(0.85, 0.88, 0.9) });
+      page.drawText('DentFlowAI — Documento de uso interno y confidencial. Generado automáticamente.', { x: L, y: footerY, size: 7, font, color: MUTED });
+      page.drawText(`${caseLabel} · ${genDate}`, { x: R - bold.widthOfTextAtSize(`${caseLabel} · ${genDate}`, 7), y: footerY, size: 7, font, color: MUTED });
+
+      const pdfBytes = await pdfDoc.save();
+      const pdfFileName = `informe_caso_${clinicalCase.caseNumber ?? id}.pdf`;
+      zip.file(pdfFileName, pdfBytes, { date: zipFileDate });
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const caseNum = clinicalCase.caseNumber ?? id;
+      const fileName = `${caseNum}_${format(new Date(), 'yyyyMMdd')}.zip`;
+      const downloadUrl = window.URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error('Error al generar descarga del caso:', err);
+      showErrorToast('Error al generar el ZIP del caso');
+    } finally {
+      setIsDownloadingCase(false);
+    }
+  };
+
   const handleClinicalFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileObj = e.target.files?.[0];
     e.target.value = '';
@@ -1541,8 +1970,8 @@ function CaseDetailPageContent() {
       return;
     }
 
-    const existingKept = (clinicalCase.files ?? []).filter((f: any) => !stagedFileRemovals.has(f.id)).length;
-    const totalDisplayed = existingKept + stagedFileAdds.length;
+    const existingKept = (clinicalCase.files ?? []).filter((f: any) => !stagedFileRemovals.has(f.id) && f.category !== 'complementary').length;
+    const totalDisplayed = existingKept + stagedFileAdds.filter(s => s.category !== 'complementary').length;
     if (totalDisplayed >= MAX_CLINICAL_FILES) {
       showErrorToast(`Máximo ${MAX_CLINICAL_FILES} archivos clínicos.`);
       return;
@@ -1624,9 +2053,9 @@ function CaseDetailPageContent() {
    */
   const displayedFiles = useMemo(() => {
     const existing = ((clinicalCase?.files ?? []) as any[])
-      .filter((f: any) => !stagedFileRemovals.has(f.id))
+      .filter((f: any) => !stagedFileRemovals.has(f.id) && f.category !== 'complementary')
       .map((f: any) => ({ ...f, staged: false as const, key: f.id }));
-    const added = stagedFileAdds.map(s => ({
+    const added = stagedFileAdds.filter(s => s.category !== 'complementary').map(s => ({
       id: s.tempId,
       key: s.tempId,
       filename: s.filename,
@@ -2158,6 +2587,8 @@ function CaseDetailPageContent() {
                     setIsCloning(false);
                   }
                 }}
+                onDownloadCase={() => void handleDownloadCase()}
+                isDownloadingCase={isDownloadingCase}
               />
             </div>
           )}
@@ -2295,6 +2726,8 @@ function CaseDetailPageContent() {
                 }
               }}
               onCreateCopy={() => undefined}
+              onDownloadCase={() => void handleDownloadCase()}
+              isDownloadingCase={isDownloadingCase}
             />
           )}
         </div>
@@ -2550,6 +2983,104 @@ function CaseDetailPageContent() {
               </div>
             </section>
           )}
+
+          {/* Documentación complementaria — visible en borrador (edición) y para todos en estados activos */}
+          {clinicalCase && (() => {
+            const compFiles = ((clinicalCase.files ?? []) as any[]).filter((f: any) => f.category === 'complementary');
+            const compStaged = stagedFileAdds.filter(s => s.category === 'complementary');
+            const totalComp = compFiles.length + compStaged.length;
+            const canAddComp = canEditForm && totalComp < MAX_COMPLEMENTARY_FILES;
+
+            const handleCompFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+              const incoming = Array.from(e.target.files ?? []);
+              e.target.value = '';
+              for (const fileObj of incoming) {
+                const ext = fileObj.name.split('.').pop()?.toLowerCase() ?? '';
+                if (!ALLOWED_COMPLEMENTARY_EXTS.includes(ext)) { showErrorToast(`Formato no permitido: ${fileObj.name}`); continue; }
+                if (fileObj.size > MAX_UPLOAD_SIZE_BYTES) { showErrorToast(`El archivo ${fileObj.name} supera 20 MB.`); continue; }
+                if (totalComp >= MAX_COMPLEMENTARY_FILES) { showErrorToast(`Máximo ${MAX_COMPLEMENTARY_FILES} archivos complementarios.`); break; }
+                const isDupeExisting = compFiles.some((f: any) => f.filename === fileObj.name && f.size === fileObj.size);
+                const isDupeStaged = compStaged.some(s => s.file.name === fileObj.name && s.file.size === fileObj.size);
+                if (isDupeExisting || isDupeStaged) { showErrorToast(`"${fileObj.name}" ya fue agregado.`); continue; }
+                const staged: StagedFileAdd = {
+                  tempId: `comp-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                  file: fileObj,
+                  category: 'complementary',
+                  subType: 'general',
+                  previewUrl: URL.createObjectURL(fileObj),
+                  filename: fileObj.name,
+                  size: fileObj.size,
+                  mimeType: fileObj.type,
+                };
+                setStagedFileAdds(prev => [...prev, staged]);
+              }
+              showSuccessToastMessage('Archivos complementarios pendientes — usa Grabar para confirmar');
+            };
+
+            if (compFiles.length === 0 && compStaged.length === 0 && !canEditForm) return null;
+            return (
+              <section className="bg-surface/40 rounded-[1.2rem] p-5 space-y-3 border border-divider">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted" />
+                    <h3 className="text-xs font-bold uppercase tracking-widest text-muted">Documentación complementaria</h3>
+                  </div>
+                  <span className="text-[10px] text-faint">{totalComp}/{MAX_COMPLEMENTARY_FILES}</span>
+                </div>
+                {canAddComp && (
+                  <label className="flex items-center justify-center gap-2 p-3 bg-background/40 rounded-xl border border-dashed border-divider hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all text-xs text-muted hover:text-primary">
+                    <Upload className="w-4 h-4" />
+                    Agregar documentación (JPG, PNG, PDF, DOCX · máx 20 MB)
+                    <input type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.docx,.stl,.ply,.obj" className="hidden" onChange={handleCompFileUpload} />
+                  </label>
+                )}
+                {(compFiles.length > 0 || compStaged.length > 0) && (
+                  <div className="flex flex-col gap-2">
+                    {compFiles.map((f: any) => {
+                      const url = downloadUrls[f.id];
+                      return (
+                        <div key={f.id} className="flex items-center justify-between p-3 bg-background/60 rounded-xl border border-divider">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="p-2 bg-primary-hl rounded-lg shrink-0"><FileText className="w-4 h-4 text-primary" /></div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-xs text-foreground font-bold truncate">{f.filename}</span>
+                              <span className="text-[10px] text-faint uppercase">{f.subType} • {(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {url && (
+                              <a href={url} download={f.filename} target="_blank" rel="noreferrer" aria-label="Descargar" className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-primary-hl border border-primary/20 text-primary hover:bg-primary hover:text-inverse transition-colors">
+                                <Download className="w-4 h-4" />
+                              </a>
+                            )}
+                            {canEditForm && (
+                              <button type="button" onClick={() => handleClinicalFileDelete(f.id)} disabled={savingChanges} aria-label="Eliminar" className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-error-hl border border-error/20 text-error hover:bg-error hover:text-inverse transition-colors disabled:opacity-50">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {compStaged.map((s: StagedFileAdd) => (
+                      <div key={s.tempId} className="flex items-center justify-between p-3 bg-background/60 rounded-xl border border-warning/20">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="p-2 bg-primary-hl rounded-lg shrink-0"><FileText className="w-4 h-4 text-primary" /></div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="text-xs text-foreground font-bold truncate">{s.filename}</span>
+                            <span className="text-[10px] text-warning font-bold uppercase">Pendiente · {(s.size / 1024 / 1024).toFixed(2)} MB</span>
+                          </div>
+                        </div>
+                        <button type="button" onClick={() => { URL.revokeObjectURL(s.previewUrl); setStagedFileAdds(prev => prev.filter(x => x.tempId !== s.tempId)); }} aria-label="Quitar" className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-error-hl border border-error/20 text-error hover:bg-error hover:text-inverse transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })()}
         </div>
 
         <div className="lg:col-span-4 flex flex-col gap-4 relative z-[100]">
@@ -2618,6 +3149,14 @@ function CaseDetailPageContent() {
                   serverClockAnchor={serverClockAnchor}
                   newMessageCount={unreadTechMessages + unreadNegotiationMessages}
                   onAcknowledgeNew={acknowledgeNewHubMessages}
+                  derivedFromCalidadName={clinicalCase?.derivedFromCalidadName ?? null}
+                  hasPendingDerivationForMe={clinicalCase?.hasPendingDerivationForMe ?? false}
+                  pendingDerivationFromName={clinicalCase?.pendingDerivationFromName ?? null}
+                  pendingDerivationReasonLabel={clinicalCase?.pendingDerivationReasonLabel ?? null}
+                  pendingDerivationComment={clinicalCase?.pendingDerivationComment ?? null}
+                  hasPendingDerivationOutgoing={clinicalCase?.hasPendingDerivationOutgoing ?? false}
+                  myQualityAssignmentStatus={clinicalCase?.myQualityAssignmentStatus ?? null}
+                  onDerivationRejected={() => router.push('/dashboard/cases')}
                 />
               </motion.div>
             )}

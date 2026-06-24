@@ -12,14 +12,7 @@ export const UCH_TECH_CHANNEL_ACTIONS = new Set([
   'ENTREGA_SUBIDA',
 ]);
 
-export const UCH_NEG_CHANNEL_ACTIONS = new Set([
-  'OFERTA_ENVIADA',
-  'OFERTA_RECIBIDA',
-  'OFERTA_RECHAZADA',
-  'OFERTA_ACEPTADA',
-  'MENSAJE_NEGOCIACION',
-  'OFERTA_CONTRAOFERTA',
-]);
+export const UCH_NEG_CHANNEL_ACTIONS = new Set<string>();
 
 export type UchUnreadEvent = {
   type: string;

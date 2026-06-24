@@ -31,6 +31,7 @@ import { subscribeHubUnreadRefresh } from '@/lib/hubUnreadEvents';
 import ImpersonationSelector from '@/components/admin/ImpersonationSelector';
 import ThemeToggleButton from '@/components/theme/ThemeToggleButton';
 import AvailabilityBadge from '@/components/availability/AvailabilityBadge';
+import { AvailabilityProvider } from '@/components/availability/AvailabilityContext';
 import RolloutBanner from '@/components/availability/RolloutBanner';
 import DemoEmailPreviewListener from '@/components/demo/DemoEmailPreviewListener';
 import Image from 'next/image';
@@ -161,6 +162,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { name: 'Financiero', icon: CreditCard, href: '/dashboard/finance' },
     ] : []),
     
+    // Rutas para Calidad
+    ...(userProfile?.role === 'calidad' ? [
+      { name: 'Casos', icon: FileText, href: '/dashboard/cases' },
+    ] : []),
+
     // Rutas para Admin (bajo "Observabilidad"). La "Zona de Alta Peligrosidad"
     // se renderiza aparte, al pie del sidebar.
     ...(userProfile?.role === 'admin' ? [
@@ -180,7 +186,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const displayName = userProfile?.fullName ?? user?.name ?? 'Usuario DentFlow';
 
-  return (
+  const inner = (
     <div className="min-h-screen bg-background text-foreground">
       {/* Sidebar */}
       <aside
@@ -262,7 +268,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </button>
 
       {/* Main Content */}
-      <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'pl-64' : 'pl-0'}`}>
+      <main className={`transition-all duration-300 min-h-screen ${isSidebarOpen ? 'pl-64' : 'pl-20'}`}>
         <header className="h-20 border-b border-divider/50 flex items-center justify-between px-10 bg-surface shadow-sm border border-divider sticky top-0 z-40">
           <div className="flex items-center gap-4" />
 
@@ -321,4 +327,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <DemoEmailPreviewListener />
     </div>
   );
+
+  if (userProfile?.role === 'tecnico') {
+    return <AvailabilityProvider>{inner}</AvailabilityProvider>;
+  }
+  return inner;
 }

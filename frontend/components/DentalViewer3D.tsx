@@ -333,14 +333,14 @@ export default function DentalViewer3D({
           <directionalLight position={[10, 10, 5]} intensity={0.95} />
           <directionalLight position={[-10, -10, -5]} intensity={0.35} />
 
-          <Suspense fallback={null}>
-            {/* `key` derivado de las URLs de los modelos: el centrado se recalcula
-                solo cuando cambian los modelos, NO al agregar/editar pins. */}
-            <Center key={validModels.map(m => m.url).join('|')}>
-              <group ref={sceneGroupRef}>
-                {validModels.map((m, idx) => (
+          {/* `key` derivado de las URLs de los modelos: el centrado se recalcula
+              solo cuando cambian los modelos, NO al agregar/editar pins. */}
+          <Center key={validModels.map(m => m.url).join('|')}>
+            <group ref={sceneGroupRef}>
+              {/* Suspense por modelo: el primero aparece en pantalla mientras los otros aún parsean */}
+              {validModels.map((m, idx) => (
+                <Suspense key={`${m.subType}-${idx}`} fallback={null}>
                   <Model
-                    key={`${m.subType}-${idx}`}
                     url={m.url}
                     color={getColor(m.subType)}
                     visible={m.visible}
@@ -355,7 +355,8 @@ export default function DentalViewer3D({
                       }
                     }}
                   />
-                ))}
+                </Suspense>
+              ))}
 
                 {showAnnotations && annotations.map(anno => (
                   <Pin
@@ -368,7 +369,6 @@ export default function DentalViewer3D({
                 ))}
               </group>
             </Center>
-          </Suspense>
 
           <OrbitControls
             ref={controlsRef}

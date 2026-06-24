@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Zap, ZapOff, Settings2 } from 'lucide-react';
 import { toggleAvailabilityAction } from '@/lib/db/actions/skills';
-import { getMyAvailabilityStatusAction } from '@/lib/db/actions/availability';
 import { useToast } from '@/context/ToastContext';
+import { useAvailability } from '@/components/availability/AvailabilityContext';
 import GlobalAvailabilitySwitch from '@/components/availability/GlobalAvailabilitySwitch';
 import ResponseStatusStepper from '@/components/availability/ResponseStatusStepper';
 
@@ -14,8 +14,6 @@ interface AvailabilityToggleProps {
   initialValue: boolean;
   suspendedUntil?: Date | null;
 }
-
-type Status = Awaited<ReturnType<typeof getMyAvailabilityStatusAction>>;
 
 /**
  * Disponibilidad en el perfil del técnico.
@@ -27,13 +25,7 @@ type Status = Awaited<ReturnType<typeof getMyAvailabilityStatusAction>>;
  * Con el flag off cae al toggle legacy (`user.is_available`).
  */
 export default function AvailabilityToggle({ initialValue, suspendedUntil }: AvailabilityToggleProps) {
-  const [status, setStatus] = useState<Status | null>(null);
-
-  const refresh = useCallback(async () => {
-    setStatus(await getMyAvailabilityStatusAction());
-  }, []);
-
-  useEffect(() => { refresh(); }, [refresh]);
+  const { status, refresh } = useAvailability();
 
   if (status && status.success && status.enabled && status.availability) {
     const { availability, level, pendingCount } = status;

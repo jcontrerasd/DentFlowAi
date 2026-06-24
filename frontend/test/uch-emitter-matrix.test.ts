@@ -13,7 +13,7 @@ describe('shouldUseUchNeutralSystemPill', () => {
     expect(
       shouldUseUchNeutralSystemPill({
         eventType: 'sistema',
-        eventAction: CASE_EVENTS.INVITACION_RECIBIDA,
+        eventAction: CASE_EVENTS.ASIGNACION_RECIBIDA,
         isOutcomeNotice: false,
       }),
     ).toBe(false);
@@ -45,11 +45,11 @@ describe('shouldUseUchNeutralSystemPill', () => {
 });
 
 describe('resolveUchThreadLane + uchPresentationRole', () => {
-  it('INVITACION_RECIBIDA técnico sin presentationAuthor: hilo + Fauchard', () => {
+  it('ASIGNACION_RECIBIDA técnico sin presentationAuthor: hilo + Fauchard', () => {
     const ev = {
       userId: 'u-tech',
       type: 'sistema' as const,
-      action: CASE_EVENTS.INVITACION_RECIBIDA,
+      action: CASE_EVENTS.ASIGNACION_RECIBIDA,
       payload: { visibleTo: 'tecnico' },
       user: { id: 'u-tech', fullName: 'Lab', role: 'tecnico' },
     };
@@ -63,7 +63,7 @@ describe('resolveUchThreadLane + uchPresentationRole', () => {
     const ev = {
       userId: 'u-tech',
       type: 'tecnico' as const,
-      action: CASE_EVENTS.OFERTA_ENVIADA,
+      action: CASE_EVENTS.REVISION_ENVIADA,
       payload: {},
       user: { id: 'u-tech', fullName: 'Lab', role: 'tecnico' },
     };
@@ -81,7 +81,7 @@ describe('resolveUchThreadLane + uchPresentationRole', () => {
     const ev = {
       userId: 'u-tech',
       type: 'tecnico' as const,
-      action: CASE_EVENTS.OFERTA_ENVIADA,
+      action: CASE_EVENTS.REVISION_ENVIADA,
       payload: {},
       user: { id: 'u-tech', fullName: 'Lab', role: 'tecnico' },
     };

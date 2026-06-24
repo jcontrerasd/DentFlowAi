@@ -3,7 +3,7 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { motion } from 'framer-motion';
 import { Save, ChevronDown, ChevronUp, Star, Undo2 } from 'lucide-react';
-import { getMySkillsAction, updateSkillsAction, type SkillRow } from '@/lib/db/actions/skills';
+import { getMySkillsAction, updateSkillsAction, getAdminTechnicianSkillsAction, updateTechnicianSkillsAdmin, type SkillRow } from '@/lib/db/actions/skills';
 import { WORK_TYPES, WORK_TYPE_LABELS, WORK_CATEGORY_LABELS } from '@/lib/constants/dental';
 import { computeGroupDisplayLevel, snapshotGroupLevels } from '@/lib/profile/skillGroupLevel';
 import { useToast } from '@/context/ToastContext';
@@ -118,6 +118,8 @@ interface SkillMatrixFormProps {
   initialCad?: boolean;
   /** Oculta el botón interno "Guardar habilidades" para guardado externo */
   hideButton?: boolean;
+  /** Modo admin: carga y guarda skills de otro usuario por su id */
+  targetUserId?: string;
 }
 
 const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(function SkillMatrixForm({
@@ -125,7 +127,9 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
   onSaveSuccess,
   initialCad = false,
   hideButton = false,
+  targetUserId,
 }, ref) {
+  const adminMode = Boolean(targetUserId);
   const { showSuccess, showError } = useToast();
   const blankSkills = WORK_TYPES.reduce<Record<string, number>>((acc, wt) => {
     acc[wt] = 0;
@@ -138,12 +142,18 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
   >({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [hasCad, setHasCad] = useState(initialCad);
+  const [hasCad, setHasCad] = useState(adminMode ? true : initialCad);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const rows: SkillRow[] = await getMySkillsAction();
+        let rows: SkillRow[];
+        if (adminMode && targetUserId) {
+          const res = await getAdminTechnicianSkillsAction(targetUserId);
+          rows = res.success && res.data ? (res.data.skills as SkillRow[]) : [];
+        } else {
+          rows = await getMySkillsAction();
+        }
         const map = WORK_TYPES.reduce<Record<string, number>>((acc, wt) => {
           acc[wt] = 0;
           return acc;
@@ -152,7 +162,7 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
           map[r.workType] = r.designLevel;
         });
         setSkills(map);
-        setHasCad(rows.some(r => r.designLevel > 0) || initialCad);
+        if (!adminMode) setHasCad(rows.some(r => r.designLevel > 0) || initialCad);
       } catch (e) {
         console.error(e);
       } finally {
@@ -160,7 +170,7 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
       }
     };
     load();
-  }, [initialCad]);
+  }, [initialCad, targetUserId, adminMode]);
 
   const clearGroupUndo = (groupLabel: string) => {
     setGroupUndoSnapshots(prev => {
@@ -199,16 +209,22 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
   };
 
   const saveSkills = async (): Promise<{ success: boolean; error?: string }> => {
+    const skillsArray = Object.entries(skills).map(([workType, designLevel]) => ({
+      workType,
+      designLevel: hasCad ? designLevel : 0,
+    }));
+
+    if (adminMode && targetUserId) {
+      const res = await updateTechnicianSkillsAdmin(targetUserId, skillsArray);
+      if (res.success) onSaveSuccess?.();
+      return res;
+    }
+
     if (!hasCad) {
       const msg = 'Debes habilitar Diseño (CAD) para declarar habilidades.';
       showError(msg);
       return { success: false, error: msg };
     }
-
-    const skillsArray = Object.entries(skills).map(([workType, designLevel]) => ({
-      workType,
-      designLevel: hasCad ? designLevel : 0,
-    }));
 
     const hasDesign = skillsArray.some(s => s.designLevel > 0);
     if (!hasDesign) {
@@ -271,21 +287,23 @@ const SkillMatrixForm = forwardRef<SkillMatrixFormHandle, SkillMatrixFormProps>(
               <Star className="w-3 h-3" /> {leagueBadge.label}
             </span>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <div
-              onClick={() => {
-                if (!hasCad) {
-                  setHasCad(true);
-                } else {
-                  showError('Debe tener Diseño habilitado para declarar habilidades');
-                }
-              }}
-              className={`w-10 h-5 rounded-full transition-colors relative ${hasCad ? 'bg-primary' : 'bg-surface-off'}`}
-            >
-              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${hasCad ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </div>
-            <span className="text-xs text-muted">Diseña (CAD)</span>
-          </label>
+          {!adminMode && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <div
+                onClick={() => {
+                  if (!hasCad) {
+                    setHasCad(true);
+                  } else {
+                    showError('Debe tener Diseño habilitado para declarar habilidades');
+                  }
+                }}
+                className={`w-10 h-5 rounded-full transition-colors relative ${hasCad ? 'bg-primary' : 'bg-surface-off'}`}
+              >
+                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${hasCad ? 'translate-x-5' : 'translate-x-0.5'}`} />
+              </div>
+              <span className="text-xs text-muted">Diseña (CAD)</span>
+            </label>
+          )}
         </div>
       )}
 
