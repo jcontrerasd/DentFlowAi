@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { auth } from '@/auth';
 import { db, infraPromise } from '@/lib/db';
-import { user } from '@/lib/db/schema';
+import { user, sessions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 import { getForcedIdentity } from './test-identity';
@@ -27,6 +27,22 @@ export async function getServerIdentity() {
 
     if (!session?.user) {
       return null;
+    }
+
+    // Fase 1/4/5 (ajuste login): con single-session o tab-close-logout activos, una sesión
+    // válida en el JWT puede haber sido invalidada por nosotros (otro login la reemplazó, o el
+    // cron de inactividad la expiró). Verificamos contra nuestra tabla `sessions` propia — sin
+    // esto activado, cero queries extra (mismo costo que hoy).
+    const ownSessionTrackingActive = process.env.SINGLE_SESSION_ENABLED === 'true'
+      || process.env.TAB_CLOSE_LOGOUT_ENABLED === 'true';
+    if (ownSessionTrackingActive) {
+      const sid = (session.user as any).sid;
+      if (!sid) return null;
+      const [row] = await db.select({ sessionToken: sessions.sessionToken })
+        .from(sessions)
+        .where(eq(sessions.sessionToken, sid))
+        .limit(1);
+      if (!row) return null;
     }
 
     const cookieStore = await cookies();

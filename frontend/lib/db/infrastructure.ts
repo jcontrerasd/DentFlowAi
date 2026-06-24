@@ -3,8 +3,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-/** v5.20 — Preferencias de notificaciones por email en perfil de usuario. */
-export const INFRA_VERSION = 'v5.20';
+/** v5.21 — Tablas NextAuth para database sessions (accounts/sessions/verificationToken), detrás de AUTH_DB_SESSIONS_ENABLED. */
+export const INFRA_VERSION = 'v5.21';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -208,6 +208,52 @@ export async function ensureIncrementalInfrastructure(db: any) {
     `);
   } catch (e) {
     // Silencioso si ya es nullable (el ALTER falla solo si hay un error real).
+  }
+
+  // v5.21 — Tablas NextAuth para database sessions (DrizzleAdapter), detrás de AUTH_DB_SESSIONS_ENABLED.
+  // Declaradas en schema.ts desde antes pero nunca creadas físicamente; columnas camelCase entre
+  // comillas porque así las espera el adapter (NextAuth usa esa convención, no snake_case).
+  // IMPORTANTE: un execute() por sentencia — `db.execute(sql\`...\`)` con varios `;` en un solo
+  // template solo corre la primera sentencia con postgres-js + prepare:false (confirmado: los
+  // índices 2do/3er de audit_log más arriba nunca se crearon por este mismo motivo).
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS accounts (
+        "userId" TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        "providerAccountId" TEXT NOT NULL,
+        refresh_token TEXT,
+        access_token TEXT,
+        expires_at INTEGER,
+        token_type TEXT,
+        scope TEXT,
+        id_token TEXT,
+        session_state TEXT,
+        PRIMARY KEY (provider, "providerAccountId")
+      );
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS accounts_userId_idx ON accounts("userId");`);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS sessions (
+        "sessionToken" TEXT PRIMARY KEY,
+        "userId" TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+        expires TIMESTAMP NOT NULL
+      );
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS sessions_userId_idx ON sessions("userId");`);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "verificationToken" (
+        identifier TEXT NOT NULL,
+        token TEXT NOT NULL,
+        expires TIMESTAMP NOT NULL,
+        PRIMARY KEY (identifier, token)
+      );
+    `);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando tablas NextAuth (v5.21):", e);
   }
 }
 

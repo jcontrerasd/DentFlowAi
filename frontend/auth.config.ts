@@ -2,7 +2,7 @@ import type { NextAuthConfig } from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import * as bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
-import { user } from "@/lib/db/schema"
+import { user, sessions } from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
 
 export default {
@@ -89,6 +89,25 @@ export default {
         token.role = (authUser as any).role;
         token.organizationId = (authUser as any).organizationId;
         token.isSystemAdmin = (authUser as any).isSystemAdmin;
+
+        // Fase 1 (ajuste login): tracking de sesión propia. NextAuth nunca toca la tabla
+        // `sessions` en modo jwt (eso solo ocurre con strategy:"database", que es incompatible
+        // con Credentials) — la gestionamos a mano para habilitar Fase 4 (single session) y
+        // Fase 5 (logout real al cerrar pestaña) sin depender del adapter.
+        try {
+          if (process.env.SINGLE_SESSION_ENABLED === 'true') {
+            await db.delete(sessions).where(eq(sessions.userId, authUser.id as string));
+          }
+          const sid = crypto.randomUUID();
+          await db.insert(sessions).values({
+            sessionToken: sid,
+            userId: authUser.id as string,
+            expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días
+          });
+          token.sid = sid;
+        } catch (e) {
+          console.error("[Auth] Error registrando sesión propia:", e);
+        }
       }
       return token;
     },
@@ -99,6 +118,7 @@ export default {
         (session.user as any).role = token.role;
         (session.user as any).organizationId = token.organizationId;
         (session.user as any).isSystemAdmin = token.isSystemAdmin;
+        (session.user as any).sid = token.sid;
       }
       return session;
     },
