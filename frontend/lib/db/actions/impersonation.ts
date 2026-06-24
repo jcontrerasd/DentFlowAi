@@ -103,6 +103,36 @@ export async function getServerIdentity() {
 }
 
 /**
+ * Fase 4 (ajuste login): chequeo liviano para que la UI (dashboard/layout.tsx) detecte
+ * que la sesión actual fue invalidada (otro login la reemplazó) y cierre sesión client-side.
+ * Con SINGLE_SESSION_ENABLED/TAB_CLOSE_LOGOUT_ENABLED off, siempre retorna válido sin query
+ * extra (mismo criterio de gating que getServerIdentity).
+ */
+export async function validateOwnSessionAction(): Promise<{ valid: boolean }> {
+  if (infraPromise) await infraPromise;
+  try {
+    const ownSessionTrackingActive = process.env.SINGLE_SESSION_ENABLED === 'true'
+      || process.env.TAB_CLOSE_LOGOUT_ENABLED === 'true';
+    if (!ownSessionTrackingActive) return { valid: true };
+
+    const session = await auth();
+    if (!session?.user) return { valid: true }; // sin sesión: nada que invalidar, login ya redirige
+
+    const sid = (session.user as any).sid;
+    if (!sid) return { valid: false };
+
+    const [row] = await db.select({ sessionToken: sessions.sessionToken })
+      .from(sessions)
+      .where(eq(sessions.sessionToken, sid))
+      .limit(1);
+    return { valid: !!row };
+  } catch (error) {
+    console.error("[validateOwnSessionAction] Error:", error);
+    return { valid: true }; // fail-open: un error de DB no debe expulsar sesiones válidas
+  }
+}
+
+/**
  * Inicia la simulación de un usuario específico.
  */
 export async function startSimulationAction(userId: string) {

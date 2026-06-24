@@ -73,6 +73,13 @@ function LoginContent() {
     }
   }, [searchParams]);
 
+  // Fase 4 (ajuste login): dashboard/layout.tsx redirige aquí cuando otro login reemplazó esta sesión.
+  useEffect(() => {
+    if (searchParams.get('reason') === 'session_replaced') {
+      setError('Tu sesión fue cerrada porque iniciaste sesión en otro dispositivo o navegador.');
+    }
+  }, [searchParams]);
+
   const handleGoogleLogin = async () => {
     setGoogleLoading(true);
     setError('');
