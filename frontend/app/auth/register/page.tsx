@@ -130,6 +130,10 @@ export default function RegisterPage() {
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [emailVerificationEnabled, setEmailVerificationEnabled] = useState(false);
+  // Identidad de esta pestaña para el desempate de presencia del wizard (ver efecto más abajo).
+  const wizardTabIdRef = useRef<string>(Math.random().toString(36).slice(2));
+  const wizardMountedAtRef = useRef<number>(Date.now());
+  const [lockedBySiblingTab, setLockedBySiblingTab] = useState(false);
 
   useEffect(() => {
     getGoogleOAuthEnabledAction().then((r) => setGoogleEnabled(r.enabled));
@@ -193,7 +197,7 @@ export default function RegisterPage() {
   // `verifyPollGeneration` se incrementa al reenviar para reiniciar el ciclo completo
   // (countdown + polling) sin duplicar intervalos.
   useEffect(() => {
-    if (!isAwaitingVerification) return;
+    if (!isAwaitingVerification || lockedBySiblingTab) return;
     setVerifyExpired(false);
     setSiblingTabDetected(false);
     setVerificationClaimedElsewhere(false);
@@ -306,7 +310,7 @@ export default function RegisterPage() {
       if (beaconId) clearInterval(beaconId);
       siblingChannel?.close();
     };
-  }, [isAwaitingVerification, verifyPollGeneration, email, password, authStatus]);
+  }, [isAwaitingVerification, verifyPollGeneration, email, password, authStatus, lockedBySiblingTab]);
 
   const handleResendVerification = async () => {
     setVerifyResending(true);
@@ -421,6 +425,42 @@ export default function RegisterPage() {
     if (step > maxStep) setMaxStep(step);
     setError(null); // Clear errors on step change
   }, [step, maxStep]);
+
+  // ── Bloqueo de pestañas duplicadas del wizard ──────────────────────────────
+  // Cubre TODO el registro desde que hay cuenta creada (incluida la espera de verificación), no
+  // solo desde "Rol" en adelante: si la segunda pestaña se abre mientras la primera todavía
+  // espera la confirmación de correo, el 'verified-claim' de esa pantalla puede perder la carrera
+  // (ambos polls detectan la verificación casi al mismo tiempo, antes de recibir el reclamo del
+  // otro) y las dos terminan avanzando al wizard editable. Esta presencia arranca apenas hay
+  // sesión autenticada con email conocido —incluso en step 0— así que la pestaña más nueva queda
+  // bloqueada de inmediato, sin depender de quién gane la carrera de verificación. Cada pestaña
+  // emite su hora de montaje; la que llegó después se bloquea permanentemente (hasta recargar) a
+  // favor de la que ya estaba.
+  useEffect(() => {
+    if (!email || authStatus !== 'authenticated') return;
+    if (typeof BroadcastChannel === 'undefined') return;
+
+    const channel = new BroadcastChannel('dfa-register-wizard-presence');
+    channel.onmessage = (ev) => {
+      if (!ev?.data || ev.data.email !== email) return;
+      const otherIsOlder =
+        ev.data.mountedAt < wizardMountedAtRef.current ||
+        (ev.data.mountedAt === wizardMountedAtRef.current && ev.data.tabId < wizardTabIdRef.current);
+      if (otherIsOlder) setLockedBySiblingTab(true);
+    };
+    const announce = () => channel.postMessage({
+      email,
+      tabId: wizardTabIdRef.current,
+      mountedAt: wizardMountedAtRef.current,
+    });
+    announce();
+    const beaconId = setInterval(announce, 1500);
+
+    return () => {
+      clearInterval(beaconId);
+      channel.close();
+    };
+  }, [email, authStatus]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const updateField = (field: string, value: string) => {
@@ -735,6 +775,32 @@ export default function RegisterPage() {
               Cerrar sesión y registrar nueva cuenta
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── BLOQUEADA POR PESTAÑA HERMANA: ya hay otra pestaña editando este registro ──
+  if (lockedBySiblingTab) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-4 gap-8">
+        <div className="text-center">
+          <h1 className="text-5xl serif-font italic mb-2">DentFlowAI.</h1>
+          <p className="text-faint text-xs tracking-widest uppercase font-black">Registro en curso en otra pestaña</p>
+        </div>
+        <div className="w-full max-w-sm bg-surface shadow-sm border border-divider p-8 rounded-[2.5rem] space-y-6 text-center">
+          <div className="w-16 h-16 bg-warning-hl rounded-2xl flex items-center justify-center mx-auto">
+            <AlertCircle className="w-8 h-8 text-warning" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-foreground mb-1">Tu registro ya está abierto en otra pestaña</h2>
+            <p className="text-faint text-xs leading-relaxed">
+              Para evitar guardar datos distintos en cada una, esta pestaña queda en pausa. Continúa tu inscripción en la otra pestaña.
+            </p>
+          </div>
+          <p className="text-foreground text-xs font-bold uppercase tracking-widest bg-surface/60 border border-divider rounded-2xl px-4 py-3">
+            Cierra esta pestaña manualmente
+          </p>
         </div>
       </div>
     );
