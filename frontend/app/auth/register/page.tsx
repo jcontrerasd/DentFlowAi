@@ -26,6 +26,8 @@ import { useSession, signIn, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import AuthNavbar from '@/components/auth/AuthNavbar';
+import FauchardHelpWindow from '@/components/admin/fauchard/FauchardHelpWindow';
+import type { FauchardHelpSection } from '@/lib/constants/fauchardHelp';
 
 // NATIVE SERVER ACTIONS
 import { createUserAction, updateUserAction, getUserProfileDirect, discardOnboardingAccountAction, getGoogleOAuthEnabledAction, checkUserStatusAction, getEmailVerificationEnabledAction } from '@/lib/db/actions/user';
@@ -44,6 +46,31 @@ import {
 type AppRole = 'dentista' | 'tecnico';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+const LEGAL_HELP_SECTION: FauchardHelpSection = {
+  title: 'Marco Legal',
+  intro: 'Estas normas no son requisitos que tengas que configurar en DentFlowAI — describen lo que la plataforma ya respeta al manejar tus datos y los de tus pacientes. Cada ejemplo muestra cómo aplica concretamente dentro del producto.',
+  params: [
+    {
+      label: 'Ley 21.719: Protección de datos personales',
+      description: 'Exige consentimiento explícito (no implícito ni por casilla premarcada) para tratar datos sensibles, incluidos los datos de salud y biométricos. Entra en vigencia plena el 1 de diciembre de 2026.',
+      example: 'Los escaneos 3D que un dentista sube a un caso son datos de salud sensibles del paciente. La ley exige contar con su consentimiento para tratarlos, y le otorga derecho a acceder, rectificar o solicitar la eliminación de esos datos.',
+    },
+    {
+      label: 'Ley 19.628: Protección vida privada',
+      description: 'Regula el tratamiento de datos personales (no necesariamente sensibles) que se almacenan en bases de datos públicas o privadas.',
+      example: 'El nombre, correo, teléfono y dirección que registras en tu perfil de DentFlowAI se usan solo para operar la plataforma (inicio de sesión, notificaciones, asignación de casos) y no se ceden a terceros sin tu autorización.',
+    },
+    {
+      label: 'Ley 20.584: Derechos y deberes pacientes',
+      description: 'Establece los derechos de los pacientes sobre su atención de salud, incluida la confidencialidad de su información clínica.',
+      example: 'Cuando publicas un caso con los antecedentes clínicos de un paciente, esa información queda visible solo para ti y el laboratorio asignado — ningún otro técnico del pool puede verla.',
+    },
+  ],
+  notes: [
+    'Se citan a modo informativo: no reemplazan el consentimiento informado que el dentista debe obtener directamente de su paciente.',
+  ],
+};
 
 const HelperTooltip = ({ text }: { text: string }) => (
   <div className="group relative inline-block ml-1 align-middle">
@@ -354,6 +381,8 @@ export default function RegisterPage() {
   });
 
   const [consent, setConsent] = useState(false);
+  const [legalHelpOpen, setLegalHelpOpen] = useState(false);
+  const [legalHelpFocus, setLegalHelpFocus] = useState<string | null>(null);
 
   // Cancelar / descartar inscripción a medio terminar
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
@@ -1171,7 +1200,7 @@ export default function RegisterPage() {
 
                   <div className="space-y-1.5">
                     <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
-                      País <HelperTooltip text="País donde ejerces tu profesión." />
+                      País <HelperTooltip text="Por ahora solo se admiten registros en Chile." />
                     </label>
                     <select
                       value={formData.country}
@@ -1179,7 +1208,7 @@ export default function RegisterPage() {
                       className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all"
                     >
                       {SUPPORTED_COUNTRIES.map(c => (
-                        <option key={c.code} value={c.code}>{c.name}</option>
+                        <option key={c.code} value={c.code} disabled={c.code !== 'CL'}>{c.name}</option>
                       ))}
                     </select>
                   </div>
@@ -1369,18 +1398,32 @@ export default function RegisterPage() {
                     <p className="text-xs text-muted font-medium leading-relaxed">Acepto el uso de DentFlowAI bajo el cumplimiento del marco legal chileno vigente:</p>
                     <ul className="space-y-3">
                       {[
+                        { href: 'https://www.bcn.cl/leychile/navegar?idNorma=1209272', label: 'Ley 21.719: Protección de datos personales' },
+                        { href: 'https://www.bcn.cl/leychile/navegar?idNorma=141599', label: 'Ley 19.628: Protección vida privada' },
                         { href: 'https://www.bcn.cl/leychile/navegar?idNorma=1039348', label: 'Ley 20.584: Derechos y deberes pacientes' },
-                        { href: 'https://www.bcn.cl/leychile/navegar?idNorma=141501', label: 'Ley 19.628: Protección vida privada' },
-                        { href: 'https://www.bcn.cl/leychile/navegar?idNorma=198424', label: 'Ley 19.799: Firma electrónica' },
                       ].map(l => (
                         <li key={l.href} className="flex items-center gap-2 group">
                           <div className="w-1.5 h-1.5 rounded-full bg-primary/50 group-hover:opacity-90 transition-colors" />
                           <a href={l.href} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-[11px] text-muted hover:text-primary font-bold transition-colors underline decoration-slate-700 underline-offset-4">{l.label}</a>
+                          <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); setLegalHelpFocus(l.label); setLegalHelpOpen(true); }}
+                            aria-label={`Abrir ayuda de ${l.label}`}
+                            className="text-faint hover:text-primary transition-colors"
+                          >
+                            <HelpCircle className="w-3.5 h-3.5" />
+                          </button>
                         </li>
                       ))}
                     </ul>
                   </div>
                 </div>
+                <FauchardHelpWindow
+                  isOpen={legalHelpOpen}
+                  onClose={() => setLegalHelpOpen(false)}
+                  section={LEGAL_HELP_SECTION}
+                  focusKey={legalHelpFocus}
+                />
                 <div className="flex gap-3">
                   <button type="button" onClick={() => setStep(role === 'tecnico' ? 4 : 3)} className="flex-1 h-16 bg-surface rounded-2xl font-bold uppercase tracking-wider text-faint border border-divider hover:text-muted transition-all text-[10px]">Atrás</button>
                   <button onClick={handleFinalize} disabled={!consent || loading} className="flex-[2] h-16 bg-surface rounded-2xl font-bold uppercase tracking-wider text-foreground shadow-xl transition-all">{loading ? <RefreshCcw className="w-5 h-5 animate-spin mx-auto" /> : 'Finalizar Inscripción'}</button>
