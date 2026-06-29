@@ -4,7 +4,7 @@ import * as bcrypt from "bcryptjs";
 import { auth } from "@/auth";
 import { db, infraPromise } from "@/lib/db";
 import { user, organization, file, caseAssignment } from "@/lib/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, isNull, lt } from "drizzle-orm";
 import GCPStorageService from "@/lib/services/gcp-storage";
 
 /**
@@ -37,6 +37,9 @@ export async function getUserProfileDirect(userId: string) {
         emailVerified: user.emailVerified,
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
+        // Nunca exponer el hash en sí — solo si existe, para que el perfil pueda ofrecer
+        // "agregar contraseña" (cuentas 100% Google) vs "cambiar contraseña" (ya la tienen).
+        hasPassword: sql<boolean>`(${user.hashedPassword} IS NOT NULL)`,
         organization: {
           id: organization.id,
           name: organization.name,
@@ -107,7 +110,10 @@ export async function createUserAction(data: {
         role: data.role as 'dentista' | 'tecnico',
         onboardingStep: data.onboardingStep || 0,
         hashedPassword,
-        emailVerified: new Date(),
+        // No marcar emailVerified aquí: con EMAIL_VERIFICATION_ENABLED activo, el wizard de
+        // registro llama requestEmailVerificationAction justo después de crear la cuenta — el
+        // usuario queda verificado solo cuando confirma el link del correo. Marcarlo aquí de
+        // entrada anulaba por completo la Fase 3 (todo usuario nuevo ya nacía "verificado").
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -237,6 +243,70 @@ export async function getUsersByRoleAction(role: 'dentista' | 'tecnico' | 'calid
  *   impersonación admin jamás pueda auto-borrar la cuenta simulada.
  * - Solo procede sobre inscripciones incompletas y no-admin.
  */
+/**
+ * Borra una cuenta de onboarding incompleta (purga GCS best-effort + delete user + limpieza de
+ * organización huérfana). Reutilizada por `discardOnboardingAccountAction` (sesión real) y por
+ * `cleanupAbandonedUnverifiedAccountsAction` (cron, sin sesión). Nunca borra admin ni cuentas
+ * con onboarding completo — mismo guard para ambos llamadores.
+ */
+async function discardUserAccountById(userId: string): Promise<{ success: boolean; error?: string }> {
+  const [target] = await db
+    .select({
+      role: user.role,
+      onboardingStep: user.onboardingStep,
+      organizationId: user.organizationId,
+    })
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1);
+
+  // El usuario ya no existe: nada que hacer.
+  if (!target) return { success: true };
+
+  // Guard: nunca descartar cuentas completas ni administradores.
+  if (target.role === 'admin' || (target.onboardingStep ?? 0) >= 100) {
+    return { success: false, error: 'Solo se puede descartar una inscripción incompleta.' };
+  }
+
+  // Purga best-effort de archivos GCS subidos por este usuario (avatar, etc.).
+  try {
+    const filesToPurge = await db
+      .select({ gcsPath: file.gcsPath })
+      .from(file)
+      .where(eq(file.uploaderId, userId));
+    const paths = filesToPurge.map(f => f.gcsPath).filter(Boolean) as string[];
+    if (paths.length > 0) {
+      await GCPStorageService.deleteFiles(paths);
+    }
+  } catch (gcsErr) {
+    console.error("[discardUserAccountById] GCS purge best-effort falló:", gcsErr);
+  }
+
+  const orgId = target.organizationId;
+
+  // Borrar el usuario (cascade limpia filas dependientes; libera el email).
+  await db.delete(user).where(eq(user.id, userId));
+
+  // Limpiar la organización temporal si queda sin usuarios (el cascade es
+  // org→user, no user→org, así que la org no se borra al borrar el usuario).
+  if (orgId) {
+    try {
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(user)
+        .where(eq(user.organizationId, orgId));
+      if (count === 0) {
+        await db.delete(organization).where(eq(organization.id, orgId));
+      }
+    } catch (orgErr) {
+      // El objetivo crítico (usuario borrado, email liberado) ya se cumplió.
+      console.error("[discardUserAccountById] Limpieza de org huérfana falló:", orgErr);
+    }
+  }
+
+  return { success: true };
+}
+
 export async function discardOnboardingAccountAction(): Promise<{ success: boolean; error?: string }> {
   if (infraPromise) await infraPromise;
 
@@ -247,63 +317,37 @@ export async function discardOnboardingAccountAction(): Promise<{ success: boole
     // Sin sesión (p. ej. paso 0, antes de crear la cuenta): nada que descartar.
     if (!realUserId) return { success: true };
 
-    const [target] = await db
-      .select({
-        role: user.role,
-        onboardingStep: user.onboardingStep,
-        organizationId: user.organizationId,
-      })
-      .from(user)
-      .where(eq(user.id, realUserId))
-      .limit(1);
-
-    // El usuario ya no existe: nada que hacer.
-    if (!target) return { success: true };
-
-    // Guard: nunca descartar cuentas completas ni administradores.
-    if (target.role === 'admin' || (target.onboardingStep ?? 0) >= 100) {
-      return { success: false, error: 'Solo se puede descartar una inscripción incompleta.' };
-    }
-
-    // Purga best-effort de archivos GCS subidos por este usuario (avatar, etc.).
-    try {
-      const filesToPurge = await db
-        .select({ gcsPath: file.gcsPath })
-        .from(file)
-        .where(eq(file.uploaderId, realUserId));
-      const paths = filesToPurge.map(f => f.gcsPath).filter(Boolean) as string[];
-      if (paths.length > 0) {
-        await GCPStorageService.deleteFiles(paths);
-      }
-    } catch (gcsErr) {
-      console.error("[discardOnboardingAccountAction] GCS purge best-effort falló:", gcsErr);
-    }
-
-    const orgId = target.organizationId;
-
-    // Borrar el usuario (cascade limpia filas dependientes; libera el email).
-    await db.delete(user).where(eq(user.id, realUserId));
-
-    // Limpiar la organización temporal si queda sin usuarios (el cascade es
-    // org→user, no user→org, así que la org no se borra al borrar el usuario).
-    if (orgId) {
-      try {
-        const [{ count }] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(user)
-          .where(eq(user.organizationId, orgId));
-        if (count === 0) {
-          await db.delete(organization).where(eq(organization.id, orgId));
-        }
-      } catch (orgErr) {
-        // El objetivo crítico (usuario borrado, email liberado) ya se cumplió.
-        console.error("[discardOnboardingAccountAction] Limpieza de org huérfana falló:", orgErr);
-      }
-    }
-
-    return { success: true };
+    return await discardUserAccountById(realUserId);
   } catch (error) {
     console.error("[discardOnboardingAccountAction] Error:", error);
     return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * Fase 3 follow-up (ajuste login) — cron de limpieza: borra cuentas creadas hace más de 2 días
+ * que nunca verificaron su correo y nunca completaron el onboarding (abandonadas a medio
+ * registrar). Los usuarios de Google OAuth quedan excluidos naturalmente (el adapter les pone
+ * emailVerified al crearlos); admin y cuentas completas los excluye discardUserAccountById.
+ */
+export async function cleanupAbandonedUnverifiedAccountsAction(): Promise<{ success: boolean; deletedCount: number; error?: string }> {
+  if (infraPromise) await infraPromise;
+  try {
+    const cutoff = new Date(Date.now() - 2 * 24 * 3600_000);
+    const candidates = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(and(isNull(user.emailVerified), lt(user.onboardingStep, 100), lt(user.createdAt, cutoff)));
+
+    let deletedCount = 0;
+    for (const candidate of candidates) {
+      const result = await discardUserAccountById(candidate.id);
+      if (result.success) deletedCount++;
+    }
+
+    return { success: true, deletedCount };
+  } catch (error) {
+    console.error("[cleanupAbandonedUnverifiedAccountsAction] Error:", error);
+    return { success: false, deletedCount: 0, error: (error as Error).message };
   }
 }

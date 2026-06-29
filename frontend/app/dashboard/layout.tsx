@@ -45,11 +45,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [pendingInvitations, setPendingInvitations] = useState(0);
   const [hubBellTotal, setHubBellTotal] = useState(0);
+  // Fase 3 (ajuste login): null = todavía no se sabe si el flag está on. Se usa también en el
+  // guard de render más abajo para no pintar el dashboard mientras esto se resuelve (mismo tipo
+  // de carrera que onboardingIncomplete: sin esto, el dashboard completo se ve por un instante
+  // antes de que el useEffect de abajo alcance a redirigir a /auth/verify).
+  const [emailVerificationEnabled, setEmailVerificationEnabled] = useState<boolean | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     if (userProfile?.image) {
+      // Avatares de Google (ajuste login, Fase 2) ya son una URL externa servible directo
+      // (https://lh3.googleusercontent.com/...) — no son una ruta interna de GCS, así que
+      // firmarla con getSignedUrlAction la rechaza como "recurso ajeno".
+      if (/^https?:\/\//i.test(userProfile.image as string)) {
+        setAvatarUrl(userProfile.image as string);
+        return;
+      }
       const fetchAvatar = async () => {
         try {
           const url = await getSignedUrlAction(userProfile.image as string);
@@ -158,6 +170,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // por el adapter, así que esta misma condición los excluye sin lógica adicional.
     if (!userProfile.emailVerified) {
       getEmailVerificationEnabledAction().then(({ enabled }) => {
+        setEmailVerificationEnabled(enabled);
         if (enabled) router.push('/auth/verify?pending=true');
       });
     }
@@ -204,7 +217,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     ] : []),
   ];
 
-  if (loading || !userProfile) return (
+  // Mismo criterio que el useEffect de arriba (redirect a /auth/register): mientras el onboarding
+  // esté incompleto, mostrar el spinner en vez del dashboard. Sin esto, hay una ventana entre que
+  // `userProfile` carga (ya con onboardingStep < 100) y el useEffect alcanza a redirigir, donde el
+  // dashboard completo se renderiza por un instante — visible sobre todo en el flujo de Google
+  // OAuth, que aterriza directo en /dashboard con un perfil recién creado en onboardingStep:20.
+  const isSystemAdminBypass = user?.email === 'jaime.contreras.d@gmail.com' || userProfile?.role === 'admin';
+  const onboardingIncomplete = !isSystemAdminBypass && (!userProfile || userProfile.onboardingStep !== 100);
+  // Mismo problema de carrera que onboardingIncomplete, pero para la verificación de email (Fase
+  // 3): mientras no sepamos si EMAIL_VERIFICATION_ENABLED está on (emailVerificationEnabled aún
+  // null) hay que bloquear el render también — si no, con flag on, un usuario sin verificar ve el
+  // dashboard completo durante el round-trip a getEmailVerificationEnabledAction.
+  const emailUnverifiedBlocking = !isSystemAdminBypass && !!userProfile && !userProfile.emailVerified
+    && emailVerificationEnabled !== false;
+  if (loading || !userProfile || onboardingIncomplete || emailUnverifiedBlocking) return (
     <div className="h-screen bg-background flex items-center justify-center">
       <div className="w-10 h-10 border-4 border-primary/30 border-t-teal-500 rounded-full animate-spin" />
     </div>

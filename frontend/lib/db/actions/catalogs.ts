@@ -85,7 +85,9 @@ type ActionResult<T = unknown> = { success: boolean; data?: T; error?: string };
 async function ensureAdmin(): Promise<{ ok: true } | { ok: false; error: string }> {
   const identity = await getServerIdentity();
   if (!identity?.id) return { ok: false, error: 'No autenticado' };
-  if (identity.role !== 'admin') return { ok: false, error: 'Solo admin' };
+  // isSystemAdmin cubre al admin real impersonando a otro usuario (identity.role pasa a ser
+  // el rol del simulado) — mismo criterio que contactGuard.ts/observability.ts/noResponseEvents.ts.
+  if (identity.role !== 'admin' && !identity.isSystemAdmin) return { ok: false, error: 'Solo admin' };
   return { ok: true };
 }
 

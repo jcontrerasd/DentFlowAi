@@ -1,14 +1,15 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useState, useEffect, Suspense } from 'react';
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { confirmEmailVerificationAction, requestEmailVerificationAction } from '@/lib/db/actions/auth';
+import { useAuth } from '@/context/AuthContext';
 
 function VerifyHandler() {
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const { refreshProfile } = useAuth();
   const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'pending'>('verifying');
   const [errorMessage, setErrorMessage] = useState('');
   const [resendEmail, setResendEmail] = useState('');
@@ -28,16 +29,20 @@ function VerifyHandler() {
       return;
     }
 
-    confirmEmailVerificationAction(token).then((result) => {
+    confirmEmailVerificationAction(token).then(async (result) => {
       if (result.success) {
+        // El AuthContext cachea el perfil y solo lo re-pide si estaba null (ver fetchProfile en
+        // AuthContext.tsx) — sin este refresh explícito, dashboard/layout.tsx sigue leyendo el
+        // perfil viejo (emailVerified: null) cacheado desde el registro y redirige de vuelta
+        // aquí en un loop, aunque la DB ya esté correctamente actualizada.
+        await refreshProfile();
         setStatus('success');
-        setTimeout(() => router.push('/dashboard'), 1500);
       } else {
         setStatus('error');
         setErrorMessage(result.error || 'No se pudo verificar el correo.');
       }
     });
-  }, [searchParams, router]);
+  }, [searchParams]);
 
   const handleResend = async () => {
     if (!resendEmail) return;
@@ -75,10 +80,28 @@ function VerifyHandler() {
               <h1 className="text-3xl font-black text-foreground mb-2 serif-font italic">Acceso Habilitado.</h1>
               <p className="text-muted text-sm">Tu correo fue verificado exitosamente.</p>
             </div>
-            <div className="flex items-center justify-center gap-2 text-primary text-xs font-bold">
-              <div className="w-3 h-3 border-2 border-teal-400/30 border-t-teal-400 rounded-full animate-spin" />
-              Redirigiendo al Dashboard...
-            </div>
+            {/* El link de verificación siempre abre una pestaña/ventana nueva (decisión del
+                cliente de correo, no se puede evitar). Si el usuario venía del wizard de
+                registro, esa pestaña original sigue esperando (polling) y avanza sola — no hay
+                que redirigir esta pestaña a ningún lado por su cuenta, porque no sabemos si
+                "el dashboard" es realmente a dónde debe ir (si el onboarding sigue incompleto,
+                /dashboard la rebota de vuelta al wizard, lo cual contradecía el mensaje anterior
+                de "Redirigiendo al Dashboard..."). Dejamos la decisión al usuario. */}
+            <p className="text-faint text-xs leading-relaxed">
+              Si estabas completando tu registro en otra pestaña, cierra esta — continuará sola en cuanto detecte la confirmación.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                // window.close() solo funciona si el navegador permite cerrar esta pestaña (p.
+                // ej. algunos bloquean cerrar pestañas que no abrió un script). Si no hace nada,
+                // el usuario la cierra manualmente — el texto de arriba ya cubre ese caso.
+                window.close();
+              }}
+              className="w-full h-12 bg-surface border border-divider rounded-xl font-bold text-foreground text-sm hover:bg-white/5 transition-all"
+            >
+              Cerrar esta pestaña
+            </button>
           </div>
         )}
 

@@ -31,6 +31,7 @@ import { formatPhone } from '@/lib/formatPhone';
 import SkillMatrixForm, { type SkillMatrixFormHandle } from '@/components/profile/SkillMatrixForm';
 import AvailabilityToggle from '@/components/profile/AvailabilityToggle';
 import ThemeSelector from '@/components/profile/ThemeSelector';
+import SetPasswordSection from '@/components/profile/SetPasswordSection';
 import { EmailNotificationPrefsSection } from '@/components/profile/EmailNotificationPrefsSection';
 
 export default function ProfilePage() {
@@ -105,7 +106,14 @@ export default function ProfilePage() {
       });
 
       if (userProfile.image) {
-        getSignedUrlAction(userProfile.image).then(url => setAvatarUrl(url));
+        // Avatares de Google (ajuste login, Fase 2) ya son una URL externa servible directo
+        // (https://lh3.googleusercontent.com/...) — firmarla con getSignedUrlAction la rechaza
+        // como "recurso ajeno" porque no es una ruta interna de GCS.
+        if (/^https?:\/\//i.test(userProfile.image)) {
+          setAvatarUrl(userProfile.image);
+        } else {
+          getSignedUrlAction(userProfile.image).then(url => setAvatarUrl(url));
+        }
       }
     }
   }, [userProfile]);
@@ -586,6 +594,13 @@ export default function ProfilePage() {
           </form>
         </div>
       </div>
+
+      {/* Cuentas 100% Google (ajuste login): ofrecer agregar contraseña propia */}
+      {userProfile && userProfile.hasPassword === false && (
+        <div className="max-w-4xl mx-auto mt-6">
+          <SetPasswordSection onPasswordSet={() => updateProfileOptimistically({ hasPassword: true })} />
+        </div>
+      )}
 
       {/* Apariencia — selector de tema (light / dark / system) */}
       <div className="max-w-4xl mx-auto mt-6">

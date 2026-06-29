@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -28,8 +28,8 @@ import { useAuth } from '@/context/AuthContext';
 import AuthNavbar from '@/components/auth/AuthNavbar';
 
 // NATIVE SERVER ACTIONS
-import { createUserAction, updateUserAction, getUserProfileDirect, discardOnboardingAccountAction, getGoogleOAuthEnabledAction } from '@/lib/db/actions/user';
-import { requestEmailVerificationAction } from '@/lib/db/actions/auth';
+import { createUserAction, updateUserAction, getUserProfileDirect, discardOnboardingAccountAction, getGoogleOAuthEnabledAction, checkUserStatusAction, getEmailVerificationEnabledAction } from '@/lib/db/actions/user';
+import { requestEmailVerificationAction, getVerificationExpiryAction } from '@/lib/db/actions/auth';
 import SkillMatrixForm from '@/components/profile/SkillMatrixForm';
 import {
   createOrganizationAction,
@@ -121,12 +121,19 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [hasSyncLoaded, setHasSyncLoaded] = useState(false);
   const [isAwaitingVerification, setIsAwaitingVerification] = useState(false);
+  // Ref (no state) para cerrar la carrera entre el auto-login de handleCreateAccount y el
+  // efecto de sync de sesión: el cambio de `session` que dispara signIn() puede llegar antes
+  // de que el setState de isAwaitingVerification se refleje en un nuevo render. Un ref se lee
+  // de forma síncrona, así que el guard del efecto de sync nunca lo pierde por timing de React.
+  const justRegisteredRef = useRef(false);
   const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(false);
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [emailVerificationEnabled, setEmailVerificationEnabled] = useState(false);
 
   useEffect(() => {
     getGoogleOAuthEnabledAction().then((r) => setGoogleEnabled(r.enabled));
+    getEmailVerificationEnabledAction().then((r) => setEmailVerificationEnabled(r.enabled));
   }, []);
 
   const handleGoogleSignUp = async () => {
@@ -141,7 +148,187 @@ export default function RegisterPage() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [fullName, setFullName] = useState('');
+
+  // "Arrastra" el email desde /auth/login cuando el usuario intentó entrar con un correo no
+  // registrado y usó el link "Regístrate aquí" (?email=...). Lectura directa de
+  // window.location en vez de useSearchParams para no forzar un boundary <Suspense> en esta
+  // página (100% cliente, sin SSR que optimizar). Solo aplica si el campo sigue vacío, para no
+  // pisar el valor ya hidratado desde una sesión real (ver efecto de sync con NextAuth abajo).
+  useEffect(() => {
+    if (email) return;
+    const params = new URLSearchParams(window.location.search);
+    const prefillEmail = params.get('email');
+    if (prefillEmail) setEmail(prefillEmail);
+  }, [email]);
+
+  // ── Espera de verificación de correo (paso "Cuenta") ──────────────────────
+  // 15 min: debe coincidir exactamente con el TTL real del token
+  // (getVerificationTtlMinutes en lib/db/actions/auth.ts) — si no coinciden, "venció"
+  // en esta pantalla podría no ser cierto (o viceversa).
+  const VERIFY_WINDOW_SECONDS = 15 * 60;
+  const [verifySecondsLeft, setVerifySecondsLeft] = useState(VERIFY_WINDOW_SECONDS);
+  const [verifyExpired, setVerifyExpired] = useState(false);
+  const [verifyResending, setVerifyResending] = useState(false);
+  const [verifyResent, setVerifyResent] = useState(false);
+  const [verifyPollGeneration, setVerifyPollGeneration] = useState(0);
+  // Aviso no bloqueante (no cambia el flujo en absoluto) de que esta misma inscripción está
+  // abierta en otra pestaña ahora mismo — vía BroadcastChannel, la única forma de distinguir
+  // "otra pestaña viva" de "esto es un simple F5" (que pierde el estado de React igual, pero no
+  // tiene a nadie del otro lado para responder el ping).
+  const [siblingTabDetected, setSiblingTabDetected] = useState(false);
+  // Cuando OTRA pestaña detecta primero la confirmación, esta se queda quieta en vez de
+  // avanzar también al wizard (antes, las dos pestañas que esperaban entraban a "Rol" al mismo
+  // tiempo — confuso y redundante). Se decide por "primero en avisar" vía el mismo
+  // BroadcastChannel: la pestaña que detecta la verificación reclama explícitamente antes de
+  // avanzar; cualquier otra que reciba ese reclamo se detiene aquí.
+  const [verificationClaimedElsewhere, setVerificationClaimedElsewhere] = useState(false);
+
+  // Mientras se espera la confirmación: countdown de 15 min (sincronizado con el TTL real
+  // del token vía getVerificationExpiryAction) + polling cada 3s a checkUserStatusAction para
+  // detectar que el usuario ya hizo clic en el link del correo (no hay token en esta pantalla,
+  // así que no podemos esperar una redirección — sondeamos el estado real en la BD).
+  // `verifyPollGeneration` se incrementa al reenviar para reiniciar el ciclo completo
+  // (countdown + polling) sin duplicar intervalos.
+  useEffect(() => {
+    if (!isAwaitingVerification) return;
+    setVerifyExpired(false);
+    setSiblingTabDetected(false);
+    setVerificationClaimedElsewhere(false);
+
+    let countdownId: ReturnType<typeof setInterval> | undefined;
+    let pollId: ReturnType<typeof setInterval> | undefined;
+    let beaconId: ReturnType<typeof setInterval> | undefined;
+    let cancelled = false;
+    // Ref (no state) para que el callback del polling, más abajo, vea el reclamo de inmediato —
+    // un setState no se refleja sincrónicamente dentro del mismo closure.
+    const claimedByOtherRef = { current: false };
+
+    // Presencia entre pestañas (informativa, no bloqueante): cada pestaña que espera
+    // verificación emite un latido cada 2s con su email; si llega un latido ajeno con el MISMO
+    // email, hay otra pestaña viva ahora mismo (un BroadcastChannel nunca recibe los mensajes
+    // que él mismo envía, así que no hace falta filtrar por id de instancia). Si no se ven
+    // latidos por >5s, se asume que la otra pestaña se cerró y se retira el aviso.
+    //
+    // Mismo canal también se usa para el "reclamo" de verificación (ver pollId más abajo).
+    let siblingChannel: BroadcastChannel | undefined;
+    let lastSiblingSeenAt = 0;
+    if (typeof BroadcastChannel !== 'undefined') {
+      siblingChannel = new BroadcastChannel('dfa-register-verify-wait');
+      siblingChannel.onmessage = (ev) => {
+        if (!ev?.data || ev.data.email !== email) return;
+        if (ev.data.type === 'verified-claim') {
+          claimedByOtherRef.current = true;
+          if (countdownId) clearInterval(countdownId);
+          if (pollId) clearInterval(pollId);
+          setIsAwaitingVerification(false);
+          setVerificationClaimedElsewhere(true);
+          return;
+        }
+        lastSiblingSeenAt = Date.now();
+        setSiblingTabDetected(true);
+      };
+      beaconId = setInterval(() => {
+        siblingChannel?.postMessage({ email });
+        if (lastSiblingSeenAt && Date.now() - lastSiblingSeenAt > 5000) {
+          setSiblingTabDetected(false);
+        }
+      }, 2000);
+    }
+
+    const setup = async () => {
+      // Tiempo restante REAL del token (no siempre 15 min completos): si esta pestaña se
+      // montó después de que otra ya inició la espera (mismo registro, pestaña nueva), el
+      // countdown debe arrancar donde realmente está el token, no resetear a 15:00.
+      const { expiresAt } = await getVerificationExpiryAction(email);
+      if (cancelled) return;
+      const expiresAtMs = expiresAt ? new Date(expiresAt).getTime() : Date.now() + VERIFY_WINDOW_SECONDS * 1000;
+
+      const computeSecondsLeft = () => Math.max(0, Math.round((expiresAtMs - Date.now()) / 1000));
+
+      const initialSeconds = computeSecondsLeft();
+      setVerifySecondsLeft(initialSeconds);
+
+      if (initialSeconds <= 0) {
+        setVerifyExpired(true);
+        return;
+      }
+
+      // Recalcula contra `expiresAtMs` (deadline absoluto) en cada tick, en vez de solo
+      // restar 1 — los navegadores pausan/ralentizan los timers de pestañas en segundo plano,
+      // así que un decremento puro se atrasa respecto al reloj real. Recomputar siempre desde
+      // el deadline absoluto se autocorrige apenas la pestaña vuelve a primer plano.
+      countdownId = setInterval(() => {
+        const secondsLeft = computeSecondsLeft();
+        if (secondsLeft <= 0) {
+          if (countdownId) clearInterval(countdownId);
+          setVerifySecondsLeft(0);
+          setVerifyExpired(true);
+          return;
+        }
+        setVerifySecondsLeft(secondsLeft);
+      }, 1000);
+
+      pollId = setInterval(async () => {
+        const status = await checkUserStatusAction(email);
+        if (status.exists && status.emailVerified) {
+          if (claimedByOtherRef.current) {
+            // El mensaje 'verified-claim' de la otra pestaña ya hizo todo el cleanup
+            // correspondiente (ver onmessage arriba) — esta pestaña no avanza también.
+            return;
+          }
+          // Reclama ANTES de avanzar: si la otra pestaña detecta lo mismo casi al mismo
+          // tiempo, este mensaje la frena a ella en vez de que las dos entren al wizard juntas.
+          siblingChannel?.postMessage({ type: 'verified-claim', email });
+          if (countdownId) clearInterval(countdownId);
+          if (pollId) clearInterval(pollId);
+          setIsAwaitingVerification(false);
+          // Esta pestaña puede ya estar autenticada (caso: se abrió una pestaña nueva de
+          // /auth/register mientras otra esperaba verificación — ver guard de emailVerified en
+          // el efecto de sync de sesión). Solo se hace signIn con email/password cuando esta
+          // pestaña es la que originó el registro y todavía no tiene sesión.
+          if (authStatus !== 'authenticated') {
+            await signIn('credentials', { email, password, redirect: false });
+          }
+          setStep(1);
+        }
+      }, 3000);
+    };
+
+    setup();
+
+    return () => {
+      cancelled = true;
+      if (countdownId) clearInterval(countdownId);
+      if (pollId) clearInterval(pollId);
+      if (beaconId) clearInterval(beaconId);
+      siblingChannel?.close();
+    };
+  }, [isAwaitingVerification, verifyPollGeneration, email, password, authStatus]);
+
+  const handleResendVerification = async () => {
+    setVerifyResending(true);
+    setVerifyResent(false);
+    try {
+      await requestEmailVerificationAction(email);
+      setVerifyResent(true);
+      setVerifyPollGeneration((g) => g + 1);
+    } finally {
+      setVerifyResending(false);
+    }
+  };
+
+  // El usuario decide explícitamente seguir en ESTA pestaña aunque otra ya haya avanzado
+  // primero (ver verificationClaimedElsewhere) — mismo paso que el polling normal habría hecho.
+  const handleContinueHereAfterClaim = async () => {
+    if (authStatus !== 'authenticated') {
+      await signIn('credentials', { email, password, redirect: false });
+    }
+    setVerificationClaimedElsewhere(false);
+    setStep(1);
+  };
 
   const [formData, setFormData] = useState({
     userId: '',
@@ -169,9 +356,14 @@ export default function RegisterPage() {
   const [cancelling, setCancelling] = useState(false);
 
   // ── Sync with Native Session ──────────────────────────────────────────────
+  // Mientras se espera la confirmación de correo (paso "Cuenta"), este efecto debe quedarse
+  // quieto: el auto-login de handleCreateAccount dispara un cambio de `session` que, sin este
+  // guard, hace fetchProfile → setStep(mapOnboardingStepToUiStep(0, role)) → salta directo a
+  // "Rol" e ignora isAwaitingVerification. Una vez confirmado el correo, el propio efecto de
+  // polling ya hace signIn + setStep(1); este efecto puede correr después sin pisar nada.
   useEffect(() => {
-    if (authStatus === 'loading' || hasSyncLoaded) return;
-    
+    if (authStatus === 'loading' || hasSyncLoaded || isAwaitingVerification || justRegisteredRef.current) return;
+
     if (session?.user) {
       const sUser = session.user as any;
       setFormData(prev => ({ ...prev, userId: sUser.id || '' }));
@@ -183,6 +375,24 @@ export default function RegisterPage() {
         if (profile) {
           const stepValue = profile.onboardingStep || 0;
           if (stepValue === 100) { router.replace('/dashboard'); return; }
+
+          // Auditoría: una pestaña NUEVA de /auth/register (sesión ya autenticada desde otra
+          // pestaña, p. ej. mientras la primera sigue esperando verificación) — o un simple F5
+          // de la MISMA pestaña, que pierde todo el estado de React y se ve igual — llegaba
+          // directo aquí y saltaba a "Rol" sin chequear nada de email. Se consulta el flag
+          // fresco (no el state del componente, que puede no haber cargado todavía en esta
+          // pestaña recién montada) para no repetir la misma carrera que ya se corrigió para
+          // el auto-login. El countdown de abajo ya recalcula contra la hora real de expiración
+          // (no decrementa a ciegas), así que entrar directo es seguro incluso si hay más de
+          // una pestaña abierta — ambas cuentan correctamente contra el mismo deadline real.
+          if (!profile.emailVerified) {
+            const { enabled: verificationRequiredNow } = await getEmailVerificationEnabledAction();
+            if (verificationRequiredNow) {
+              if (profile.email) setEmail(profile.email);
+              setIsAwaitingVerification(true);
+              return;
+            }
+          }
 
           const resolvedRole = resolveOnboardingRole(profile.role);
           setRole(resolvedRole);
@@ -205,7 +415,7 @@ export default function RegisterPage() {
       };
       fetchProfile();
     }
-  }, [session, authStatus, hasSyncLoaded, router, fullName, email]);
+  }, [session, authStatus, hasSyncLoaded, isAwaitingVerification, router, fullName, email]);
 
   useEffect(() => {
     if (step > maxStep) setMaxStep(step);
@@ -234,6 +444,7 @@ export default function RegisterPage() {
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); return; }
+    if (password !== confirmPassword) { setError('Las contraseñas no coinciden.'); return; }
     setLoading(true);
     setError(null);
     try {
@@ -247,17 +458,22 @@ export default function RegisterPage() {
       
       if (!newUser?.success || !newUser.data) throw new Error(newUser?.error || 'Error al crear usuario.');
 
-      // Fase 3 (ajuste login): dispara el correo de verificación. No bloquea el auto-login de
-      // abajo — el gate real vive en dashboard/layout.tsx (preserva el flujo de registro actual).
-      requestEmailVerificationAction(email).catch(() => {});
-
       setFormData(prev => ({
-        ...prev, 
+        ...prev,
         userId: newUser.data.id,
         orgId: newUser.data.organizationId || ''
       }));
-      
-      // AUTO-LOGIN: Iniciamos sesión automáticamente para que el Dashboard funcione al final
+
+      if (emailVerificationEnabled) {
+        // Bloquea el efecto de sync de sesión ANTES de iniciar sesión — el signIn de abajo
+        // dispara un cambio de `session` casi de inmediato, y sin esto el efecto de sync
+        // alcanza a correr y saltar a "Rol" antes de que isAwaitingVerification (un setState,
+        // no síncrono) se refleje.
+        justRegisteredRef.current = true;
+      }
+
+      // AUTO-LOGIN: Iniciamos sesión automáticamente (necesario para que Cancelar pueda
+      // resolver identidad real y descartar la cuenta si el usuario abandona la espera).
       await signIn('credentials', {
         email,
         password,
@@ -269,9 +485,15 @@ export default function RegisterPage() {
       if (newUser.data.organizationId) {
         window.localStorage.setItem('onboardingOrgId', newUser.data.organizationId);
       }
-      
-      // Transición directa al Paso 1 para máxima velocidad
-      setStep(1);
+
+      if (emailVerificationEnabled) {
+        // Fase 3 (ajuste login): el wizard se queda en el paso "Cuenta" esperando la
+        // confirmación del correo antes de avanzar a "Rol" (ver efecto de polling arriba).
+        await requestEmailVerificationAction(email);
+        setIsAwaitingVerification(true);
+      } else {
+        setStep(1);
+      }
     } catch (err: any) {
       setError(err.message || 'Error en el registro.');
     } finally {
@@ -464,6 +686,25 @@ export default function RegisterPage() {
 
   const isStepUnlocked = (i: number) => i <= step || i <= maxStep;
 
+  // ── ESPERANDO RESOLVER SESIÓN EXISTENTE ────────────────────────────────────
+  // Si ya hay sesión (p. ej. pestaña nueva del mismo navegador, o refresh a mitad del wizard),
+  // el efecto de sync de arriba decide async qué mostrar (Rol, el countdown de verificación,
+  // etc.) — sin este guard, el paso 0 (form de "Crea tu identidad") se renderiza primero y
+  // recién después cambia, generando un flash confuso. No aplica cuando `justRegisteredRef`
+  // está activo: ese es el propio auto-login de handleCreateAccount, que ya tiene su propio
+  // estado de `loading` en el botón.
+  const sessionStillResolving = !justRegisteredRef.current && (
+    authStatus === 'loading' ||
+    (!!session?.user && !hasSyncLoaded && !isAwaitingVerification && !isAlreadyRegistered)
+  );
+  if (sessionStillResolving) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary/30 border-t-teal-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   // ── YA REGISTRADO: sesión activa con onboarding completo ──────────────────
   if (isAlreadyRegistered) {
     return (
@@ -565,7 +806,7 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {step < 10 && !isAwaitingVerification && (
+        {step < 10 && !isAwaitingVerification && !verificationClaimedElsewhere && (
           <div className="flex justify-between items-center mb-12 px-2">
             {getSteps(role).map((s, i) => {
               const unlocked = isStepUnlocked(i);
@@ -607,8 +848,66 @@ export default function RegisterPage() {
               </div>
             )}
 
+            {/* PASO 0: CREAR CUENTA — esperando confirmación de correo */}
+            {step === 0 && isAwaitingVerification && (
+              <div className="space-y-6 text-center">
+                <div>
+                  <h2 className="text-3xl serif-font italic mb-1">Confirma tu correo.</h2>
+                  <p className="text-faint text-xs">
+                    Te enviamos un enlace a <span className="text-foreground font-bold">{email}</span>. Ábrelo para continuar con tu inscripción.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-3 text-primary text-sm font-bold py-4">
+                  <div className="w-4 h-4 border-2 border-teal-400/30 border-t-teal-400 rounded-full animate-spin" />
+                  Esperando confirmación...
+                </div>
+                {siblingTabDetected && (
+                  <p className="text-faint text-[11px] leading-relaxed bg-surface/60 border border-divider rounded-xl px-3 py-2">
+                    Esta inscripción también está abierta en otra pestaña de este navegador — cualquiera de las dos avanzará sola en cuanto confirmes el correo.
+                  </p>
+                )}
+                {!verifyExpired ? (
+                  <p className="text-faint text-xs">
+                    Este enlace expira en <span className="text-foreground font-bold">{Math.floor(verifySecondsLeft / 60)}:{String(verifySecondsLeft % 60).padStart(2, '0')}</span>
+                  </p>
+                ) : (
+                  <p className="text-error text-xs font-bold">El enlace venció. Solicita uno nuevo para seguir esperando.</p>
+                )}
+                {verifyResent && !verifyExpired && (
+                  <p className="text-jade text-xs">Te enviamos un nuevo enlace de verificación.</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleResendVerification}
+                  disabled={verifyResending}
+                  className="w-full h-14 bg-surface border border-divider rounded-2xl font-bold uppercase tracking-wider text-foreground text-xs hover:bg-white/5 transition-all disabled:opacity-50"
+                >
+                  {verifyResending ? <RefreshCcw className="w-4 h-4 animate-spin mx-auto" /> : 'Reenviar enlace de verificación'}
+                </button>
+              </div>
+            )}
+
+            {/* PASO 0: CORREO CONFIRMADO, PERO OTRA PESTAÑA YA AVANZÓ PRIMERO */}
+            {step === 0 && verificationClaimedElsewhere && !isAwaitingVerification && (
+              <div className="space-y-6 text-center">
+                <div>
+                  <h2 className="text-3xl serif-font italic mb-1">Correo confirmado.</h2>
+                  <p className="text-faint text-xs leading-relaxed">
+                    Tu registro ya continuó en otra pestaña de este navegador. Puedes cerrarla, o seguir aquí mismo si prefieres continuar en este lugar.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleContinueHereAfterClaim}
+                  className="w-full h-14 bg-surface rounded-2xl font-bold uppercase tracking-wider text-foreground shadow-xl transition-all"
+                >
+                  Continuar aquí
+                </button>
+              </div>
+            )}
+
             {/* PASO 0: CREAR CUENTA */}
-            {step === 0 && (
+            {step === 0 && !isAwaitingVerification && !verificationClaimedElsewhere && (
               <>
                 <form onSubmit={handleCreateAccount} className="space-y-6">
                   <div>
@@ -630,6 +929,18 @@ export default function RegisterPage() {
                       <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-faint">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
                     </div>
                     <PasswordStrength password={password} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-black tracking-widest text-faint ml-1 flex items-center">
+                      Confirmar contraseña
+                    </label>
+                    <div className="relative">
+                      <input type={showConfirmPassword ? 'text' : 'password'} required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full bg-surface border border-divider rounded-2xl px-5 py-4 text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint" placeholder="••••••••" />
+                      <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-faint">{showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
+                    </div>
+                    {confirmPassword.length > 0 && confirmPassword !== password && (
+                      <p className="text-error text-[11px] ml-1">Las contraseñas no coinciden.</p>
+                    )}
                   </div>
                   <button type="submit" disabled={loading} className="w-full h-16 bg-surface rounded-2xl font-bold uppercase tracking-wider text-foreground shadow-xl flex items-center justify-center gap-3 transition-all">
                     {loading ? <RefreshCcw className="w-5 h-5 animate-spin" /> : <>Registrarme <ArrowRight className="w-5 h-5" /></>}

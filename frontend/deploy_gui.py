@@ -114,6 +114,27 @@ BEHAVIOR_FLAGS = [
      "Motor de ligas (Fase 2)",
      "Movimiento automático entre ligas (ascenso/transición/descenso) + cron diario. "
      "Gating de selección por liga. Idempotente e inerte con el flag off."),
+    ("GOOGLE_OAUTH_ENABLED",
+     "Login con Google (ajuste login, Fase 2)",
+     "Muestra el botón 'Continuar con Google' en login/registro. Requiere GOOGLE_CLIENT_ID/"
+     "GOOGLE_CLIENT_SECRET configurados (sección Recursos) y la URL de callback de ESTE "
+     "ambiente agregada en Google Cloud Console → Auth Platform → Clientes → URIs de "
+     "redirección autorizados (https://<host-de-este-servicio>/api/auth/callback/google)."),
+    ("EMAIL_VERIFICATION_ENABLED",
+     "Verificación de email obligatoria (ajuste login, Fase 3)",
+     "Exige confirmar el correo (link enviado vía EmailJS) antes de dejar pasar al dashboard. "
+     "Antes de activar en un ambiente con usuarios reales, correr el backfill "
+     "(scripts/backfill-email-verified.ts) para no bloquear cuentas existentes sin verificar."),
+    ("SINGLE_SESSION_ENABLED",
+     "Una sola sesión activa (ajuste login, Fase 4)",
+     "Un nuevo login cierra cualquier sesión previa del mismo usuario (last-write-wins, sin "
+     "excepción para admin). Requiere AUTH_DB_SESSIONS_ENABLED implícito (tracking de sesión "
+     "propia ya cableado en el callback jwt)."),
+    ("TAB_CLOSE_LOGOUT_ENABLED",
+     "Logout al cerrar pestaña (ajuste login, Fase 5)",
+     "Heartbeat cliente→servidor + sendBeacon al cerrar/navegar fuera; un cron (Cloud Scheduler, "
+     "no incluido en este deploy) debe llamar /api/cron/cleanup-stale-sessions periódicamente "
+     "para expirar sesiones cuyo heartbeat se detuvo sin un close limpio."),
 ]
 
 # Secretos / URLs editables por deploy.
@@ -140,9 +161,13 @@ CLOUD_RUN_RESOURCES = [
 ]
 
 # Variables de recursos del ambiente (solo lectura en la GUI; se editan en .env.local).
+# GOOGLE_CLIENT_ID/SECRET y los TTL de heartbeat (ajuste login) no llevan sufijo _DEV/_PROD:
+# es un único cliente OAuth con varias URIs de redirección autorizadas, y los TTL son iguales
+# en todos los ambientes salvo que se edite .env.local manualmente.
 RESOURCE_KEYS = ["DATABASE_URL", "GCP_BUCKET_NAME", "AUTH_SECRET", "GCP_PROJECT_ID",
                  "EMAILJS_SERVICE_ID", "EMAILJS_TEMPLATE_ID", "EMAILJS_PUBLIC_KEY",
-                 "EMAILJS_PRIVATE_KEY"]
+                 "EMAILJS_PRIVATE_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
+                 "SESSION_HEARTBEAT_SECONDS", "SESSION_STALE_TTL_SECONDS"]
 
 CICLO_DOC = REPO_ROOT / "Doc" / "Ciclo_Desarrollo.md"
 VERSIONADO_DOC = REPO_ROOT / "Doc" / "Estrategia_Versionado.md"
@@ -848,6 +873,7 @@ class EnvTab:
             ("AUTH_SECRET", "✓ definido" if self.env.read("AUTH_SECRET") else "✗ vacío"),
             ("GCP_PROJECT_ID", self.env.read("GCP_PROJECT_ID") or "(vacío)"),
             ("EmailJS creds", "✓ definidas" if self.env.read("EMAILJS_PRIVATE_KEY") else "✗ faltan"),
+            ("Google OAuth creds", "✓ definidas" if self.env.read("GOOGLE_CLIENT_ID") and self.env.read("GOOGLE_CLIENT_SECRET") else "✗ faltan"),
         ]
         for label, val in rows:
             row = ttk.Frame(grp)
@@ -971,6 +997,18 @@ class EnvTab:
             "NEXT_TELEMETRY_DISABLED": "1",
             "NODE_ENV": "production",
         }
+        # Credenciales OAuth de Google (ajuste login, Fase 2) — un solo cliente para todos los
+        # ambientes, sin sufijo _DEV/_PROD. Solo se inyectan si tienen valor (igual que EMAILJS_*
+        # nunca se omite arriba porque siempre son requeridas; estas son opcionales mientras
+        # GOOGLE_OAUTH_ENABLED esté off).
+        if e.read("GOOGLE_CLIENT_ID"):
+            ev["GOOGLE_CLIENT_ID"] = e.read("GOOGLE_CLIENT_ID")
+        if e.read("GOOGLE_CLIENT_SECRET"):
+            ev["GOOGLE_CLIENT_SECRET"] = e.read("GOOGLE_CLIENT_SECRET")
+        # TTL de heartbeat (ajuste login, Fase 5) — mismo valor en todos los ambientes salvo
+        # edición manual de .env.local; defaults si no están definidos en el archivo.
+        ev["SESSION_HEARTBEAT_SECONDS"] = e.read("SESSION_HEARTBEAT_SECONDS") or "30"
+        ev["SESSION_STALE_TTL_SECONDS"] = e.read("SESSION_STALE_TTL_SECONDS") or "90"
         # secretos / URLs (solo si tienen valor, como deploy.sh)
         for key, _, _, _ in SECRET_FIELDS:
             val = self.secret_vars[key].get().strip()
@@ -998,6 +1036,14 @@ class EnvTab:
             for key in ("AUTH_URL", "NEXT_PUBLIC_APP_URL"):
                 if not self.secret_vars[key].get().strip():
                     missing.append(key)
+        # Login con Google (ajuste login, Fase 2): si se activa el flag en este deploy, las
+        # credenciales son obligatorias — sin ellas el botón de Google fallaría en el primer
+        # intento real de login en este ambiente.
+        if self.flag_vars.get("GOOGLE_OAUTH_ENABLED") and self.flag_vars["GOOGLE_OAUTH_ENABLED"].get():
+            if not e.read("GOOGLE_CLIENT_ID"):
+                missing.append("GOOGLE_CLIENT_ID")
+            if not e.read("GOOGLE_CLIENT_SECRET"):
+                missing.append("GOOGLE_CLIENT_SECRET")
         return missing
 
     def _cr_flags(self) -> list[str]:

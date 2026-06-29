@@ -52,6 +52,7 @@ function LoginContent() {
   const [googleEnabled, setGoogleEnabled] = useState(false);
   const [emailVerificationEnabled, setEmailVerificationEnabled] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
+  const [notRegistered, setNotRegistered] = useState(false);
   const [resendSent, setResendSent] = useState(false);
 
   useEffect(() => {
@@ -91,6 +92,7 @@ function LoginContent() {
     setLoading(true);
     setError('');
     setNeedsVerification(false);
+    setNotRegistered(false);
     setResendSent(false);
 
     try {
@@ -99,6 +101,7 @@ function LoginContent() {
 
       if (!status.exists) {
         setError('Este correo electrónico no está registrado en nuestro sistema.');
+        setNotRegistered(true);
         setLoading(false);
         return;
       }
@@ -160,7 +163,16 @@ function LoginContent() {
         {error && (
           <div className="mb-8 p-4 bg-red-900/10 border border-error/30 rounded-2xl flex items-center gap-3 text-red-200 text-xs font-medium">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
-            {error}
+            <span>{error}</span>
+            {notRegistered && (
+              <>
+                {' '}
+                <Link href={`/auth/register?email=${encodeURIComponent(email)}`} className="text-primary hover:text-primary font-bold underline underline-offset-2">
+                  Regístrate aquí
+                </Link>
+                .
+              </>
+            )}
           </div>
         )}
 
@@ -258,7 +270,7 @@ function LoginContent() {
 
         <div className="mt-12 text-center text-[10px] uppercase tracking-widest font-black">
           <span className="text-faint">¿No tienes acceso? </span>
-          <Link href="/auth/register" className="text-primary hover:text-primary transition-colors ml-1">
+          <Link href={email ? `/auth/register?email=${encodeURIComponent(email)}` : '/auth/register'} className="text-primary hover:text-primary transition-colors ml-1">
             Inscríbete en DentFlowAI
           </Link>
         </div>

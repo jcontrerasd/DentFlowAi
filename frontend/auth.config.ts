@@ -109,12 +109,18 @@ export default {
       if (account?.provider !== 'google') return true;
       if (!authUser.email) return false;
 
+      // En este punto del flujo de Auth.js, `authUser.id` es un id generado a partir del
+      // perfil de Google (todavía no resuelto/vinculado contra la DB) — el id real de la
+      // fila en `user` recién se asigna DESPUÉS de que este callback aprueba. Por eso la
+      // búsqueda debe ser por email, no por id.
       const [existingUser] = await db
         .select()
         .from(user)
-        .where(eq(user.id, authUser.id as string))
+        .where(sql`LOWER(${user.email}) = ${authUser.email.toLowerCase()}`)
         .limit(1);
-      if (!existingUser) return false;
+      // Usuario nuevo (sin fila todavía): el adapter la creará después de este callback con
+      // role:'dentista' (placeholder, ver auth.ts) — nada que validar/bloquear aquí todavía.
+      if (!existingUser) return true;
 
       const isMaster = existingUser.email === 'jaime.contreras.d@gmail.com';
       const isAdminDomain = existingUser.email?.endsWith('@dentflow.ai');
@@ -145,11 +151,9 @@ export default {
         .set({ lastLoginAt: new Date() })
         .where(eq(user.id, currentUser.id));
 
-      // Mutar el objeto en el lugar para que el callback jwt (mismo ciclo de request) reciba
-      // los valores frescos — patrón estándar de NextAuth para pasar datos entre estos callbacks.
-      (authUser as any).role = currentUser.role;
-      (authUser as any).organizationId = currentUser.organizationId;
-
+      // No es necesario mutar `authUser` aquí: Auth.js vuelve a resolver el usuario por email
+      // (handleLoginOrRegister) después de que este callback aprueba, así que el callback `jwt`
+      // recibe automáticamente los valores ya actualizados (role/onboardingStep/lastLoginAt).
       return true;
     },
     async jwt({ token, user: authUser }) {

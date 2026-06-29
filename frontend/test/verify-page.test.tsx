@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { pushMock, searchParamsGetMock, confirmEmailVerificationActionMock } = vi.hoisted(() => ({
@@ -31,7 +31,10 @@ describe('VerifyPage', () => {
     vi.useRealTimers();
   });
 
-  it('muestra verificacion exitosa y luego redirige al dashboard', async () => {
+  it('muestra verificacion exitosa y espera al click de Cerrar (no auto-redirige ni auto-navega)', async () => {
+    const closeMock = vi.fn();
+    vi.stubGlobal('close', closeMock);
+
     render(<VerifyPage />);
 
     expect(screen.getByText('Verificando...')).toBeInTheDocument();
@@ -43,10 +46,15 @@ describe('VerifyPage', () => {
     expect(confirmEmailVerificationActionMock).toHaveBeenCalledWith('test-token-123');
     expect(screen.getByText('Acceso Habilitado.')).toBeInTheDocument();
 
+    // No debe redirigir solo — "el dashboard" puede no ser a dónde corresponde ir si el
+    // onboarding sigue incompleto (otra pestaña puede estar esperando esta confirmación).
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1600);
+      await vi.advanceTimersByTimeAsync(5000);
     });
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(closeMock).not.toHaveBeenCalled();
 
-    expect(pushMock).toHaveBeenCalledWith('/dashboard');
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar esta pestaña' }));
+    expect(closeMock).toHaveBeenCalled();
   });
 });

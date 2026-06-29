@@ -37,6 +37,7 @@ yarn-error.log*
 firebase-key.json
 *-service-account.json
 *-key.json
+client_secret_*.json
 
 
 # vercel

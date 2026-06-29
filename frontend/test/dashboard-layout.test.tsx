@@ -35,6 +35,11 @@ vi.mock('@/components/theme/ThemeToggleButton', () => ({
   default: () => null,
 }));
 
+vi.mock('@/lib/db/actions/user', () => ({
+  getEmailVerificationEnabledAction: vi.fn().mockResolvedValue({ enabled: false }),
+  getTabCloseLogoutEnabledAction: vi.fn().mockResolvedValue({ enabled: false, heartbeatSeconds: 30 }),
+}));
+
 import DashboardLayout from '@/app/dashboard/layout';
 
 describe('DashboardLayout', () => {

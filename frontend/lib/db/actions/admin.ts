@@ -3,7 +3,7 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { user, organization, clinicalCase, bid, file, annotation, review, caseAssignment, clinicalCaseDelivery, clinicalCaseEvent, commercialRound, contactGuardAudit, auditLog, technicianNoResponseEvent } from "@/lib/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, or, desc, sql } from "drizzle-orm";
 import * as bcrypt from "bcryptjs";
 import GCPStorageService from "@/lib/services/gcp-storage";
 
@@ -120,19 +120,79 @@ export async function deleteUserAdmin(userId: string) {
       };
     }
 
-    // 1. Encontrar todos los archivos subidos por este usuario
+    // 1. Guard de integridad histórica: solo se puede borrar físicamente a un usuario que
+    //    NUNCA tuvo ningún rastro de actividad. Si tuvo algo, la única vía es bloquearlo
+    //    (toggleUserStatusAdmin) — preferimos un error explícito y predecible aquí en vez de
+    //    depender de que la FK de alguna tabla (review/clinicalCaseDelivery) lo bloquee a medias
+    //    mientras otras (clinicalCase, caseAssignment) lo dejan en silencio con SET NULL.
+    const [hasCaseRole] = await db
+      .select({ id: clinicalCase.id })
+      .from(clinicalCase)
+      .where(or(
+        eq(clinicalCase.doctorId, userId),
+        eq(clinicalCase.assignedTechnicianId, userId),
+      ))
+      .limit(1);
+    if (hasCaseRole) {
+      return { success: false, error: 'No se puede eliminar: el usuario tiene casos asociados (dentista o técnico). Bloquéalo en su lugar.' };
+    }
+
+    const [hasAssignment] = await db
+      .select({ id: caseAssignment.id })
+      .from(caseAssignment)
+      .where(eq(caseAssignment.technicianId, userId))
+      .limit(1);
+    if (hasAssignment) {
+      return { success: false, error: 'No se puede eliminar: el usuario tiene asignaciones de casos registradas. Bloquéalo en su lugar.' };
+    }
+
+    const [hasDelivery] = await db
+      .select({ id: clinicalCaseDelivery.id })
+      .from(clinicalCaseDelivery)
+      .where(or(
+        eq(clinicalCaseDelivery.technicianId, userId),
+        eq(clinicalCaseDelivery.qualityReviewerId, userId),
+      ))
+      .limit(1);
+    if (hasDelivery) {
+      return { success: false, error: 'No se puede eliminar: el usuario tiene entregas o revisiones de calidad registradas. Bloquéalo en su lugar.' };
+    }
+
+    const [hasReview] = await db
+      .select({ id: review.id })
+      .from(review)
+      .where(or(
+        eq(review.reviewerId, userId),
+        eq(review.revieweeId, userId),
+      ))
+      .limit(1);
+    if (hasReview) {
+      return { success: false, error: 'No se puede eliminar: el usuario tiene calificaciones registradas. Bloquéalo en su lugar.' };
+    }
+
+    const [hasEvent] = await db
+      .select({ id: clinicalCaseEvent.id })
+      .from(clinicalCaseEvent)
+      .where(eq(clinicalCaseEvent.userId, userId))
+      .limit(1);
+    if (hasEvent) {
+      return { success: false, error: 'No se puede eliminar: el usuario generó eventos en el historial de algún caso. Bloquéalo en su lugar.' };
+    }
+
+    // 2. Encontrar todos los archivos subidos por este usuario
     const filesToPurge = await db
       .select({ gcsPath: file.gcsPath })
       .from(file)
       .where(eq(file.uploaderId, userId));
-    
-    // 2. Borrar físicamente en Google Cloud
+
+    // 3. Borrar físicamente en Google Cloud
     const paths = filesToPurge.map(f => f.gcsPath).filter(Boolean) as string[];
     if (paths.length > 0) {
       await GCPStorageService.deleteFiles(paths);
     }
 
-    // 3. Borrar en la DB (Cascade se encarga del resto)
+    // 4. Borrar en la DB (sin rastro de actividad: solo quedan accounts/sessions/file propios,
+    //    que sí se borran en cascada)
     await db.delete(user).where(eq(user.id, userId));
     return { success: true };
   } catch (error) {

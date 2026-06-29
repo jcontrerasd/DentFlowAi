@@ -3,8 +3,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-/** v5.21 — Tablas NextAuth para database sessions (accounts/sessions/verificationToken), detrás de AUTH_DB_SESSIONS_ENABLED. */
-export const INFRA_VERSION = 'v5.21';
+/** v5.22 — auth_action_rate_limit: tope duro de reenvíos por email/hora (verificación/reset). */
+export const INFRA_VERSION = 'v5.22';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -277,6 +277,34 @@ export async function ensureIncrementalInfrastructure(db: any) {
     await db.execute(sql`ALTER TABLE sessions ADD COLUMN IF NOT EXISTS "lastSeenAt" TIMESTAMP;`);
   } catch (e) {
     console.error("[Infrastructure] Error añadiendo sessions.lastSeenAt (v5.21):", e);
+  }
+
+  // v5.21 — user.is_active: schema.ts ya declara default(true), pero esta DB nunca tuvo el
+  // ALTER que fija ese DEFAULT a nivel de columna (desfase de migraciones previas). El adapter
+  // de NextAuth (Google OAuth) inserta usuarios nuevos sin pasar is_active explícito y confía en
+  // el DEFAULT de Postgres — sin esto, el INSERT viola el NOT NULL y el primer login de Google
+  // para un email nunca visto falla. El wrapper en auth.ts ya pasa isActive:true como mitigación
+  // inmediata; este ALTER cierra la causa real para cualquier otro camino que dependa del default.
+  try {
+    await db.execute(sql`ALTER TABLE "user" ALTER COLUMN is_active SET DEFAULT true;`);
+  } catch (e) {
+    console.error("[Infrastructure] Error fijando default de user.is_active (v5.21):", e);
+  }
+
+  // v5.22 — auth_action_rate_limit (Fase 3 follow-up): tope duro de reenvíos por
+  // email/hora para verificación de email y recuperación de contraseña.
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS auth_action_rate_limit (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        email TEXT NOT NULL,
+        action_type TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS auth_action_rate_limit_lookup_idx ON auth_action_rate_limit(email, action_type, created_at);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando auth_action_rate_limit (v5.22):", e);
   }
 }
 

@@ -33,6 +33,8 @@ export interface UserProfile {
   experienceYears?: number | null;
   bio?: string | null;
   emailVerified?: string | Date | null;
+  /** true si la cuenta tiene hashedPassword (no expone el hash). false = solo entra por Google. */
+  hasPassword?: boolean;
 }
 
 interface AuthContextType {

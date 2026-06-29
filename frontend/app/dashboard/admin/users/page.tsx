@@ -161,11 +161,12 @@ export default function AdminUsersPage() {
         res = await toggleUserStatusAdmin(userData.id, !userData.isActive);
       } else if (type === 'delete') {
         res = await deleteUserAdmin(userData.id);
-        // Optimistic delete
-        setUsers(prev => prev.filter(u => u.id !== userData.id));
       }
 
       if (res?.success) {
+        if (type === 'delete') {
+          setUsers(prev => prev.filter(u => u.id !== userData.id));
+        }
         await fetchUsers(); // Recargar datos reales
         setActionModal({ show: false, type: 'toggle', userData: null });
       } else {

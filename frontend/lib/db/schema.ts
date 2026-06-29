@@ -527,6 +527,16 @@ export const passwordResetToken = pgTable("password_reset_token", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
 });
 
+// Fase 3 follow-up (ajuste login) — tope duro de reenvíos por email/hora para
+// requestEmailVerificationAction y requestPasswordResetAction. Tabla append-only (una fila
+// por correo realmente enviado); se cuenta por ventana de 1h vía lib/db/rateLimit.ts.
+export const authActionRateLimit = pgTable("auth_action_rate_limit", {
+  id: uuid("id").default(sql`gen_random_uuid()`).primaryKey().notNull(),
+  email: text("email").notNull(),
+  actionType: text("action_type").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow().notNull(),
+});
+
 // RELATIONS
 export const clinicalCaseRelations = relations(clinicalCase, ({ one, many }) => ({
   organization: one(organization, {
