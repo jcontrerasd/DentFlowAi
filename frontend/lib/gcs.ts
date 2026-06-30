@@ -23,30 +23,62 @@ const LOCAL_GCS = !!process.env.GCS_API_ENDPOINT;
 
 /**
  * Genera (o recupera del caché en proceso) una URL firmada de lectura para un archivo en GCS.
+ * @param expiresInMs TTL en ms (default 15 min). Máximo 7 días para v4 signing.
+ *   URLs con TTL > CACHE_TTL_MS no se cachean para evitar servir links ya vencidos.
  */
-export async function getSignedUrl(fileName: string) {
+export async function getSignedUrl(fileName: string, expiresInMs = 15 * 60 * 1000) {
   try {
     if (LOCAL_GCS) {
       return `${process.env.GCS_API_ENDPOINT}/download/storage/v1/b/${bucketName}/o/${encodeURIComponent(fileName)}?alt=media`;
     }
 
-    const cached = _urlCache.get(fileName);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.url;
+    const useCache = expiresInMs <= CACHE_TTL_MS * 3;
+    if (useCache) {
+      const cached = _urlCache.get(fileName);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.url;
+      }
     }
 
     const options = {
       version: 'v4' as const,
       action: 'read' as const,
-      expires: Date.now() + 15 * 60 * 1000, // 15 minutos
+      expires: Date.now() + expiresInMs,
     };
     const [url] = await storage.bucket(bucketName).file(fileName).getSignedUrl(options);
 
-    _urlCache.set(fileName, { url, expiresAt: Date.now() + CACHE_TTL_MS });
+    if (useCache) {
+      _urlCache.set(fileName, { url, expiresAt: Date.now() + CACHE_TTL_MS });
+    }
     return url;
   } catch (error) {
     console.error("[getSignedUrl] Error:", error);
     return null;
+  }
+}
+
+/**
+ * Descarga el contenido de un archivo GCS como Buffer.
+ * Útil para armado de ZIPs server-side sin escribir a disco.
+ */
+export async function downloadFileBuffer(fileName: string): Promise<Buffer | null> {
+  try {
+    const [contents] = await storage.bucket(bucketName).file(fileName).download();
+    return contents;
+  } catch (error) {
+    console.error("[downloadFileBuffer] Error:", error);
+    return null;
+  }
+}
+
+/**
+ * Elimina un archivo del bucket. ignoreNotFound=true evita error si ya fue borrado.
+ */
+export async function deleteFile(fileName: string): Promise<void> {
+  try {
+    await storage.bucket(bucketName).file(fileName).delete({ ignoreNotFound: true });
+  } catch (error) {
+    console.error("[deleteFile] Error:", error);
   }
 }
 

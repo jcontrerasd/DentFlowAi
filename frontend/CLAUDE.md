@@ -2,136 +2,121 @@
 
 ## Diferencias clave vs Next.js < 15
 
-- **`use client` en páginas con params dinámicos** — las rutas `[id]` son Client Components que usan `useParams()` de `next/navigation`, NO el patrón `await params` de Server Components.
-- **React 19**: `use()` hook disponible; suspense nativo en Server Components. No usar librerías de fetching antiguas.
-- **Tailwind CSS 4**: sintaxis de config diferente — no existe `tailwind.config.js`, la config va en CSS (`@theme`). No crear ese archivo.
-- **Server Actions**: se importan directamente en Client Components (`'use server'` en el archivo de la action). No usar API routes para mutaciones internas.
-- **`output: 'standalone'`** en next.config.ts — el build genera un servidor Node standalone, no exportación estática.
+- **`use client` en páginas con params dinámicos** — rutas `[id]` son Client Components que usan `useParams()`, NO `await params` de Server Components.
+- **React 19**: `use()` hook disponible; Suspense nativo en Server Components.
+- **Tailwind CSS 4**: config va en CSS (`@theme`). No crear `tailwind.config.js`.
+- **Server Actions**: importar directamente en Client Components (`'use server'` en el archivo de la action). No usar API routes para mutaciones internas.
+- **`output: 'standalone'`** en next.config.ts — no exportación estática.
 
 ## Autenticación (NextAuth 5 beta)
 
-- Session strategy: **JWT** (no database sessions) — más rápido en Cloud Run.
-- Importar `auth` desde `@/auth` para leer sesión en Server Components.
-- Importar `useSession` de `next-auth/react` en Client Components.
+- Session strategy: **JWT** (no database sessions).
+- Importar `auth` desde `@/auth` en Server Components; `useSession` de `next-auth/react` en Client Components.
 - El JWT contiene: `id`, `role`, `organizationId`, `onboardingStep` — puede estar desactualizado durante onboarding.
-- <important>Para datos de identidad frescos usar getServerIdentity() — lee de DB, no del JWT</important>
+- <important>Para datos de identidad frescos usar `getServerIdentity()` — lee de DB, no del JWT</important>
 
 ## Impersonación admin
-- El admin puede simular ser otro usuario vía `AuthContext.startSimulation(userId)`.
-- El perfil simulado se expone como `userProfile` desde `useAuth()` (mismo hook, contexto transparente).
+
+- Admin simula otro usuario vía `AuthContext.startSimulation(userId)`.
+- Perfil simulado expuesto como `userProfile` desde `useAuth()`.
 - `getServerIdentity()` en el servidor también resuelve el usuario simulado.
-- `uchPresentationRole` en la página del caso fuerza tabla A (dentista) o B (técnico) en el UCH cuando admin tiene ambos flags activos.
+- `uchPresentationRole` en la página del caso fuerza tabla A (dentista) o B (técnico) cuando admin tiene ambos flags.
 
 ## Convenciones del proyecto
 
 - Alias `@/` apunta a `frontend/` (tsconfig paths).
-- Feedback al usuario: siempre `useToast()` de `@/context/ToastContext` — nunca `alert()` ni `console` visible.
-- Iconos: solo `lucide-react` — no instalar otras librerías de iconos.
-- Estilos: Tailwind utility classes únicamente — no CSS modules, no styled-components.
-- Tests: Vitest + Testing Library. Archivos de test en `frontend/test/`.
+- Feedback al usuario: `useToast()` de `@/context/ToastContext` — nunca `alert()`.
+- Iconos: solo `lucide-react`.
+- Estilos: solo Tailwind utility classes — no CSS modules, no styled-components.
 
 ## Affordances accionables (hover/focus)
 
-No nos apoyamos en `cursor: pointer` para indicar que algo es accionable (inconsistente entre `<Link>` y `<div onClick>`, inexistente en touch). Usamos hover visible + `focus-visible` para teclado. Tres recetas reutilizables:
+No usar `cursor: pointer` para indicar accionable. Usar hover visible + `focus-visible`.
 
-**Receta A — Tarjeta/píldora accionable** (KPI cards, case cards, kanban cards):
+**Receta A — Tarjeta/píldora accionable** (KPI cards, case cards):
 ```
 transition-colors duration-150
 hover:bg-white/5 hover:border-white/20
 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400/40
 ```
 
-**Receta B — Link de texto / inline** ("Ver todos", anclas):
+**Receta B — Link de texto** ("Ver todos", anclas):
 ```
 text-teal-300 hover:text-teal-200 hover:underline underline-offset-2
 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-teal-400/40 rounded-sm
 ```
 
-**Receta C — Fila de lista / item de menú** (timeline UCH, items de asignación, filas tabla):
+**Receta C — Fila de lista / item de menú** (timeline UCH, filas tabla):
 ```
 transition-colors duration-150
 hover:bg-white/[0.04]
 focus-visible:outline-none focus-visible:bg-white/[0.06]
 ```
 
-Estado deshabilitado universal: `disabled:opacity-50 disabled:pointer-events-none`.
+Estado deshabilitado: `disabled:opacity-50 disabled:pointer-events-none`.
 
-Reglas:
-- No añadir `cursor-pointer`. El cursor nativo del navegador en `<a>`/`<button>` es suficiente; para `<div onClick>` el hover visible es la señal.
-- Elementos accionables sin `<button>`/`<a>` deben ser navegables por teclado (`tabIndex={0}` + `onKeyDown` Enter/Space) y exponer `focus-visible:ring-*`.
-- Si el fondo del componente ya es claro, usar `hover:bg-white/10` o cambiar el borde en lugar del fondo.
+Elementos accionables sin `<button>`/`<a>` necesitan `tabIndex={0}` + `onKeyDown` Enter/Space + `focus-visible:ring-*`.
 
 ## Wizard de creación de casos (`app/dashboard/cases/new`)
-- `CaseCreationWizard.tsx` — producto activo: **solo diseño** fijo (`SERVICE_TYPES.SOLO_DISENO`). Sin selector de 3 tipos (legacy en schema).
-- Paso de archivos: tres slots de scans (`superior`, `inferior`, `oclusal`). Campo `replacesMissingTeeth` (pónticos Sí/No).
-- `app/dashboard/cases/new/page.tsx` envía `serviceType: 'solo_diseno'` al `createClinicalCaseAction`.
-- Las listas de **material**, **color VITA**, **tipo de restauración** y **urgencia** se cargan vía server actions (`listVitaShadesAction`, etc.) en `lib/db/actions/catalogs.ts`. El form envía `code` opaco para material/restoration/shade y **`label`** para urgency (la lógica de negocio se compara contra labels estándar como `'Alta'`). `resolveCatalogCodesToIds` resuelve a id antes de persistir.
-- **No hay texto libre "Otro"**: si falta una opción, admin la agrega en `/dashboard/admin/catalogos`.
+
+- `CaseCreationWizard.tsx` — producto activo: `solo_diseno` fijo. Sin selector de tipos de servicio.
+- Tres slots de scans (`superior`, `inferior`, `oclusal`). Campo `replacesMissingTeeth` (pónticos Sí/No).
+- Listas de **material**, **color VITA**, **tipo de restauración** y **urgencia** vía server actions (`listVitaShadesAction`, etc.) en `catalogs.ts`. El form envía `code` opaco para material/restoration/shade y `label` para urgency. `resolveCatalogCodesToIds` resuelve a id antes de persistir.
 
 ## Badge global de disponibilidad (v5.0)
-- `components/availability/AvailabilityBadge.tsx` — pill en el header (`app/dashboard/layout.tsx`, entre Bell y ThemeToggle). Solo se monta para rol `tecnico`; además se **auto-oculta** si `AVAILABILITY_UI_TECNICO_ENABLED` está off (el gating server-side viaja en `enabled` de `getMyAvailabilityStatusAction`, porque el flag es server-only y el layout es Client Component).
-- Punto de aviso ámbar (Nivel 2) / rojo (Nivel 3). Click → popover con `GlobalAvailabilitySwitch` + `ResponseStatusStepper` condensado + link al panel.
-- Panel completo en `/dashboard/profile/availability` (`AvailabilityPanel`): switch global, columnas CAD/CAM con **7 categorías** (`WORK_CATEGORIES` v5.13), historial de respuesta. Padre OFF deshabilita hijos visualmente pero **preserva** sus valores.
-- Wizard / ficha borrador: campo `replacesMissingTeeth` (pónticos), preview de clasificación (`resolveScenario`), `reclassifyCaseDraftAction` al editar piezas/restauración.
-- Toggle del switch global: OFF con asignaciones pendientes → `BulkRejectDialog` (mantener / rechazar todas); ON desde Nivel 3 → `ReactivationModal` (informativo, no bloqueante). Orquestado por `GlobalAvailabilitySwitch`.
-- **Fuente de verdad única + sincronización legacy**: el switch v5.0 (`technician_availability.level_global`) y el toggle legacy del perfil (`user.is_available`) se **espejan en la capa de escritura** para que nunca diverjan entre superficies (badge del header · panel `/availability` · perfil) ni entre los dos flags independientes (`AVAILABILITY_MODEL_ENABLED` lee `level_global`; con ese flag off el filtro Fauchard legacy lee `user.is_available`). `updateAvailabilityLevelAction` (target `global`) también escribe `user.is_available`; `toggleAvailabilityAction` también escribe `technician_availability.level_global` (best-effort, solo si la fila existe). En el perfil, `components/profile/AvailabilityToggle.tsx` consulta `getMyAvailabilityStatusAction()` y, si la UI v5.0 está habilitada, renderiza el `GlobalAvailabilitySwitch` con estado en vivo (mismo control que el badge) en lugar del toggle legacy; con el flag off cae al toggle legacy (`user.is_available`).
+
+- `components/availability/AvailabilityBadge.tsx` — pill en el header. Solo para rol `tecnico`; se auto-oculta si `AVAILABILITY_UI_TECNICO_ENABLED` está off.
+- Punto ámbar (Nivel 2) / rojo (Nivel 3). Click → popover con switch + stepper + link al panel.
+- Panel completo en `/dashboard/profile/availability`: switch global, columnas CAD/CAM con 7 categorías, historial.
+- El switch global y el toggle legacy (`user.is_available`) se **espejan en la capa de escritura** para no divergir. `updateAvailabilityLevelAction` (target `global`) también escribe `user.is_available`; `toggleAvailabilityAction` también escribe `technician_availability.level_global`.
+- OFF con asignaciones pendientes → `BulkRejectDialog`. ON desde Nivel 3 → `ReactivationModal`.
 
 ## Tema (claro/oscuro/sistema)
-- Provider en `components/theme/ThemeProvider.tsx` + contexto en `ThemeContext.ts`. Toggle: `ThemeToggleButton.tsx`.
-- Tokens CSS en `app/theme.css`; Tailwind 4 los consume. No instalar `next-themes` — la implementación es propia.
+
+Provider en `components/theme/ThemeProvider.tsx` + `ThemeContext.ts`. Toggle: `ThemeToggleButton.tsx`. Tokens CSS en `app/theme.css`. No instalar `next-themes`.
 
 ## Entorno local (Docker + fake-gcs)
-- `docker compose up -d` en la raíz levanta Postgres 16 y `fsouza/fake-gcs-server` ([docker-compose.yml](../docker-compose.yml)).
+
+- `docker compose up -d` en la raíz levanta Postgres 16 y `fsouza/fake-gcs-server`.
 - `.env.local` apunta `DATABASE_URL` a `localhost:5432` y `GCS_API_ENDPOINT` a `http://localhost:4443`.
-- Cuando `GCS_API_ENDPOINT` está definido, `lib/gcs.ts` firma URLs hacia `/api/local-gcs-proxy` (descomprime gzip antes de servir, ya que fake-gcs no hace decompressive transcoding).
+- `lib/gcs.ts` firma URLs hacia `/api/local-gcs-proxy` cuando `GCS_API_ENDPOINT` está definido.
 - Seed: `npx tsx scripts/seed-uat.ts`.
-- **Bucket por contexto**: `npm run dev` usa `GCP_BUCKET_NAME` (default `dentflowai-local` con fake-gcs). En Cloud Run, `deploy.sh` inyecta `GCP_BUCKET_NAME_DEV` (`dentflowai-assets-dev`) o `_PROD` (`dentflowai-assets-prod`) según el entorno. Staging y producción están aislados a nivel de bucket.
 
-## Cifrado en tránsito a la base de datos (cumplimiento legal)
+## Cifrado en tránsito a la base de datos
 
-`DATABASE_URL_DEV`/`_PROD` viven en `frontend/.env.local` (gitignored) y se inyectan en Cloud Run por `deploy.sh`. **Deben** incluir `?sslmode=require` en la connection string — Cloud SQL ya cifra por defecto en la mayoría de conectores, pero se deja explícito para no depender de eso. `lib/db/index.ts` loguea un warning al boot si en producción no detecta `sslmode` en `DATABASE_URL`. Ver `Doc/Auditoria_Cumplimiento_Legal.md`.
+`DATABASE_URL_DEV`/`_PROD` en `frontend/.env.local` (gitignored). **Deben** incluir `?sslmode=require`. `lib/db/index.ts` loguea warning al boot si en producción no detecta `sslmode`.
 
 ## Scripts auxiliares (`frontend/scripts/`)
 
-Ejecutar con `npx tsx scripts/<archivo>.ts` desde `frontend/` (lee `.env.local`).
+Ejecutar con `npx tsx scripts/<archivo>.ts` desde `frontend/`.
 
 | Script | Propósito |
 |---|---|
-| `seed-uat.ts` | Crea usuarios y casos de prueba para UAT local |
-| `migrate-catalogs-fk.ts` | One-time v3.7→v3.8: catálogos texto → FK uuid. **Ya aplicado** |
-| `migrate-catalogs-opaque-codes.ts` | One-time v3.8→v3.9: codes slug → opacos (`mat_001`, …). **Ya aplicado** |
-| `migrate-recovery-v39.ts` | One-time v3.9→v4.0: dedup catálogos + backfill FK + drop columnas text. **Ya aplicado** |
-| `migrate-tokens.ts` | One-time: migración de tokens auth |
-| `reseed-contact-guard-regex.ts` | Re-poblar reglas regex de ContactGuard (idempotente). Elimina las reglas legacy `telefono_*`: los teléfonos se detectan por país en código (`lib/contactGuard/phonePatterns.ts`) |
-| `diag-contact-guard.ts` | Diagnóstico — verifica reglas activas + testea inputs |
-| `seed-courier-allowlist.ts` | Seed/upsert idempotente de la allowlist de couriers (`contact_guard_courier_allowlist`, por `domain` en minúsculas). Los dominios permitidos eximen URLs de tracking del bloqueo |
-| `recheck-contact-guard-audit.ts` | Solo lectura: re-evalúa el histórico de `contact_guard_audit` con la lógica actual (teléfonos country-aware + exención URLs/tracking) para distinguir falsos positivos ya corregidos de bloqueos vigentes |
-| `backfill-availability.ts` | One-time v5.0 (Fase 7): puebla `technician_availability` por técnico (infiere CAD/CAM de skills). Idempotente. Correr una vez en la activación |
-| `send-rollout-email.ts proximo\|activado` | One-time v5.0 (Fase 7): comunicación masiva de rollout a técnicos vía EmailJS (best-effort) |
-| `backfill-tech-rejection-events.ts` | Migración de eventos `OFERTA_RECHAZADA_POR_TECNICO` anteriores al fix de visibilidad: cambia `visibleTo:'sistema'` → `visibleTo:'tecnico'`, quita enmascarado Fauchard y reconstruye contenido + payload con el motivo/comentario. Idempotente (solo toca eventos con `visibleTo='sistema'`). Correr apuntando `.env.local` a la BD destino |
-| `seed-demo-tecnicos.ts` | Seed dedicado para demo del flujo completo + funnel Fauchard. Crea idempotente: 1 org demo, 1 dentista (con dirección), 10 técnicos `tecnico_prueba1..10@test1.cl` (password `dent2026`), liga bronce, habilidades `corona_posterior` con design/fab variados, disponibilidad CAD∧CAM en categoría coronas. Ajusta la config Fauchard activa: `nInvited=5`, `tQuoteMinutes=240` |
-| `test-emailjs.ts` | Diagnóstico: envía un correo de prueba via EmailJS para verificar que las credenciales y el template funcionan correctamente |
+| `seed-uat.ts` | Usuarios y casos de prueba para UAT local |
+| `seed-demo-tecnicos.ts` | 1 org demo, 1 dentista, 10 técnicos de prueba para demo del funnel Fauchard |
+| `backfill-availability.ts` | One-time v5.0: puebla `technician_availability` por técnico. Idempotente |
+| `reseed-contact-guard-regex.ts` | Re-poblar reglas regex de ContactGuard (idempotente). Elimina reglas legacy `telefono_*` |
+| `diag-contact-guard.ts` | Diagnóstico: verifica reglas activas + testea inputs |
+| `seed-courier-allowlist.ts` | Seed/upsert idempotente de allowlist de couriers (`contact_guard_courier_allowlist`) |
+| `recheck-contact-guard-audit.ts` | Re-evalúa histórico de `contact_guard_audit` con lógica actual (solo lectura) |
+| `seed-price-rules.ts` | Seed de reglas de precio |
+| `backfill-tech-rejection-events.ts` | Migración de eventos `OFERTA_RECHAZADA_POR_TECNICO` anteriores al fix de visibilidad |
+| `test-emailjs.ts` | Diagnóstico: envía correo de prueba via EmailJS |
 
-Scripts marcados "ya aplicado" se conservan como referencia histórica; no volver a ejecutar.
+Scripts de migración one-time (`migrate-catalogs-fk.ts`, `migrate-catalogs-opaque-codes.ts`, `migrate-recovery-v39.ts`) ya aplicados — conservados como referencia histórica.
 
-## Sistema de preview de emails (DEMO local)
+## Preview de emails (DEMO local)
 
-Flag `NEXT_PUBLIC_DEMO_EMAIL_PREVIEW=true` (default off). Cuando está activo, `notifyUser` en `lib/services/notifications.ts` registra el correo en el buffer de memoria **sin enviarlo** (compatible con `NOTIFICATIONS_LIVE=false`). El cliente lee los previews vía polling y los muestra en un modal informativo.
-- `lib/services/emailPreviewBuffer.ts` — ring buffer proceso-único, máx 50 entradas. `pushEmailPreview()` es llamado desde `notifyUser`.
-- `app/api/demo/email-preview/route.ts` — `GET ?since=<timestamp>`; responde con la lista de emails registrados. Devuelve lista vacía si el flag está off.
-- `components/demo/DemoEmailPreviewListener.tsx` — polling cada 2s, montado en `dashboard/layout.tsx`. Modal con asunto, cuerpo y tipo del correo. Se auto-oculta si el flag está off.
-
-## Feature flags de autenticación (planificadas, no activas)
-
-`.env.example` lista flags para una migración planeada del módulo auth:
-`AUTH_DB_SESSIONS_ENABLED`, `GOOGLE_OAUTH_ENABLED`, `EMAIL_VERIFICATION_ENABLED`,
-`SINGLE_SESSION_ENABLED`, `TAB_CLOSE_LOGOUT_ENABLED`. **Ninguna está cableada al código todavía** (grep no encuentra referencias). El stack actual usa NextAuth 5 con JWT puro, sin sesiones DB ni Google OAuth. Cuando se implemente alguna fase, agregar aquí su comportamiento.
+Flag `NEXT_PUBLIC_DEMO_EMAIL_PREVIEW=true` (default off). Cuando está activo, `notifyUser` registra el correo en buffer sin enviarlo.
+- `lib/services/emailPreviewBuffer.ts` — ring buffer, máx 50 entradas.
+- `app/api/demo/email-preview/route.ts` — `GET ?since=<timestamp>`.
+- `components/demo/DemoEmailPreviewListener.tsx` — polling 2s, modal informativo en dashboard.
 
 ## Tests
 
 - Vitest + Testing Library. Archivos en `frontend/test/`.
-- Helper canónico: `frontend/test/helpers/test-identity.ts` — stub de `getServerIdentity()` para tests de server actions (evita instanciar Auth real). Tests fuera del modo test deben fallar si llaman este helper en producción (guard incluido).
-- Mocks de DB: usar `vi.mock('@/lib/db')` con factory que devuelve queries deterministas. No tocar la DB real en unit tests.
+- Helper canónico: `test/helpers/test-identity.ts` — stub de `getServerIdentity()` para server actions (no instancia Auth real).
+- Mocks de DB: `vi.mock('@/lib/db')` con factory determinista. No tocar DB real en unit tests.
 - Smoke tests (`npm run test:smoke`): cubren páginas críticas (auth, onboarding, ficha de caso, dashboard).
 
 ## Comandos
@@ -139,16 +124,9 @@ Flag `NEXT_PUBLIC_DEMO_EMAIL_PREVIEW=true` (default off). Cuando está activo, `
 npm run dev          # desarrollo (Turbopack, puerto 3000)
 npm run build        # build producción (standalone)
 npm run type-check   # tsc --noEmit
-npm run test         # vitest (watch)
 npm run test:run     # vitest una pasada
 npm run test:smoke   # smoke tests páginas clave
 npm run lint         # eslint
-npm run validate:full # lint + type-check + build
+npm run validate:full # lint + type-check + build (solo si se pide)
 npx tsx scripts/seed-uat.ts  # seed UAT (.env.local)
-bash deploy.sh develop       # staging en Cloud Run (servicio dentflowai-frontend-dev)
-bash deploy.sh production    # producción en Cloud Run (pide confirmación 'SI')
 ```
-
-Requisitos: Node ≥ 20.19, npm ≥ 10.
-
-Detalle del flujo de desarrollo y deploy: [Doc/Ciclo_Desarrollo.md](../Doc/Ciclo_Desarrollo.md).

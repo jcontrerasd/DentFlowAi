@@ -3,8 +3,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-/** v5.24 — user_deletion_request: auditoría legal inmutable de solicitudes de eliminación (Ley 21.719). */
-export const INFRA_VERSION = 'v5.24';
+/** v5.25 — data_export_request: solicitudes asíncronas de exportación de datos (portabilidad, Ley 21.719). */
+export const INFRA_VERSION = 'v5.25';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -1727,6 +1727,30 @@ export async function ensureInfrastructure(db: any) {
         ADD COLUMN IF NOT EXISTS email_notification_prefs JSONB;
     `);
     console.log('[DB] v5.20 email_notification_prefs en user.');
+
+    // v5.25 — data_export_request: solicitudes asíncronas de exportación de datos (portabilidad, Ley 21.719)
+    try {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS data_export_request (
+          id UUID DEFAULT gen_random_uuid() PRIMARY KEY NOT NULL,
+          user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'pending',
+          gcs_path TEXT,
+          download_url TEXT,
+          error_message TEXT,
+          requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          ready_at TIMESTAMPTZ,
+          expires_at TIMESTAMPTZ,
+          deleted_at TIMESTAMPTZ
+        );
+        CREATE INDEX IF NOT EXISTS der_user_idx ON data_export_request(user_id);
+        CREATE INDEX IF NOT EXISTS der_status_idx ON data_export_request(status);
+        CREATE INDEX IF NOT EXISTS der_expires_at_idx ON data_export_request(expires_at);
+      `);
+      console.log('[DB] v5.25 data_export_request: tabla + índices.');
+    } catch (e) {
+      console.error('[DB] v5.25 error:', e);
+    }
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
     console.log("[DB] Infraestructura verificada con éxito.");

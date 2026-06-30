@@ -12,6 +12,7 @@
 
 import { processLeagueMaintenanceAction } from '@/lib/db/actions/leagueCron';
 import { processPendingPoolReevaluationAction } from '@/lib/db/actions/poolQueue';
+import { processPendingDataExportsAction, purgeExpiredDataExportsAction } from '@/lib/db/actions/dataExport';
 import { isAvailabilityEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
 
 declare global {
@@ -55,7 +56,27 @@ export function startLocalCronScheduler(): void {
   setTimeout(runPoolReevaluation, 20_000);
   setInterval(runPoolReevaluation, poolIntervalMs);
 
+  const dataExportIntervalMs = Number(process.env.LOCAL_DATA_EXPORT_CRON_INTERVAL_MS ?? 30_000);
+
+  const runDataExports = async () => {
+    try {
+      const process = await processPendingDataExportsAction();
+      if (process.success && (process.processed ?? 0) > 0) {
+        console.log('[local-cron] process-data-exports:', JSON.stringify(process));
+      }
+      const purge = await purgeExpiredDataExportsAction();
+      if (purge.success && (purge.purged ?? 0) > 0) {
+        console.log('[local-cron] purge-data-exports:', JSON.stringify(purge));
+      }
+    } catch (e) {
+      console.error('[local-cron] process-data-exports error:', e);
+    }
+  };
+
+  setTimeout(runDataExports, 10_000);
+  setInterval(runDataExports, dataExportIntervalMs);
+
   console.log(
-    `[local-cron] scheduler iniciado (process-league cada ${leagueIntervalMs}ms; pool reevaluation cada ${poolIntervalMs}ms).`,
+    `[local-cron] scheduler iniciado (process-league cada ${leagueIntervalMs}ms; pool reevaluation cada ${poolIntervalMs}ms; data-exports cada ${dataExportIntervalMs}ms).`,
   );
 }

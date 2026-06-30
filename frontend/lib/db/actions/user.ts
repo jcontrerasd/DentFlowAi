@@ -4,9 +4,8 @@ import * as bcrypt from "bcryptjs";
 import { auth } from "@/auth";
 import { getServerIdentity } from "@/lib/db/actions/impersonation";
 import { db, infraPromise } from "@/lib/db";
-import { user, organization, file, caseAssignment, clinicalCase, clinicalCaseDelivery, userDeletionRequest } from "@/lib/db/schema";
-import { eq, sql, and, isNull, lt, or, desc } from "drizzle-orm";
-import { getSignedUrl } from "@/lib/gcs";
+import { user, organization, file, caseAssignment, clinicalCase, userDeletionRequest } from "@/lib/db/schema";
+import { eq, sql, and, isNull, lt, or } from "drizzle-orm";
 import GCPStorageService from "@/lib/services/gcp-storage";
 
 /**
@@ -394,74 +393,6 @@ export async function requestAccountDeletionAction(): Promise<{ success: boolean
   }
 }
 
-/**
- * Cumplimiento legal (Ley 21.719, derecho de acceso y portabilidad) — exporta los datos
- * personales del usuario autenticado: perfil, organización y los casos en los que participa
- * (como dentista o como técnico asignado). Usa `getServerIdentity()` para respetar la
- * simulación admin: el admin puede exportar los datos del usuario simulado en su nombre.
- */
-export async function exportMyDataAction(): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
-  if (infraPromise) await infraPromise;
-  try {
-    const identity = await getServerIdentity();
-    const userId = identity?.id as string | undefined;
-    if (!userId) return { success: false, error: 'No autenticado' };
-
-    const profile = await getUserProfileDirect(userId);
-    if (!profile) return { success: false, error: 'Usuario no encontrado' };
-    const { organization: organizationData, ...usuario } = profile;
-
-    const casosRaw = await db
-      .select({
-        id: clinicalCase.id,
-        internalName: clinicalCase.internalName,
-        status: clinicalCase.status,
-        rolEnElCaso: sql<string>`CASE WHEN ${clinicalCase.doctorId} = ${userId} THEN 'dentista' ELSE 'tecnico' END`,
-        createdAt: clinicalCase.createdAt,
-        publishedAt: clinicalCase.publishedAt,
-        completedAt: clinicalCase.completedAt,
-      })
-      .from(clinicalCase)
-      .where(or(eq(clinicalCase.doctorId, userId), eq(clinicalCase.assignedTechnicianId, userId)));
-
-    // Solo se incluyen los archivos de la ENTREGA APROBADA (final), nunca revisiones
-    // intermedias pendientes o rechazadas — esas son borradores de trabajo, no el
-    // resultado final que el dentista aceptó para el paciente.
-    const casos = await Promise.all(casosRaw.map(async (caso) => {
-      const [approvedDelivery] = await db
-        .select({ files: clinicalCaseDelivery.files, version: clinicalCaseDelivery.version })
-        .from(clinicalCaseDelivery)
-        .where(and(eq(clinicalCaseDelivery.clinicalCaseId, caso.id), eq(clinicalCaseDelivery.status, 'approved')))
-        .orderBy(desc(clinicalCaseDelivery.version))
-        .limit(1);
-
-      let archivosEntregaFinal: { path: string; url: string | null }[] = [];
-      if (approvedDelivery?.files?.length) {
-        archivosEntregaFinal = await Promise.all(
-          approvedDelivery.files.map(async (gcsPath) => ({
-            path: gcsPath,
-            url: await getSignedUrl(gcsPath).catch(() => null),
-          })),
-        );
-      }
-
-      return { ...caso, archivosEntregaFinal };
-    }));
-
-    return {
-      success: true,
-      data: {
-        generatedAt: new Date().toISOString(),
-        usuario,
-        organizacion: organizationData ?? null,
-        casos,
-      },
-    };
-  } catch (error) {
-    console.error("[exportMyDataAction] Error:", error);
-    return { success: false, error: (error as Error).message };
-  }
-}
 
 /**
  * Fase 3 follow-up (ajuste login) — cron de limpieza: borra cuentas creadas hace más de 2 días

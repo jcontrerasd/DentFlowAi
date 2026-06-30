@@ -611,7 +611,7 @@ export default function ProfilePage() {
 
       {/* Cumplimiento legal — derecho de acceso y portabilidad (Ley 21.719) */}
       <div className="max-w-4xl mx-auto mt-6">
-        <MyDataSection />
+        <MyDataSection userId={userProfile?.id} />
       </div>
 
       {/* Cumplimiento legal — derecho de cancelación/supresión (Ley 21.719/19.628) */}

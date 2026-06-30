@@ -169,6 +169,29 @@ RESOURCE_KEYS = ["DATABASE_URL", "GCP_BUCKET_NAME", "AUTH_SECRET", "GCP_PROJECT_
                  "EMAILJS_PRIVATE_KEY", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
                  "SESSION_HEARTBEAT_SECONDS", "SESSION_STALE_TTL_SECONDS"]
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Definición de Cloud Scheduler jobs (todos los crons del sistema).
+# El deploy los crea automáticamente si no existen (idempotente).
+# Cada entrada: (job_name_suffix, schedule, path, http_method, attempt_deadline_s)
+# El suffix se convierte en "evaluate-quotes-prod" / "evaluate-quotes-dev" al desplegar.
+# ──────────────────────────────────────────────────────────────────────────────
+CRON_JOBS = [
+    # evaluate-quotes: legacy, cada 5 min — solo casos históricos con cotizaciones
+    ("evaluate-quotes",     "*/5 * * * *", "/api/cron/evaluate-quotes",        "GET",  60),
+    # process-availability: disponibilidad v5.0, cada hora
+    ("process-availability", "0 * * * *",  "/api/cron/process-availability",   "POST", 120),
+    # process-pool-queue: cola pendiente_pool v5.0, cada 2 min
+    ("process-pool-queue",  "*/2 * * * *", "/api/cron/process-pool-queue",     "POST", 60),
+    # process-league: motor de ligas v5.5, diario a las 04:00 (hora Santiago)
+    ("process-league",      "0 4 * * *",   "/api/cron/process-league",         "POST", 300),
+    # process-data-exports: portabilidad de datos v5.25, cada 5 min
+    ("process-data-exports", "*/5 * * * *", "/api/cron/process-data-exports",  "POST", 300),
+    # cleanup-stale-sessions: expira sesiones sin heartbeat (ajuste login Fase 5), cada 5 min
+    ("cleanup-stale-sessions", "*/5 * * * *", "/api/cron/cleanup-stale-sessions", "POST", 60),
+    # cleanup-unverified-accounts: borra cuentas sin verificar >2 días, diario a las 03:00
+    ("cleanup-unverified-accounts", "0 3 * * *", "/api/cron/cleanup-unverified-accounts", "POST", 120),
+]
+
 CICLO_DOC = REPO_ROOT / "Doc" / "Ciclo_Desarrollo.md"
 VERSIONADO_DOC = REPO_ROOT / "Doc" / "Estrategia_Versionado.md"
 
@@ -885,7 +908,11 @@ class EnvTab:
         grp = ttk.LabelFrame(self.body, text="Comportamiento · flags v5.0 (ajuste para ESTE deploy)", padding=10)
         grp.pack(fill="x", pady=4)
         for key, label, desc in BEHAVIOR_FLAGS:
-            cur = self.env.resolve(key, self.suffix).lower() == "true"
+            # NOTIFICATIONS_LIVE en producción siempre arranca en true — no depende de .env.local.
+            if key == "NOTIFICATIONS_LIVE" and self.env_key == "production":
+                cur = True
+            else:
+                cur = self.env.resolve(key, self.suffix).lower() == "true"
             var = tk.BooleanVar(value=cur)
             self.flag_vars[key] = var
             row = ttk.Frame(grp)
@@ -1093,6 +1120,52 @@ class EnvTab:
         deploy_cmd += self._cr_flags()
         return build_cmd, deploy_cmd, self._collect_env_vars()
 
+    # -- Cloud Scheduler sync ------------------------------------------------
+    def _sync_schedulers(self, service_url: str, cron_secret: str) -> None:
+        """Crea los Cloud Scheduler jobs que no existan. Idempotente (describe antes de create)."""
+        env_suffix = self.env_key.replace("develop", "dev").replace("production", "prod")
+        self.app._append(f"\n>> [3/3] Cloud Scheduler — sincronizando jobs para {env_suffix}…\n")
+
+        if not cron_secret:
+            self.app._append("⚠ CRON_SECRET vacío — los jobs se crearán sin header de autorización.\n")
+
+        for (name, schedule, path, method, deadline) in CRON_JOBS:
+            job_name = f"{name}-{env_suffix}"
+            uri = f"{service_url.rstrip('/')}{path}"
+
+            # Verificar si ya existe
+            check = subprocess.run(
+                ["gcloud", "scheduler", "jobs", "describe", job_name,
+                 f"--location={REGION}", f"--project={PROJECT_ID}"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if check.returncode == 0:
+                self.app._append(f"  ✓ {job_name} ya existe — sin cambios.\n")
+                continue
+
+            # Crear
+            create_cmd = [
+                "gcloud", "scheduler", "jobs", "create", "http", job_name,
+                f"--location={REGION}",
+                f"--schedule={schedule}",
+                f"--uri={uri}",
+                f"--http-method={method}",
+                f"--attempt-deadline={deadline}s",
+                f"--time-zone=America/Santiago",
+                f"--project={PROJECT_ID}",
+            ]
+            if cron_secret:
+                create_cmd.append(f"--headers=Authorization=Bearer {cron_secret}")
+
+            self.app._append(f"  + Creando {job_name} ({schedule} → {path})…\n")
+            result = subprocess.run(create_cmd, capture_output=True, text=True, timeout=60)
+            if result.returncode == 0:
+                self.app._append(f"    ✓ Creado.\n")
+            else:
+                self.app._append(f"    ✗ Error:\n{result.stderr.strip()}\n")
+
+        self.app._append("Scheduler sync terminado.\n")
+
     def _dry_run(self):
         missing = self._missing_required()
         build_cmd, deploy_cmd, ev = self._build_commands()
@@ -1115,7 +1188,11 @@ class EnvTab:
         for k, v in ev.items():
             shown = mask(v) if ("SECRET" in k or "PRIVATE" in k or "DATABASE_URL" in k) else v
             self.app._append(f"  {k}: {shown}\n")
-        self.app._append("\n[3/3] Smoke test del landing tras el deploy.\n")
+        env_suffix = self.env_key.replace("develop", "dev").replace("production", "prod")
+        self.app._append("\n[3/3] Cloud Scheduler — jobs a sincronizar (crear si no existen):\n")
+        for name, schedule, path, method, deadline in CRON_JOBS:
+            job_name = f"{name}-{env_suffix}"
+            self.app._append(f"  · {job_name:45s} {schedule:15s} {method} {path}\n")
         if policy.level == "block":
             self.app._append("⛔ Este deploy estaría BLOQUEADO por política de rama.\n")
         self.app.set_status("Dry-run mostrado (no se desplegó).")
@@ -1176,16 +1253,40 @@ class EnvTab:
         self.app.set_status(f"Desplegando a {self.service}…")
         self.app._append("\n" + "═" * 70 + f"\nDEPLOY · {self.service}\n" + "═" * 70 + "\n")
 
+        cron_secret = self.secret_vars["CRON_SECRET"].get().strip()
+
         def after_deploy(rc):
             try:
                 os.unlink(yaml_path)
             except OSError:
                 pass
-            if rc == 0:
-                self.app.set_status(f"Deploy a {self.service} OK. Verifica con 🔍.")
-                self.app._append("\n✓ Deploy terminado. Pulsa 'Verificar' para smoke test + URL.\n")
-            else:
+            if rc != 0:
                 self.app.set_status(f"Deploy a {self.service} falló (exit {rc}).")
+                return
+
+            self.app._append("\n✓ Deploy terminado.\n")
+            self.app.set_status(f"Deploy a {self.service} OK. Sincronizando schedulers…")
+
+            # Obtiene la URL del servicio para construir las URIs de los schedulers
+            def sync_schedulers_task(log):
+                url_result = subprocess.run(
+                    ["gcloud", "run", "services", "describe", self.service,
+                     "--region", REGION, "--project", PROJECT_ID,
+                     "--format=value(status.url)"],
+                    capture_output=True, text=True, timeout=60,
+                )
+                service_url = url_result.stdout.strip()
+                if not service_url:
+                    log("⚠ No se pudo obtener la URL del servicio — scheduler sync omitido.\n")
+                    return
+                log(f"URL del servicio: {service_url}\n")
+                self._sync_schedulers(service_url, cron_secret)
+
+            def after_sync(rc_sync):
+                self.app.set_status(f"Deploy a {self.service} OK. Pulsa 🔍 para smoke test.")
+                self.app._append("Listo. Pulsa 'Verificar' para smoke test + URL.\n")
+
+            self.app.runner.run_func(sync_schedulers_task, on_done=after_sync)
 
         def after_build(rc):
             if rc != 0:

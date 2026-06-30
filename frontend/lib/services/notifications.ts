@@ -39,13 +39,29 @@ function notificationsLive(): boolean {
  * Envía un correo vía la API REST de EmailJS. Mantiene el contrato del template
  * `te60drn` / `template_DentFlowAi`: `{{subject}}`, `{{to_email}}`, `{{body}}`.
  */
-async function sendViaEmailJS(params: { subject: string; toEmail: string; body: string }): Promise<{ ok: boolean; error?: string }> {
+async function sendViaEmailJS(
+  params: { subject: string; toEmail: string; body: string },
+  /** Si true, ignora NOTIFICATIONS_LIVE y envía siempre que haya credenciales (p. ej. correos legalmente obligatorios). */
+  force = false,
+): Promise<{ ok: boolean; error?: string }> {
   const cfg = emailJsConfig();
-  if (!notificationsLive() || isStubMode(cfg)) {
-    const reason = !notificationsLive() ? 'NOTIFICATIONS_LIVE!=true' : 'sin credenciales';
-    console.log(`[STUB-EMAIL] (${reason}) To: ${params.toEmail} | Subject: ${params.subject}`);
+  if (isStubMode(cfg)) {
+    console.log(`[STUB-EMAIL] (sin credenciales) To: ${params.toEmail} | Subject: ${params.subject}`);
     return { ok: true };
   }
+  if (!force && !notificationsLive()) {
+    console.log(`[STUB-EMAIL] (NOTIFICATIONS_LIVE!=true) To: ${params.toEmail} | Subject: ${params.subject}`);
+    return { ok: true };
+  }
+
+  // Redirige todos los correos a EMAIL_OVERRIDE_TO cuando está definido (útil en local/dev
+  // para recibir correos de usuarios de prueba en un inbox real). El asunto incluye el
+  // destinatario original para distinguir de quién es cada correo.
+  const overrideTo = process.env.EMAIL_OVERRIDE_TO;
+  const effectiveEmail = overrideTo || params.toEmail;
+  const effectiveSubject = overrideTo
+    ? `[→ ${params.toEmail}] ${params.subject}`
+    : params.subject;
 
   try {
     const response = await fetch(EMAILJS_ENDPOINT, {
@@ -56,7 +72,7 @@ async function sendViaEmailJS(params: { subject: string; toEmail: string; body: 
         template_id: cfg.templateId,
         user_id: cfg.publicKey,
         accessToken: cfg.privateKey,
-        template_params: { subject: params.subject, to_email: params.toEmail, body: params.body },
+        template_params: { subject: effectiveSubject, to_email: effectiveEmail, body: params.body },
       }),
     });
     if (!response.ok) {
@@ -129,7 +145,7 @@ export type EmailNotifCategory =
 
 export type EmailNotificationPrefs = Partial<Record<EmailNotifCategory, boolean>>;
 
-export const NOTIFICATION_CATEGORY_MAP: Record<NotificationType, EmailNotifCategory> = {
+export const NOTIFICATION_CATEGORY_MAP: Partial<Record<NotificationType, EmailNotifCategory>> = {
   // Dentista
   ASIGNACION_ACEPTADA:            'actividad_caso',
   FAUCHARD_INICIO_PLAZO_DENTISTA: 'actividad_caso',
@@ -209,7 +225,9 @@ export type NotificationType =
   /** Calidad (origen): el destino aceptó la derivación. */
   | 'DERIVACION_CALIDAD_ACEPTADA'
   /** Calidad (origen): el destino rechazó la derivación. */
-  | 'DERIVACION_CALIDAD_RECHAZADA';
+  | 'DERIVACION_CALIDAD_RECHAZADA'
+  /** Portabilidad (Ley 21.719): el ZIP con los datos del usuario está listo para descargar. */
+  | 'DATOS_EXPORTACION_LISTA';
 
 const baseUrl = () => process.env.NEXT_PUBLIC_APP_URL || '';
 
@@ -242,6 +260,8 @@ const NOTIFICATION_CHANNELS: Partial<Record<NotificationType, NotificationChanne
   QUALITY_PLAZO_POR_VENCER: { email: true, inApp: true },
   QUALITY_PLAZO_VENCIDO: { email: true, inApp: true },
   CALIDAD_POR_CALIFICAR: { email: true, inApp: true },
+  // Portabilidad legal — email obligatorio, nunca in-app ni desactivable por preferencias
+  DATOS_EXPORTACION_LISTA: { email: true, inApp: false },
 };
 
 export function channelsForNotification(type: NotificationType): NotificationChannels {
@@ -366,6 +386,10 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
     subject: 'Calidad: tu derivación fue rechazada',
     body: (data) => `Hola,\n\nLa derivación del caso ${data.caseNumber || data.caseId} fue rechazada. El caso permanece contigo para su revisión. Ingresa al Hub para ver el motivo.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
+  DATOS_EXPORTACION_LISTA: {
+    subject: 'Tus datos personales están listos para descargar',
+    body: (data) => `Hola ${data.name},\n\nTu solicitud de exportación de datos (Ley 21.719 — derecho de acceso y portabilidad) está lista.\n\nDescarga tu archivo aquí:\n${data.downloadUrl}\n\nEste enlace estará disponible hasta el ${data.expiresAt}. Después de esa fecha el archivo será eliminado de forma permanente.\n\nSi no solicitaste esta descarga, puedes ignorar este correo.`,
+  },
 };
 
 /**
@@ -392,6 +416,8 @@ export async function notifyUser(userId: string, type: NotificationType, data: a
     }
 
     // 1.c Preferencias del usuario: si la categoría del tipo está desactivada, no se envía.
+    //      Tipos sin categoría en el mapa (como DATOS_EXPORTACION_LISTA) son obligatorios y
+    //      no pueden ser desactivados por el usuario.
     const userPrefs = userData.emailNotificationPrefs as EmailNotificationPrefs | null;
     if (userPrefs) {
       const category = NOTIFICATION_CATEGORY_MAP[type];
@@ -407,8 +433,12 @@ export async function notifyUser(userId: string, type: NotificationType, data: a
     //      Gated por NEXT_PUBLIC_DEMO_EMAIL_PREVIEW; independiente de NOTIFICATIONS_LIVE.
     pushEmailPreview({ to: userData.email, subject, body, type });
 
+    // Tipos sin categoría (DATOS_EXPORTACION_LISTA) son legalmente obligatorios:
+    // se envían aunque NOTIFICATIONS_LIVE esté off, siempre que haya credenciales.
+    const forceSend = !NOTIFICATION_CATEGORY_MAP[type];
+
     // 2. Enviar vía EmailJS (modo stub interno loguea sin enviar en dev local).
-    const result = await sendViaEmailJS({ subject, toEmail: userData.email, body });
+    const result = await sendViaEmailJS({ subject, toEmail: userData.email, body }, forceSend);
 
     if (!result.ok) return { success: false, error: result.error };
     return { success: true };

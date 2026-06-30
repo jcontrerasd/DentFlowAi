@@ -492,6 +492,24 @@ export const userDeletionRequest = pgTable("user_deletion_request", {
   index("udr_requested_at_idx").on(table.requestedAt),
 ]);
 
+// Exportación portabilidad de datos (Ley 21.719 — derecho de acceso y portabilidad)
+export const dataExportRequest = pgTable("data_export_request", {
+  id: uuid().default(sql`gen_random_uuid()`).primaryKey().notNull(),
+  userId: text("user_id").notNull().references(() => user.id, { onDelete: 'cascade' }),
+  status: text("status").notNull().default('pending'), // pending | processing | ready | failed | expired
+  gcsPath: text("gcs_path"),
+  downloadUrl: text("download_url"),
+  errorMessage: text("error_message"),
+  requestedAt: timestamp("requested_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  readyAt: timestamp("ready_at", { withTimezone: true, mode: 'date' }),
+  expiresAt: timestamp("expires_at", { withTimezone: true, mode: 'date' }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true, mode: 'date' }),
+}, (table) => [
+  index("der_user_idx").on(table.userId),
+  index("der_status_idx").on(table.status),
+  index("der_expires_at_idx").on(table.expiresAt),
+]);
+
 // NextAuth Tables
 export const accounts = pgTable(
   "accounts",
