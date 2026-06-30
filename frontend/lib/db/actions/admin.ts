@@ -2,10 +2,12 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { user, organization, clinicalCase, bid, file, annotation, review, caseAssignment, clinicalCaseDelivery, clinicalCaseEvent, commercialRound, contactGuardAudit, auditLog, technicianNoResponseEvent } from "@/lib/db/schema";
-import { eq, or, desc, sql } from "drizzle-orm";
+import { user, organization, clinicalCase, bid, file, annotation, review, caseAssignment, clinicalCaseDelivery, clinicalCaseEvent, commercialRound, contactGuardAudit, auditLog, technicianNoResponseEvent, userDeletionRequest } from "@/lib/db/schema";
+import { eq, or, desc, sql, and } from "drizzle-orm";
 import * as bcrypt from "bcryptjs";
 import GCPStorageService from "@/lib/services/gcp-storage";
+import { getUploadUrl } from "@/lib/gcs";
+import type { DeletionReinstateReasonCode } from "@/lib/constants/legalReasons";
 
 /**
  * Middleware de seguridad interno para asegurar que solo un ADMIN opere estas funciones.
@@ -40,6 +42,7 @@ export async function listAllUsersAdmin() {
         createdAt: user.createdAt,
         onboardingStep: user.onboardingStep,
         organizationName: organization.name,
+        deletionRequestedAt: user.deletionRequestedAt,
       })
       .from(user)
       .leftJoin(organization, eq(user.organizationId, organization.id))
@@ -89,6 +92,63 @@ export async function changeUserPasswordAdmin(userId: string, newPassword: strin
 }
 
 /**
+ * Guard de integridad histórica: detecta si un usuario tiene cualquier rastro de actividad
+ * de negocio (casos, asignaciones, entregas, calificaciones, eventos). Si tiene algo, la
+ * única vía es bloquearlo (toggleUserStatusAdmin) o desactivarlo (requestAccountDeletionAction)
+ * — preferimos un error explícito y predecible aquí en vez de depender de que la FK de alguna
+ * tabla (review/clinicalCaseDelivery) lo bloquee a medias mientras otras (clinicalCase,
+ * caseAssignment) lo dejan en silencio con SET NULL. Usado por `deleteUserAdmin` (admin) y por
+ * `requestAccountDeletionAction` (el propio usuario, derecho de cancelación Ley 21.719).
+ */
+export async function hasUserActivityTrace(userId: string): Promise<string | null> {
+  const [hasCaseRole] = await db
+    .select({ id: clinicalCase.id })
+    .from(clinicalCase)
+    .where(or(
+      eq(clinicalCase.doctorId, userId),
+      eq(clinicalCase.assignedTechnicianId, userId),
+    ))
+    .limit(1);
+  if (hasCaseRole) return 'el usuario tiene casos asociados (dentista o técnico)';
+
+  const [hasAssignment] = await db
+    .select({ id: caseAssignment.id })
+    .from(caseAssignment)
+    .where(eq(caseAssignment.technicianId, userId))
+    .limit(1);
+  if (hasAssignment) return 'el usuario tiene asignaciones de casos registradas';
+
+  const [hasDelivery] = await db
+    .select({ id: clinicalCaseDelivery.id })
+    .from(clinicalCaseDelivery)
+    .where(or(
+      eq(clinicalCaseDelivery.technicianId, userId),
+      eq(clinicalCaseDelivery.qualityReviewerId, userId),
+    ))
+    .limit(1);
+  if (hasDelivery) return 'el usuario tiene entregas o revisiones de calidad registradas';
+
+  const [hasReview] = await db
+    .select({ id: review.id })
+    .from(review)
+    .where(or(
+      eq(review.reviewerId, userId),
+      eq(review.revieweeId, userId),
+    ))
+    .limit(1);
+  if (hasReview) return 'el usuario tiene calificaciones registradas';
+
+  const [hasEvent] = await db
+    .select({ id: clinicalCaseEvent.id })
+    .from(clinicalCaseEvent)
+    .where(eq(clinicalCaseEvent.userId, userId))
+    .limit(1);
+  if (hasEvent) return 'el usuario generó eventos en el historial de algún caso';
+
+  return null;
+}
+
+/**
  * Elimina un usuario por completo, incluyendo sus archivos físicos en el Cloud.
  */
 export async function deleteUserAdmin(userId: string) {
@@ -121,62 +181,10 @@ export async function deleteUserAdmin(userId: string) {
     }
 
     // 1. Guard de integridad histórica: solo se puede borrar físicamente a un usuario que
-    //    NUNCA tuvo ningún rastro de actividad. Si tuvo algo, la única vía es bloquearlo
-    //    (toggleUserStatusAdmin) — preferimos un error explícito y predecible aquí en vez de
-    //    depender de que la FK de alguna tabla (review/clinicalCaseDelivery) lo bloquee a medias
-    //    mientras otras (clinicalCase, caseAssignment) lo dejan en silencio con SET NULL.
-    const [hasCaseRole] = await db
-      .select({ id: clinicalCase.id })
-      .from(clinicalCase)
-      .where(or(
-        eq(clinicalCase.doctorId, userId),
-        eq(clinicalCase.assignedTechnicianId, userId),
-      ))
-      .limit(1);
-    if (hasCaseRole) {
-      return { success: false, error: 'No se puede eliminar: el usuario tiene casos asociados (dentista o técnico). Bloquéalo en su lugar.' };
-    }
-
-    const [hasAssignment] = await db
-      .select({ id: caseAssignment.id })
-      .from(caseAssignment)
-      .where(eq(caseAssignment.technicianId, userId))
-      .limit(1);
-    if (hasAssignment) {
-      return { success: false, error: 'No se puede eliminar: el usuario tiene asignaciones de casos registradas. Bloquéalo en su lugar.' };
-    }
-
-    const [hasDelivery] = await db
-      .select({ id: clinicalCaseDelivery.id })
-      .from(clinicalCaseDelivery)
-      .where(or(
-        eq(clinicalCaseDelivery.technicianId, userId),
-        eq(clinicalCaseDelivery.qualityReviewerId, userId),
-      ))
-      .limit(1);
-    if (hasDelivery) {
-      return { success: false, error: 'No se puede eliminar: el usuario tiene entregas o revisiones de calidad registradas. Bloquéalo en su lugar.' };
-    }
-
-    const [hasReview] = await db
-      .select({ id: review.id })
-      .from(review)
-      .where(or(
-        eq(review.reviewerId, userId),
-        eq(review.revieweeId, userId),
-      ))
-      .limit(1);
-    if (hasReview) {
-      return { success: false, error: 'No se puede eliminar: el usuario tiene calificaciones registradas. Bloquéalo en su lugar.' };
-    }
-
-    const [hasEvent] = await db
-      .select({ id: clinicalCaseEvent.id })
-      .from(clinicalCaseEvent)
-      .where(eq(clinicalCaseEvent.userId, userId))
-      .limit(1);
-    if (hasEvent) {
-      return { success: false, error: 'No se puede eliminar: el usuario generó eventos en el historial de algún caso. Bloquéalo en su lugar.' };
+    //    NUNCA tuvo ningún rastro de actividad. Si tuvo algo, la única vía es bloquearlo.
+    const activityReason = await hasUserActivityTrace(userId);
+    if (activityReason) {
+      return { success: false, error: `No se puede eliminar: ${activityReason}. Bloquéalo en su lugar.` };
     }
 
     // 2. Encontrar todos los archivos subidos por este usuario
@@ -486,13 +494,17 @@ export async function purgeAllBusinessDataAdmin(): Promise<PurgeReport> {
 
     // 2. Borrar en orden explícito de dependencias — cada tabla por separado para reporte individual
 
-    // Auditoría de negocio: contact_guard_audit (FK al caso es SET NULL) y audit_log (FK SET NULL).
-    // Se borran antes que clinical_case para no dejar filas huérfanas con referencia rota.
+    // Auditoría de negocio: contact_guard_audit (FK al caso es SET NULL).
+    // Se borra antes que clinical_case para no dejar filas huérfanas con referencia rota.
     const delContactGuardAudit = await db.delete(contactGuardAudit).returning({ id: contactGuardAudit.id });
     log('contactGuardAudit', 'Auditoría ContactGuard (intentos de bypass)', delContactGuardAudit.length);
 
-    const delAuditLog = await db.delete(auditLog).returning({ id: auditLog.id });
-    log('auditLog', 'Audit log de acciones del sistema', delAuditLog.length);
+    // Cumplimiento legal (Ley 21.719/19.628): audit_log se EXCLUYE de la purga a propósito —
+    // es el registro de trazabilidad que debe sobrevivir incluso a un borrado masivo de datos
+    // de negocio. Sus FKs a organization/user son SET NULL, así que no bloquea nada al
+    // preservarse (ver Doc/Auditoria_Cumplimiento_Legal.md).
+    const [{ count: auditLogCount }] = await db.select({ count: sql<number>`count(*)::int` }).from(auditLog);
+    steps.push({ key: 'auditLog', label: `Audit log preservado (no se purga) — ${auditLogCount} filas`, status: 'skipped' });
 
     const delAnnotation = await db.delete(annotation).returning({ id: annotation.id });
     log('annotation', 'Anotaciones', delAnnotation.length);
@@ -545,6 +557,11 @@ export async function purgeAllBusinessDataAdmin(): Promise<PurgeReport> {
       .returning({ id: user.id });
     log('userFauchardReset', 'Técnicos: reset de contadores Fauchard', resetTechs.length);
 
+    // Cumplimiento legal (Ley 21.719): user_deletion_request se EXCLUYE de la purga — igual que
+    // audit_log, es trazabilidad legal inmutable. Sus FKs a user son SET NULL y no bloquean la purga.
+    const [{ count: udrCount }] = await db.select({ count: sql<number>`count(*)::int` }).from(userDeletionRequest);
+    steps.push({ key: 'userDeletionRequest', label: `Historial de solicitudes de eliminación preservado (no se purga) — ${udrCount} filas`, status: 'skipped' });
+
     // 4. Contar lo que se preservó
     const [preservedUsers] = await db.select({ count: sql<number>`count(*)::int` }).from(user);
     const [preservedOrgs] = await db.select({ count: sql<number>`count(*)::int` }).from(organization);
@@ -565,5 +582,150 @@ export async function purgeAllBusinessDataAdmin(): Promise<PurgeReport> {
       steps,
       preserved: { users: 0, organizations: 0 },
     };
+  }
+}
+
+/**
+ * Reactiva un usuario que había solicitado la eliminación de su cuenta.
+ * Registra el motivo y evidencia en user_deletion_request (inmutable, Ley 21.719).
+ */
+export async function reactivateUserWithJustificationAdmin(input: {
+  userId: string;
+  reasonCode: DeletionReinstateReasonCode;
+  reasonNote?: string;
+  evidenceGcsPath?: string;
+  evidenceFilename?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  const session = await ensureAdmin();
+  const adminId = (session.user as any).id as string;
+  const { userId, reasonCode, reasonNote, evidenceGcsPath, evidenceFilename } = input;
+
+  if (reasonCode === 'other' && !reasonNote?.trim()) {
+    return { success: false, error: 'Se requiere una nota cuando el motivo es "Otro".' };
+  }
+
+  try {
+    await db.update(user)
+      .set({ isActive: true, deletionRequestedAt: null, updatedAt: new Date() })
+      .where(eq(user.id, userId));
+
+    const [latestRequest] = await db
+      .select({ id: userDeletionRequest.id })
+      .from(userDeletionRequest)
+      .where(and(eq(userDeletionRequest.userId, userId), eq(userDeletionRequest.outcome, 'deactivated')))
+      .orderBy(desc(userDeletionRequest.requestedAt))
+      .limit(1);
+
+    if (latestRequest) {
+      await db.update(userDeletionRequest)
+        .set({
+          outcome: 'reinstated',
+          resolvedAt: new Date(),
+          resolvedByAdminId: adminId,
+          resolutionReasonCode: reasonCode,
+          resolutionNote: reasonNote ?? null,
+          evidenceGcsPath: evidenceGcsPath ?? null,
+          evidenceFilename: evidenceFilename ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(userDeletionRequest.id, latestRequest.id));
+    }
+
+    db.insert(auditLog).values({
+      userId: adminId,
+      action: 'USER_DELETION_REQUEST_CANCELLED',
+      payload: { targetUserId: userId, reasonCode, adminId },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).catch((e) => console.error('[reactivateUserWithJustificationAdmin] audit_log error:', e));
+
+    return { success: true };
+  } catch (error) {
+    console.error('[reactivateUserWithJustificationAdmin] Error:', error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+const ALLOWED_EVIDENCE_CONTENT_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+
+/**
+ * Genera una URL firmada de subida a GCS para archivos de evidencia de reactivación.
+ * Los archivos se almacenan bajo users/{userId}/legal/deletion-requests/.
+ */
+export async function getLegalEvidenceUploadUrlAction(input: {
+  userId: string;
+  filename: string;
+  contentType: string;
+}): Promise<{ success: boolean; url?: string; gcsPath?: string; error?: string }> {
+  await ensureAdmin();
+  const { userId, filename, contentType } = input;
+
+  if (!ALLOWED_EVIDENCE_CONTENT_TYPES.includes(contentType)) {
+    return { success: false, error: 'Tipo de archivo no permitido. Solo se aceptan PDF, JPEG y PNG.' };
+  }
+
+  const ext = filename.split('.').pop()?.toLowerCase() ?? 'bin';
+  const sanitized = filename
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9_\-]/g, '_')
+    .slice(0, 80);
+  const timestamp = Date.now();
+  const gcsPath = `users/${userId}/legal/deletion-requests/${timestamp}_${sanitized}.${ext}`;
+
+  try {
+    const url = await getUploadUrl(gcsPath, contentType);
+    if (!url) return { success: false, error: 'No se pudo generar la URL de subida.' };
+    return { success: true, url, gcsPath };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * Lista el historial completo de solicitudes de eliminación de cuenta para la página legal.
+ */
+export async function listDeletionRequestsAdmin() {
+  await ensureAdmin();
+  try {
+    const rows = await db
+      .select({
+        id: userDeletionRequest.id,
+        userId: userDeletionRequest.userId,
+        userEmailSnapshot: userDeletionRequest.userEmailSnapshot,
+        requestedAt: userDeletionRequest.requestedAt,
+        outcome: userDeletionRequest.outcome,
+        resolvedAt: userDeletionRequest.resolvedAt,
+        resolvedByAdminId: userDeletionRequest.resolvedByAdminId,
+        resolutionReasonCode: userDeletionRequest.resolutionReasonCode,
+        resolutionNote: userDeletionRequest.resolutionNote,
+        evidenceGcsPath: userDeletionRequest.evidenceGcsPath,
+        evidenceFilename: userDeletionRequest.evidenceFilename,
+        userFullName: user.fullName,
+      })
+      .from(userDeletionRequest)
+      .leftJoin(user, eq(userDeletionRequest.userId, user.id))
+      .orderBy(desc(userDeletionRequest.requestedAt));
+
+    // Enrich admin names separately to avoid alias complexity
+    const adminIds = [...new Set(rows.map(r => r.resolvedByAdminId).filter(Boolean))] as string[];
+    const adminMap: Record<string, string> = {};
+    if (adminIds.length > 0) {
+      const admins = await db
+        .select({ id: user.id, fullName: user.fullName })
+        .from(user)
+        .where(or(...adminIds.map(id => eq(user.id, id))));
+      for (const a of admins) adminMap[a.id] = a.fullName ?? '';
+    }
+
+    return {
+      success: true,
+      data: rows.map(r => ({
+        ...r,
+        resolvedByAdminName: r.resolvedByAdminId ? (adminMap[r.resolvedByAdminId] ?? null) : null,
+      })),
+    };
+  } catch (error) {
+    console.error('[listDeletionRequestsAdmin] Error:', error);
+    return { success: false, error: (error as Error).message, data: [] };
   }
 }

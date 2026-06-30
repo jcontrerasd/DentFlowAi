@@ -114,7 +114,7 @@ describe('UchDealSummary', () => {
         clinicalCase={{ assignedTechnicianId: null, proposedPrice: null, workDeadline: null }}
       />,
     );
-    expect(screen.getByText(/comparativo de ofertas está en el hilo/i)).toBeInTheDocument();
+    expect(screen.getByText(/el resumen del acuerdo se mostrará aquí/i)).toBeInTheDocument();
     expect(screen.queryByText(/Oferta #1/i)).not.toBeInTheDocument();
   });
 

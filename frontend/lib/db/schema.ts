@@ -59,6 +59,10 @@ export const user = pgTable("user", {
   consecutiveNoResponse: integer("consecutive_no_response").default(0),
   themePreference: text("theme_preference").default('system').notNull(),
   emailNotificationPrefs: jsonb("email_notification_prefs"),
+  // Cumplimiento legal (Ley 21.719 / Ley 19.628) — ver Doc/Auditoria_Cumplimiento_Legal.md
+  consentRegistrationAcceptedAt: timestamp("consent_registration_accepted_at", { withTimezone: true, mode: 'date' }),
+  consentRegistrationLegalVersion: text("consent_registration_legal_version"),
+  deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true, mode: 'date' }),
 }, (table) => [
   uniqueIndex("user_email_uidx").on(table.email),
   index("user_organizationId_idx").on(table.organizationId),
@@ -74,6 +78,9 @@ export const clinicalCase = pgTable("clinical_case", {
 	notesEsthetic: text("notes_esthetic"),
 	notesOclusal: text("notes_oclusal"),
 	patientIdAnon: text("patient_id_anon"),
+	// Declaración del dentista de contar con el consentimiento del paciente (Ley 21.719 / 20.584).
+	// No es una firma del paciente: la plataforma nunca interactúa con él directamente.
+	patientConsentDeclaredAt: timestamp("patient_consent_declared_at", { withTimezone: true, mode: 'date' }),
 	status: text().notNull(),
 	teeth: jsonb(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
@@ -462,6 +469,27 @@ export const auditLog = pgTable("audit_log", {
   index("al_org_idx").on(table.organizationId),
   index("al_user_idx").on(table.userId),
   index("al_action_idx").on(table.action),
+]);
+
+// Auditoría legal de solicitudes de eliminación de cuenta (Ley 21.719 — art. 14 sexies ARCO)
+export const userDeletionRequest = pgTable("user_deletion_request", {
+  id: uuid().default(sql`gen_random_uuid()`).primaryKey().notNull(),
+  userId: text("user_id").references(() => user.id, { onDelete: 'set null' }),
+  userEmailSnapshot: text("user_email_snapshot").notNull(),
+  requestedAt: timestamp("requested_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  outcome: text("outcome").notNull(), // 'deactivated' | 'deleted' | 'reinstated' | 'pending'
+  resolvedAt: timestamp("resolved_at", { withTimezone: true, mode: 'date' }),
+  resolvedByAdminId: text("resolved_by_admin_id").references(() => user.id, { onDelete: 'set null' }),
+  resolutionReasonCode: text("resolution_reason_code"),
+  resolutionNote: text("resolution_note"),
+  evidenceGcsPath: text("evidence_gcs_path"),
+  evidenceFilename: text("evidence_filename"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  index("udr_user_idx").on(table.userId),
+  index("udr_outcome_idx").on(table.outcome),
+  index("udr_requested_at_idx").on(table.requestedAt),
 ]);
 
 // NextAuth Tables

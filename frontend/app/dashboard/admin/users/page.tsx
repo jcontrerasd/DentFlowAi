@@ -21,7 +21,11 @@ import {
   getUserForEditAdmin,
   updateUserProfileAdmin,
   updateUserOrgAdmin,
+  reactivateUserWithJustificationAdmin,
+  getLegalEvidenceUploadUrlAction,
 } from '@/lib/db/actions/admin';
+import { DELETION_REINSTATEMENT_REASONS } from '@/lib/constants/legalReasons';
+import { AlertTriangle, UploadCloud, FileCheck } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
 
@@ -39,9 +43,18 @@ export default function AdminUsersPage() {
   const [processing, setProcessing] = useState(false);
   const [actionModal, setActionModal] = useState<{
     show: boolean;
-    type: 'toggle' | 'delete' | 'password' | 'edit';
+    type: 'toggle' | 'delete' | 'password' | 'edit' | 'reactivate_deletion';
     userData: any;
   }>({ show: false, type: 'toggle', userData: null });
+  const [justificationForm, setJustificationForm] = useState({
+    reasonCode: '',
+    reasonNote: '',
+    evidenceFile: null as File | null,
+    uploading: false,
+    uploadProgress: 0,
+    uploadedGcsPath: '',
+    uploadedFilename: '',
+  });
   const [resetModal, setResetModal] = useState<{ show: boolean; userId: string; userName: string }>({ show: false, userId: '', userName: '' });
   const [editForm, setEditForm] = useState({
     fullName: '', phone: '', specialty: '', registrationNumber: '',
@@ -144,6 +157,68 @@ export default function AdminUsersPage() {
       setActionModal({ show: false, type: 'toggle', userData: null });
     } catch {
       showError('Error de conexión con el servidor');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleReactivateWithJustification = async () => {
+    if (!actionModal.userData || processing) return;
+    const { reasonCode, reasonNote, evidenceFile } = justificationForm;
+    if (!reasonCode) { showError('Debes seleccionar un motivo.'); return; }
+    if (reasonCode === 'other' && !reasonNote.trim()) { showError('El motivo "Otro" requiere una nota.'); return; }
+
+    setProcessing(true);
+    try {
+      let gcsPath = justificationForm.uploadedGcsPath;
+      let filename = justificationForm.uploadedFilename;
+
+      if (evidenceFile && !gcsPath) {
+        setJustificationForm(f => ({ ...f, uploading: true }));
+        const urlRes = await getLegalEvidenceUploadUrlAction({
+          userId: actionModal.userData.id,
+          filename: evidenceFile.name,
+          contentType: evidenceFile.type,
+        });
+        if (!urlRes.success || !urlRes.url) {
+          showError(urlRes.error || 'Error al obtener URL de subida.');
+          setJustificationForm(f => ({ ...f, uploading: false }));
+          setProcessing(false);
+          return;
+        }
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('PUT', urlRes.url!);
+          xhr.setRequestHeader('Content-Type', evidenceFile.type);
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) setJustificationForm(f => ({ ...f, uploadProgress: Math.round((e.loaded / e.total) * 100) }));
+          };
+          xhr.onload = () => xhr.status < 300 ? resolve() : reject(new Error(`Upload failed: ${xhr.status}`));
+          xhr.onerror = () => reject(new Error('Network error durante upload'));
+          xhr.send(evidenceFile);
+        });
+        gcsPath = urlRes.gcsPath!;
+        filename = evidenceFile.name;
+        setJustificationForm(f => ({ ...f, uploading: false, uploadedGcsPath: gcsPath, uploadedFilename: filename }));
+      }
+
+      const res = await reactivateUserWithJustificationAdmin({
+        userId: actionModal.userData.id,
+        reasonCode: reasonCode as any,
+        reasonNote: reasonNote || undefined,
+        evidenceGcsPath: gcsPath || undefined,
+        evidenceFilename: filename || undefined,
+      });
+
+      if (res.success) {
+        showSuccess('Usuario reactivado con justificación registrada.');
+        await fetchUsers();
+        setActionModal({ show: false, type: 'toggle', userData: null });
+      } else {
+        showError(res.error || 'No se pudo reactivar al usuario.');
+      }
+    } catch {
+      showError('Error de conexión con el servidor.');
     } finally {
       setProcessing(false);
     }
@@ -306,6 +381,14 @@ export default function AdminUsersPage() {
                             {u.isActive ? 'Activo' : 'Bloqueado'}
                           </span>
                         </div>
+                        {!u.isActive && u.deletionRequestedAt && (
+                          <span
+                            title={`Solicitud: ${new Date(u.deletionRequestedAt).toLocaleDateString('es-CL')}`}
+                            className="text-[9px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 w-fit"
+                          >
+                            Elim. solicitada
+                          </span>
+                        )}
                         <div className="w-24 h-1 bg-surface-2 rounded-full overflow-hidden">
                           <div className="h-full bg-primary" style={{ width: `${u.onboardingStep || 0}%` }} />
                         </div>
@@ -324,9 +407,16 @@ export default function AdminUsersPage() {
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => setActionModal({ show: true, type: 'toggle', userData: u })}
+                          onClick={() => {
+                            if (!u.isActive && u.deletionRequestedAt) {
+                              setJustificationForm({ reasonCode: '', reasonNote: '', evidenceFile: null, uploading: false, uploadProgress: 0, uploadedGcsPath: '', uploadedFilename: '' });
+                              setActionModal({ show: true, type: 'reactivate_deletion', userData: u });
+                            } else {
+                              setActionModal({ show: true, type: 'toggle', userData: u });
+                            }
+                          }}
                           className={`p-2 rounded-lg transition-colors ${u.isActive ? 'text-faint hover:text-error hover:bg-error/10' : 'text-primary hover:opacity-90/10'}`}
-                          title={u.isActive ? 'Bloquear' : 'Activar'}
+                          title={u.isActive ? 'Bloquear' : (u.deletionRequestedAt ? 'Reactivar (solicitud de eliminación)' : 'Activar')}
                         >
                           {u.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                         </button>
@@ -433,6 +523,113 @@ export default function AdminUsersPage() {
                   className="w-full py-4 text-faint font-black text-xs uppercase tracking-widest hover:text-foreground transition-colors disabled:opacity-50"
                 >
                   Cancelar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Modal de Reactivación con Justificación Legal */}
+        {actionModal.show && actionModal.type === 'reactivate_deletion' && (
+          <div key="modal-reactivate" className="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-md bg-black/60">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg bg-surface border-2 border-amber-500/30 rounded-[2.5rem] p-10 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-start gap-4 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
+                <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-amber-300 text-sm font-bold">Reactivar con justificación</p>
+                  <p className="text-amber-400/70 text-xs mt-1">
+                    {actionModal.userData?.fullName} solicitó eliminar su cuenta el{' '}
+                    {actionModal.userData?.deletionRequestedAt
+                      ? new Date(actionModal.userData.deletionRequestedAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })
+                      : '—'}.
+                    Esta acción queda registrada en el log de cumplimiento legal (Ley 21.719).
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-faint uppercase tracking-wider mb-2">Motivo de reactivación *</label>
+                <select
+                  value={justificationForm.reasonCode}
+                  onChange={(e) => setJustificationForm(f => ({ ...f, reasonCode: e.target.value }))}
+                  className="w-full bg-surface-2 border border-divider rounded-xl px-4 py-3 text-sm text-foreground outline-none focus:border-amber-400/40"
+                >
+                  <option value="">Selecciona un motivo...</option>
+                  {DELETION_REINSTATEMENT_REASONS.map(r => (
+                    <option key={r.code} value={r.code}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-faint uppercase tracking-wider mb-2">
+                  Nota adicional {justificationForm.reasonCode === 'other' ? '*' : '(opcional)'}
+                </label>
+                <textarea
+                  value={justificationForm.reasonNote}
+                  onChange={(e) => setJustificationForm(f => ({ ...f, reasonNote: e.target.value }))}
+                  rows={3}
+                  className="w-full bg-surface-2 border border-divider rounded-xl px-4 py-3 text-sm text-foreground outline-none focus:border-amber-400/40 resize-none"
+                  placeholder="Describe el contexto o acuerdo con el usuario..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-faint uppercase tracking-wider mb-2">Respaldo documental (opcional)</label>
+                {justificationForm.uploadedGcsPath ? (
+                  <div className="flex items-center gap-3 p-3 bg-surface-2 border border-divider rounded-xl">
+                    <FileCheck className="w-4 h-4 text-primary" />
+                    <span className="text-xs text-foreground truncate">{justificationForm.uploadedFilename}</span>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-divider rounded-xl cursor-pointer hover:border-amber-400/40 transition-colors">
+                    <UploadCloud className="w-6 h-6 text-faint" />
+                    <span className="text-xs text-faint">PDF, JPEG o PNG · máx 20 MB</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (!f) return;
+                        if (f.size > 20 * 1024 * 1024) { showError('El archivo supera el límite de 20 MB.'); return; }
+                        setJustificationForm(prev => ({ ...prev, evidenceFile: f }));
+                      }}
+                    />
+                    {justificationForm.evidenceFile && (
+                      <span className="text-xs text-primary font-bold">{justificationForm.evidenceFile.name}</span>
+                    )}
+                  </label>
+                )}
+                {justificationForm.uploading && (
+                  <div className="mt-2">
+                    <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-400 transition-all duration-200" style={{ width: `${justificationForm.uploadProgress}%` }} />
+                    </div>
+                    <p className="text-[10px] text-faint mt-1">{justificationForm.uploadProgress}% subido...</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setActionModal({ show: false, type: 'toggle', userData: null })}
+                  className="flex-1 py-3 border border-divider rounded-2xl text-sm text-muted hover:text-foreground transition-colors"
+                  disabled={processing}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleReactivateWithJustification}
+                  disabled={processing || !justificationForm.reasonCode}
+                  className="flex-1 py-3 bg-amber-500 hover:bg-amber-400 text-white rounded-2xl text-sm font-bold disabled:opacity-50 disabled:pointer-events-none transition-colors"
+                >
+                  {processing ? 'Guardando...' : 'Reactivar y registrar'}
                 </button>
               </div>
             </motion.div>

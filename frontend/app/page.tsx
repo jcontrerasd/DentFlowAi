@@ -142,8 +142,8 @@ export default async function Home() {
         </div>
         <p className="text-sm text-zinc-500">© 2026 DentFlowAi. Todos los derechos reservados.</p>
         <div className="flex gap-6 text-sm text-zinc-500">
-          <Link href="#" className="hover:text-primary transition-colors">Privacidad</Link>
-          <Link href="#" className="hover:text-primary transition-colors">Términos</Link>
+          <Link href="/legal/privacidad" className="hover:text-primary transition-colors">Privacidad</Link>
+          <Link href="/legal/terminos" className="hover:text-primary transition-colors">Términos</Link>
           <Link href="#" className="hover:text-primary transition-colors">Contacto</Link>
         </div>
       </footer>

@@ -2,9 +2,11 @@
 
 import * as bcrypt from "bcryptjs";
 import { auth } from "@/auth";
+import { getServerIdentity } from "@/lib/db/actions/impersonation";
 import { db, infraPromise } from "@/lib/db";
-import { user, organization, file, caseAssignment } from "@/lib/db/schema";
-import { eq, sql, and, isNull, lt } from "drizzle-orm";
+import { user, organization, file, caseAssignment, clinicalCase, clinicalCaseDelivery, userDeletionRequest } from "@/lib/db/schema";
+import { eq, sql, and, isNull, lt, or, desc } from "drizzle-orm";
+import { getSignedUrl } from "@/lib/gcs";
 import GCPStorageService from "@/lib/services/gcp-storage";
 
 /**
@@ -311,15 +313,152 @@ export async function discardOnboardingAccountAction(): Promise<{ success: boole
   if (infraPromise) await infraPromise;
 
   try {
-    const session = await auth();
-    const realUserId = (session?.user as any)?.id as string | undefined;
+    const identity = await getServerIdentity();
+    const userId = identity?.id as string | undefined;
 
     // Sin sesión (p. ej. paso 0, antes de crear la cuenta): nada que descartar.
-    if (!realUserId) return { success: true };
+    if (!userId) return { success: true };
 
-    return await discardUserAccountById(realUserId);
+    // Un admin no puede auto-borrarse disfrazado de otro usuario.
+    if (identity?.isSimulating && identity.role === 'admin') {
+      return { success: false, error: 'No disponible en modo simulación para cuentas admin.' };
+    }
+
+    return await discardUserAccountById(userId);
   } catch (error) {
     console.error("[discardOnboardingAccountAction] Error:", error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * Cumplimiento legal (Ley 21.719/19.628, derecho de cancelación/supresión) — el propio
+ * usuario solicita eliminar su cuenta. Usa `getServerIdentity()` para respetar la
+ * simulación admin (el admin puede actuar en nombre del usuario simulado), pero bloquea
+ * explícitamente que un admin se auto-borre disfrazado de otro usuario.
+ *
+ * - Sin rastro de actividad (casos/asignaciones/entregas/reviews/eventos) → se borra
+ *   físicamente, igual que `discardUserAccountById`.
+ * - Con actividad → no se puede borrar sin perder integridad histórica; se desactiva la
+ *   cuenta (mismo efecto que el bloqueo admin) y se registra `deletionRequestedAt` para que
+ *   el caso pueda revisarse/purgarse manualmente respetando la política de retención
+ *   (ver Doc/Auditoria_Cumplimiento_Legal.md).
+ */
+export async function requestAccountDeletionAction(): Promise<{ success: boolean; deactivated?: boolean; error?: string }> {
+  if (infraPromise) await infraPromise;
+  try {
+    const identity = await getServerIdentity();
+    const userId = identity?.id as string | undefined;
+    if (!userId) return { success: false, error: 'No autenticado' };
+
+    // Un admin no puede auto-borrarse disfrazado de otro usuario.
+    if (identity?.isSimulating && identity.role === 'admin') {
+      return { success: false, error: 'No disponible en modo simulación para cuentas admin.' };
+    }
+
+    const [target] = await db.select({ role: user.role, email: user.email }).from(user).where(eq(user.id, userId)).limit(1);
+    if (!target) return { success: false, error: 'Usuario no encontrado.' };
+    if (target.role === 'admin') return { success: false, error: 'Un administrador no puede solicitar la eliminación de su propia cuenta.' };
+
+    const { hasUserActivityTrace } = await import('@/lib/db/actions/admin');
+    const activityReason = await hasUserActivityTrace(userId);
+
+    if (!activityReason) {
+      // Insertar registro de auditoría antes de la eliminación física (FK quedará NULL tras el delete)
+      await db.insert(userDeletionRequest).values({
+        userId,
+        userEmailSnapshot: target.email,
+        outcome: 'deleted',
+        resolvedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      const result = await discardUserAccountById(userId);
+      return { ...result, deactivated: false };
+    }
+
+    await db.update(user)
+      .set({ isActive: false, deletionRequestedAt: new Date(), updatedAt: new Date() })
+      .where(eq(user.id, userId));
+    await db.insert(userDeletionRequest).values({
+      userId,
+      userEmailSnapshot: target.email,
+      outcome: 'deactivated',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    return { success: true, deactivated: true };
+  } catch (error) {
+    console.error("[requestAccountDeletionAction] Error:", error);
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * Cumplimiento legal (Ley 21.719, derecho de acceso y portabilidad) — exporta los datos
+ * personales del usuario autenticado: perfil, organización y los casos en los que participa
+ * (como dentista o como técnico asignado). Usa `getServerIdentity()` para respetar la
+ * simulación admin: el admin puede exportar los datos del usuario simulado en su nombre.
+ */
+export async function exportMyDataAction(): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+  if (infraPromise) await infraPromise;
+  try {
+    const identity = await getServerIdentity();
+    const userId = identity?.id as string | undefined;
+    if (!userId) return { success: false, error: 'No autenticado' };
+
+    const profile = await getUserProfileDirect(userId);
+    if (!profile) return { success: false, error: 'Usuario no encontrado' };
+    const { organization: organizationData, ...usuario } = profile;
+
+    const casosRaw = await db
+      .select({
+        id: clinicalCase.id,
+        internalName: clinicalCase.internalName,
+        status: clinicalCase.status,
+        rolEnElCaso: sql<string>`CASE WHEN ${clinicalCase.doctorId} = ${userId} THEN 'dentista' ELSE 'tecnico' END`,
+        createdAt: clinicalCase.createdAt,
+        publishedAt: clinicalCase.publishedAt,
+        completedAt: clinicalCase.completedAt,
+      })
+      .from(clinicalCase)
+      .where(or(eq(clinicalCase.doctorId, userId), eq(clinicalCase.assignedTechnicianId, userId)));
+
+    // Solo se incluyen los archivos de la ENTREGA APROBADA (final), nunca revisiones
+    // intermedias pendientes o rechazadas — esas son borradores de trabajo, no el
+    // resultado final que el dentista aceptó para el paciente.
+    const casos = await Promise.all(casosRaw.map(async (caso) => {
+      const [approvedDelivery] = await db
+        .select({ files: clinicalCaseDelivery.files, version: clinicalCaseDelivery.version })
+        .from(clinicalCaseDelivery)
+        .where(and(eq(clinicalCaseDelivery.clinicalCaseId, caso.id), eq(clinicalCaseDelivery.status, 'approved')))
+        .orderBy(desc(clinicalCaseDelivery.version))
+        .limit(1);
+
+      let archivosEntregaFinal: { path: string; url: string | null }[] = [];
+      if (approvedDelivery?.files?.length) {
+        archivosEntregaFinal = await Promise.all(
+          approvedDelivery.files.map(async (gcsPath) => ({
+            path: gcsPath,
+            url: await getSignedUrl(gcsPath).catch(() => null),
+          })),
+        );
+      }
+
+      return { ...caso, archivosEntregaFinal };
+    }));
+
+    return {
+      success: true,
+      data: {
+        generatedAt: new Date().toISOString(),
+        usuario,
+        organizacion: organizationData ?? null,
+        casos,
+      },
+    };
+  } catch (error) {
+    console.error("[exportMyDataAction] Error:", error);
     return { success: false, error: (error as Error).message };
   }
 }

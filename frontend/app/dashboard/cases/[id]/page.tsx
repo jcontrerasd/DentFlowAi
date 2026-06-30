@@ -356,6 +356,9 @@ function CaseDetailPageContent() {
   const [isCloning, setIsCloning] = useState(false);
   const [isDownloadingCase, setIsDownloadingCase] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  // Cumplimiento legal (Ley 21.719 / Ley 20.584): declaración del dentista de contar con el
+  // consentimiento del paciente, requerida para publicar. Se reinicia cada vez que se abre el modal.
+  const [patientConsentChecked, setPatientConsentChecked] = useState(false);
   // v5.0 — pendiente_pool / republicar (modelo de disponibilidad).
   const [republicarOpen, setRepublicarOpen] = useState(false);
   const [checkInOpen, setCheckInOpen] = useState(false);
@@ -1138,7 +1141,7 @@ function CaseDetailPageContent() {
     }
     setActionLoading(true, 'publish');
     try {
-      const res = await publishCaseAction(id as string);
+      const res = await publishCaseAction(id as string, patientConsentChecked);
       if (!res.success) {
         if (res.error === 'Pool de técnicos vacío') {
           showErrorToast('No hay laboratorios disponibles con las habilidades requeridas. Modifica los requisitos o intenta más tarde.');
@@ -2232,6 +2235,7 @@ function CaseDetailPageContent() {
                     return;
                   }
                   setIsDeleting(false);
+                  setPatientConsentChecked(false);
                   setIsPublishing(true);
                 }}
                 onDeleteClick={() => {
@@ -3295,6 +3299,20 @@ function CaseDetailPageContent() {
               </div>
             </div>
 
+            {/* Cumplimiento legal (Ley 21.719 / Ley 20.584) — declaración del dentista, no firma del paciente */}
+            <label className="flex items-start gap-3 rounded-2xl border border-divider bg-surface-2 p-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={patientConsentChecked}
+                onChange={(e) => setPatientConsentChecked(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-primary shrink-0"
+              />
+              <span className="text-xs text-foreground leading-relaxed">
+                Declaro contar con el consentimiento del paciente para el tratamiento de sus datos clínicos
+                (Ley 21.719 / Ley 20.584).
+              </span>
+            </label>
+
             <div className="flex gap-4">
               <Button variant="ghost" className="flex-1 py-3.5" onClick={() => setIsPublishing(false)}>
                 Cancelar
@@ -3304,6 +3322,7 @@ function CaseDetailPageContent() {
                   variant="primary"
                   className="flex-1 py-3.5"
                   loading={loadingAction === 'publish' || savingChanges}
+                  disabled={!patientConsentChecked}
                   onClick={() => void handlePublish({ saveFirst: true })}
                 >
                   Guardar y publicar
@@ -3313,7 +3332,7 @@ function CaseDetailPageContent() {
                   variant="primary"
                   className="flex-1 py-3.5"
                   loading={loadingAction === 'publish'}
-                  disabled={!detailActions.publish.enabled}
+                  disabled={!detailActions.publish.enabled || !patientConsentChecked}
                   onClick={() => void handlePublish()}
                 >
                   Publicar ahora

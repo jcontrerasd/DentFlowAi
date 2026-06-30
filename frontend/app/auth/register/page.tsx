@@ -45,26 +45,30 @@ import {
 
 type AppRole = 'dentista' | 'tecnico';
 
+/** Versión del texto legal aceptado en el paso "Marco Legal". Subir esto si el texto cambia
+ *  de forma sustantiva, para poder detectar a futuro consentimientos sobre versiones viejas. */
+const LEGAL_CONSENT_VERSION = 'v1-2026-06';
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 const LEGAL_HELP_SECTION: FauchardHelpSection = {
   title: 'Marco Legal',
-  intro: 'Estas normas no son requisitos que tengas que configurar en DentFlowAI — describen lo que la plataforma ya respeta al manejar tus datos y los de tus pacientes. Cada ejemplo muestra cómo aplica concretamente dentro del producto.',
+  intro: 'Estas normas describen lo que la plataforma ya respeta al manejar tus datos y los de tus pacientes — no son configuraciones tuyas. Puedes consultar los documentos completos en la política de privacidad y los términos de uso de DentFlowAI.',
   params: [
     {
       label: 'Ley 21.719: Protección de datos personales',
       description: 'Exige consentimiento explícito (no implícito ni por casilla premarcada) para tratar datos sensibles, incluidos los datos de salud y biométricos. Entra en vigencia plena el 1 de diciembre de 2026.',
-      example: 'Los escaneos 3D que un dentista sube a un caso son datos de salud sensibles del paciente. La ley exige contar con su consentimiento para tratarlos, y le otorga derecho a acceder, rectificar o solicitar la eliminación de esos datos.',
+      example: 'Los escaneos 3D que un dentista sube a un caso son datos de salud sensibles del paciente. Al aceptar este marco registramos la fecha y versión de tu consentimiento. Como titular, puedes acceder, rectificar, cancelar, oponerte y exportar tus datos desde la sección "Mis datos" de tu perfil, o solicitar la eliminación de tu cuenta.',
     },
     {
       label: 'Ley 19.628: Protección vida privada',
       description: 'Regula el tratamiento de datos personales (no necesariamente sensibles) que se almacenan en bases de datos públicas o privadas.',
-      example: 'El nombre, correo, teléfono y dirección que registras en tu perfil de DentFlowAI se usan solo para operar la plataforma (inicio de sesión, notificaciones, asignación de casos) y no se ceden a terceros sin tu autorización.',
+      example: 'Tu nombre, correo, teléfono y dirección se usan únicamente para operar la plataforma (inicio de sesión, notificaciones, asignación de casos). No se venden ni se ceden a terceros con fines comerciales; solo se comparten con el laboratorio asignado en la medida necesaria para cada caso.',
     },
     {
       label: 'Ley 20.584: Derechos y deberes pacientes',
       description: 'Establece los derechos de los pacientes sobre su atención de salud, incluida la confidencialidad de su información clínica.',
-      example: 'Cuando publicas un caso con los antecedentes clínicos de un paciente, esa información queda visible solo para ti y el laboratorio asignado — ningún otro técnico del pool puede verla.',
+      example: 'Cuando publicas un caso, esa información queda visible solo para ti y el laboratorio asignado — ningún otro técnico del pool puede verla. El paciente se almacena únicamente como un identificador anónimo: la plataforma nunca guarda su nombre ni RUT.',
     },
   ],
   notes: [
@@ -704,7 +708,11 @@ export default function RegisterPage() {
       const userId = formData.userId || window.localStorage.getItem('onboardingUserId') || (session?.user as any)?.id;
       if (!userId) throw new Error('Usuario no identificado.');
 
-      const result = await updateUserAction(userId, { onboardingStep: 100 });
+      const result = await updateUserAction(userId, {
+        onboardingStep: 100,
+        consentRegistrationAcceptedAt: new Date(),
+        consentRegistrationLegalVersion: LEGAL_CONSENT_VERSION,
+      });
       if (!result.success) throw new Error(result.error || 'No se pudo finalizar la inscripción.');
 
       window.localStorage.removeItem('onboardingData');
@@ -1395,7 +1403,10 @@ export default function RegisterPage() {
                     {consent && <CheckCircle2 className="w-3.5 h-3.5 text-inverse" />}
                   </div>
                   <div className="space-y-4">
-                    <p className="text-xs text-muted font-medium leading-relaxed">Acepto el uso de DentFlowAI bajo el cumplimiento del marco legal chileno vigente:</p>
+                    <p className="text-xs text-muted font-medium leading-relaxed">
+                      Acepto el uso de DentFlowAI bajo el cumplimiento del marco legal chileno vigente (ver{' '}
+                      <Link href="/legal/privacidad" target="_blank" onClick={e => e.stopPropagation()} className="text-primary hover:underline underline-offset-2">política de privacidad completa</Link>):
+                    </p>
                     <ul className="space-y-3">
                       {[
                         { href: 'https://www.bcn.cl/leychile/navegar?idNorma=1209272', label: 'Ley 21.719: Protección de datos personales' },

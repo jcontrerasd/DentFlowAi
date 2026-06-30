@@ -114,7 +114,7 @@ describe('MarketplaceCaseCard (técnico)', () => {
       />,
     );
 
-    expect(screen.getByText(/Cotización enviada · en evaluación/i)).toBeInTheDocument();
+    expect(screen.getByText(/Asignación enviada · en evaluación/i)).toBeInTheDocument();
   });
 
   it('muestra globo de no leídos junto al botón del Centro de control', () => {

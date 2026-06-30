@@ -35,23 +35,32 @@ export function shouldPresentUchEventAsFauchard(
   if (viewer.role === 'admin') return false;
 
   const payload = (event.payload ?? {}) as Record<string, unknown>;
+
+  // Invitación/asignación a cotizar o trabajar: siempre orquestación de Fauchard, sin
+  // excepción — el técnico nunca "escribió" este mensaje, solo es el destinatario al que
+  // pertenece la fila en BD. A diferencia del split de CASO_PUBLICADO (donde el dentista
+  // sí realizó la acción real), aquí el userId persistido coincidiendo con el viewer NO
+  // significa que el viewer sea el autor. Soporta el alias legacy en BD ('INVITACION_RECIBIDA').
+  if (
+    viewer.role === 'tecnico' &&
+    (event.action === 'ASIGNACION_RECIBIDA' || event.action === 'INVITACION_RECIBIDA') &&
+    (payload.visibleTo === 'tecnico' || payload.visibleTo === undefined)
+  ) {
+    return true;
+  }
+
   if (payload.presentationAuthor === 'fauchard') {
-    // Para eventos visibles a ambos roles (ej. REVISION_SOLICITADA), el autor real
-    // no debe verse enmascarado como Fauchard — solo el otro rol lo ve así.
-    // Eventos visibles solo a un rol (ej. ASIGNACION_RECIBIDA visibleTo:'tecnico')
-    // mantienen el enmascarado aunque userId === viewer.id.
+    // Para eventos visibles a AMBOS roles, el autor real no debe verse enmascarado como
+    // Fauchard ante sí mismo — solo el otro rol lo ve así. NO extender esta excepción a
+    // visibleTo de un solo rol (ej. 'tecnico'): esa coincidencia también se da en eventos
+    // donde el viewer es solo el destinatario, nunca el autor (ej. ASIGNACION_RECIBIDA,
+    // ASIGNACION_EXPIRADA — el userId persistido es "de quién es la fila", no "quién la
+    // escribió"). El split de CASO_PUBLICADO no depende de este unmask: trabaja directo
+    // con `event.userId` (nunca tocado por el masking) en `uchCasoPublicadoSplit.ts`.
     const persistedActorId = event.userId;
     const visibleTo = payload.visibleTo as string | undefined;
-    // No enmascarar cuando el viewer ES el autor real del evento.
-    // Cubre 'ambos' (ej. REVISION_SOLICITADA) y eventos cuya visibilidad
-    // coincide con el rol del viewer (ej. CASO_PUBLICADO con visibleTo:'dentista'
-    // visto por el dentista autor, o visibleTo:'tecnico' por el técnico autor).
-    const visibleToMatchesViewer =
-      visibleTo === 'ambos' ||
-      (visibleTo === 'dentista' && viewer.role === 'dentista') ||
-      (visibleTo === 'tecnico' && viewer.role === 'tecnico');
     if (
-      visibleToMatchesViewer &&
+      visibleTo === 'ambos' &&
       persistedActorId &&
       String(persistedActorId) === String(viewer.id)
     ) {

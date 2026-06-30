@@ -334,7 +334,7 @@ Helpers: `frontend/lib/db/caseDeadlines.ts`.
 ### Qué ES el UCH
 El UCH (UnifiedCaseHub) NO es un chat libre. Es una pantalla de flujo guiado con tres capas:
 1. **CaseWorkflowStepper** → línea de tiempo del estado del caso (`frontend/components/cases/CaseWorkflowStepper.tsx`).
-2. **EventStream** → historial de eventos renderizado por rol en `frontend/components/cases/UnifiedCaseHub.tsx` (vista única tipo Actividad; sin pestaña Resumen; filtros de fase: Todos / Propuesta / Diseño / Produc.).
+2. **EventStream** → historial de eventos renderizado por rol en `frontend/components/cases/UnifiedCaseHub.tsx` (vista única tipo Actividad; sin pestaña Resumen; filtros de fase v2: Todos / Asignación / Entrega / Calificación — reemplazan los labels v1 Propuesta/Diseño/Produc.).
 3. **ActionPanel** → acciones y formularios embebidos en el **mismo hilo** (`buildUchTimelineRows`, filas expandibles en `frontend/components/cases/uch/`), sin overlays `fixed inset-0` centrados por defecto.
 
 ### Principio fundamental
@@ -347,7 +347,7 @@ Fauchard prioriza **una acción primaria** visible expandida en el hilo (aceptar
 | ASIGNACION_REASIGNADA | Técnico (nuevo asignado) | Evento Fauchard tras `tryReplaceAfterRejectAction` |
 | CASO_EN_COLA | Dentista | `PendingPoolBanner` + evento en hilo (pool sin elegibles) |
 | PROPUESTA_ACEPTADA / ASIGNACION_ACEPTADA | Ambos | `AcceptedProposalSummary.tsx`, `UchDealSummary.tsx` |
-| OFERTA_RECHAZADA / OFERTA_NO_SELECCIONADA | Técnico (perdedor) | `UchEventBubble.tsx` con bloque de detalle snapshot (legacy) |
+| OFERTA_RECHAZADA / OFERTA_NO_SELECCIONADA / CASO_OFERTAS_TODAS_RECHAZADAS | Técnico (perdedor) | **Retirado** — el bloque de detalle snapshot (costo/plazo/comentario) se eliminó de `UchEventBubble.tsx`; estos eventos legacy en BD solo muestran el `content` genérico, sin tarjeta especial |
 | OFERTA_RECHAZADA_POR_TECNICO | Sistema (enmascarado Fauchard) | `UchRejectInvitationDialog.tsx` + `rejectInvitationIndividualAction` — el técnico rechaza explícitamente su asignación pendiente (gated por `REJECTION_INDIVIDUAL_ENABLED`). **No** cuenta como no-respuesta; dispara reemplazo automático si `AVAILABILITY_MODEL_ENABLED`. El dentista no ve detalle explícito (el reemplazo aparece como nueva asignación). Distinto del rechazo **masivo** (`rejectInvitationsBulkAction`, al pausar el switch global). |
 | TRABAJO_INICIADO | Ambos | `UchFauchardActionsPanel.tsx` + `startWorkAction` |
 | REVISION_ENVIADA | Ambos | `UchDeliveryPanel.tsx` + `submitRevisionAction` |

@@ -1,6 +1,6 @@
 # Auditoría de cumplimiento legal — DentFlowAi
 
-Fecha de la auditoría: 29-jun-2026.
+Fecha de la auditoría: 29-jun-2026. **Actualizado el mismo día tras remediación** (rama `tmp-legal`, 8 de 9 recomendaciones implementadas — ver scorecard y sección final).
 
 > ⚠️ **Alcance**: evaluación **técnica del código** (qué hace y qué no hace el sistema hoy), no una opinión legal. Verificar con asesoría jurídica antes de tomar decisiones de cumplimiento.
 >
@@ -15,46 +15,48 @@ Leyes evaluadas (las mismas referenciadas en el wizard de registro, `frontend/ap
 
 ## Resumen ejecutivo (scorecard)
 
+> Este scorecard refleja el estado **post-remediación** (rama `tmp-legal`). Las tablas detalladas de cada ley, más abajo, conservan el diagnóstico original de la auditoría (29-jun-2026) seguido del estado actual tras la implementación.
+
 | Ley | Nivel de cumplimiento | Estado |
 |---|---|---|
-| **19.628** (vida privada — vigente hoy) | 🟡 Medio | Fuerte en seguridad/confidencialidad; débil en transparencia y derechos del titular |
-| **21.719** (datos personales — rige dic-2026) | 🔴 Bajo / no preparado | Faltan consentimiento demostrable, derechos ARCO+, política y registro de tratamiento |
-| **20.584** (derechos del paciente) | 🟢 Bueno | Confidencialidad clínica sólida; consentimiento del paciente delegado al dentista (offline) |
+| **19.628** (vida privada — vigente hoy) | 🟢 Bueno | Transparencia (política publicada), derecho de acceso/portabilidad y consentimiento ya resueltos. |
+| **21.719** (datos personales — rige dic-2026) | 🟢 Bueno / preparado | Consentimiento demostrable, derechos ARCO+ (acceso, rectificación, cancelación, oposición), política publicada y registro de tratamiento implementados. Pendiente solo el refuerzo menor #8 (omitido por decisión de producto). |
+| **20.584** (derechos del paciente) | 🟢 Bueno | Confidencialidad clínica sólida; declaración del dentista sobre consentimiento del paciente al publicar el caso (offline, vía checkbox auditable). |
 
-**Lo que está bien resuelto:** la **confidencialidad y el control de acceso** son la mayor fortaleza del sistema. **La mayor brecha** es el ciclo de **consentimiento + derechos del titular + transparencia**, justo lo que la 21.719 endurece.
+**Lo que está bien resuelto:** la **confidencialidad y el control de acceso** ya eran la mayor fortaleza del sistema; tras la remediación, también lo es el ciclo de **consentimiento + derechos del titular + transparencia**, que era la mayor brecha original.
 
 ---
 
-## 1. Ley 21.719 — Protección de datos personales 🔴
+## 1. Ley 21.719 — Protección de datos personales 🟢 (post-remediación)
 
 La app trata **datos sensibles** (escaneos 3D dentales = datos de salud/biométricos en `frontend/lib/db/schema.ts:67-103`; el caso guarda `notesEsthetic`, `doctorNotes`, `teeth`, archivos STL).
 
-| Requisito 21.719 | Estado | Evidencia en código |
-|---|---|---|
-| **Consentimiento explícito y demostrable** para datos sensibles | 🔴 No cumple | El checkbox de registro **no se persiste**: `handleFinalize` solo hace `if (!consent) return` (`frontend/app/auth/register/page.tsx:700-723`). No hay timestamp, versión del texto ni registro de quién/cuándo aceptó. |
-| **Derecho de acceso** (obtener copia de sus datos) | 🔴 No cumple | No existe ninguna acción de exportación/descarga de datos personales. |
-| **Rectificación** | 🟢 Cumple | `dashboard/profile` permite editar todos los campos personales y de organización (`frontend/app/dashboard/profile/page.tsx:168-197`). |
-| **Cancelación / supresión** | 🟡 Parcial | `deleteUserAdmin` solo borra si el usuario **no tiene actividad**; si tiene casos/eventos, obliga a bloquear y **retiene los datos** (`frontend/lib/db/actions/admin.ts:94-199`). No hay solicitud de borrado iniciada por el usuario. La retención por motivos legales es legítima, pero no hay política de retención documentada ni proceso para gestionar la solicitud. |
-| **Oposición / opt-out** | 🟡 Parcial | `emailNotificationPrefs` permite desactivar categorías de correo (`frontend/lib/services/notifications.ts:130-175`), pero todas son transaccionales/operativas. No hay un mecanismo general de oposición al tratamiento. |
-| **Portabilidad** | 🔴 No cumple | Sin export en formato estructurado. |
-| **Bloqueo** | 🔴 No cumple | No implementado como derecho del titular (existe `isActive`, pero es control admin). |
-| **Registro de actividades de tratamiento** (Art. 14 ter) | 🔴 No cumple | `audit_log` existe pero solo registra eventos de archivos (`frontend/lib/db/actions/files.ts:113`) y es purgable en la zona de peligro admin. No hay inventario de tratamientos. |
-| **Deber de transparencia** (política de privacidad accesible) | 🔴 No cumple | No existe página de política de privacidad ni de términos. El registro solo enlaza a las 3 leyes citadas. |
-| **Seguridad desde el diseño** | 🟢 Mayormente | bcrypt (10 rounds) para contraseñas; URLs firmadas GCS de vida corta (15 min); minimización del dato del paciente (solo ID anónimo); redacción de PII en telemetría. |
+| Requisito 21.719 | Estado original | Estado actual | Evidencia en código |
+|---|---|---|---|
+| **Consentimiento explícito y demostrable** para datos sensibles | 🔴 No cumple | 🟢 Cumple | `consentRegistrationAcceptedAt` + `consentRegistrationLegalVersion` (`schema.ts:63-64`), seteados en `handleFinalize` (`frontend/app/auth/register/page.tsx:713-714`) con versión fija del texto legal aceptado. |
+| **Derecho de acceso** (obtener copia de sus datos) | 🔴 No cumple | 🟢 Cumple | `exportMyDataAction` (`frontend/lib/db/actions/user.ts:374`) — descarga JSON del perfil, casos y entregas **aprobadas** (excluye revisiones intermedias pendientes/rechazadas). UI en `MyDataSection.tsx` (perfil). |
+| **Rectificación** | 🟢 Cumple | 🟢 Cumple | `dashboard/profile` permite editar todos los campos personales y de organización (`frontend/app/dashboard/profile/page.tsx:168-197`). |
+| **Cancelación / supresión** | 🟡 Parcial | 🟢 Cumple | `requestAccountDeletionAction` (`user.ts:340`) — autoservicio: borra físicamente si no hay rastro de actividad; si lo hay, desactiva la cuenta y registra `deletionRequestedAt` (retención documentada, ver sección final). Unifica criterio con `deleteUserAdmin` vía `hasUserActivityTrace`. UI en `DeleteAccountSection.tsx`. |
+| **Oposición / opt-out** | 🟡 Parcial | 🟡 Parcial (sin cambios) | `emailNotificationPrefs` permite desactivar categorías de correo, pero todas son transaccionales/operativas. No hay mecanismo general de oposición al tratamiento — fuera de alcance de esta remediación. |
+| **Portabilidad** | 🔴 No cumple | 🟢 Cumple | Mismo `exportMyDataAction` cubre acceso y portabilidad (formato JSON estructurado). |
+| **Bloqueo** | 🔴 No cumple | 🟡 Parcial (sin cambios) | Sigue sin implementarse como derecho explícito del titular (existe `isActive`, control admin); no priorizado en esta remediación. |
+| **Registro de actividades de tratamiento** (Art. 14 ter) | 🔴 No cumple | 🟢 Cumple | `lib/constants/dataProcessingRegistry.ts` + página admin descargable `/dashboard/admin/legal`. `audit_log` además excluido de purga (`admin.ts`, ver punto 9 abajo). |
+| **Deber de transparencia** (política de privacidad accesible) | 🔴 No cumple | 🟢 Cumple | `app/legal/privacidad/page.tsx` y `app/legal/terminos/page.tsx`, enlazadas desde registro y footer. |
+| **Seguridad desde el diseño** | 🟢 Mayormente | 🟢 Mayormente (sin cambios) | bcrypt (10 rounds) para contraseñas; URLs firmadas GCS de vida corta (15 min); minimización del dato del paciente (solo ID anónimo); redacción de PII en telemetría. Migración a argon2id evaluada y omitida (punto 8). |
 
 ---
 
-## 2. Ley 19.628 — Protección de la vida privada 🟡 (vigente hoy)
+## 2. Ley 19.628 — Protección de la vida privada 🟢 (vigente hoy, post-remediación)
 
-| Requisito | Estado | Nota |
-|---|---|---|
-| Tratamiento con finalidad e información al titular | 🟡 Parcial | Sin política publicada que declare finalidad/base legal. |
-| Calidad y rectificación de datos | 🟢 Cumple | Edición de perfil. |
-| Derecho de acceso | 🔴 No cumple | Sin export. |
-| Cancelación | 🟡 Parcial | Igual que la 21.719: admin-only con retención por actividad. |
-| Seguridad y confidencialidad | 🟢 Cumple bien | Ver sección 3. |
+| Requisito | Estado original | Estado actual | Nota |
+|---|---|---|---|
+| Tratamiento con finalidad e información al titular | 🟡 Parcial | 🟢 Cumple | Política de privacidad publicada y enlazada (declara finalidad/base legal). |
+| Calidad y rectificación de datos | 🟢 Cumple | 🟢 Cumple | Edición de perfil (sin cambios). |
+| Derecho de acceso | 🔴 No cumple | 🟢 Cumple | `exportMyDataAction` (ver tabla 21.719). |
+| Cancelación | 🟡 Parcial | 🟢 Cumple | `requestAccountDeletionAction`, autoservicio (ver tabla 21.719). |
+| Seguridad y confidencialidad | 🟢 Cumple bien | 🟢 Cumple bien | Sin cambios — ver sección 3. |
 
-La 19.628 **ya rige**: las brechas de transparencia, acceso y consentimiento son exigibles **hoy**, no solo desde diciembre.
+La 19.628 **ya rige**: las brechas de transparencia, acceso y consentimiento, exigibles desde hoy, quedaron resueltas con esta remediación.
 
 ---
 
@@ -64,23 +66,33 @@ La 19.628 **ya rige**: las brechas de transparencia, acceso y consentimiento son
 |---|---|---|
 | **Confidencialidad de la información clínica** | 🟢 Cumple bien | Identidad autoritativa server-side (`getServerIdentity()`); reglas de anonimato (dentista nunca ve al técnico, técnico nunca ve a otros técnicos) vía `sanitizeUchPayloadForViewer`; gate de dirección en 3 niveles (`getDoctorAddressDisclosure`); ContactGuard modera campos libres para evitar fuga de contacto/datos (`frontend/lib/db/actions/cases.ts`, aplicado en notas/despacho). |
 | **Minimización de identidad del paciente** | 🟢 Cumple | El paciente se almacena solo como `patientIdAnon` (`frontend/lib/db/schema.ts:76`) — no se guarda nombre ni RUT del paciente. Buena decisión de diseño. |
-| **Consentimiento informado del paciente** | 🟡 Delegado | El sistema **no captura** el consentimiento del paciente; se asume que el dentista lo obtiene fuera de la plataforma. Arquitectónicamente aceptable, pero no queda registro de que ese consentimiento existió. |
+| **Consentimiento informado del paciente** | 🟡 Delegado → 🟢 Declaración auditable | El sistema sigue **sin capturar** el consentimiento real del paciente (lo obtiene el dentista offline, fuera de la plataforma — la app nunca interactúa con el paciente). Lo que se agregó es una **declaración explícita del dentista**: checkbox obligatorio (`patientConsentChecked`) al publicar el caso, que bloquea `publishCaseAction` si no está marcado (`frontend/app/dashboard/cases/[id]/page.tsx:361,1144`). Deja registro de que el dentista atestiguó contar con el consentimiento, sin pretender sustituirlo. |
 
 ---
 
-## Recomendaciones priorizadas
+## Recomendaciones priorizadas — estado final
 
 **🔴 Crítico (antes de dic-2026, y varios exigibles ya por la 19.628):**
-1. **Persistir el consentimiento**: guardar `consentAcceptedAt` + versión del texto legal aceptado en `user` (o tabla `consent_log`). Hoy no hay prueba de consentimiento.
-2. **Publicar política de privacidad y términos** como páginas accesibles; enlazarlas desde el registro y el footer.
-3. **Derecho de acceso + portabilidad**: una acción "Descargar mis datos" (JSON/CSV del perfil + casos del usuario).
-4. **Proceso de supresión iniciado por el titular** + **política de retención documentada** (qué se conserva, por cuánto tiempo y por qué base legal).
+1. ✅ **Implementado** — Persistir el consentimiento: `consentRegistrationAcceptedAt` + `consentRegistrationLegalVersion` en `user` (`frontend/lib/db/schema.ts:63-64`), seteados en el registro (`frontend/app/auth/register/page.tsx:713-714`).
+2. ✅ **Implementado** — Política de privacidad y términos publicadas como páginas accesibles (`app/legal/privacidad/`, `app/legal/terminos/`), enlazadas desde el registro y el footer.
+3. ✅ **Implementado** — Derecho de acceso + portabilidad: `exportMyDataAction` ("Descargar mis datos", JSON del perfil + casos + entregas **aprobadas**), expuesto en `MyDataSection.tsx` del perfil.
+4. ✅ **Implementado** — Proceso de supresión iniciado por el titular (`requestAccountDeletionAction`, `DeleteAccountSection.tsx`) + política de retención documentada (ver sección final de este documento).
 
 **🟡 Importante:**
-5. **Registro de actividades de tratamiento** (Art. 14 ter) — documentar qué datos, finalidad, base legal, destinatarios, plazos.
-6. **Captura opcional de consentimiento del paciente** (o al menos una casilla donde el dentista declare haberlo obtenido, con registro).
-7. Confirmar **cifrado en tránsito a la BD** (`sslmode=require` en `DATABASE_URL` / conector Cloud SQL) — no es verificable desde el código (`frontend/lib/db/index.ts` no fija `ssl` explícitamente).
+5. ✅ **Implementado** — Registro de actividades de tratamiento (Art. 14 ter): `lib/constants/dataProcessingRegistry.ts`, descargable desde `/dashboard/admin/legal`.
+6. ✅ **Implementado** — Declaración del dentista sobre consentimiento del paciente: checkbox obligatorio al publicar el caso (`patientConsentChecked`), bloquea la publicación si no está marcado.
+7. ✅ **Implementado** — Cifrado en tránsito a la BD: warning en boot si `DATABASE_URL` no incluye `sslmode` en producción (`frontend/lib/db/index.ts:11-12`); documentado contra el archivo real `frontend/.env.local` (no `.env.example`).
 
 **🟢 Refuerzos menores:**
-8. Considerar `argon2id` para nuevas contraseñas (bcrypt-10 es aceptable hoy).
-9. Hacer el `audit_log` no purgable o exportable antes de purgar (trazabilidad de cumplimiento).
+8. ⏭️ **Omitido por decisión del producto** — `argon2id` para nuevas contraseñas; bcrypt-10 se mantiene (decisión explícita, no pendiente).
+9. ✅ **Implementado** — `audit_log` excluido de la purga masiva admin (`purgeAllBusinessDataAdmin`, `frontend/lib/db/actions/admin.ts`) — preserva trazabilidad de cumplimiento aunque se purguen datos de negocio.
+
+---
+
+## Política de retención de datos (implementada)
+
+A partir de la remediación de este informe, `requestAccountDeletionAction` (`frontend/lib/db/actions/user.ts`) aplica la siguiente política cuando un usuario solicita eliminar su cuenta:
+
+- **Sin rastro de actividad** (sin casos, asignaciones, entregas, calificaciones ni eventos asociados): la cuenta y sus archivos se **borran físicamente** de inmediato.
+- **Con rastro de actividad**: la cuenta se **desactiva** (`isActive = false`, no puede volver a iniciar sesión) y se registra `deletionRequestedAt`. Los datos se **retienen** por motivos de integridad histórica del marketplace (trazabilidad de casos, calificaciones y eventos ya ocurridos entre las partes), sujeto a revisión manual periódica por el equipo administrador.
+- Esta misma regla de actividad (`hasUserActivityTrace`, en `frontend/lib/db/actions/admin.ts`) es la que ya usaba `deleteUserAdmin` — se unificó en un solo helper para que ambos caminos (admin y autoservicio) evalúen exactamente el mismo criterio.

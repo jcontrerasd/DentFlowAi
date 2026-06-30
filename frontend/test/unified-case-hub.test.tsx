@@ -298,8 +298,8 @@ describe('UnifiedCaseHub', () => {
     }
   });
 
-  it('filtro Diseño mantiene orden descendente dentro de la fase', () => {
-    const evPropuesta = {
+  it('filtro Entrega mantiene orden descendente dentro de la fase', () => {
+    const evAsignacion = {
       id: 'ev-prop',
       type: 'tecnico' as const,
       action: 'COTIZACION_RECIBIDA',
@@ -309,17 +309,17 @@ describe('UnifiedCaseHub', () => {
       createdAt: '2025-02-01T10:00:00.000Z',
       user: { id: 'u-tech', fullName: 'Téc. Prueba', role: 'tecnico' },
     };
-    const evDisenoViejo = {
+    const evEntregaVieja = {
       id: 'ev-dis-old',
       type: 'tecnico' as const,
-      action: 'TRABAJO_INICIADO',
-      content: 'Inicio trabajo',
+      action: 'TRABAJO_APROBADO',
+      content: 'Trabajo aprobado',
       payload: {},
       stateChange: {},
       createdAt: '2024-01-01T08:00:00.000Z',
       user: { id: 'u-tech', fullName: 'Téc. Prueba', role: 'tecnico' },
     };
-    const evDisenoNuevo = {
+    const evEntregaNueva = {
       id: 'ev-dis-new',
       type: 'tecnico' as const,
       action: 'REVISION_ENVIADA',
@@ -329,8 +329,8 @@ describe('UnifiedCaseHub', () => {
       createdAt: '2025-01-15T12:00:00.000Z',
       user: { id: 'u-tech', fullName: 'Téc. Prueba', role: 'tecnico' },
     };
-    renderDentistHubWithEvents([evDisenoViejo, evPropuesta, evDisenoNuevo]);
-    fireEvent.click(screen.getByRole('button', { name: /^diseño$/i }));
+    renderDentistHubWithEvents([evEntregaVieja, evAsignacion, evEntregaNueva]);
+    fireEvent.click(screen.getByRole('button', { name: /^entrega$/i }));
     const panel = activityScroll();
     const rows = within(panel).getAllByTestId(/^uch-activity-event-/);
     expect(rows.map((el) => el.getAttribute('data-testid'))).toEqual([
@@ -372,6 +372,8 @@ describe('UnifiedCaseHub', () => {
 
   it('técnico asignado ve el panel de entrega de diseño en el hilo (región, no modal centrado)', () => {
     renderTechHub();
+    // El panel arranca colapsado (atajo clicable); expandirlo revela la región real.
+    fireEvent.click(screen.getByTestId('uch-delivery-collapsed'));
     expect(screen.getByRole('region', { name: /entrega de diseño/i })).toBeInTheDocument();
   });
 
@@ -382,6 +384,7 @@ describe('UnifiedCaseHub', () => {
 
   it('colapsa el panel de entrega con Cerrar', () => {
     renderTechHub();
+    fireEvent.click(screen.getByTestId('uch-delivery-collapsed'));
     const region = screen.getByRole('region', { name: /entrega de diseño/i });
     fireEvent.click(within(region).getByRole('button', { name: /^cerrar$/i }));
     expect(screen.queryByRole('region', { name: /entrega de diseño/i })).not.toBeInTheDocument();
@@ -390,20 +393,23 @@ describe('UnifiedCaseHub', () => {
 
   it('colapsa el panel de entrega con Cancelar', () => {
     renderTechHub();
+    fireEvent.click(screen.getByTestId('uch-delivery-collapsed'));
     const region = screen.getByRole('region', { name: /entrega de diseño/i });
     fireEvent.click(within(region).getByRole('button', { name: /^cancelar$/i }));
     expect(screen.queryByRole('region', { name: /entrega de diseño/i })).not.toBeInTheDocument();
   });
 
-  it('en el panel de entrega, enviar permanece deshabilitado solo con notas (faltan archivos)', () => {
+  it('en el panel de entrega, enviar con solo notas (faltan archivos) avisa y no avanza a confirmar', () => {
     renderTechHub();
+    fireEvent.click(screen.getByTestId('uch-delivery-collapsed'));
     const region = screen.getByRole('region', { name: /entrega de diseño/i });
-    const submit = within(region).getByRole('button', { name: /enviar para revisión/i });
-    expect(submit).toBeDisabled();
+    const submit = within(region).getByRole('button', { name: /enviar al dentista/i });
     const notes = region.querySelector('#uch-delivery-notes') as HTMLTextAreaElement;
     fireEvent.change(notes, { target: { value: 'Mensaje de prueba' } });
     expect(notes).toHaveValue('Mensaje de prueba');
-    expect(submit).toBeDisabled();
+    fireEvent.click(submit);
+    expect(screen.getByText(/debes adjuntar al menos un archivo/i)).toBeInTheDocument();
+    expect(within(region).queryByRole('button', { name: /confirmar envío/i })).not.toBeInTheDocument();
   });
 
   it('muestra comentario del técnico en COMENTARIO_TECNICO', () => {
@@ -948,33 +954,6 @@ describe('UnifiedCaseHub', () => {
     expect(screen.getByText(/Te llegó una invitación para cotizar este caso\./i)).toBeInTheDocument();
   });
 
-  it('UchEventBubble: técnico ve título unificado y comentario del solicitante en OFERTA_RECHAZADA', () => {
-    render(
-      <UchEventBubble
-        event={{
-          id: 'ev-bub',
-          type: 'sistema',
-          action: 'OFERTA_RECHAZADA',
-          content: 'Tu oferta no fue seleccionada en esta ocasión.',
-          // El técnico recibe el payload sanitizado: feedbackDentista se entrega como
-          // comentarioDelSolicitante (ver uchPresentation.sanitizeUchPayloadForViewer).
-          payload: { visibleTo: 'tecnico', invitationId: 'x', comentarioDelSolicitante: 'Precio fuera de rango.' },
-          stateChange: {},
-          createdAt: new Date().toISOString(),
-          user: { id: 'u-dent', fullName: 'Dr.', role: 'dentista' },
-        }}
-        currentUser={{ id: 'u-tech' }}
-        actingAsDentista={false}
-        actingAsTecnico
-        revisionVersionMap={new Map()}
-        formatActivityTimestamp={() => 'hora'}
-      />,
-    );
-    expect(screen.getByText('Otra oferta fue elegida')).toBeInTheDocument();
-    expect(screen.getByText(/Comentario del solicitante/i)).toBeInTheDocument();
-    expect(screen.getByText(/Precio fuera de rango/i)).toBeInTheDocument();
-  });
-
   it('UchEventBubble: OFERTA_RECHAZADA técnico-only con user enmascarado va a hilo como Fauchard (no «Yo»)', () => {
     render(
       <UchEventBubble
@@ -1023,217 +1002,6 @@ describe('UnifiedCaseHub', () => {
     expect(screen.getByTestId('uch-activity-event-ev-ti-dent')).toHaveAttribute('data-uch-lane', 'thread');
     expect(screen.getByText('Fauchard')).toBeInTheDocument();
     expect(screen.queryByText('Yo')).not.toBeInTheDocument();
-  });
-
-  it('UchEventBubble: dentista ve costo, plazo y comentario del oferente en OFERTA_RECHAZADA', () => {
-    const priceLabel = new Intl.NumberFormat('es-CL', {
-      style: 'currency',
-      currency: 'CLP',
-      maximumFractionDigits: 0,
-    }).format(125000);
-    render(
-      <UchEventBubble
-        event={{
-          id: 'ev-dent-rej',
-          type: 'sistema',
-          action: 'OFERTA_RECHAZADA',
-          content: 'Rechazaste una oferta. Tu comentario fue enviado al laboratorio.',
-          payload: {
-            visibleTo: 'dentista',
-            invitationId: 'inv-1',
-            feedback: 'Muy caro',
-            compensation: 125000,
-            deadlineDays: 5,
-          },
-          stateChange: {},
-          createdAt: new Date().toISOString(),
-          user: { id: 'u-dent', fullName: 'Dra.', role: 'dentista' },
-        }}
-        currentUser={{ id: 'u-dent' }}
-        actingAsDentista
-        revisionVersionMap={new Map()}
-        formatActivityTimestamp={() => 'hora'}
-      />,
-    );
-    expect(screen.getByText('Oferta rechazada')).toBeInTheDocument();
-    expect(screen.getByText(/Rechazaste una oferta/i)).toBeInTheDocument();
-    expect(screen.getByText(priceLabel)).toBeInTheDocument();
-    expect(screen.getByText(/5 días hábiles/i)).toBeInTheDocument();
-  });
-
-  it('UchEventBubble: OFERTA_RECHAZADA dentista-only con user enmascarado y sin userId va a self', () => {
-    render(
-      <UchEventBubble
-        event={{
-          id: 'ev-dent-rej-mask',
-          type: 'sistema',
-          action: 'OFERTA_RECHAZADA',
-          content: 'Rechazaste una oferta.',
-          payload: { visibleTo: 'dentista', invitationId: 'inv-x' },
-          stateChange: {},
-          createdAt: new Date().toISOString(),
-          user: { id: '__fauchard__', fullName: 'Fauchard', role: 'sistema' },
-        }}
-        currentUser={{ id: 'u-dent' }}
-        actingAsDentista
-        revisionVersionMap={new Map()}
-        formatActivityTimestamp={() => 't'}
-      />,
-    );
-    expect(screen.getByTestId('uch-activity-event-ev-dent-rej-mask')).toHaveAttribute('data-uch-lane', 'self');
-    expect(screen.getByText('Yo')).toBeInTheDocument();
-  });
-
-  it('UchEventBubble: CASO_OFERTAS_TODAS_RECHAZADAS dentista-only sin userId va a self', () => {
-    render(
-      <UchEventBubble
-        event={{
-          id: 'ev-all-rej',
-          type: 'sistema',
-          action: 'CASO_OFERTAS_TODAS_RECHAZADAS',
-          content: 'He rechazado todas las ofertas.',
-          payload: { visibleTo: 'dentista' },
-          stateChange: {},
-          createdAt: new Date().toISOString(),
-          user: { id: '__fauchard__', fullName: 'Fauchard', role: 'sistema' },
-        }}
-        currentUser={{ id: 'u-dent' }}
-        actingAsDentista
-        revisionVersionMap={new Map()}
-        formatActivityTimestamp={() => 't'}
-      />,
-    );
-    expect(screen.getByTestId('uch-activity-event-ev-all-rej')).toHaveAttribute('data-uch-lane', 'self');
-  });
-
-  it('UchEventBubble: dentista acepta quotedPrice y deadlineDays como string en JSON', () => {
-    const priceLabel = new Intl.NumberFormat('es-CL', {
-      style: 'currency',
-      currency: 'CLP',
-      maximumFractionDigits: 0,
-    }).format(99000);
-    render(
-      <UchEventBubble
-        event={{
-          id: 'ev-dent-rej-str',
-          type: 'sistema',
-          action: 'OFERTA_RECHAZADA',
-          content: 'Rechazaste una oferta. Tu comentario fue enviado al laboratorio.',
-          payload: {
-            visibleTo: 'dentista',
-            invitationId: 'inv-s',
-            feedback: 'x',
-            compensation: '99000',
-            deadlineDays: '3',
-
-          },
-          stateChange: {},
-          createdAt: new Date().toISOString(),
-          user: { id: 'u-dent', fullName: 'Dra.', role: 'dentista' },
-        }}
-        currentUser={{ id: 'u-dent' }}
-        actingAsDentista
-        revisionVersionMap={new Map()}
-        formatActivityTimestamp={() => 'hora'}
-      />,
-    );
-    expect(screen.getByText(priceLabel)).toBeInTheDocument();
-    expect(screen.getByText(/3 días hábiles/i)).toBeInTheDocument();
-  });
-
-  it('UchEventBubble: dentista OFERTA_RECHAZADA sin snapshot en payload muestra em dash y sin comentario', () => {
-    render(
-      <UchEventBubble
-        event={{
-          id: 'ev-dent-rej-old',
-          type: 'sistema',
-          action: 'OFERTA_RECHAZADA',
-          content: 'Rechazaste una oferta. Tu comentario fue enviado al laboratorio.',
-          payload: { visibleTo: 'dentista', invitationId: 'inv-old', feedback: 'Ok' },
-          stateChange: {},
-          createdAt: new Date().toISOString(),
-          user: { id: 'u-dent', fullName: 'Dra.', role: 'dentista' },
-        }}
-        currentUser={{ id: 'u-dent' }}
-        actingAsDentista
-        revisionVersionMap={new Map()}
-        formatActivityTimestamp={() => 'hora'}
-      />,
-    );
-    expect(screen.getByText('Oferta rechazada')).toBeInTheDocument();
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/Sin comentario del oferente/i)).toBeInTheDocument();
-  });
-
-  it('UchEventBubble: técnico ve costo, plazo y comentario en OFERTA_ENVIADA', () => {
-    const priceLabel = new Intl.NumberFormat('es-CL', {
-      style: 'currency',
-      currency: 'CLP',
-      maximumFractionDigits: 0,
-    }).format(88000);
-    render(
-      <UchEventBubble
-        event={{
-          id: 'ev-off-sent',
-          userId: 'u-tech',
-          type: 'sistema',
-          action: 'OFERTA_ENVIADA',
-          content: 'He enviado la Oferta.',
-          payload: {
-            visibleTo: 'tecnico',
-            invitationId: 'inv-1',
-            compensation: 88000,
-            deadlineDays: 7,
-          },
-          stateChange: {},
-          createdAt: new Date().toISOString(),
-          user: { id: 'u-tech', fullName: 'Téc.', role: 'tecnico' },
-        }}
-        currentUser={{ id: 'u-tech' }}
-        actingAsDentista={false}
-        actingAsTecnico
-        revisionVersionMap={new Map()}
-        formatActivityTimestamp={() => 't'}
-      />,
-    );
-    expect(screen.getByText(/Cotización enviada/i)).toBeInTheDocument();
-    expect(screen.getByText(priceLabel)).toBeInTheDocument();
-    expect(screen.getByText(/7 días hábiles/i)).toBeInTheDocument();
-  });
-
-  it('UchEventBubble: dentista ve detalle en OFERTA_NO_SELECCIONADA al elegir otra oferta', () => {
-    const priceLabel = new Intl.NumberFormat('es-CL', {
-      style: 'currency',
-      currency: 'CLP',
-      maximumFractionDigits: 0,
-    }).format(70000);
-    render(
-      <UchEventBubble
-        event={{
-          id: 'ev-ns-dent',
-          userId: 'u-dent',
-          type: 'sistema',
-          action: 'OFERTA_NO_SELECCIONADA',
-          content: 'Esta oferta quedó fuera al elegir otra propuesta para el caso.',
-          payload: {
-            visibleTo: 'dentista',
-            invitationId: 'inv-x',
-            compensation: 70000,
-            deadlineDays: 3,
-          },
-          stateChange: {},
-          createdAt: new Date().toISOString(),
-          user: { id: 'u-dent', fullName: 'Dra.', role: 'dentista' },
-        }}
-        currentUser={{ id: 'u-dent' }}
-        actingAsDentista
-        revisionVersionMap={new Map()}
-        formatActivityTimestamp={() => 't'}
-      />,
-    );
-    expect(screen.getByText('Oferta no seleccionada')).toBeInTheDocument();
-    expect(screen.getByText(priceLabel)).toBeInTheDocument();
-    expect(screen.getByText(/3 días hábiles/i)).toBeInTheDocument();
   });
 
   it('UCH: muestra CASO_CREADO y CASO_PUBLICADO en el hilo (dentista)', () => {

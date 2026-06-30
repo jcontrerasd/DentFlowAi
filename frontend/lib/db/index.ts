@@ -5,6 +5,13 @@ import { ensureInfrastructure, ensureIncrementalInfrastructure, INFRA_VERSION } 
 
 const connectionString = process.env.DATABASE_URL!;
 
+// Cumplimiento legal (Ley 21.719/19.628) — cifrado en tránsito. No bloquea el arranque (Cloud
+// SQL Proxy puede manejar TLS de otra forma), solo alerta si en producción la connection string
+// no fuerza sslmode explícitamente. Ver Doc/Auditoria_Cumplimiento_Legal.md.
+if (process.env.NODE_ENV === 'production' && connectionString && !/sslmode=/i.test(connectionString)) {
+  console.warn('[lib/db] DATABASE_URL no incluye sslmode explícito en producción. Verificar frontend/.env.local (DATABASE_URL_PROD) — ver frontend/CLAUDE.md.');
+}
+
 // Prevenir múltiples conexiones en desarrollo (Singleton para Next.js HMR)
 const globalForDb = global as unknown as {
   client: postgres.Sql | undefined,

@@ -3,8 +3,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
-/** v5.22 — auth_action_rate_limit: tope duro de reenvíos por email/hora (verificación/reset). */
-export const INFRA_VERSION = 'v5.22';
+/** v5.24 — user_deletion_request: auditoría legal inmutable de solicitudes de eliminación (Ley 21.719). */
+export const INFRA_VERSION = 'v5.24';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -305,6 +305,55 @@ export async function ensureIncrementalInfrastructure(db: any) {
     await db.execute(sql`CREATE INDEX IF NOT EXISTS auth_action_rate_limit_lookup_idx ON auth_action_rate_limit(email, action_type, created_at);`);
   } catch (e) {
     console.error("[Infrastructure] Error creando auth_action_rate_limit (v5.22):", e);
+  }
+
+  // v5.23 — Cumplimiento legal (Ley 21.719/19.628/20.584): consentimiento de registro,
+  // solicitud de eliminación de cuenta y declaración de consentimiento del paciente al publicar.
+  try {
+    await db.execute(sql`
+      ALTER TABLE "user"
+        ADD COLUMN IF NOT EXISTS consent_registration_accepted_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS consent_registration_legal_version TEXT,
+        ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ;
+    `);
+  } catch (e) {
+    console.error("[Infrastructure] Error añadiendo columnas de cumplimiento legal a user (v5.23):", e);
+  }
+  try {
+    await db.execute(sql`
+      ALTER TABLE clinical_case
+        ADD COLUMN IF NOT EXISTS patient_consent_declared_at TIMESTAMPTZ;
+    `);
+  } catch (e) {
+    console.error("[Infrastructure] Error añadiendo patient_consent_declared_at a clinical_case (v5.23):", e);
+  }
+
+  // v5.24 — user_deletion_request: tabla de auditoría legal inmutable para solicitudes
+  // de eliminación de cuenta (Ley 21.719 art. 14 sexies, derechos ARCO).
+  // userId es SET NULL para que las filas sobrevivan la eliminación física del usuario.
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS user_deletion_request (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+        user_email_snapshot TEXT NOT NULL,
+        requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        outcome TEXT NOT NULL,
+        resolved_at TIMESTAMPTZ,
+        resolved_by_admin_id TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+        resolution_reason_code TEXT,
+        resolution_note TEXT,
+        evidence_gcs_path TEXT,
+        evidence_filename TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS udr_user_idx ON user_deletion_request(user_id)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS udr_outcome_idx ON user_deletion_request(outcome)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS udr_requested_at_idx ON user_deletion_request(requested_at)`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando user_deletion_request (v5.24):", e);
   }
 }
 

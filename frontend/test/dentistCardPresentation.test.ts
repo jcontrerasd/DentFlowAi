@@ -11,31 +11,11 @@ describe('getDentistCardZone', () => {
     expect(z.secondary).toContain('3 archivos');
   });
 
-  it('enEvaluacion sin ofertas → "Aún sin ofertas"', () => {
-    const z = getDentistCardZone({ status: 'enEvaluacion', bids: [] });
-    expect(z.primary).toBe('Evaluando');
-    expect(z.secondary).toBe('Aún sin ofertas');
+  it('enEvaluacion: asignación directa v2, sin conteo de ofertas (no revela el pool)', () => {
+    const z = getDentistCardZone({ status: 'enEvaluacion' });
+    expect(z.primary).toBe('Esperando asignación');
+    expect(z.secondary).toBe('Fauchard busca o asigna técnico');
     expect(z.ctaLabel).toBe('Ver caso');
-  });
-
-  it('enEvaluacion solo cuenta bids pending (no revela invitados)', () => {
-    const z = getDentistCardZone({
-      status: 'enEvaluacion',
-      bids: [
-        { status: 'pending' },
-        { status: 'pending' },
-        { status: 'pending' },
-        { status: 'quoted' },
-        { status: 'withdrawn' },
-        { status: 'expired' },
-      ],
-    });
-    expect(z.secondary).toBe('3 ofertas recibidas');
-  });
-
-  it('enEvaluacion con 1 oferta singulariza', () => {
-    const z = getDentistCardZone({ status: 'enEvaluacion', bids: [{ status: 'pending' }] });
-    expect(z.secondary).toBe('1 oferta recibida');
   });
 
   it('propuestaLista usa CTA primario "Elegir oferta"', () => {
@@ -102,9 +82,9 @@ describe('getDentistCardZone', () => {
 });
 
 describe('getTechnicianCardCta', () => {
-  it('pending → "Cotizar"', () => {
+  it('pending → "Ver asignación"', () => {
     expect(getTechnicianCardCta({ invitationStatus: 'pending', caseStatus: 'enEvaluacion' })).toBe(
-      'Cotizar',
+      'Ver asignación',
     );
   });
 

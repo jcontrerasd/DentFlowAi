@@ -31,6 +31,8 @@ import { formatPhone } from '@/lib/formatPhone';
 import SkillMatrixForm, { type SkillMatrixFormHandle } from '@/components/profile/SkillMatrixForm';
 import AvailabilityToggle from '@/components/profile/AvailabilityToggle';
 import ThemeSelector from '@/components/profile/ThemeSelector';
+import MyDataSection from '@/components/profile/MyDataSection';
+import DeleteAccountSection from '@/components/profile/DeleteAccountSection';
 import SetPasswordSection from '@/components/profile/SetPasswordSection';
 import { EmailNotificationPrefsSection } from '@/components/profile/EmailNotificationPrefsSection';
 
@@ -605,6 +607,16 @@ export default function ProfilePage() {
       {/* Apariencia — selector de tema (light / dark / system) */}
       <div className="max-w-4xl mx-auto mt-6">
         <ThemeSelector />
+      </div>
+
+      {/* Cumplimiento legal — derecho de acceso y portabilidad (Ley 21.719) */}
+      <div className="max-w-4xl mx-auto mt-6">
+        <MyDataSection />
+      </div>
+
+      {/* Cumplimiento legal — derecho de cancelación/supresión (Ley 21.719/19.628) */}
+      <div className="max-w-4xl mx-auto mt-6">
+        <DeleteAccountSection />
       </div>
 
       {/* Notificaciones por email */}

@@ -124,7 +124,6 @@ export default function MarketplaceCaseCard({
       isDentist
         ? getDentistCardZone({
             status: String(c.status ?? ''),
-            bids: c.bids,
             workDeadline: c.workDeadline,
             completedAt: c.completedAt,
             material: c.material,

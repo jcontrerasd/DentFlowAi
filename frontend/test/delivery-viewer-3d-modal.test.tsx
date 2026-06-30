@@ -145,6 +145,7 @@ describe('DeliveryViewer3DModal — footer QA', () => {
     const textarea = screen.getByPlaceholderText(/comentario para el técnico/i);
     fireEvent.change(textarea, { target: { value: 'todo correcto' } });
     fireEvent.click(screen.getByText(/certificar entrega/i));
+    fireEvent.click(screen.getByText(/confirmar certificación/i));
     await waitFor(() => expect(onCertify).toHaveBeenCalledWith('todo correcto'));
   });
 
@@ -164,6 +165,7 @@ describe('DeliveryViewer3DModal — footer QA', () => {
     const textarea = screen.getByPlaceholderText(/comentario para el técnico/i);
     fireEvent.change(textarea, { target: { value: 'revisar margen distal' } });
     fireEvent.click(screen.getByText(/solicitar ajustes/i));
+    fireEvent.click(screen.getByText(/confirmar ajustes/i));
     await waitFor(() => expect(onChanges).toHaveBeenCalledWith('revisar margen distal'));
   });
 

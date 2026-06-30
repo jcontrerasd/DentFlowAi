@@ -178,10 +178,12 @@ function resolveTecnicoTableB(
 ): { lane: UchThreadLane; showAsFauchard: boolean } {
   const { visibleTo, presentationAuthor, samePersistedAuthor, maskedUserIsFauchard, authorRole } = ctx;
 
-  // B — Asignación recibida: siempre hilo y voz Fauchard.
+  // B — Asignación recibida: siempre hilo y voz Fauchard. Incluye el alias legacy en BD
+  // ('INVITACION_RECIBIDA', nombre previo a la v2 de asignación directa).
   if (
     action === CASE_EVENTS.ASIGNACION_RECIBIDA ||
-    action === CASE_EVENTS.ASIGNACION_REASIGNADA
+    action === CASE_EVENTS.ASIGNACION_REASIGNADA ||
+    action === 'INVITACION_RECIBIDA'
   ) {
     return { lane: 'thread', showAsFauchard: true };
   }

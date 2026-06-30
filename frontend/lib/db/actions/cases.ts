@@ -2356,7 +2356,7 @@ export async function cloneCaseFromTerminalAction(
   }
 }
 
-export async function publishCaseAction(caseId: string): Promise<ActionResult> {
+export async function publishCaseAction(caseId: string, patientConsentDeclared?: boolean): Promise<ActionResult> {
   const identity = await getServerIdentity();
   if (!identity?.id) return { success: false, error: "No autorizado" };
 
@@ -2384,6 +2384,16 @@ export async function publishCaseAction(caseId: string): Promise<ActionResult> {
       return { success: false, error: 'Este caso ya fue publicado' };
     }
     if (current.status !== 'borrador') return { success: false, error: "Solo se puede publicar un caso en borrador" };
+
+    // Cumplimiento legal (Ley 21.719 / Ley 20.584): el dentista debe declarar contar con el
+    // consentimiento del paciente antes de que sus datos clínicos entren al flujo con el
+    // laboratorio. No es una firma del paciente — es una atestación del tratante.
+    if (!patientConsentDeclared) {
+      return {
+        success: false,
+        error: 'Debes declarar que cuentas con el consentimiento del paciente para publicar el caso.',
+      };
+    }
 
     if (!current.desiredDeliveryAt || !validateDesiredDeliveryAt(current.desiredDeliveryAt)) {
       return {
@@ -2436,6 +2446,7 @@ export async function publishCaseAction(caseId: string): Promise<ActionResult> {
         internalStatus: 'caso_recibido',
         canBeDeleted: false,
         publishedAt: new Date(),
+        patientConsentDeclaredAt: new Date(),
         updatedAt: new Date(),
         lastActivityAt: new Date(),
         listPriceRuleId: pricePatch.listPriceRuleId,

@@ -87,6 +87,10 @@ Reglas:
 - Seed: `npx tsx scripts/seed-uat.ts`.
 - **Bucket por contexto**: `npm run dev` usa `GCP_BUCKET_NAME` (default `dentflowai-local` con fake-gcs). En Cloud Run, `deploy.sh` inyecta `GCP_BUCKET_NAME_DEV` (`dentflowai-assets-dev`) o `_PROD` (`dentflowai-assets-prod`) según el entorno. Staging y producción están aislados a nivel de bucket.
 
+## Cifrado en tránsito a la base de datos (cumplimiento legal)
+
+`DATABASE_URL_DEV`/`_PROD` viven en `frontend/.env.local` (gitignored) y se inyectan en Cloud Run por `deploy.sh`. **Deben** incluir `?sslmode=require` en la connection string — Cloud SQL ya cifra por defecto en la mayoría de conectores, pero se deja explícito para no depender de eso. `lib/db/index.ts` loguea un warning al boot si en producción no detecta `sslmode` en `DATABASE_URL`. Ver `Doc/Auditoria_Cumplimiento_Legal.md`.
+
 ## Scripts auxiliares (`frontend/scripts/`)
 
 Ejecutar con `npx tsx scripts/<archivo>.ts` desde `frontend/` (lee `.env.local`).

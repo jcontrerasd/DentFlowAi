@@ -11,11 +11,8 @@ export type DentistCardZone = {
   ctaVariant: 'primary' | 'neutral';
 };
 
-type Bid = { status?: string | null } | null | undefined;
-
 type DentistCardInput = {
   status: string;
-  bids?: Array<Bid> | null;
   workDeadline?: string | Date | null;
   completedAt?: string | Date | null;
   material?: string | null;
@@ -28,11 +25,6 @@ function formatShortDate(value: string | Date | null | undefined): string | null
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' });
-}
-
-function countPendingOffers(bids: DentistCardInput['bids']): number {
-  if (!Array.isArray(bids)) return 0;
-  return bids.filter((b) => b?.status === 'pending').length;
 }
 
 function joinSecondary(parts: Array<string | null | undefined>): string | null {

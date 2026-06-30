@@ -116,18 +116,28 @@ describe('simulatorConstants', () => {
     }
   });
 
-  it('PARAM_GROUPS_BY_STEP partitions PARAM_GROUPS without duplication', () => {
-    const allKeys = new Set<string>();
+  it('PARAM_GROUPS_BY_STEP partitions PARAM_GROUPS without unexpected duplication', () => {
+    // 'wQualityDays' aparece a propósito en dos filas distintas (Calidad histórica /
+    // Puntualidad histórica): un solo campo de config alimenta ambas ventanas (ver
+    // CLAUDE.md, "Ventana histórica"), y el render ya desambigua con el índice de fila
+    // (SimulatorActiveConfigRows.tsx usa `${it.key}-${idx}` como key de React). Cualquier
+    // otra clave debe ser única — si esta lista crece sin querer, es un bug real.
+    const KNOWN_INTENTIONAL_DUPLICATES = new Set(['wQualityDays']);
+    const counts = new Map<string, number>();
     for (const groups of Object.values(PARAM_GROUPS_BY_STEP)) {
       for (const g of groups) {
         for (const item of g.items) {
-          expect(allKeys.has(item.key)).toBe(false);
-          allKeys.add(item.key);
+          counts.set(item.key, (counts.get(item.key) ?? 0) + 1);
         }
       }
     }
+    for (const [key, count] of counts) {
+      if (count > 1) {
+        expect(KNOWN_INTENTIONAL_DUPLICATES.has(key), `clave duplicada inesperada: ${key}`).toBe(true);
+      }
+    }
     const flatParamKeys = PARAM_GROUPS.flatMap((g) => g.items.map((i) => i.key));
-    expect([...allKeys].sort()).toEqual(flatParamKeys.sort());
+    expect([...counts.keys()].sort()).toEqual([...new Set(flatParamKeys)].sort());
   });
 
   it('FUNNEL_STEPS has 5 steps in funnel order', () => {
