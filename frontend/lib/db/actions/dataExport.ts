@@ -171,7 +171,7 @@ export async function processPendingDataExportsAction(): Promise<{
           serviceType: clinicalCase.serviceType,
           status: clinicalCase.status,
           internalStatus: clinicalCase.internalStatus,
-          rolEnElCaso: sql<string>`CASE WHEN ${clinicalCase.doctorId} = ${userId} THEN 'dentista' ELSE 'tecnico' END`,
+          rolEnElCaso: sql<string>`CASE WHEN ${clinicalCase.doctorId} = ${userId} THEN 'dentista' WHEN ${clinicalCase.assignedTechnicianId} = ${userId} THEN 'tecnico' ELSE 'calidad' END`,
           // Datos clínicos
           teeth: clinicalCase.teeth,
           replacesMissingTeeth: clinicalCase.replacesMissingTeeth,
@@ -207,7 +207,11 @@ export async function processPendingDataExportsAction(): Promise<{
         .leftJoin(vitaShade, eq(clinicalCase.shadeId, vitaShade.id))
         .leftJoin(urgencyLevel, eq(clinicalCase.urgencyId, urgencyLevel.id))
         .leftJoin(userTable, eq(clinicalCase.assignedTechnicianId, userTable.id))
-        .where(or(eq(clinicalCase.doctorId, userId), eq(clinicalCase.assignedTechnicianId, userId)));
+        .where(or(
+          eq(clinicalCase.doctorId, userId),
+          eq(clinicalCase.assignedTechnicianId, userId),
+          eq(clinicalCase.qualityReviewerId, userId),
+        ));
 
       // Arma el ZIP
       const zip = new JSZip();
