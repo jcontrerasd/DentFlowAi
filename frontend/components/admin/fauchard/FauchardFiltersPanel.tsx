@@ -28,7 +28,7 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-xs font-bold text-foreground">Selección y Asignación</h3>
-          <p className="text-[10px] text-faint hidden md:block">Filtros, plazos y reglas de asignación.</p>
+          <p className="text-xs text-muted hidden md:block">Filtros, plazos y reglas de asignación.</p>
         </div>
         <FauchardHelpButton onClick={() => openHelp()} label="Selección y Asignación" />
       </div>
@@ -95,7 +95,7 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
             />
             <div className="flex items-start gap-2 pt-3 border-t border-warning/20">
               <ShieldAlert className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
-              <p className="text-[10px] text-warning leading-relaxed font-medium">
+              <p className="text-xs text-warning leading-relaxed font-medium">
                 Estos dos se aplican <strong>antes del score</strong>: un técnico que no los cumpla queda excluido del pool para ese caso, por bueno que sea su puntaje.
               </p>
             </div>
@@ -159,7 +159,7 @@ function Section({ title, icon, children }: { title: string; icon: React.ReactNo
         <div className="w-6 h-6 rounded-lg bg-surface-2 flex items-center justify-center text-muted border border-divider [&>svg]:w-3.5 [&>svg]:h-3.5">
           {icon}
         </div>
-        <h3 className="text-[11px] font-bold uppercase tracking-wider text-foreground">{title}</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">{title}</h3>
       </div>
       <div className="space-y-4 pl-1">
         {children}

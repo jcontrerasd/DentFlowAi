@@ -62,7 +62,7 @@ export default function ConfirmSaveModal({
                   </div>
                   <button
                     onClick={onClose}
-                    className="p-2 text-faint hover:text-foreground transition-colors"
+                    className="p-2 text-muted hover:text-foreground transition-colors"
                   >
                     <X className="w-5 h-5" />
                   </button>
@@ -79,7 +79,7 @@ export default function ConfirmSaveModal({
 
                 {requireReason && (
                   <div className="mb-6 space-y-2">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-faint">
+                    <label className="text-xs font-bold uppercase tracking-wider text-muted">
                       Motivo del cambio (obligatorio)
                     </label>
                     <textarea
@@ -87,7 +87,7 @@ export default function ConfirmSaveModal({
                       onChange={(e) => onReasonChange?.(e.target.value)}
                       rows={3}
                       placeholder="Ej: ajuste de calibración tras revisión de métricas de no-respuesta"
-                      className="w-full rounded-2xl bg-surface-2 border border-divider p-3 text-sm text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 resize-none"
+                      className="w-full rounded-2xl bg-surface-2 border border-divider p-3 text-sm text-foreground placeholder:text-muted placeholder:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 resize-none"
                     />
                   </div>
                 )}
@@ -98,7 +98,7 @@ export default function ConfirmSaveModal({
                     loading={isLoading}
                     disabled={cannotConfirm}
                     variant="primary"
-                    className="w-full bg-primary hover:opacity-90 text-inverse font-bold uppercase tracking-wider text-[10px] h-12 rounded-2xl"
+                    className="w-full bg-primary hover:opacity-90 text-inverse font-bold uppercase tracking-wider text-xs h-12 rounded-2xl"
                     icon={<Save className="w-4 h-4" />}
                   >
                     Confirmar y Aplicar
@@ -107,7 +107,7 @@ export default function ConfirmSaveModal({
                     onClick={onClose}
                     disabled={isLoading}
                     variant="secondary"
-                    className="w-full bg-surface-2 hover:bg-surface-off text-foreground font-bold uppercase tracking-wider text-[10px] h-12 rounded-2xl border-none"
+                    className="w-full bg-surface-2 hover:bg-surface-off text-foreground font-bold uppercase tracking-wider text-xs h-12 rounded-2xl border-none"
                   >
                     Cancelar
                   </Button>

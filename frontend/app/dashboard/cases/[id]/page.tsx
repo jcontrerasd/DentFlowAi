@@ -506,6 +506,7 @@ function CaseDetailPageContent() {
       setCaseEvents(events);
       setUchHasMoreOlder(hasMoreOlder);
       if (vsi) setViewerSignedImage(vsi);
+      lastEventCountRef.current = events.length;
     } catch (err) {
       console.error("Error loading events:", err);
     } finally {
@@ -669,27 +670,51 @@ function CaseDetailPageContent() {
   }, [id]);
 
   /**
-   * Polling de eventos mientras el Centro de control está abierto (no hay realtime).
+   * Polling adaptativo de eventos (no hay realtime). Intervalo base 30s; sube a 60s
+   * tras 3 polls consecutivos sin eventos nuevos, vuelve a 30s cuando llegan eventos.
    * Pausa en pestaña oculta para no consumir recursos; se limpia al cerrar/cambiar de caso.
    */
+  const pollEmptyCountRef = useRef(0);
+  const lastEventCountRef = useRef(0);
   useEffect(() => {
     if (!isHubOpen || !id) return;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      if (intervalId != null) return;
-      intervalId = setInterval(() => { void loadCaseEvents(); }, 15000);
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+
+    const poll = async () => {
+      if (!active) return;
+      const prevCount = lastEventCountRef.current;
+      await loadCaseEvents();
+      const newCount = lastEventCountRef.current;
+      if (newCount === prevCount) {
+        pollEmptyCountRef.current += 1;
+      } else {
+        pollEmptyCountRef.current = 0;
+      }
+      if (!active) return;
+      const delay = pollEmptyCountRef.current >= 3 ? 60_000 : 30_000;
+      timeoutId = setTimeout(poll, delay);
     };
+
     const stop = () => {
-      if (intervalId != null) { clearInterval(intervalId); intervalId = null; }
+      active = false;
+      if (timeoutId != null) { clearTimeout(timeoutId); timeoutId = null; }
     };
+
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') start();
-      else stop();
+      if (document.visibilityState === 'visible') {
+        if (timeoutId == null && active) timeoutId = setTimeout(poll, 30_000);
+      } else {
+        if (timeoutId != null) { clearTimeout(timeoutId); timeoutId = null; }
+      }
     };
-    if (typeof document === 'undefined' || document.visibilityState === 'visible') start();
+
+    if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+      timeoutId = setTimeout(poll, 30_000);
+    }
     document.addEventListener('visibilitychange', onVisibility);
     return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
-    // loadCaseEvents lee `id` (estable) y solo usa setters; deps mínimas evitan reiniciar el interval cada render.
+    // loadCaseEvents lee `id` (estable) y solo usa setters; deps mínimas evitan reiniciar el poll cada render.
   }, [isHubOpen, id]);
 
   /**

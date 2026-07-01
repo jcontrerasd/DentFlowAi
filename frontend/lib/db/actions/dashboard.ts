@@ -2,8 +2,9 @@
 
 import { db } from '@/lib/db';
 import { clinicalCase, caseAssignment } from '@/lib/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
+import { perfLog, perfStart } from '@/lib/perfLog';
 import { buildActiveCaseVisibilityWhere } from '@/lib/db/caseListVisibility';
 import { canActAsTecnico, canActAsDentista } from '@/lib/auth-helpers';
 import {
@@ -28,6 +29,7 @@ export type DashboardMetricsResult = {
 };
 
 export async function getDashboardMetricsAction(): Promise<DashboardMetricsResult | null> {
+  const t0 = perfStart();
   const identity = await getServerIdentity();
   if (!identity?.id) return null;
 
@@ -46,12 +48,6 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
     orgId: identity.orgId ?? null,
   });
 
-  const [countRow] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(clinicalCase)
-    .where(whereClause);
-
-  const totalCases = Number(countRow?.count ?? 0);
   const serverNowMs = Date.now();
 
   if (isDentist) {
@@ -65,11 +61,13 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
       const kpiId = classifyDentistCaseKpi(row.status);
       metrics[kpiId] = (metrics[kpiId] ?? 0) + 1;
     }
+    const totalCases = rows.length;
 
     if (process.env.NODE_ENV !== 'production') {
       assertMetricsPartition(metrics, totalCases, 'getDashboardMetricsAction:dentista');
     }
 
+    perfLog('getDashboardMetricsAction', Date.now() - t0, { role: 'dentista', totalCases });
     return { role: 'dentista', metrics, totalCases, serverNowMs };
   }
 
@@ -85,34 +83,44 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
       metrics[kpiId] = (metrics[kpiId] ?? 0) + 1;
     }
 
-    return { role: 'calidad', metrics, totalCases, serverNowMs };
+    perfLog('getDashboardMetricsAction', Date.now() - t0, { role: 'calidad', totalCases: rows.length });
+    return { role: 'calidad', metrics, totalCases: rows.length, serverNowMs };
   }
 
-  const caseRows = await db
+  // Técnico: LEFT JOIN con case_assignment para eliminar la segunda query y el join JS
+  const techId = identity.id as string;
+  const joinedRows = await db
     .select({
       id: clinicalCase.id,
       status: clinicalCase.status,
       assignedTechnicianId: clinicalCase.assignedTechnicianId,
+      invStatus: caseAssignment.status,
+      invUpdatedAt: caseAssignment.updatedAt,
+      invAssignedAt: caseAssignment.assignedAt,
     })
     .from(clinicalCase)
+    .leftJoin(
+      caseAssignment,
+      and(
+        eq(caseAssignment.clinicalCaseId, clinicalCase.id),
+        eq(caseAssignment.technicianId, techId),
+      ),
+    )
     .where(whereClause);
 
-  const invRows = await db
-    .select({
-      clinicalCaseId: caseAssignment.clinicalCaseId,
-      status: caseAssignment.status,
-      updatedAt: caseAssignment.updatedAt,
-      assignedAt: caseAssignment.assignedAt,
-    })
-    .from(caseAssignment)
-    .where(eq(caseAssignment.technicianId, identity.id as string));
-
-  const invByCase = buildInvitationStatusByCaseId(invRows);
+  const invByCase = buildInvitationStatusByCaseId(
+    joinedRows
+      .filter(r => r.invStatus != null)
+      .map(r => ({
+        clinicalCaseId: r.id,
+        status: r.invStatus!,
+        updatedAt: r.invUpdatedAt,
+        invitedAt: r.invAssignedAt,
+      })),
+  );
 
   const metrics = initEmptyMetrics(TECH_DASHBOARD_METRICS);
-  const techId = identity.id as string;
-
-  for (const c of caseRows) {
+  for (const c of joinedRows) {
     const kpiId = classifyTechnicianCaseKpi({
       caseStatus: c.status,
       assignedTechnicianId: c.assignedTechnicianId,
@@ -122,9 +130,11 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
     metrics[kpiId] = (metrics[kpiId] ?? 0) + 1;
   }
 
+  const totalCases = joinedRows.length;
   if (process.env.NODE_ENV !== 'production') {
     assertMetricsPartition(metrics, totalCases, 'getDashboardMetricsAction:tecnico');
   }
 
+  perfLog('getDashboardMetricsAction', Date.now() - t0, { role: 'tecnico', totalCases });
   return { role: 'tecnico', metrics, totalCases, serverNowMs };
 }

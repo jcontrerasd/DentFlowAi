@@ -57,7 +57,7 @@ export default function AssignmentMetricsPanel({ metrics }: AssignmentMetricsPan
           <div className="w-8 h-8 rounded-xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary shrink-0">
             <BookOpen className="w-4 h-4" />
           </div>
-          <span className="text-[10px] font-black uppercase tracking-widest text-faint">Cómo leer este panel</span>
+          <span className="text-xs font-black uppercase tracking-widest text-muted">Cómo leer este panel</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
@@ -87,7 +87,7 @@ export default function AssignmentMetricsPanel({ metrics }: AssignmentMetricsPan
           />
         </div>
 
-        <p className="text-[10px] text-faint border-t border-divider pt-4 leading-relaxed">
+        <p className="text-xs text-muted border-t border-divider pt-4 leading-relaxed">
           La barra de cada técnico muestra su volumen relativo de asignaciones. Los colores indican su liga actual:{' '}
           <span className="font-semibold text-muted">Bronce · Plata · Oro · Élite</span>.
           Un técnico con muchas asignaciones y baja aceptación puede indicar sobrecarga o perfil mal calibrado en Fauchard.
@@ -103,7 +103,7 @@ function ReadingHint({ term, description }: { term: string; description: string 
       <span className="text-[10px] font-black text-primary bg-primary-hl border border-primary/20 rounded-lg px-2 py-0.5 h-fit shrink-0 mt-0.5 whitespace-nowrap">
         {term}
       </span>
-      <p className="text-[11px] text-muted leading-relaxed">{description}</p>
+      <p className="text-xs text-foreground leading-relaxed">{description}</p>
     </div>
   );
 }
@@ -128,9 +128,9 @@ function MetricCard({ label, value, sub, icon, color }: {
         {icon}
       </div>
       <div>
-        <span className="text-[9px] font-black uppercase text-faint tracking-widest block mb-1">{label}</span>
+        <span className="text-[10px] font-black uppercase text-muted tracking-widest block mb-1">{label}</span>
         <span className="text-2xl font-black text-foreground">{value}</span>
-        <p className="text-[10px] text-faint mt-1 font-medium">{sub}</p>
+        <p className="text-xs text-muted mt-1 font-medium">{sub}</p>
       </div>
     </div>
   );

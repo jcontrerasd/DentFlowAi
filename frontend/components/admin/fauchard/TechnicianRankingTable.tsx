@@ -48,13 +48,13 @@ export default function TechnicianRankingTable({ data, days }: TechnicianRanking
             <input
               type="text"
               placeholder="Buscar técnico..."
-              className="w-full bg-surface border border-divider rounded-xl pl-9 pr-4 py-2 text-[11px] text-foreground focus:outline-none focus:border-primary/30"
+              className="w-full bg-surface border border-divider rounded-xl pl-9 pr-4 py-2 text-xs text-foreground focus:outline-none focus:border-primary/30"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
           </div>
           <select
-            className="bg-surface border border-divider rounded-xl px-3 py-2 text-[11px] font-bold text-muted outline-none uppercase tracking-widest"
+            className="bg-surface border border-divider rounded-xl px-3 py-2 text-xs font-bold text-muted outline-none uppercase tracking-widest"
             value={leagueFilter}
             onChange={(e) => setLeagueFilter(e.target.value)}
           >
@@ -70,7 +70,7 @@ export default function TechnicianRankingTable({ data, days }: TechnicianRanking
       <div className="rounded-[2.5rem] border border-divider overflow-x-auto bg-surface/20">
         <table className="w-full text-left border-collapse">
           <thead>
-            <tr className="bg-surface border-b border-divider text-[9px] font-bold uppercase tracking-wider text-faint">
+            <tr className="bg-surface border-b border-divider text-xs font-bold uppercase tracking-wider text-muted">
               <th className="px-6 py-5">Técnico</th>
               <th className="px-6 py-5">Score Prom.</th>
               <th className="px-6 py-5">{`Desempeño (${days}d)`}</th>
@@ -96,13 +96,13 @@ export default function TechnicianRankingTable({ data, days }: TechnicianRanking
                       </span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-[11px] font-black text-foreground uppercase tracking-tight">{t.fullName}</span>
+                      <span className="text-xs font-black text-foreground uppercase tracking-tight">{t.fullName}</span>
                       <span className="flex items-center gap-1.5">
-                        <span className={`text-[9px] font-bold uppercase tracking-wider ${leagueColor(t.leagueLevel)}`}>
+                        <span className={`text-xs font-bold uppercase tracking-wider ${leagueColor(t.leagueLevel)}`}>
                           {t.leagueLevel}
                         </span>
                         {t.leagueInTransition && (
-                          <span className="inline-flex items-center gap-0.5 text-[8px] font-bold uppercase tracking-wider text-warning" title="En período de transición tras ascender">
+                          <span className="inline-flex items-center gap-0.5 text-xs font-bold uppercase tracking-wider text-warning" title="En período de transición tras ascender">
                             <TrendingUp className="w-2.5 h-2.5" /> Transición
                           </span>
                         )}
@@ -115,13 +115,13 @@ export default function TechnicianRankingTable({ data, days }: TechnicianRanking
                     <Trophy className="w-3 h-3 text-primary" />
                     {t.avgScore != null
                       ? <span className="text-xs font-mono font-bold text-foreground">{t.avgScore.toFixed(3)}</span>
-                      : <span className="text-xs font-mono text-faint">—</span>
+                      : <span className="text-xs font-mono text-muted opacity-50">—</span>
                     }
                   </div>
                 </td>
                 <td className="px-6 py-5">
                   <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2 text-[10px] font-medium text-muted">
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted">
                       <span>Asig: <b className="text-foreground">{t.assignmentsCount}</b></span>
                       <span className="w-1 h-1 bg-surface-off rounded-full" />
                       <span>Acept: <b className="text-primary">{t.acceptedCount}</b></span>
@@ -137,19 +137,19 @@ export default function TechnicianRankingTable({ data, days }: TechnicianRanking
                   </div>
                 </td>
                 <td className="px-6 py-5">
-                  <span className={`text-[10px] font-mono font-bold ${t.technicianResponseRate > 0.8 ? 'text-primary' : t.technicianResponseRate > 0.5 ? 'text-warning' : 'text-error'}`}>
+                  <span className={`text-xs font-mono font-bold ${t.technicianResponseRate > 0.8 ? 'text-primary' : t.technicianResponseRate > 0.5 ? 'text-warning' : 'text-error'}`}>
                     {(t.technicianResponseRate * 100).toFixed(0)}%
                   </span>
                 </td>
                 <td className="px-6 py-5">
-                  <div className="flex items-center gap-1.5 text-[10px] font-medium text-faint">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted">
                     <Clock className="w-3 h-3" />
                     {t.daysWithoutAssignment === 999 ? 'Nunca' : `hace ${t.daysWithoutAssignment}d`}
                   </div>
                 </td>
                 <td className="px-6 py-5">
                   <div className="flex items-center justify-center">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-semibold ${
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold ${
                       t.isAvailable
                         ? 'bg-primary-hl text-primary border-primary/20'
                         : 'bg-error-hl text-error border-error/30'

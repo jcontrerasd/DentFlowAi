@@ -19,26 +19,26 @@ export function SimulatorLivePriceBlock({
   return (
     <div className={boxClass}>
       {livePrice.loading ? (
-        <span className="text-faint text-[10px]">Resolviendo precio…</span>
+        <span className="text-muted text-xs">Resolviendo precio…</span>
       ) : livePrice.salePrice != null ? (
         compact ? (
           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
             {livePrice.ruleCode && (
               <div className="col-span-2 flex justify-between gap-2">
-                <span className="text-[9px] font-bold uppercase text-faint">Regla</span>
-                <span className="font-mono text-[10px] text-primary font-bold">{livePrice.ruleCode}</span>
+                <span className="text-xs font-bold uppercase text-muted">Regla</span>
+                <span className="font-mono text-xs text-primary font-bold">{livePrice.ruleCode}</span>
               </div>
             )}
             <div className="flex flex-col">
-              <span className="text-[9px] font-bold uppercase text-faint">Comp. técnico</span>
+              <span className="text-xs font-bold uppercase text-muted">Comp. técnico</span>
               <span className="font-mono font-bold text-foreground text-xs">{formatUchQuoteClp(livePrice.cost!)}</span>
             </div>
             <div className="flex flex-col items-end">
-              <span className="text-[9px] font-bold uppercase text-faint">Fee</span>
+              <span className="text-xs font-bold uppercase text-muted">Fee</span>
               <span className="font-mono text-muted text-xs">{((livePrice.feePercent ?? 0) * 100).toFixed(0)}%</span>
             </div>
             <div className="col-span-2 flex justify-between border-t border-divider pt-1.5 mt-0.5">
-              <span className="text-[9px] font-bold uppercase text-primary">Precio dentista</span>
+              <span className="text-xs font-bold uppercase text-primary">Precio dentista</span>
               <span className="font-mono font-black text-primary text-xs">{formatUchQuoteClp(livePrice.salePrice)}</span>
             </div>
           </div>
@@ -46,20 +46,20 @@ export function SimulatorLivePriceBlock({
           <div className="space-y-2">
             {livePrice.ruleCode && (
               <div className="flex justify-between">
-                <span className="text-[10px] font-bold uppercase text-faint">Regla</span>
+                <span className="text-xs font-bold uppercase text-muted">Regla</span>
                 <span className="font-mono text-xs text-primary font-bold">{livePrice.ruleCode}</span>
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-[10px] font-bold uppercase text-faint">Compensación técnico</span>
+              <span className="text-xs font-bold uppercase text-muted">Compensación técnico</span>
               <span className="font-mono font-bold text-foreground">{formatUchQuoteClp(livePrice.cost!)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-[10px] font-bold uppercase text-faint">Fee plataforma</span>
+              <span className="text-xs font-bold uppercase text-muted">Fee plataforma</span>
               <span className="font-mono text-muted">{((livePrice.feePercent ?? 0) * 100).toFixed(0)}%</span>
             </div>
             <div className="flex justify-between border-t border-divider pt-2">
-              <span className="text-[10px] font-bold uppercase text-primary">Precio dentista</span>
+              <span className="text-xs font-bold uppercase text-primary">Precio dentista</span>
               <span className="font-mono font-black text-primary">{formatUchQuoteClp(livePrice.salePrice)}</span>
             </div>
           </div>
@@ -67,12 +67,12 @@ export function SimulatorLivePriceBlock({
       ) : livePrice.checked ? (
         <div className="space-y-2">
           <p className="text-xs text-error font-medium">Sin regla de precio para esta combinación.</p>
-          <Link href="/dashboard/admin/prices" className="text-[10px] font-bold uppercase text-primary hover:underline">
+          <Link href="/dashboard/admin/prices" className="text-xs font-bold uppercase text-primary hover:underline">
             Admin → Precios
           </Link>
         </div>
       ) : (
-        <span className="text-faint text-xs">Completa las 4 dimensiones para ver el precio.</span>
+        <span className="text-muted opacity-50 text-xs">Completa las 4 dimensiones para ver el precio.</span>
       )}
     </div>
   );
@@ -86,7 +86,7 @@ export function SimulatorPriceResultCard({ preview }: { preview: SimulationResul
         <span className="text-warning text-xs font-medium">
           Sin regla de precio — el caso no sería publicable en producción.
         </span>
-        <Link href="/dashboard/admin/prices" className="text-[10px] font-bold uppercase text-primary hover:underline">
+        <Link href="/dashboard/admin/prices" className="text-xs font-bold uppercase text-primary hover:underline">
           Admin → Precios
         </Link>
       </div>
@@ -95,7 +95,7 @@ export function SimulatorPriceResultCard({ preview }: { preview: SimulationResul
   return (
     <div className="space-y-3">
       {preview.ruleCode && (
-        <span className="inline-flex text-[10px] font-bold uppercase px-3 py-1 rounded-full bg-surface border border-divider text-muted">
+        <span className="inline-flex text-xs font-bold uppercase px-3 py-1 rounded-full bg-surface border border-divider text-muted">
           Regla: <span className="text-primary font-mono ml-1">{preview.ruleCode}</span>
         </span>
       )}

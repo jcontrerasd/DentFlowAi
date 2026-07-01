@@ -168,7 +168,7 @@ export default function CaseWorkflowStepper({
               roseDone ? 'bg-error-hl text-error ring-1 ring-error/30' : '',
               tealEarlyDone ? 'bg-primary text-inverse' : '',
               !isTerminalStep && !roseDone && !tealEarlyDone && isCurrent ? 'bg-primary-hl text-primary ring-2 ring-primary/30' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && isPending ? 'bg-surface-2 text-faint' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && isPending ? 'bg-surface-2 text-muted' : '',
             ]
               .filter(Boolean)
               .join(' ')
@@ -177,28 +177,28 @@ export default function CaseWorkflowStepper({
               isDone ? 'bg-primary text-inverse' : '',
               isCurrent && !isTerminalStep ? 'bg-primary-hl text-primary ring-2 ring-primary/30' : '',
               isTerminalStep ? 'bg-error-hl text-error ring-2 ring-error/30' : '',
-              isPending && !isTerminalStep ? 'bg-surface-2 text-faint' : '',
+              isPending && !isTerminalStep ? 'bg-surface-2 text-muted' : '',
             ]
               .filter(Boolean)
               .join(' ');
 
         const labelClass = useRoseScheme
           ? [
-              'text-[8px] font-bold uppercase tracking-wider text-center leading-tight whitespace-nowrap',
+              'text-[11px] font-bold uppercase tracking-wider text-center leading-tight whitespace-nowrap',
               isTerminalStep ? 'text-error' : '',
               roseDone ? 'text-error/90' : '',
               tealEarlyDone ? 'text-primary' : '',
               !isTerminalStep && !roseDone && !tealEarlyDone && isCurrent ? 'text-primary' : '',
-              !isTerminalStep && !roseDone && !tealEarlyDone && isPending ? 'text-faint' : '',
+              !isTerminalStep && !roseDone && !tealEarlyDone && isPending ? 'text-muted' : '',
             ]
               .filter(Boolean)
               .join(' ')
           : [
-              'text-[8px] font-bold uppercase tracking-wider text-center leading-tight whitespace-nowrap',
+              'text-[11px] font-bold uppercase tracking-wider text-center leading-tight whitespace-nowrap',
               isDone ? 'text-primary' : '',
               isCurrent && !isTerminalStep ? 'text-primary' : '',
               isTerminalStep ? 'text-error' : '',
-              isPending && !isTerminalStep ? 'text-faint' : '',
+              isPending && !isTerminalStep ? 'text-muted' : '',
             ]
               .filter(Boolean)
               .join(' ');
@@ -225,12 +225,12 @@ export default function CaseWorkflowStepper({
               </div>
               <p className={labelClass}>{step.label}</p>
               {step.status === 'enEjecucion' && deadlineText && (
-                <p className="text-[7px] text-muted text-center leading-tight whitespace-nowrap">
+                <p className="text-[11px] text-muted text-center leading-tight whitespace-nowrap">
                   Entrega: {deadlineText}
                 </p>
               )}
               {step.status === 'enRevisionCalidad' && isCurrent && showQualityStep && (
-                <p className="text-[7px] text-muted text-center leading-tight whitespace-nowrap">
+                <p className="text-[11px] text-muted text-center leading-tight whitespace-nowrap">
                   {currentResponsibility === 'tecnico' ? 'Ajustes del técnico' : 'En revisión'}
                 </p>
               )}

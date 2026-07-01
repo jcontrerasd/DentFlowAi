@@ -28,7 +28,7 @@ export default function FauchardNav({ className }: { className?: string }) {
           <Link key={link.href} href={link.href}>
             <div className={`
               flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-300 relative
-              ${isActive ? 'text-foreground' : 'text-faint hover:text-muted'}
+              ${isActive ? 'text-foreground' : 'text-muted hover:text-foreground'}
             `}>
               {isActive && (
                 <motion.div
@@ -38,7 +38,7 @@ export default function FauchardNav({ className }: { className?: string }) {
                 />
               )}
               <Icon className={`w-3.5 h-3.5 shrink-0 relative z-10 ${isActive ? 'text-primary' : ''}`} />
-              <span className="text-[9px] font-bold uppercase tracking-wider relative z-10 whitespace-nowrap">
+              <span className="text-xs font-bold uppercase tracking-wider relative z-10 whitespace-nowrap">
                 {link.label}
               </span>
             </div>

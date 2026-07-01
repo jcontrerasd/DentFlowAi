@@ -47,7 +47,7 @@ export default function SimulatorFunnelStepper({
                       ? 'bg-primary border-primary text-white'
                       : done
                         ? 'bg-primary/10 border-primary/30 text-primary'
-                        : 'bg-surface border-divider text-faint'
+                        : 'bg-surface border-divider text-muted'
                   }`}
                 >
                   {done && !isActive ? (
@@ -57,11 +57,11 @@ export default function SimulatorFunnelStepper({
                   )}
                 </span>
                 <span className="flex flex-col min-w-0">
-                  <span className="text-[10px] font-black uppercase tracking-wider truncate">
+                  <span className="text-xs font-black uppercase tracking-wider truncate">
                     {step.shortLabel}
                   </span>
                   {badge && (
-                    <span className="text-[9px] font-mono text-faint truncate max-w-[120px] group-hover:text-muted">
+                    <span className="text-xs font-mono text-muted truncate max-w-[120px] group-hover:text-foreground">
                       {badge}
                     </span>
                   )}

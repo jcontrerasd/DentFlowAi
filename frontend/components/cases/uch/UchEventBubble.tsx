@@ -150,7 +150,7 @@ function QualityReviewControls({
               {attachments.length > 0 && (
                 <ul className="space-y-0.5">
                   {attachments.map((f, i) => (
-                    <li key={i} className="flex items-center justify-between text-[10px] bg-white/5 rounded px-2 py-1">
+                    <li key={i} className="flex items-center justify-between text-xs bg-white/5 rounded px-2 py-1">
                       <span className="truncate max-w-[80%] text-foreground">{f.name}</span>
                       <button type="button" onClick={() => setAttachments(attachments.filter((_, j) => j !== i))} className="text-error hover:text-error/70 ml-1"><XCircle className="w-3 h-3" /></button>
                     </li>
@@ -342,7 +342,7 @@ export default function UchEventBubble({
   let bubbleShell: string;
   if (isNeutralSystemPill) {
     bubbleShell =
-      'bg-surface-off border border-divider text-muted text-[10px] py-1.5 px-3 rounded-full self-start max-w-[min(100%,24rem)]';
+      'bg-surface-off border border-divider text-muted text-xs py-1.5 px-3 rounded-full self-start max-w-[min(100%,24rem)]';
   } else if (isSelfLane) {
     bubbleShell = bubbleSelfBase;
   } else {
@@ -360,7 +360,7 @@ export default function UchEventBubble({
       className={`flex flex-col w-full ${isRightLane ? 'items-end' : 'items-start'}`}
     >
       {showFauchardSystemTimestamp && (
-        <span className="text-[10px] text-faint mb-1 tabular-nums self-start">
+        <span className="text-xs text-muted mb-1 tabular-nums self-start">
           {formatActivityTimestamp(event.createdAt)}
         </span>
       )}
@@ -377,13 +377,13 @@ export default function UchEventBubble({
               const avatarSrc = event.user?.image || (showHeaderAsYou ? currentUser?.image : undefined);
               return avatarSrc && (avatarSrc.startsWith('http') || avatarSrc.startsWith('/'))
                 ? <Image src={avatarSrc} alt="" width={20} height={20} className="w-full h-full object-cover" unoptimized={avatarSrc.startsWith('http')} />
-                : <User className="w-2.5 h-2.5 text-faint" />;
+                : <User className="w-2.5 h-2.5 text-muted" />;
             })()}
           </div>
-          <span className="text-[10px] font-semibold text-faint">
+          <span className="text-xs font-semibold text-muted">
             {showHeaderAsYou ? 'Yo' : showAsFauchard ? 'Fauchard' : (event.user?.fullName || 'Usuario')}
           </span>
-          <span className="text-[10px] text-faint tabular-nums">
+          <span className="text-xs text-muted tabular-nums">
             {formatActivityTimestamp(event.createdAt)}
           </span>
         </div>
@@ -421,7 +421,7 @@ export default function UchEventBubble({
             if (!Array.isArray(files) || files.length === 0 || event.action === 'REVISION_ENVIADA' || event.action === CASE_EVENTS.REVISION_ENVIADA_CALIDAD) return null;
             return (
               <p
-                className={`text-[10px] flex items-center gap-1.5 mt-1 ${
+                className={`text-xs flex items-center gap-1.5 mt-1 ${
                   isSelfLane ? 'text-foreground' : 'text-muted'
                 }`}
               >
@@ -433,13 +433,13 @@ export default function UchEventBubble({
 
           {event.action === 'COMENTARIO_TECNICO' && (
             <div className="space-y-1">
-              <p className={`text-[10px] font-medium ${isSelfLane ? 'text-foreground' : 'text-muted'}`}>
+              <p className={`text-xs font-medium ${isSelfLane ? 'text-foreground' : 'text-muted'}`}>
                 Comentario del técnico
               </p>
               {event.content?.trim() ? (
                 <p className="text-xs leading-relaxed whitespace-pre-wrap">{event.content}</p>
               ) : (
-                <p className="text-[10px] text-faint italic">Sin texto.</p>
+                <p className="text-xs text-muted opacity-50 italic">Sin texto.</p>
               )}
             </div>
           )}
@@ -486,7 +486,7 @@ export default function UchEventBubble({
                 </div>
                 {event.content?.trim() ? (
                   <div className="space-y-0.5">
-                    <p className="text-[10px] font-medium text-faint">Comentario con la entrega</p>
+                    <p className="text-xs font-medium text-muted">Comentario con la entrega</p>
                     <p className="text-[11px] text-foreground leading-relaxed whitespace-pre-wrap">{event.content}</p>
                   </div>
                 ) : null}
@@ -496,7 +496,7 @@ export default function UchEventBubble({
                       isSelfLane ? 'border-primary/30' : 'border-divider'
                     }`}
                   >
-                    <span className={`text-[10px] ${isSelfLane ? 'text-foreground' : 'text-muted'}`}>
+                    <span className={`text-xs ${isSelfLane ? 'text-foreground' : 'text-muted'}`}>
                       v{deliveryVersion} · {files.length} archivo{files.length !== 1 ? 's' : ''}
                     </span>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -587,7 +587,7 @@ export default function UchEventBubble({
                             {revisionAttachments.length > 0 && (
                               <ul className="space-y-0.5">
                                 {revisionAttachments.map((f, i) => (
-                                  <li key={i} className="flex items-center justify-between text-[10px] bg-white/5 rounded px-2 py-1">
+                                  <li key={i} className="flex items-center justify-between text-xs bg-white/5 rounded px-2 py-1">
                                     <span className="truncate max-w-[80%] text-foreground">{f.name}</span>
                                     <button type="button" onClick={() => setRevisionAttachments(revisionAttachments.filter((_, j) => j !== i))} className="text-error hover:text-error/70 ml-1"><XCircle className="w-3 h-3" /></button>
                                   </li>
@@ -678,11 +678,11 @@ export default function UchEventBubble({
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="text-[11px] font-bold">Ajuste requerido por el solicitante</span>
                 </div>
-                <p className="text-[10px] font-medium text-faint">Detalle del ajuste</p>
+                <p className="text-xs font-medium text-muted">Detalle del ajuste</p>
                 {adjustmentText ? (
                   <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{adjustmentText}</p>
                 ) : (
-                  <p className="text-[10px] text-faint italic">Sin descripción de ajuste.</p>
+                  <p className="text-xs text-muted opacity-50 italic">Sin descripción de ajuste.</p>
                 )}
                 {canView3DSol && (
                   <div className={`pt-1.5 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'}`}>
@@ -713,13 +713,13 @@ export default function UchEventBubble({
                 <div className="flex items-center gap-2 text-primary">
                   <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="text-[11px] font-bold">Ajuste solicitado por Calidad</span>
-                  <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary-hl text-primary">Calidad</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-primary-hl text-primary">Calidad</span>
                 </div>
-                <p className="text-[10px] font-medium text-faint">Detalle del ajuste</p>
+                <p className="text-xs font-medium text-muted">Detalle del ajuste</p>
                 {adjustmentText ? (
                   <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{adjustmentText}</p>
                 ) : (
-                  <p className="text-[10px] text-faint italic">Sin descripción de ajuste.</p>
+                  <p className="text-xs text-muted opacity-50 italic">Sin descripción de ajuste.</p>
                 )}
                 {canView3DCal && (
                   <div className={`pt-1.5 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'}`}>
@@ -776,7 +776,7 @@ export default function UchEventBubble({
                 ) : null}
                 {commentBody ? (
                   <div className="pl-5 space-y-0.5">
-                    <p className="text-[10px] font-medium text-faint">
+                    <p className="text-xs font-medium text-muted">
                       {actingAsDentista && isSelfLane ? 'Tu comentario' : 'Comentario del solicitante'}
                     </p>
                     <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/95">{commentBody}</p>
@@ -800,7 +800,7 @@ export default function UchEventBubble({
                   {[1, 2, 3, 4, 5].map((n) => (
                     <Star
                       key={n}
-                      className={`w-3.5 h-3.5 ${n <= rating ? 'text-warning fill-current' : 'text-faint'}`}
+                      className={`w-3.5 h-3.5 ${n <= rating ? 'text-warning fill-current' : 'text-muted'}`}
                     />
                   ))}
                   <span className="ml-1 text-[11px] font-semibold text-foreground/95 tabular-nums">{rating}/5</span>
@@ -826,14 +826,14 @@ export default function UchEventBubble({
                   {[1, 2, 3, 4, 5].map((n) => (
                     <Star
                       key={n}
-                      className={`w-3.5 h-3.5 ${n <= rating ? 'text-warning fill-current' : 'text-faint'}`}
+                      className={`w-3.5 h-3.5 ${n <= rating ? 'text-warning fill-current' : 'text-muted'}`}
                     />
                   ))}
                   <span className="ml-1 text-[11px] font-semibold text-foreground/95 tabular-nums">{rating}/5</span>
                 </div>
                 {comment ? (
                   <div className="pl-5 space-y-0.5">
-                    <p className="text-[10px] font-medium text-faint">
+                    <p className="text-xs font-medium text-muted">
                       {actingAsDentista && isSelfLane ? 'Tu comentario' : 'Comentario'}
                     </p>
                     <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/95">{comment}</p>

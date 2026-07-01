@@ -4,6 +4,7 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 // Singleton persistente en el objeto global para sobrevivir a HMR en desarrollo
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
 /** v5.25 — data_export_request: solicitudes asíncronas de exportación de datos (portabilidad, Ley 21.719). */
+/** v5.26 — Índices de rendimiento: cobertura compuesta para Fauchard, UCH polling, crons y quality gate. */
 export const INFRA_VERSION = 'v5.25';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
@@ -354,6 +355,87 @@ export async function ensureIncrementalInfrastructure(db: any) {
     await db.execute(sql`CREATE INDEX IF NOT EXISTS udr_requested_at_idx ON user_deletion_request(requested_at)`);
   } catch (e) {
     console.error("[Infrastructure] Error creando user_deletion_request (v5.24):", e);
+  }
+
+  // v5.26 — Índices de rendimiento: cobertura compuesta para motor Fauchard, polling UCH,
+  // crons de disponibilidad/revisión y quality gate. Sin cambio de schema, solo índices.
+  try {
+    // P0: unique index faltante en review — onConflictDoUpdate requiere este índice en DB
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS review_case_reviewer_dimension_uidx ON review(clinical_case_id, reviewer_id, dimension);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando review_case_reviewer_dimension_uidx (v5.26):", e);
+  }
+  try {
+    // P0: Fauchard — full scan de user(role, is_active, is_available) → índice parcial técnicos
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS user_role_active_available_idx ON "user"(role, is_active, is_available) WHERE role = 'tecnico';`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando user_role_active_available_idx (v5.26):", e);
+  }
+  try {
+    // P0: Fauchard cooldown — (technician_id, work_type, assigned_at) para check de ventana
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS ca_tech_worktype_assigned_idx ON case_assignment(technician_id, work_type, assigned_at DESC) WHERE status != 'rejected' AND status != 'expired';`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando ca_tech_worktype_assigned_idx (v5.26):", e);
+  }
+  try {
+    // P0: Fauchard skills — (user_id, work_type, design_level) para filtro triple de habilidades
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS ts_user_worktype_design_idx ON technician_skill(user_id, work_type, design_level DESC);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando ts_user_worktype_design_idx (v5.26):", e);
+  }
+  try {
+    // P1: pool queue — internal_status para re-evaluación y filtros de estado interno
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS clinical_case_internalstatus_idx ON clinical_case(internal_status);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando clinical_case_internalstatus_idx (v5.26):", e);
+  }
+  try {
+    // P1: dashboard — (organization_id, status, created_at) para métricas y listados
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS clinical_case_org_status_created_idx ON clinical_case(organization_id, status, created_at DESC);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando clinical_case_org_status_created_idx (v5.26):", e);
+  }
+  try {
+    // P1: quality gate — (clinical_case_id, status) en entregas para filtros de revisión
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS delivery_case_status_idx ON clinical_case_delivery(clinical_case_id, status);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando delivery_case_status_idx (v5.26):", e);
+  }
+  try {
+    // P1: UCH — (clinical_case_id, type, created_at) para filtros de eventos por rol
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS case_event_case_type_created_idx ON clinical_case_event(clinical_case_id, type, created_at DESC);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando case_event_case_type_created_idx (v5.26):", e);
+  }
+  try {
+    // P1: assignments — (clinical_case_id, status) para filtros de asignación por caso
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS ca_case_status_idx ON case_assignment(clinical_case_id, status);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando ca_case_status_idx (v5.26):", e);
+  }
+  try {
+    // P2: sanción rolling 14d — (technician_user_id, status, occurred_at) para ventana activa
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS tnre_tech_status_occurred_idx ON technician_no_response_event(technician_user_id, status, occurred_at DESC);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando tnre_tech_status_occurred_idx (v5.26):", e);
+  }
+  try {
+    // P2: cron disponibilidad — level_global para filtrar técnicos con disponibilidad activa
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS ta_levelglobal_idx ON technician_availability(level_global);`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando ta_levelglobal_idx (v5.26):", e);
+  }
+  try {
+    // P2: técnicos activos por rol para listados admin
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS user_role_active_idx ON "user"(role) WHERE is_active = true;`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando user_role_active_idx (v5.26):", e);
+  }
+  try {
+    // P2: inactividad — last_login_at para cron de inactividad de técnicos
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS user_lastlogin_idx ON "user"(last_login_at DESC) WHERE last_login_at IS NOT NULL;`);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando user_lastlogin_idx (v5.26):", e);
   }
 }
 

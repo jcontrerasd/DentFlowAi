@@ -204,7 +204,7 @@ function HealthScore({ score, outOfRange }: { score: number; outOfRange: number 
     <div className="p-6 rounded-3xl bg-surface/40 border border-divider flex items-center gap-8">
       <div className="shrink-0 text-right">
         <span className="text-5xl font-black" style={{ color }}>{score}</span>
-        <span className="text-xl font-black text-faint">/100</span>
+        <span className="text-xl font-black text-muted">/100</span>
         <p className="text-xs font-black uppercase tracking-widest mt-0.5" style={{ color }}>{label}</p>
       </div>
       <div className="flex-1 space-y-2.5 min-w-0">
@@ -474,7 +474,7 @@ function CompactRec({ rule, config }: { rule: ActiveRule; config: FauchardConfig
   const isCritical = rule.severity === 'critical';
   const firstParam = rule.params[0];
   return (
-    <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-[11px] flex-wrap ${
+    <div className={`flex items-center gap-3 px-4 py-3 rounded-2xl border text-xs flex-wrap ${
       isCritical ? 'bg-error-hl border-error/20' : 'bg-warning-hl border-warning/20'
     }`}>
       {isCritical
@@ -487,16 +487,16 @@ function CompactRec({ rule, config }: { rule: ActiveRule; config: FauchardConfig
       {firstParam && (
         <>
           <span className="text-faint">→</span>
-          <code className="font-mono text-[10px] bg-primary-hl text-primary px-1.5 py-0.5 rounded">
+          <code className="font-mono text-xs bg-primary-hl text-primary px-1.5 py-0.5 rounded">
             {firstParam.name}
           </code>
           <span className="text-muted">{firstParam.currentValue(config)}</span>
-          <span className="text-faint text-[10px]">{firstParam.suggestion}</span>
+          <span className="text-muted text-xs">{firstParam.suggestion}</span>
         </>
       )}
       <a
         href="/dashboard/admin/fauchard"
-        className="ml-auto flex items-center gap-1 text-[10px] font-bold text-primary hover:underline shrink-0"
+        className="ml-auto flex items-center gap-1 text-xs font-bold text-primary hover:underline shrink-0"
       >
         <ExternalLink className="w-3 h-3" /> Configuración
       </a>
@@ -534,7 +534,7 @@ export default function CalibrationPanel({ initialData, initialDays, config }: P
     <div className="flex flex-col gap-8">
       {/* Controles */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-faint">
+        <span className="text-xs font-bold uppercase tracking-wider text-muted">
           Actualizado {new Date(data.generatedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
         </span>
         <Button onClick={refresh} loading={loading} variant="secondary" icon={<RefreshCw className="w-4 h-4" />}>
@@ -569,9 +569,9 @@ export default function CalibrationPanel({ initialData, initialDays, config }: P
         </div>
       ) : (
         <div className="space-y-3">
-          <h2 className="text-[11px] font-black uppercase tracking-wider text-foreground">
+          <h2 className="text-xs font-black uppercase tracking-wider text-foreground">
             Recomendaciones ({activeRules.length})
-            <span className="ml-2 text-[9px] font-bold text-faint normal-case tracking-normal">
+            <span className="ml-2 text-xs font-bold text-muted normal-case tracking-normal">
               — parámetros a revisar según las alertas activas
             </span>
           </h2>

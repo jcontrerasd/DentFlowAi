@@ -147,13 +147,13 @@ export default function FauchardLabPanel() {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <FlaskConical className="w-3.5 h-3.5 text-primary shrink-0" />
-          <h3 className="text-[11px] font-black uppercase tracking-wider text-foreground truncate">Laboratorio</h3>
+          <h3 className="text-xs font-black uppercase tracking-wider text-foreground truncate">Laboratorio</h3>
         </div>
         {isPending && <RefreshCcw className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />}
       </div>
 
       <div className="p-2.5 rounded-xl bg-surface/30 border border-divider">
-        <h4 className="text-[10px] font-bold text-foreground mb-1">Radar α</h4>
+        <h4 className="text-xs font-bold text-foreground mb-1">Radar α</h4>
         <svg ref={svgRef} viewBox="0 0 300 300" className="w-full max-w-[180px] mx-auto h-auto touch-none">
           <defs>
             <radialGradient id="labRadarFill" cx="50%" cy="50%" r="50%">
@@ -193,8 +193,8 @@ export default function FauchardLabPanel() {
           })}
           <circle cx={CX} cy={CY} r="3" fill="var(--color-primary)" opacity="0.5" />
         </svg>
-        <p className="text-[9px] text-faint text-center mt-1 leading-tight">Arrastra los vértices para ajustar α · pasa el mouse para ver cada factor</p>
-        <div className={`mt-1 p-2 rounded-lg border text-[10px] font-bold flex items-center justify-between ${isWeightsSumValid ? 'bg-primary/5 border-primary/20 text-primary' : 'bg-error/5 border-error/20 text-error'}`}>
+        <p className="text-xs text-muted text-center mt-1 leading-tight">Arrastra los vértices para ajustar α · pasa el mouse para ver cada factor</p>
+        <div className={`mt-1 p-2 rounded-lg border text-xs font-bold flex items-center justify-between ${isWeightsSumValid ? 'bg-primary/5 border-primary/20 text-primary' : 'bg-error/5 border-error/20 text-error'}`}>
           <span>Σ α = {sumWeights.toFixed(3)}</span>
           <span>{isWeightsSumValid ? '✓ Válido' : '⚠ Debe sumar 1.0'}</span>
         </div>
@@ -224,10 +224,10 @@ export default function FauchardLabPanel() {
           className="w-full flex items-center gap-2 p-2.5 text-left transition-colors hover:bg-surface-2/30 focus-visible:outline-none focus-visible:bg-surface-2/40"
           aria-expanded={showDist}
         >
-          <Users className="w-4 h-4 text-faint shrink-0" />
+          <Users className="w-4 h-4 text-muted shrink-0" />
           <span className="text-xs font-black text-foreground uppercase tracking-tight">Ver técnicos</span>
           {simulation && (
-            <span className="text-[9px] font-black px-2 py-0.5 bg-primary-hl border border-primary/20 text-primary rounded-lg">
+            <span className="text-xs font-black px-2 py-0.5 bg-primary-hl border border-primary/20 text-primary rounded-lg">
               {simulation.funnel?.eligible ?? 0} / {simulation.funnel?.universe ?? 0}
             </span>
           )}
@@ -237,7 +237,7 @@ export default function FauchardLabPanel() {
         {showDist && (
           <div className="px-4 pb-4 space-y-3">
             {errorMessage && (
-              <div className="p-3 rounded-xl bg-error-hl border border-error/20 text-error text-[11px] flex items-center gap-2">
+              <div className="p-3 rounded-xl bg-error-hl border border-error/20 text-error text-xs flex items-center gap-2">
                 <AlertCircle className="w-3.5 h-3.5 shrink-0" />{errorMessage}
               </div>
             )}
@@ -246,22 +246,22 @@ export default function FauchardLabPanel() {
                 {(simulation.ranked as Array<Record<string, unknown>>)?.slice(0, 10).map((d) => (
                   <div key={d.technicianId as string} className={`flex items-center gap-2 p-2 rounded-lg ${d.excluded ? 'opacity-40 bg-background/10' : 'bg-background/20'}`}>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-bold text-foreground truncate">{d.fullName as string}</p>
+                      <p className="text-xs font-bold text-foreground truncate">{d.fullName as string}</p>
                       {d.excluded
-                        ? <p className="text-[8px] font-black uppercase text-error">{String(d.exclusionReason)}</p>
-                        : <p className="text-[8px] font-bold uppercase text-faint">{d.leagueLevel as string}</p>}
+                        ? <p className="text-xs font-black uppercase text-error">{String(d.exclusionReason)}</p>
+                        : <p className="text-xs font-bold uppercase text-muted">{d.leagueLevel as string}</p>}
                     </div>
-                    <span className="text-[11px] font-mono font-bold text-primary shrink-0">{(d.score as number).toFixed(3)}</span>
+                    <span className="text-xs font-mono font-bold text-primary shrink-0">{(d.score as number).toFixed(3)}</span>
                     <div className="flex gap-0.5 shrink-0">
                       {['Q', 'P', 'E', 'B', 'L', 'N'].map((k) => (
-                        <span key={k} className="text-[7px] font-mono text-faint">{(d.components as Record<string, number>)?.[k]?.toFixed(1)}</span>
+                        <span key={k} className="text-xs font-mono text-muted">{(d.components as Record<string, number>)?.[k]?.toFixed(1)}</span>
                       ))}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="py-6 text-center text-[11px] text-faint">Esperando simulación…</p>
+              <p className="py-6 text-center text-xs text-muted opacity-50">Esperando simulación…</p>
             )}
           </div>
         )}
@@ -277,13 +277,13 @@ export default function FauchardLabPanel() {
           }}
         >
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-black uppercase tracking-wider text-foreground">{tipInfo.label}</span>
-            <span className="text-[9px] font-mono font-bold bg-surface-2 border border-divider px-1 py-0.5 rounded text-primary ml-auto shrink-0">
+            <span className="text-xs font-black uppercase tracking-wider text-foreground">{tipInfo.label}</span>
+            <span className="text-xs font-mono font-bold bg-surface-2 border border-divider px-1 py-0.5 rounded text-primary ml-auto shrink-0">
               {tipInfo.symbol} = {(draft[tip.key as keyof typeof draft] as number).toFixed(2)}
             </span>
           </div>
-          <p className="text-[10px] text-muted leading-snug">{tipInfo.description}</p>
-          <p className="text-[10px] text-faint leading-snug italic">{tipInfo.example}</p>
+          <p className="text-xs text-muted leading-snug">{tipInfo.description}</p>
+          <p className="text-xs text-muted leading-snug italic">{tipInfo.example}</p>
         </div>
       )}
     </div>
@@ -299,10 +299,10 @@ function Kpi({ label, value, good, goodLabel, badLabel, bar, onClick }: { label:
       aria-label={`Resaltar parámetros de ${label}`}
       className="p-2 rounded-lg bg-surface/40 border border-divider flex flex-col gap-1 text-left transition-colors duration-150 hover:bg-white/5 hover:border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
-      <span className="text-[8px] font-black text-faint uppercase tracking-widest">{label}</span>
+      <span className="text-xs font-black text-muted uppercase tracking-widest">{label}</span>
       <div className="flex items-baseline gap-1.5">
         <span className="text-xl font-black text-foreground tabular-nums">{value}%</span>
-        <span className={`text-[8px] font-bold ${good ? 'text-jade' : 'text-warning'}`}>{good ? goodLabel : badLabel}</span>
+        <span className={`text-xs font-bold ${good ? 'text-jade' : 'text-warning'}`}>{good ? goodLabel : badLabel}</span>
       </div>
       <div className="w-full h-1 bg-surface-2 rounded-full overflow-hidden">
         <div className={`h-full ${bar}`} style={{ width: `${value}%` }} />
@@ -313,7 +313,7 @@ function Kpi({ label, value, good, goodLabel, badLabel, bar, onClick }: { label:
 
 function Warn({ text }: { text: string }) {
   return (
-    <div className="p-3 rounded-xl bg-warning-hl border border-warning/25 text-warning text-[11px] flex items-start gap-2">
+    <div className="p-3 rounded-xl bg-warning-hl border border-warning/25 text-warning text-xs flex items-start gap-2">
       <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
       <span className="leading-relaxed">{text}</span>
     </div>

@@ -17,10 +17,10 @@ function RankingRow({ row }: { row: SimulationResult['ranked'][number] }) {
       <td className="px-6 py-4 text-xs font-mono font-bold text-muted">{row.rank}</td>
       <td className="px-6 py-4">
         <div className="flex flex-col">
-          <span className="text-[11px] font-bold text-foreground">{row.fullName}</span>
-          <span className="text-[9px] font-bold uppercase text-faint">{row.leagueLevel}</span>
+          <span className="text-xs font-bold text-foreground">{row.fullName}</span>
+          <span className="text-xs font-bold uppercase text-muted">{row.leagueLevel}</span>
           {row.excluded && (
-            <span className="text-[8px] font-black uppercase text-error mt-1 flex items-center gap-1">
+            <span className="text-xs font-black uppercase text-error mt-1 flex items-center gap-1">
               <AlertCircle className="w-2.5 h-2.5" />{' '}
               {row.exclusionReason
                 ? EXCLUSION_LABELS[row.exclusionReason] ?? row.exclusionReason
@@ -28,12 +28,12 @@ function RankingRow({ row }: { row: SimulationResult['ranked'][number] }) {
             </span>
           )}
           {isWinner && (
-            <span className="text-[8px] font-black uppercase text-emerald-600 mt-1 flex items-center gap-1">
+            <span className="text-xs font-black uppercase text-emerald-600 mt-1 flex items-center gap-1">
               <Trophy className="w-2.5 h-2.5" /> Vista previa #1
             </span>
           )}
           {isBackup && (
-            <span className="text-[8px] font-black uppercase text-amber-600 mt-1">Respaldo #{chainPos}</span>
+            <span className="text-xs font-black uppercase text-amber-600 mt-1">Respaldo #{chainPos}</span>
           )}
         </div>
       </td>
@@ -44,13 +44,13 @@ function RankingRow({ row }: { row: SimulationResult['ranked'][number] }) {
         <div className="flex gap-1.5">
           {(['Q', 'P', 'E', 'B', 'L', 'N'] as const).map((k) => (
             <div key={k} className="flex flex-col items-center">
-              <span className="text-[7px] font-black text-faint">{k}</span>
-              <span className="text-[9px] font-mono text-muted">{row.components[k].toFixed(2)}</span>
+              <span className="text-xs font-black text-muted">{k}</span>
+              <span className="text-xs font-mono text-muted">{row.components[k].toFixed(2)}</span>
             </div>
           ))}
         </div>
       </td>
-      <td className="px-6 py-4 text-[10px] font-mono text-muted">{row.activeLoad}</td>
+      <td className="px-6 py-4 text-xs font-mono text-muted">{row.activeLoad}</td>
     </tr>
   );
 }
@@ -68,7 +68,7 @@ export default function SimulatorRankingTable({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <h4 className="text-sm font-bold uppercase tracking-wider text-foreground">Ranking Q/P/E/B/L/N</h4>
-        <label className="flex items-center gap-2 text-[10px] font-bold uppercase text-muted cursor-pointer">
+        <label className="flex items-center gap-2 text-xs font-bold uppercase text-muted cursor-pointer">
           <ListFilter className="w-3.5 h-3.5" />
           <input
             type="checkbox"
@@ -83,7 +83,7 @@ export default function SimulatorRankingTable({
       <div className="rounded-[2rem] border border-divider bg-surface/20 overflow-hidden">
         <table className="w-full text-left">
           <thead>
-            <tr className="bg-surface border-b border-divider text-[9px] font-bold uppercase tracking-wider text-faint">
+            <tr className="bg-surface border-b border-divider text-xs font-bold uppercase tracking-wider text-muted">
               <th className="px-6 py-5">#</th>
               <th className="px-6 py-5">Técnico</th>
               <th className="px-6 py-5">Score</th>
@@ -98,7 +98,7 @@ export default function SimulatorRankingTable({
           </tbody>
         </table>
         {displayRanked.length === 0 && (
-          <p className="p-6 text-center text-faint text-sm">Sin filas que mostrar con el filtro actual.</p>
+          <p className="p-6 text-center text-muted text-sm">Sin filas que mostrar con el filtro actual.</p>
         )}
       </div>
     </div>

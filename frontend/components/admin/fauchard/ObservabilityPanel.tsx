@@ -79,7 +79,7 @@ export default function ObservabilityPanel() {
             <button
               key={w}
               onClick={() => setDays(w)}
-              className={`px-4 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider transition-colors ${
                 days === w ? 'bg-surface-2 text-primary border border-divider' : 'text-faint hover:text-muted'
               }`}
             >
@@ -89,7 +89,7 @@ export default function ObservabilityPanel() {
         </div>
         <div className="flex items-center gap-4">
           {data && (
-            <span className="text-[10px] font-bold uppercase tracking-wider text-faint">
+            <span className="text-xs font-bold uppercase tracking-wider text-muted">
               Última actualización {new Date(data.generatedAt).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
@@ -119,7 +119,7 @@ export default function ObservabilityPanel() {
               title={help?.description ?? m.hint}
             >
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-faint">#{m.id}</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-muted">#{m.id}</span>
                 <div className="flex items-center gap-1.5">
                   <span className={`text-2xl font-black ${m.available ? 'text-foreground' : 'text-faint'}`}>{formatMetric(m)}</span>
                   {help && (
@@ -136,7 +136,7 @@ export default function ObservabilityPanel() {
                 </div>
               </div>
               <p className="text-xs font-bold text-muted mt-2">{m.label}</p>
-              <p className="text-[10px] text-faint mt-1 leading-snug">{m.hint}</p>
+              <p className="text-xs text-muted mt-1 leading-snug">{m.hint}</p>
             </div>
           );
         })}
@@ -145,7 +145,7 @@ export default function ObservabilityPanel() {
       {/* Funnel (métrica 13) */}
       <div className="p-6 rounded-3xl bg-surface/40 border border-divider">
         <div className="flex items-center gap-2 mb-1">
-          <h3 className="text-[11px] font-black uppercase tracking-wider text-primary">#13 · Funnel del caso</h3>
+          <h3 className="text-xs font-black uppercase tracking-wider text-primary">#13 · Funnel del caso</h3>
           <button
             type="button"
             onClick={() => openHelp('#13')}
@@ -156,7 +156,7 @@ export default function ObservabilityPanel() {
             <HelpCircle className="w-3.5 h-3.5" />
           </button>
         </div>
-        <p className="text-[10px] text-faint mb-5">Publicado → Propuesta lista → Aceptada → Completado (últimos {data?.windowDays ?? days} días)</p>
+        <p className="text-xs text-muted mb-5">Publicado → Propuesta lista → Aceptada → Completado (últimos {data?.windowDays ?? days} días)</p>
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={funnelData} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
@@ -171,7 +171,7 @@ export default function ObservabilityPanel() {
         </div>
       </div>
 
-      <p className="text-[10px] text-faint italic">
+      <p className="text-xs text-muted italic">
         Métricas 3, 4 y 12 requieren historial de eventos que se registra en Fase 6 (crons). Se muestran como "—".
       </p>
     </div>

@@ -155,7 +155,7 @@ export default function FauchardHelpWindow({ isOpen, onClose, section, focusKey 
           >
             <GripVertical className="w-4 h-4 text-faint shrink-0" />
             <HelpCircle className="w-4 h-4 text-primary shrink-0" />
-            <span className="flex-1 text-[11px] font-bold uppercase tracking-wider text-foreground truncate">
+            <span className="flex-1 text-xs font-bold uppercase tracking-wider text-foreground truncate">
               {section.title}
             </span>
             <button
@@ -193,11 +193,11 @@ export default function FauchardHelpWindow({ isOpen, onClose, section, focusKey 
                     return (
                       <div className="flex items-center gap-2">
                         {numText ? (
-                          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-primary-hl px-1.5 text-[11px] font-black text-primary" title={`Parámetro ${numText}`}>
+                          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-primary-hl px-1.5 text-xs font-black text-primary" title={`Parámetro ${numText}`}>
                             {numText}
                           </span>
                         ) : param.symbol ? (
-                          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-primary-hl px-1.5 text-[11px] font-black text-primary">
+                          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-primary-hl px-1.5 text-xs font-black text-primary">
                             {param.symbol}
                           </span>
                         ) : null}
@@ -207,14 +207,14 @@ export default function FauchardHelpWindow({ isOpen, onClose, section, focusKey 
                   })()}
                   <p className="text-xs leading-relaxed text-muted">{param.description}</p>
                   <div className="rounded-xl border border-divider/60 bg-surface/60 px-3 py-2">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-faint mb-1">
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted mb-1">
                       Ejemplo
                     </p>
                     <p className="text-xs leading-relaxed text-foreground/90">{param.example}</p>
                   </div>
                   {param.links && param.links.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-faint mr-0.5">Ajustar:</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted mr-0.5">Ajustar:</span>
                       {param.links.map((lnk) => {
                         const n = fauchardParamNumber(lnk.key);
                         return (
@@ -225,7 +225,7 @@ export default function FauchardHelpWindow({ isOpen, onClose, section, focusKey 
                               router.push(`/dashboard/admin/fauchard?space=${fauchardParamSpace(lnk.key)}&focus=${lnk.key}`);
                               onClose();
                             }}
-                            className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary-hl px-2 py-1 text-[11px] font-bold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                            className="inline-flex items-center gap-1 rounded-lg border border-primary/30 bg-primary-hl px-2 py-1 text-xs font-bold text-primary transition-colors hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                             title={`Ir al parámetro ${n != null ? `N°${n} ` : ''}"${fauchardParamLabel(lnk.key)}"`}
                           >
                             <SlidersHorizontal className="w-3 h-3 shrink-0" />
@@ -242,7 +242,7 @@ export default function FauchardHelpWindow({ isOpen, onClose, section, focusKey 
 
             {section.notes && section.notes.length > 0 && (
               <div className="space-y-2 rounded-2xl border border-divider/70 bg-surface-2/30 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-faint">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted">
                   Reglas
                 </p>
                 <ul className="space-y-1.5">

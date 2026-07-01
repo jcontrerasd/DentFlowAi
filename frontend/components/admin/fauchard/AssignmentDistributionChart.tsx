@@ -31,7 +31,7 @@ export default function AssignmentDistributionChart({ data }: AssignmentDistribu
           {Object.entries(LEAGUE_COLORS).map(([league, color]) => (
             <div key={league} className="flex items-center gap-1.5">
               <div className={`w-2 h-2 rounded-full ${color}`} />
-              <span className="text-[9px] font-bold uppercase text-faint tracking-tighter">{league}</span>
+              <span className="text-[10px] font-bold uppercase text-muted tracking-tighter">{league}</span>
             </div>
           ))}
         </div>
@@ -51,13 +51,13 @@ export default function AssignmentDistributionChart({ data }: AssignmentDistribu
             return (
               <div key={tech.fullName} className="space-y-1.5 group">
                 <div className="flex justify-between items-end px-1">
-                  <span className="text-[11px] font-bold text-muted group-hover:text-foreground transition-colors">
+                  <span className="text-xs font-bold text-foreground group-hover:text-foreground transition-colors">
                     {tech.fullName}
                   </span>
-                  <div className="flex gap-3 text-[10px] font-mono">
-                    <span className="text-faint">Asig.: <span className="text-foreground">{tech.assignmentsCount}</span></span>
-                    <span className="text-faint">Resp: <span className="text-primary">{responseRate.toFixed(0)}%</span></span>
-                    <span className="text-faint">Acept: <span className="text-jade">{(tech.acceptRate * 100).toFixed(0)}%</span></span>
+                  <div className="flex gap-3 text-xs font-mono">
+                    <span className="text-muted">Asig.: <span className="text-foreground font-bold">{tech.assignmentsCount}</span></span>
+                    <span className="text-muted">Resp: <span className="text-primary font-bold">{responseRate.toFixed(0)}%</span></span>
+                    <span className="text-muted">Acept: <span className="text-jade font-bold">{(tech.acceptRate * 100).toFixed(0)}%</span></span>
                   </div>
                 </div>
 
@@ -76,7 +76,7 @@ export default function AssignmentDistributionChart({ data }: AssignmentDistribu
           })
         )}
         {sorted.length > 15 && (
-          <p className="text-center text-[10px] text-faint font-bold uppercase tracking-widest pt-2">
+          <p className="text-center text-xs text-muted font-bold uppercase tracking-widest pt-2">
             + {sorted.length - 15} técnicos adicionales
           </p>
         )}

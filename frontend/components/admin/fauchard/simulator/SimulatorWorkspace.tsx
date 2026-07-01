@@ -254,7 +254,7 @@ export default function SimulatorWorkspace({ currentConfig, catalogOptions }: Si
 
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-divider bg-surface/40 px-3 py-2 flex flex-wrap items-center gap-3 text-[10px]">
+      <div className="rounded-xl border border-divider bg-surface/40 px-3 py-2 flex flex-wrap items-center gap-3 text-xs">
         <div className="flex items-center gap-2 min-w-[12rem] flex-1">
           <input
             type="text"
@@ -269,7 +269,7 @@ export default function SimulatorWorkspace({ currentConfig, catalogOptions }: Si
             onClick={() => void handleLoadCaseSeed()}
             disabled={seedLoading || !seedCaseId.trim()}
             loading={seedLoading}
-            className="py-1 px-2.5 text-[10px] rounded-lg"
+            className="py-1 px-2.5 text-xs rounded-lg"
           >
             Cargar caso
           </Button>

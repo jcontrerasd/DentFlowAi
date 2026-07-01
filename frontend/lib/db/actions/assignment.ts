@@ -804,7 +804,7 @@ async function logCaseEnteredPoolEvent(
     userId: actorId,
     type: 'sistema',
     action: CASE_EVENTS.CASO_EN_COLA,
-    content: `No hay técnicos elegibles ahora. El caso entra en cola de espera. ${summary}`,
+    content: `No hay técnicos elegibles ahora. El caso entra en cola de espera.`,
     payload: {
       visibleTo: 'dentista',
       ...UCH_PAYLOAD_PRESENTATION_FAUCHARD,
@@ -827,6 +827,7 @@ export async function runAssignmentAction(caseId: string): Promise<{
 }> {
   const identity = await getServerIdentity();
   if (!identity) return { success: false, error: 'No autenticado' };
+  const t0run = perfStart();
 
   try {
     await db
@@ -855,6 +856,7 @@ export async function runAssignmentAction(caseId: string): Promise<{
       return { success: false, error: 'No se encontraron técnicos disponibles para asignar.' };
     }
 
+    perfLog('runAssignmentAction', Date.now() - t0run, { caseId, poolSize: ranked.length });
     return {
       success: true,
       technicianId: ranked[0].technicianId,

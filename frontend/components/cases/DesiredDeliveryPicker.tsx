@@ -92,7 +92,7 @@ export function DesiredDeliveryPicker({
     <div className="space-y-3">
       <div className={compact ? 'grid grid-cols-1 sm:grid-cols-2 gap-2' : 'grid grid-cols-1 sm:grid-cols-2 gap-3'}>
         <div className="relative space-y-1.5" ref={containerRef}>
-          <label className="text-[10px] font-bold uppercase tracking-wider text-faint px-1 flex items-center gap-1">
+          <label className="text-xs font-bold uppercase tracking-wider text-muted px-1 flex items-center gap-1">
             <Calendar size={11} /> Fecha
           </label>
           <button
@@ -105,7 +105,7 @@ export function DesiredDeliveryPicker({
             <span className="truncate">{dateLabel}</span>
             <ChevronDown
               size={compact ? 14 : 16}
-              className={`shrink-0 text-faint transition-transform ${calendarOpen ? 'rotate-180' : ''}`}
+              className={`shrink-0 text-muted transition-transform ${calendarOpen ? 'rotate-180' : ''}`}
             />
           </button>
 
@@ -129,7 +129,7 @@ export function DesiredDeliveryPicker({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[10px] font-bold uppercase tracking-wider text-faint px-1 flex items-center gap-1">
+          <label className="text-xs font-bold uppercase tracking-wider text-muted px-1 flex items-center gap-1">
             <Clock size={11} /> Hora (hh:mm)
           </label>
           <input
@@ -144,7 +144,7 @@ export function DesiredDeliveryPicker({
               update(date, h, m);
             }}
           />
-          <p className="text-[11px] text-faint px-1">
+          <p className="text-xs text-muted px-1">
             Elige la hora límite de entrega del diseño.
           </p>
         </div>
@@ -158,7 +158,7 @@ export function DesiredDeliveryPicker({
               : 'border-warning/30 bg-warning-hl'
           }`}
         >
-          <p className="text-[10px] font-bold uppercase tracking-wider text-faint mb-1">
+          <p className="text-xs font-bold uppercase tracking-wider text-muted mb-1">
             Entrega solicitada
           </p>
           <p className={`text-sm font-semibold leading-snug ${valid ? 'text-foreground' : 'text-warning'}`}>

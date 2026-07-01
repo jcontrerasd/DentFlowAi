@@ -18,7 +18,7 @@ import {
   restorationType as restorationTypeTable,
   technicianAvailability,
 } from '@/lib/db/schema';
-import { eq, and, inArray, lt, gte, count, desc } from 'drizzle-orm';
+import { eq, and, inArray, or, lt, gte, count, desc } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { logCaseEvent } from './cases';
 import { notifyUser } from '../../services/notifications';
@@ -924,10 +924,16 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
       .from(clinicalCase)
       .where(
         and(
-          inArray(clinicalCase.status, [
-            INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO,
-            INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO,
-          ]),
+          or(
+            inArray(clinicalCase.status, [
+              INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO,
+              INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO,
+            ]),
+            and(
+              eq(clinicalCase.status, CASE_STATUSES.EN_EVALUACION),
+              eq(clinicalCase.internalStatus, 'pendiente_pool'),
+            ),
+          ),
           gte(clinicalCase.updatedAt, startDate),
         ),
       )
@@ -938,9 +944,11 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
       status: c.status,
       internalStatus: c.internalStatus,
       reason:
-        c.status === INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO
-          ? 'Sin técnicos elegibles para asignar'
-          : 'No se encontraron técnicos elegibles tras agotar la cola de espera',
+        c.internalStatus === 'pendiente_pool'
+          ? 'En cola de espera: sin técnicos elegibles al momento de publicar'
+          : c.status === INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO
+            ? 'Sin técnicos elegibles para asignar'
+            : 'No se encontraron técnicos elegibles tras agotar la cola de espera',
       createdAt: c.updatedAt,
     }));
 

@@ -33,12 +33,12 @@ export default function SimulatorResultPanel({
   if (!result) {
     return (
       <div className="lg:sticky lg:top-6 h-full min-h-[320px] flex flex-col items-center justify-center p-12 lg:p-16 border-2 border-dashed border-divider rounded-[3rem] text-center gap-4">
-        <div className="w-20 h-20 rounded-[2.5rem] bg-surface flex items-center justify-center text-faint">
+        <div className="w-20 h-20 rounded-[2.5rem] bg-surface flex items-center justify-center text-muted opacity-50">
           <FlaskConical className="w-10 h-10" />
         </div>
         <div className="max-w-md">
           <h4 className="text-foreground font-bold mb-1">Listo para simular</h4>
-          <p className="text-faint text-sm">
+          <p className="text-muted opacity-50 text-sm">
             Configura el caso virtual en el panel izquierdo y presiona &quot;Simular asignación&quot; para ver el
             embudo, ranking y cadena de respaldo aquí.
           </p>
@@ -81,8 +81,8 @@ export default function SimulatorResultPanel({
             onResetRejects={onResetRejects}
           />
           <div className="p-6 rounded-3xl bg-surface border border-divider flex gap-4">
-            <Info className="w-5 h-5 text-faint shrink-0" />
-            <p className="text-[11px] text-faint leading-relaxed">
+            <Info className="w-5 h-5 text-muted shrink-0" />
+            <p className="text-xs text-muted leading-relaxed">
               Asignación directa: el técnico #1 recibe el caso. Usa &quot;Simular rechazo&quot; para probar el
               respaldo siguiente en la cadena.
             </p>
@@ -91,7 +91,7 @@ export default function SimulatorResultPanel({
       )}
 
       {activeStep !== 'asignacion' && activeStep !== 'ranking' && (
-        <p className="text-[10px] text-faint text-center">
+        <p className="text-xs text-muted text-center">
           Navega a Ranking o Asignación para ver la tabla completa y la cadena de respaldo.
         </p>
       )}

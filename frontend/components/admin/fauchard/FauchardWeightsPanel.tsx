@@ -39,7 +39,7 @@ export default function FauchardWeightsPanel({ initialFocusKey = null }: { initi
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-xs font-bold text-foreground">Pesos del Score</h3>
-          <p className="text-[10px] text-faint hidden md:block">Importancia relativa de cada factor. Deben sumar 1.000.</p>
+          <p className="text-xs text-muted hidden md:block">Importancia relativa de cada factor. Deben sumar 1.000.</p>
         </div>
         <FauchardHelpButton onClick={() => openHelp()} label="Pesos del Score" />
       </div>
@@ -56,12 +56,12 @@ export default function FauchardWeightsPanel({ initialFocusKey = null }: { initi
       <div className={`flex flex-wrap items-center gap-2 px-3 py-2 rounded-xl border text-xs ${isSumValid ? 'bg-primary-hl border-primary/20 text-primary' : 'bg-warning-hl border-warning/30 text-warning'}`}>
         {isSumValid ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
         <span className="font-bold">Σ α: {sum.toFixed(3)} / 1.000</span>
-        <span className="text-[10px] opacity-80 hidden sm:inline">{isSumValid ? 'Válido.' : 'Debe ser exactamente 1.000 para guardar.'}</span>
+        <span className="text-xs opacity-80 hidden sm:inline">{isSumValid ? 'Válido.' : 'Debe ser exactamente 1.000 para guardar.'}</span>
         {!isSumValid && (
           <button
             type="button"
             onClick={balanceWeights}
-            className="ml-auto text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg border border-warning/40 hover:bg-warning/10 transition-colors"
+            className="ml-auto text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-lg border border-warning/40 hover:bg-warning/10 transition-colors"
           >
             Equilibrar a 1.000
           </button>

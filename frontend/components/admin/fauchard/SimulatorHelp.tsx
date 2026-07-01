@@ -47,7 +47,7 @@ export function SimulatorParamHelpButton({ focusKey, label }: { focusKey: string
       type="button"
       onClick={() => openSimulatorHelp(focusKey)}
       aria-label={label ? `Abrir ayuda de ${label}` : 'Abrir ayuda del parámetro'}
-      className="shrink-0 rounded-lg p-1 text-faint transition-colors hover:bg-white/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      className="shrink-0 rounded-lg p-1 text-muted transition-colors hover:bg-white/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
       <HelpCircle className="w-3.5 h-3.5" />
     </button>

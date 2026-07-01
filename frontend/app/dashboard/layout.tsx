@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -35,6 +35,7 @@ import AvailabilityBadge from '@/components/availability/AvailabilityBadge';
 import { AvailabilityProvider } from '@/components/availability/AvailabilityContext';
 import RolloutBanner from '@/components/availability/RolloutBanner';
 import DemoEmailPreviewListener from '@/components/demo/DemoEmailPreviewListener';
+import WebVitalsReporter from '@/components/WebVitalsReporter';
 import SessionHeartbeat from '@/components/auth/SessionHeartbeat';
 import Image from 'next/image';
 
@@ -54,6 +55,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
 
+  const hubUnreadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedFetchHubUnread = useCallback(() => {
+    if (hubUnreadTimerRef.current) clearTimeout(hubUnreadTimerRef.current);
+    hubUnreadTimerRef.current = setTimeout(async () => {
+      try {
+        const { total } = await getMyHubUnreadTotalAction();
+        setHubBellTotal(total);
+      } catch {
+        // silencioso
+      }
+    }, 300);
+  }, []);
+
   useEffect(() => {
     if (userProfile?.image) {
       // Avatares de Google (ajuste login, Fase 2) ya son una URL externa servible directo
@@ -63,15 +77,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setAvatarUrl(userProfile.image as string);
         return;
       }
+      let isMounted = true;
       const fetchAvatar = async () => {
         try {
           const url = await getSignedUrlAction(userProfile.image as string);
-          setAvatarUrl(url);
-        } catch (err) {
+          if (isMounted) setAvatarUrl(url);
+        } catch {
           // Fallback silencioso para avatar
         }
       };
       fetchAvatar();
+      return () => { isMounted = false; };
     }
   }, [userProfile?.image]);
 
@@ -106,27 +122,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (userProfile?.role !== 'dentista' && userProfile?.role !== 'tecnico') return;
-    const onFocus = () => {
-      void getMyHubUnreadTotalAction().then(({ total }) => setHubBellTotal(total)).catch(() => {});
-    };
+    const onFocus = () => debouncedFetchHubUnread();
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [userProfile?.role]);
+  }, [userProfile?.role, debouncedFetchHubUnread]);
 
   useEffect(() => {
     if (userProfile?.role !== 'dentista' && userProfile?.role !== 'tecnico') return;
-    void getMyHubUnreadTotalAction()
-      .then(({ total }) => setHubBellTotal(total))
-      .catch(() => {});
-  }, [pathname, userProfile?.role]);
+    debouncedFetchHubUnread();
+  }, [pathname, userProfile?.role, debouncedFetchHubUnread]);
 
   // Refresco instantáneo de la campana cuando un caso se marca como leído.
   useEffect(() => {
     if (userProfile?.role !== 'dentista' && userProfile?.role !== 'tecnico') return;
-    return subscribeHubUnreadRefresh(() => {
-      void getMyHubUnreadTotalAction().then(({ total }) => setHubBellTotal(total)).catch(() => {});
-    });
-  }, [userProfile?.role]);
+    return subscribeHubUnreadRefresh(() => debouncedFetchHubUnread());
+  }, [userProfile?.role, debouncedFetchHubUnread]);
 
   // Fase 4 (ajuste login, single session): si otro login reemplazó esta sesión (o el cron de
   // Fase 5 la expiró por inactividad), el JWT sigue siendo válido pero nuestra fila de control
@@ -379,6 +389,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </main>
       <DemoEmailPreviewListener />
       <SessionHeartbeat />
+      <WebVitalsReporter />
     </div>
   );
 

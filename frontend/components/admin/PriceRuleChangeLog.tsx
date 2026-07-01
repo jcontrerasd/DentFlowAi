@@ -76,7 +76,7 @@ export default function PriceRuleChangeLog({ ruleId, onClearRuleFilter }: PriceR
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
         <Loader2 className="w-7 h-7 text-primary animate-spin" />
-        <p className="text-faint text-sm">Cargando historial...</p>
+        <p className="text-muted text-sm">Cargando historial...</p>
       </div>
     );
   }
@@ -92,18 +92,18 @@ export default function PriceRuleChangeLog({ ruleId, onClearRuleFilter }: PriceR
           {ruleId && onClearRuleFilter && (
             <button
               onClick={onClearRuleFilter}
-              className="text-[10px] font-bold uppercase tracking-wide text-primary hover:underline"
+              className="text-xs font-bold uppercase tracking-wide text-primary hover:underline"
             >
               Ver todo
             </button>
           )}
         </div>
         <div className="relative w-full max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-faint" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted" />
           <input
             type="text"
             placeholder="Filtrar por campo, admin o motivo..."
-            className="w-full bg-surface border border-divider rounded-xl pl-9 pr-4 py-2 text-[11px] text-foreground focus:outline-none focus:border-primary/40"
+            className="w-full bg-surface border border-divider rounded-xl pl-9 pr-4 py-2 text-xs text-foreground focus:outline-none focus:border-primary/40"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
@@ -114,12 +114,12 @@ export default function PriceRuleChangeLog({ ruleId, onClearRuleFilter }: PriceR
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-surface border-b border-divider">
-              <th className="px-4 py-3 text-[9px] font-bold uppercase tracking-wider text-faint">Fecha</th>
-              <th className="px-4 py-3 text-[9px] font-bold uppercase tracking-wider text-faint">Admin</th>
-              <th className="px-4 py-3 text-[9px] font-bold uppercase tracking-wider text-faint">Acción</th>
-              <th className="px-4 py-3 text-[9px] font-bold uppercase tracking-wider text-faint">Campo</th>
-              <th className="px-4 py-3 text-[9px] font-bold uppercase tracking-wider text-faint text-center">Cambio</th>
-              <th className="px-4 py-3 text-[9px] font-bold uppercase tracking-wider text-faint">Motivo</th>
+              <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-muted">Fecha</th>
+              <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-muted">Admin</th>
+              <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-muted">Acción</th>
+              <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-muted">Campo</th>
+              <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-muted text-center">Cambio</th>
+              <th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-muted">Motivo</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-divider/50">
@@ -129,7 +129,7 @@ export default function PriceRuleChangeLog({ ruleId, onClearRuleFilter }: PriceR
                 typeof log.context.caseNumber === 'string' ? log.context.caseNumber : null;
               return (
                 <tr key={log.id} className="hover:bg-surface-2/30 transition-colors">
-                  <td className="px-4 py-3 whitespace-nowrap text-[10px] text-muted">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-muted">
                     {format(new Date(log.createdAt), 'dd MMM yyyy, HH:mm', { locale: es })}
                   </td>
                   <td className="px-4 py-3">
@@ -137,13 +137,13 @@ export default function PriceRuleChangeLog({ ruleId, onClearRuleFilter }: PriceR
                       <div className="w-6 h-6 rounded-lg bg-surface-2 flex items-center justify-center border border-divider">
                         <User className="w-3 h-3 text-muted" />
                       </div>
-                      <span className="text-[11px] font-bold">{log.changedByName ?? 'Sistema'}</span>
+                      <span className="text-xs font-bold">{log.changedByName ?? 'Sistema'}</span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[10px] font-bold uppercase tracking-wide text-foreground">
+                  <td className="px-4 py-3 text-xs font-bold uppercase tracking-wide text-foreground">
                     {PRICE_RULE_ACTION_LABELS[log.action] ?? log.action}
                     {caseId && (
-                      <p className="text-[9px] font-normal normal-case text-faint mt-0.5">
+                      <p className="text-xs font-normal normal-case text-muted mt-0.5">
                         Caso{' '}
                         <Link href={`/dashboard/cases/${caseId}`} className="text-primary hover:underline">
                           {caseNumber ?? caseId.slice(0, 8)}
@@ -151,21 +151,21 @@ export default function PriceRuleChangeLog({ ruleId, onClearRuleFilter }: PriceR
                       </p>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-[11px] font-semibold">
+                  <td className="px-4 py-3 text-xs font-semibold">
                     {PRICE_RULE_FIELD_LABELS[log.fieldKey] ?? log.fieldKey}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-2">
-                      <span className="text-[10px] font-mono text-faint bg-surface-2 px-2 py-0.5 rounded border border-divider/30">
+                      <span className="text-xs font-mono text-muted bg-surface-2 px-2 py-0.5 rounded border border-divider/30">
                         {formatDisplayValue(log.fieldKey, log.oldValueLabel, log.oldValue)}
                       </span>
-                      <ArrowRight className="w-3 h-3 text-faint shrink-0" />
-                      <span className="text-[10px] font-mono text-foreground bg-primary-hl px-2 py-0.5 rounded border border-primary/20">
+                      <ArrowRight className="w-3 h-3 text-muted shrink-0" />
+                      <span className="text-xs font-mono text-foreground bg-primary-hl px-2 py-0.5 rounded border border-primary/20">
                         {formatDisplayValue(log.fieldKey, log.newValueLabel, log.newValue)}
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-[10px] text-muted max-w-[14rem]">
+                  <td className="px-4 py-3 text-xs text-muted max-w-[14rem]">
                     {log.changeReason}
                   </td>
                 </tr>
@@ -173,7 +173,7 @@ export default function PriceRuleChangeLog({ ruleId, onClearRuleFilter }: PriceR
             })}
             {filteredLogs.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-16 text-center text-faint text-sm italic">
+                <td colSpan={6} className="px-4 py-16 text-center text-muted opacity-50 text-sm italic">
                   No hay registros de auditoría.
                 </td>
               </tr>

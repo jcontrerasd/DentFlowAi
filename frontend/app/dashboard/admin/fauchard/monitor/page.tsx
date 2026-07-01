@@ -7,6 +7,7 @@ import ConcentrationAlert from '@/components/admin/fauchard/ConcentrationAlert';
 import AssignmentDistributionChart from '@/components/admin/fauchard/AssignmentDistributionChart';
 import AssignmentMetricsPanel from '@/components/admin/fauchard/AssignmentMetricsPanel';
 import FailedSelectionsPanel from '@/components/admin/fauchard/FailedSelectionsPanel';
+import PerfLatencyPanel from '@/components/admin/PerfLatencyPanel';
 import { Activity, AlertTriangle } from 'lucide-react';
 
 export const metadata = {
@@ -46,6 +47,11 @@ export default async function AdminFauchardMonitorPage({ searchParams }: { searc
         </div>
 
         <FailedSelectionsPanel failedCases={metrics.failedCases} />
+
+        {/* Panel de latencias de server actions — datos en memoria del proceso actual */}
+        <section className="bg-surface/40 border border-divider rounded-2xl p-6">
+          <PerfLatencyPanel />
+        </section>
       </div>
     </div>
   );

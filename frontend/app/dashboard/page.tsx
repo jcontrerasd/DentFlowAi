@@ -72,15 +72,25 @@ export default function DashboardHome() {
   );
   const featuredQueryKey = serializeCaseListFilters(featuredFiltersForFetch);
   const dashboardInitialLoadDone = useRef(false);
+  const lastFetchRef = useRef<number>(0);
+  const isMountedRef = useRef(true);
+  useEffect(() => { return () => { isMountedRef.current = false; }; }, []);
 
   const fetchDashboardData = useCallback(async (opts?: { silent?: boolean }) => {
     if (!userProfile) return;
+    const now = Date.now();
+    // Gate: llamadas silenciosas (visibility/focus/suscripción) no refrescan si el
+    // último fetch fue hace menos de 5s — evita el triple-call al montar.
+    if (opts?.silent && now - lastFetchRef.current < 5_000) return;
+    lastFetchRef.current = now;
     if (!opts?.silent) setLoading(true);
     try {
       const [metricsResult, casesResult] = await Promise.all([
         getDashboardMetricsAction(),
         listCasesByOrganization(1, RECENT_CASES_LIMIT, false, true, featuredFiltersForFetch),
       ]);
+
+      if (!isMountedRef.current) return;
 
       if (metricsResult) {
         setMetrics(metricsResult.metrics);
@@ -103,6 +113,8 @@ export default function DashboardHome() {
           getMyInvitationsAction(),
         ]);
 
+        if (!isMountedRef.current) return;
+
         const invitationsArr = (invitations as any[]) || [];
         const hasSkills = (skillsCheck as any[]).some(
           (s: any) => (s.designLevel ?? 0) > 0,
@@ -115,8 +127,8 @@ export default function DashboardHome() {
         });
         setMyBidsMap(bidsMap);
 
-        const now = new Date();
-        if (userProfile.suspendedUntil && new Date(userProfile.suspendedUntil) > now) {
+        const now2 = new Date();
+        if (userProfile.suspendedUntil && new Date(userProfile.suspendedUntil) > now2) {
           setIsSuspended(true);
           setSuspendedUntil(userProfile.suspendedUntil);
         } else {
@@ -127,7 +139,7 @@ export default function DashboardHome() {
     } catch (err) {
       logError('Error fetching dashboard data', err);
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) setLoading(false);
     }
   }, [userProfile, featuredQueryKey]);
 

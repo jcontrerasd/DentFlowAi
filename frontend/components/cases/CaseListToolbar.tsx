@@ -162,7 +162,7 @@ export default function CaseListToolbar({
     <div className={`space-y-3 ${compact ? '' : 'w-full'}`}>
       <div className={`flex flex-col md:flex-row gap-3 ${compact ? '' : 'w-full'}`}>
         <div className={`relative ${compact ? 'flex-1 min-w-[140px]' : 'flex-1'}`}>
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
           <input
             type="search"
             placeholder={
@@ -174,7 +174,7 @@ export default function CaseListToolbar({
               if (onSearchChange) onSearchChange(q);
               else onFiltersChange({ ...filters, q });
             }}
-            className="w-full bg-surface border border-divider rounded-xl pl-11 pr-4 py-3 text-sm text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-faint"
+            className="w-full bg-surface border border-divider rounded-xl pl-11 pr-4 py-3 text-sm text-foreground outline-none focus:border-primary/30 transition-all placeholder:text-muted"
             aria-label="Buscar casos"
           />
         </div>
@@ -189,10 +189,10 @@ export default function CaseListToolbar({
         >
           <Filter className="w-3.5 h-3.5" />
           {!compact && (
-            <span className="text-[10px] font-bold uppercase tracking-wider">Filtros avanzados</span>
+            <span className="text-xs font-bold uppercase tracking-wider">Filtros avanzados</span>
           )}
           {activeCount > 0 && (
-            <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-inverse text-[9px] font-black flex items-center justify-center px-1">
+            <span className="min-w-[18px] h-[18px] rounded-full bg-primary text-inverse text-[11px] font-black flex items-center justify-center px-1">
               {activeCount}
             </span>
           )}
@@ -202,7 +202,7 @@ export default function CaseListToolbar({
       {(activeChips.length > 0 || (total != null && !compact)) && (
         <div className="flex flex-wrap items-center gap-2">
           {total != null && (
-            <p className="text-[10px] font-bold uppercase tracking-wider text-faint mr-2" aria-live="polite">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted mr-2" aria-live="polite">
               {loading ? 'Buscando…' : `${total} ${total === 1 ? 'caso' : 'casos'}`}
             </p>
           )}
@@ -211,7 +211,7 @@ export default function CaseListToolbar({
               key={chip.key}
               type="button"
               onClick={chip.clear}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-2 border border-divider text-[9px] font-bold uppercase tracking-wide text-muted hover:border-error/20 hover:text-error transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-2 border border-divider text-[11px] font-bold uppercase tracking-wide text-muted hover:border-error/20 hover:text-error transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               {chip.label}
               <X className="w-3 h-3" />

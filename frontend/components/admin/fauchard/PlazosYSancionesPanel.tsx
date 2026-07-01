@@ -22,25 +22,25 @@ function NumberField({
     <div className="space-y-1.5">
       <div className="flex items-center gap-2">
         {paramNumber != null && (
-          <span className="inline-flex h-5 items-center justify-center rounded-md bg-primary-hl px-1.5 text-[10px] font-black text-primary tracking-normal normal-case shrink-0" title={`Parámetro N°${paramNumber}`}>
+          <span className="inline-flex h-5 items-center justify-center rounded-md bg-primary-hl px-1.5 text-xs font-black text-primary tracking-normal normal-case shrink-0" title={`Parámetro N°${paramNumber}`}>
             N°{paramNumber}
           </span>
         )}
-        <label className="text-[11px] font-bold uppercase tracking-wider text-faint">{label}</label>
+        <label className="text-xs font-bold uppercase tracking-wider text-muted">{label}</label>
         {onHelp ? (
           <button
             type="button"
             onClick={onHelp}
             title={tooltip}
             aria-label={`Abrir ayuda de ${label}`}
-            className="shrink-0 rounded-lg p-1 text-faint transition-colors hover:bg-white/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            className="shrink-0 rounded-lg p-1 text-muted transition-colors hover:bg-white/5 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             <HelpCircle className="w-3.5 h-3.5" />
           </button>
         ) : tooltip ? (
           <span className="relative group/tt inline-flex items-center">
-            <HelpCircle className="w-3 h-3 text-faint cursor-help" />
-            <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover/tt:block w-56 p-2.5 bg-surface-2 text-foreground text-[11px] font-normal normal-case tracking-normal rounded-md shadow-md border border-divider z-[100] text-left space-y-1.5">
+            <HelpCircle className="w-3 h-3 text-muted cursor-help" />
+            <span className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover/tt:block w-56 p-2.5 bg-surface-2 text-foreground text-xs font-normal normal-case tracking-normal rounded-md shadow-md border border-divider z-[100] text-left space-y-1.5">
               <span className="block leading-relaxed">{tooltip}</span>
               <span className="absolute top-full left-0 right-0 h-2" aria-hidden="true"></span>
             </span>
@@ -56,7 +56,7 @@ function NumberField({
           onChange={(e) => onChange(parseInt(e.target.value))}
           className="w-full rounded-xl bg-surface-2 border border-divider px-3 py-2 text-sm font-bold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         />
-        {suffix && <span className="text-[10px] font-bold uppercase text-faint shrink-0">{suffix}</span>}
+        {suffix && <span className="text-xs font-bold uppercase text-muted shrink-0">{suffix}</span>}
       </div>
     </div>
   );
@@ -65,7 +65,7 @@ function NumberField({
 function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h3 className="text-[10px] font-black uppercase tracking-wider text-primary">{title}</h3>
+      <h3 className="text-xs font-black uppercase tracking-wider text-primary">{title}</h3>
       <div className="space-y-3">{children}</div>
     </section>
   );
@@ -87,7 +87,7 @@ export default function PlazosYSancionesPanel({ initialFocusKey = null }: { init
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-xs font-bold text-foreground">Disponibilidad y Sanciones</h3>
-          <p className="text-[10px] text-faint hidden md:block">Revisión, pool, reemplazo e inactividad.</p>
+          <p className="text-xs text-muted hidden md:block">Revisión, pool, reemplazo e inactividad.</p>
         </div>
         <FauchardHelpButton onClick={() => openHelp()} label="Disponibilidad y Sanciones" />
       </div>
@@ -122,7 +122,7 @@ export default function PlazosYSancionesPanel({ initialFocusKey = null }: { init
       </Block>
       </div>
 
-      <div className="rounded-xl border border-divider/70 bg-surface-2/30 p-3 text-[10px] text-muted leading-snug">
+      <div className="rounded-xl border border-divider/70 bg-surface-2/30 p-3 text-xs text-muted leading-snug">
         Los <strong>pesos del score</strong> (incluida la Penalización por No-respuesta, αN) se
         configuran en la pestaña <strong>Pesos del Score</strong>, única fuente de verdad (los 6
         pesos suman 1.000).

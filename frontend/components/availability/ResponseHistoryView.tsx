@@ -21,7 +21,7 @@ export default function ResponseHistoryView({ userId }: { userId: string }) {
   const badge = (s: ResponseHistoryItem['windowStatus']) =>
     s === 'Activa' ? 'bg-amber-400/10 text-amber-400'
       : s === 'Perdonada' ? 'bg-primary-hl text-primary'
-        : 'bg-surface-2 text-faint';
+        : 'bg-surface-2 text-muted';
 
   return (
     <div className="space-y-4">
@@ -32,7 +32,7 @@ export default function ResponseHistoryView({ userId }: { userId: string }) {
             const active = (k === 'activas') === onlyActive;
             return (
               <button key={k} onClick={() => setOnlyActive(k === 'activas')}
-                className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors ${active ? 'bg-surface-2 text-primary border border-divider' : 'text-faint hover:text-muted'}`}>
+                className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-colors ${active ? 'bg-surface-2 text-primary border border-divider' : 'text-muted hover:text-foreground'}`}>
                 {label}
               </button>
             );
@@ -41,22 +41,22 @@ export default function ResponseHistoryView({ userId }: { userId: string }) {
       </div>
 
       {loading ? (
-        <p className="text-sm text-faint">Cargando…</p>
+        <p className="text-sm text-muted">Cargando…</p>
       ) : shown.length === 0 ? (
-        <p className="text-sm text-faint">Sin no-respuestas registradas. Estás en Nivel 1.</p>
+        <p className="text-sm text-muted opacity-50">Sin no-respuestas registradas. Estás en Nivel 1.</p>
       ) : (
         <ul className="rounded-2xl border border-divider divide-y divide-divider overflow-hidden">
           {shown.map((it) => (
             <li key={it.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <div className="min-w-0">
                 <p className="text-sm font-bold text-foreground">{it.caseNumber ?? 'Caso —'}</p>
-                <p className="text-[11px] text-faint">
+                <p className="text-xs text-muted">
                   {new Date(it.occurredAt).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' })}
                   {it.windowStatus === 'Activa' && it.exitDate && ` · sale el ${new Date(it.exitDate).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}`}
                   {it.windowStatus === 'Perdonada' && it.pardonReason && ` · ${it.pardonReason}`}
                 </p>
               </div>
-              <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-md shrink-0 ${badge(it.windowStatus)}`}>{it.windowStatus}</span>
+              <span className={`text-xs font-bold uppercase px-2 py-1 rounded-md shrink-0 ${badge(it.windowStatus)}`}>{it.windowStatus}</span>
             </li>
           ))}
         </ul>

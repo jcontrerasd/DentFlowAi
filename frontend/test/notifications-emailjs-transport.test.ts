@@ -18,13 +18,15 @@ vi.mock('@/lib/db', () => ({
 
 import { notifyUser } from '@/lib/services/notifications';
 
-const ENV_KEYS = ['EMAILJS_SERVICE_ID', 'EMAILJS_TEMPLATE_ID', 'EMAILJS_PUBLIC_KEY', 'EMAILJS_PRIVATE_KEY', 'NOTIFICATIONS_LIVE'] as const;
+const ENV_KEYS = ['EMAILJS_SERVICE_ID', 'EMAILJS_TEMPLATE_ID', 'EMAILJS_PUBLIC_KEY', 'EMAILJS_PRIVATE_KEY', 'NOTIFICATIONS_LIVE', 'EMAIL_OVERRIDE_TO'] as const;
 
 describe('notifyUser — transport EmailJS', () => {
   let snapshot: Record<string, string | undefined>;
 
   beforeEach(() => {
     snapshot = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
+    // Limpiar override de email para no afectar la dirección esperada del test
+    delete process.env.EMAIL_OVERRIDE_TO;
     vi.restoreAllMocks();
   });
 

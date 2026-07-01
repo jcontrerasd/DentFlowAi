@@ -91,7 +91,7 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
           <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
           <div>
             <p className="text-xs font-bold text-primary">Motor de categorías activo</p>
-            <p className="text-[10px] text-primary/80 leading-snug hidden sm:block">
+            <p className="text-xs text-primary/80 leading-snug hidden sm:block">
               El cron diario aplica estos umbrales para mover técnicos entre categorías.
             </p>
           </div>
@@ -101,7 +101,7 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
           <Construction className="w-4 h-4 text-warning shrink-0 mt-0.5" />
           <div>
             <p className="text-xs font-bold text-warning">Motor de categorías apagado</p>
-            <p className="text-[10px] text-warning/80 leading-snug hidden sm:block">
+            <p className="text-xs text-warning/80 leading-snug hidden sm:block">
               Umbrales guardados; motor automático inactivo (<code>LEAGUE_ENGINE_ENABLED=false</code>).
             </p>
           </div>
@@ -111,7 +111,7 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-xs font-bold text-foreground">Sistema de Categorías</h3>
-          <p className="text-[10px] text-faint hidden md:block">Ascenso, transición y descenso entre ligas.</p>
+          <p className="text-xs text-muted hidden md:block">Ascenso, transición y descenso entre ligas.</p>
         </div>
         <FauchardHelpButton onClick={() => openHelp()} label="Sistema de Categorías" />
       </div>
@@ -120,7 +120,7 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-foreground">Requisitos de Ascenso</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Requisitos de Ascenso</h3>
           </div>
           <div className="space-y-4 pl-1">
             <Slider label="Calificación Mínima" value={v.lMinRating} min={3.5} max={5.0} step={0.1} onChange={(e) => set('lMinRating', parseFloat(e.target.value))} valueSuffix=" ⭐" tooltip={fauchardParamTooltip('lMinRating')} onHelp={() => openHelp('lMinRating')} paramNumber={fauchardParamNumber('lMinRating')} />
@@ -134,7 +134,7 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <TrendingDown className="w-4 h-4 text-warning" />
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-foreground">Transición y Descenso</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">Transición y Descenso</h3>
           </div>
           <div className="space-y-4 pl-1">
             <Slider label="Casos en Transición" value={v.lCasesTransition} min={1} max={10} step={1} onChange={(e) => set('lCasesTransition', parseInt(e.target.value))} valueSuffix=" casos" tooltip={fauchardParamTooltip('lCasesTransition')} onHelp={() => openHelp('lCasesTransition')} paramNumber={fauchardParamNumber('lCasesTransition')} />
@@ -150,7 +150,7 @@ export default function LeagueConfigPanel({ initialConfig }: LeagueConfigPanelPr
         <Trophy className="w-5 h-5 text-primary shrink-0" />
         <div>
           <h4 className="text-xs font-bold text-primary">Sobre el sistema de categorías</h4>
-          <p className="text-[10px] text-primary/70 leading-snug hidden sm:block">
+          <p className="text-xs text-primary/70 leading-snug hidden sm:block">
             Bronce → Élite determinan acceso a casos de mayor complejidad.
           </p>
         </div>

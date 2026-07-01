@@ -143,15 +143,15 @@ function CategoryToggle({
             <button
               type="button"
               tabIndex={-1}
-              className="flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-semibold border border-divider text-faint hover:text-primary hover:border-primary transition-colors"
+              className="flex items-center justify-center w-4 h-4 rounded-full text-xs font-semibold border border-divider text-muted hover:text-primary hover:border-primary transition-colors"
               aria-label={`Más información sobre ${def.label}`}
             >
               ?
             </button>
-            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tt:block w-72 p-3 bg-surface-2 text-foreground text-[11px] rounded-md shadow-md border border-divider z-[100] pointer-events-none">
+            <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tt:block w-72 p-3 bg-surface-2 text-foreground text-xs rounded-md shadow-md border border-divider z-[100] pointer-events-none">
               {tooltipLines.map((line, i) =>
                 line.startsWith('·') ? (
-                  <span key={i} className="block pl-2 text-faint">{line}</span>
+                  <span key={i} className="block pl-2 text-muted">{line}</span>
                 ) : (
                   <span key={i} className="block font-medium mb-1">{line}</span>
                 )
@@ -159,11 +159,11 @@ function CategoryToggle({
             </span>
           </span>
         </div>
-        <p className="text-xs text-faint mt-0.5">{def.description}</p>
+        <p className="text-xs text-muted mt-0.5">{def.description}</p>
       </div>
 
       {/* Estado */}
-      <span className={`text-xs shrink-0 mt-0.5 ${value ? 'text-primary' : 'text-faint'}`}>
+      <span className={`text-xs shrink-0 mt-0.5 ${value ? 'text-primary' : 'text-muted'}`}>
         {value ? 'Activo' : 'Silenciado'}
       </span>
     </div>
@@ -204,7 +204,7 @@ export function EmailNotificationPrefsSection({ role }: { role: string }) {
   return (
     <div className="rounded-xl border border-divider bg-surface p-5 space-y-1">
       <h3 className="text-sm font-semibold text-foreground mb-1">Notificaciones por email</h3>
-      <p className="text-xs text-faint mb-3">
+      <p className="text-xs text-muted mb-3">
         Elige qué tipos de email quieres recibir. Siempre puedes reactivarlos cuando quieras.
       </p>
       <div className="divide-y divide-divider">

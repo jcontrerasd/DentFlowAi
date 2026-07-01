@@ -89,7 +89,7 @@ export default function UchDealSummary({
         className="mt-2 rounded-lg border border-divider bg-surface/40 px-3 py-2"
         data-testid="uch-deal-summary"
       >
-        <p className="text-[10px] text-faint leading-snug">
+        <p className="text-xs text-muted leading-snug">
           {(actingAsDentista || viewingAsAdmin) && caseStatus === 'propuestaLista'
             ? 'El resumen del acuerdo se mostrará aquí cuando el técnico acepte la asignación.'
             : 'La compensación y la fecha de entrega se mostrarán aquí cuando el caso avance en el flujo.'}
@@ -132,10 +132,10 @@ export default function UchDealSummary({
             {/* Fila 1 — trabajo */}
             <div className="flex items-stretch">
               <div className="flex-1 min-w-0 px-2">
-                <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">Trabajo</p>
-                <p className="text-[12px] font-bold tabular-nums text-foreground truncate">{formatUchQuoteClp(totalPrice)}</p>
+                <p className="text-[11px] uppercase font-bold tracking-normal text-muted truncate">Trabajo</p>
+                <p className="text-xs font-bold tabular-nums text-foreground truncate">{formatUchQuoteClp(totalPrice)}</p>
                 {totalTurnaround !== '—' && (
-                  <p className="text-[9px] text-muted truncate">{totalTurnaround}</p>
+                  <p className="text-[11px] text-muted truncate">{totalTurnaround}</p>
                 )}
               </div>
             </div>
@@ -143,26 +143,26 @@ export default function UchDealSummary({
             {/* Fila 2 — total + entrega */}
             <div className="flex items-stretch border-t border-divider pt-1.5">
               <div className="flex-1 min-w-0 px-2">
-                <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">Total</p>
-                <p className="text-[13px] font-bold tabular-nums text-primary truncate">{formatUchQuoteClp(totalPrice)}</p>
+                <p className="text-[11px] uppercase font-bold tracking-normal text-muted truncate">Total</p>
+                <p className="text-sm font-bold tabular-nums text-primary truncate">{formatUchQuoteClp(totalPrice)}</p>
                 {totalTurnaround !== '—' && (
-                  <p className="text-[9px] text-muted truncate">Plazo · {totalTurnaround}</p>
+                  <p className="text-[11px] text-muted truncate">Plazo · {totalTurnaround}</p>
                 )}
               </div>
 
               <div className="flex-1 min-w-0 px-2 border-l border-divider">
-                <p className="text-[8px] uppercase font-bold tracking-normal text-muted truncate">Entrega</p>
+                <p className="text-[11px] uppercase font-bold tracking-normal text-muted truncate">Entrega</p>
                 {deadlineFmt ? (
                   <div title={deadlineFmt.full}>
                     <p className="text-[11px] font-medium text-foreground capitalize truncate">
                       <span className="text-muted">{deadlineFmt.day}</span>
-                      <span className="mx-1 text-faint">·</span>
+                      <span className="mx-1 text-muted">·</span>
                       <span className="tabular-nums">{deadlineFmt.date}</span>
                     </p>
-                    <p className="text-[9px] text-faint tabular-nums truncate">{deadlineFmt.time}</p>
+                    <p className="text-[11px] text-muted tabular-nums truncate">{deadlineFmt.time}</p>
                   </div>
                 ) : (
-                  <p className="text-[10px] text-faint leading-snug">{deliveryFallback}</p>
+                  <p className="text-xs text-muted leading-snug">{deliveryFallback}</p>
                 )}
               </div>
             </div>
@@ -174,7 +174,7 @@ export default function UchDealSummary({
       {showTechQuote && !showPactada && invitation && quotedPrice != null && (
         <div className="space-y-1.5">
           {sentLabel ? (
-            <p className="text-[10px] text-muted tabular-nums">{sentLabel}</p>
+            <p className="text-xs text-muted tabular-nums">{sentLabel}</p>
           ) : null}
           <UchQuoteBreakdown
             quote={quoteDisplayFromInvitation(invitation)}
@@ -193,7 +193,7 @@ export default function UchDealSummary({
       )}
 
       {!showPactada && !showTechQuote && !showTechQuoteRejectedOnly && !techRejectedSummary && (
-        <p className="text-[10px] text-faint">Se fijará al aceptar la propuesta.</p>
+        <p className="text-xs text-muted">Se fijará al aceptar la propuesta.</p>
       )}
     </div>
   );

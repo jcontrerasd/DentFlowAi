@@ -78,7 +78,7 @@ export default function GlobalSaveBar() {
                   <p className="text-xs font-black text-foreground">
                     {dirtyKeys.length} cambio{dirtyKeys.length !== 1 ? 's' : ''} sin guardar
                   </p>
-                  <p className="text-[10px] text-faint truncate">
+                  <p className="text-xs text-muted truncate">
                     {isValid ? dirtyKeys.map((k) => KEY_LABELS[k]).join(' · ') : errors[0].message}
                   </p>
                 </div>
@@ -87,7 +87,7 @@ export default function GlobalSaveBar() {
                 <button
                   onClick={reset}
                   disabled={saving}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-faint hover:text-foreground hover:bg-surface-2 text-[11px] font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-muted hover:text-foreground hover:bg-surface-2 text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Descartar
                 </button>

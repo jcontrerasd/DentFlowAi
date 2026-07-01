@@ -1,5 +1,10 @@
 'use server';
 
+// Gate de módulo: throttle de batchExpireInvitationsForCases por org a 30s.
+// Persiste en memoria por instancia (Cloud Run = por pod); la expiración es
+// idempotente, así que la eventual inconsistencia entre pods es aceptable.
+const _lastBatchExpireCheck = new Map<string, number>();
+
 import { randomUUID } from 'crypto';
 import { notifyUser } from "../../services/notifications";
 import GCPStorageService from '@/lib/services/gcp-storage';
@@ -159,37 +164,38 @@ export async function getCaseEventsAction(
     if (filter) whereConditions.push(eq(clinicalCaseEvent.type, filter));
     if (beforeCursor) whereConditions.push(sql`${clinicalCaseEvent.createdAt} < ${beforeCursor}`);
 
-    // Pedimos DESC para tomar los más recientes, luego invertimos al retornar
-    const events = await db.query.clinicalCaseEvent.findMany({
-      where: and(...whereConditions),
-      orderBy: [sql`created_at DESC`],
-      limit: pageLimit,
-      with: {
-        user: {
-          columns: {
-            id: true,
-            fullName: true,
-            role: true,
-            image: true
+    // Pedimos DESC para tomar los más recientes, luego invertimos al retornar.
+    // La query de invitación del técnico corre en paralelo con los eventos (son independientes).
+    const [events, myInvRows] = await Promise.all([
+      db.query.clinicalCaseEvent.findMany({
+        where: and(...whereConditions),
+        orderBy: [sql`created_at DESC`],
+        limit: pageLimit,
+        with: {
+          user: {
+            columns: {
+              id: true,
+              fullName: true,
+              role: true,
+              image: true
+            }
           }
         }
-      }
-    });
+      }),
+      identity.role === 'tecnico'
+        ? db.select({ id: caseAssignment.id })
+            .from(caseAssignment)
+            .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.technicianId, identity.id as string)))
+            .limit(1)
+        : Promise.resolve([] as { id: string }[]),
+    ]);
 
     // Restablecer orden cronológico ascendente (más antiguo primero)
     const dbRowCount = events.length;
     const hasMoreOlder = dbRowCount >= pageLimit;
     events.reverse();
 
-    // Obtener invitationId del técnico actual (para filtro por invitation)
-    let currentInvitationId: string | null = null;
-    if (identity.role === 'tecnico') {
-      const [myInv] = await db.select({ id: caseAssignment.id })
-        .from(caseAssignment)
-        .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.technicianId, identity.id as string)))
-        .limit(1);
-      currentInvitationId = myInv?.id ?? null;
-    }
+    const currentInvitationId: string | null = myInvRows[0]?.id ?? null;
 
     const filteredEvents = filterCaseEventsForUchViewer(
       events,
@@ -548,8 +554,13 @@ export async function listCasesByOrganization(
     });
 
     if (evalCaseIds.length > 0) {
-      const { batchExpireInvitationsForCases } = await import('./fauchard');
-      await batchExpireInvitationsForCases(evalCaseIds);
+      const orgKey = identity.orgId ?? identity.id ?? 'default';
+      const lastCheck = _lastBatchExpireCheck.get(orgKey as string) ?? 0;
+      if (Date.now() - lastCheck > 30_000) {
+        _lastBatchExpireCheck.set(orgKey as string, Date.now());
+        const { batchExpireInvitationsForCases } = await import('./fauchard');
+        await batchExpireInvitationsForCases(evalCaseIds);
+      }
     }
 
     perfLog('listCasesByOrganization.total', Date.now() - t0list, { page, pageSize, resultCount: processedResults.length, total });
@@ -612,7 +623,8 @@ export async function getCaseDetails(caseId: string) {
           with: {
             technician: true
           },
-          orderBy: (deliveries, { desc }) => [desc(deliveries.version)]
+          orderBy: (deliveries, { desc }) => [desc(deliveries.version)],
+          limit: 10,
         },
         technician: {
           with: { organization: true }

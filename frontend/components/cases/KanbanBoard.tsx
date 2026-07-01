@@ -96,8 +96,8 @@ export default function KanbanBoard({ cases, role, userId }: KanbanBoardProps) {
       {DENTIST_COLUMNS.map((col) => (
         <div key={col.id} className="flex-shrink-0 w-80 flex flex-col">
           <div className={`mb-4 p-4 rounded-2xl border ${col.color} flex items-center justify-between`}>
-            <h3 className="text-[10px] uppercase font-black tracking-widest">{col.title}</h3>
-            <span className="text-[10px] font-bold opacity-60 bg-surface-off px-2 py-0.5 rounded-full">
+            <h3 className="text-xs uppercase font-black tracking-widest">{col.title}</h3>
+            <span className="text-xs font-bold opacity-60 bg-surface-off px-2 py-0.5 rounded-full">
               {casesByColumn[col.id].length}
             </span>
           </div>
@@ -127,7 +127,7 @@ export default function KanbanBoard({ cases, role, userId }: KanbanBoardProps) {
                 >
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
-                      <p className="text-[10px] text-primary font-mono tracking-tighter">{c.caseNumber}</p>
+                      <p className="text-xs text-primary font-mono tracking-tighter">{c.caseNumber}</p>
                       <h4 className="text-foreground text-xs font-bold leading-tight group-hover:text-primary transition-colors uppercase">
                         {c.internalName}
                       </h4>
@@ -139,12 +139,12 @@ export default function KanbanBoard({ cases, role, userId }: KanbanBoardProps) {
 
                   <div className="grid grid-cols-2 gap-2">
                     <div className="bg-surface-off p-2 rounded-xl border border-divider">
-                      <p className="text-[8px] text-faint uppercase font-black">Restauración</p>
-                      <p className="text-[10px] text-muted font-bold truncate">{c.restorationType}</p>
+                      <p className="text-[11px] text-muted uppercase font-black">Restauración</p>
+                      <p className="text-xs text-muted font-bold truncate">{c.restorationType}</p>
                     </div>
                     <div className="bg-surface-off p-2 rounded-xl border border-divider">
-                      <p className="text-[8px] text-faint uppercase font-black">Material</p>
-                      <p className="text-[10px] text-muted font-bold truncate">{c.material}</p>
+                      <p className="text-[11px] text-muted uppercase font-black">Material</p>
+                      <p className="text-xs text-muted font-bold truncate">{c.material}</p>
                     </div>
                   </div>
 
@@ -161,11 +161,11 @@ export default function KanbanBoard({ cases, role, userId }: KanbanBoardProps) {
                       <div className="w-6 h-6 bg-surface-2 rounded-full flex items-center justify-center">
                         <User className="w-3 h-3 text-muted" />
                       </div>
-                      <span className="text-[9px] text-muted uppercase font-bold">Clínica</span>
+                      <span className="text-[11px] text-muted uppercase font-bold">Clínica</span>
                     </div>
-                    <div className="flex items-center gap-1 text-faint">
+                    <div className="flex items-center gap-1 text-muted">
                       <Calendar className="w-3 h-3" />
-                      <span className="text-[9px] font-bold">
+                      <span className="text-[11px] font-bold">
                         {new Date(c.createdAt).toLocaleDateString('es-ES', {
                           day: '2-digit',
                           month: '2-digit',
@@ -179,7 +179,7 @@ export default function KanbanBoard({ cases, role, userId }: KanbanBoardProps) {
 
             {casesByColumn[col.id].length === 0 && (
               <div className="h-32 border border-dashed border-divider rounded-[2rem] flex items-center justify-center">
-                <span className="text-[9px] text-faint uppercase font-black tracking-widest italic">
+                <span className="text-[11px] text-muted opacity-50 uppercase font-black tracking-widest italic">
                   Vacío
                 </span>
               </div>

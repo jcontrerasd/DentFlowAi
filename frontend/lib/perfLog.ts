@@ -1,13 +1,18 @@
 /**
- * Utility de performance logging para diagnóstico local.
- * Escribe en frontend/perf.log (excluido por .gitignore).
- * Activado cuando PERF_LOG=true en .env.local.
+ * Utility de performance logging.
+ * - Siempre alimenta el ring buffer en memoria (lib/perfBuffer.ts).
+ * - Escribe en frontend/perf.log cuando PERF_LOG=true (solo servidor local).
  */
 
-const ENABLED = process.env.PERF_LOG === 'true';
+import { recordPerfSample } from './perfBuffer';
+
+const FILE_LOG_ENABLED = process.env.PERF_LOG === 'true';
 
 export function perfLog(label: string, durationMs: number, meta?: Record<string, string | number | boolean | null | undefined>): void {
-  if (!ENABLED) return;
+  // Siempre registrar en buffer en memoria.
+  recordPerfSample({ action: label, durationMs, ts: Date.now(), meta: meta as Record<string, string | number | boolean | null> | undefined });
+
+  if (!FILE_LOG_ENABLED) return;
   const ts = new Date().toISOString();
   const metaStr = meta
     ? ' | ' + Object.entries(meta).map(([k, v]) => `${k}=${v ?? 'null'}`).join(' | ')

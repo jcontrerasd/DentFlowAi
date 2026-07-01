@@ -73,34 +73,34 @@ export default function DemoEmailPreviewListener() {
                     <Mail className="w-5 h-5" />
                   </div>
                   <div>
-                    <span className="inline-block text-[9px] font-black uppercase tracking-wider text-primary bg-primary-hl border border-primary/20 rounded-full px-2 py-0.5">
+                    <span className="inline-block text-xs font-black uppercase tracking-wider text-primary bg-primary-hl border border-primary/20 rounded-full px-2 py-0.5">
                       📧 Demo · este correo se enviaría
                     </span>
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-faint mt-1">{current.type}</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted mt-1">{current.type}</p>
                   </div>
                 </div>
-                <button onClick={advance} className="p-2 text-faint hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg" aria-label="Cerrar">
+                <button onClick={advance} className="p-2 text-muted hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg" aria-label="Cerrar">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-3">
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-faint">Para</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted">Para</span>
                   <p className="text-sm font-mono text-foreground break-all">{current.to}</p>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-faint">Asunto</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted">Asunto</span>
                   <p className="text-sm font-bold text-foreground">{current.subject}</p>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-faint">Cuerpo</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-muted">Cuerpo</span>
                   <pre className="mt-1 text-xs text-muted whitespace-pre-wrap font-sans bg-background border border-divider rounded-2xl p-4 max-h-64 overflow-y-auto">{current.body}</pre>
                 </div>
               </div>
 
               <div className="flex items-center justify-between pt-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-faint">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted">
                   {remaining > 0 ? `${remaining} correo(s) en cola` : 'Sin correos pendientes'}
                 </span>
                 <button

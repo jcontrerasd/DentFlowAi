@@ -79,7 +79,7 @@ export default function ResetNoResponseModal({
                   <div className="w-12 h-12 rounded-2xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary">
                     <ShieldCheck className="w-6 h-6" />
                   </div>
-                  <button onClick={onClose} className="p-2 text-faint hover:text-foreground transition-colors">
+                  <button onClick={onClose} className="p-2 text-muted hover:text-foreground transition-colors">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
@@ -92,19 +92,19 @@ export default function ResetNoResponseModal({
                 </p>
 
                 <div className="mb-6">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-faint mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted mb-2">
                     No-respuestas activas que se perdonarán
                   </p>
                   {loading ? (
-                    <p className="text-sm text-faint">Cargando…</p>
+                    <p className="text-sm text-muted">Cargando…</p>
                   ) : events.length === 0 ? (
-                    <p className="text-sm text-faint">No hay no-respuestas activas.</p>
+                    <p className="text-sm text-muted opacity-50">No hay no-respuestas activas.</p>
                   ) : (
                     <ul className="max-h-40 overflow-auto rounded-2xl border border-divider divide-y divide-divider">
                       {events.map((e) => (
                         <li key={e.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
                           <span className="text-foreground font-medium">{e.caseNumber ?? 'Caso —'}</span>
-                          <span className="text-faint text-xs">{new Date(e.occurredAt).toLocaleDateString('es-CL')}</span>
+                          <span className="text-muted text-xs">{new Date(e.occurredAt).toLocaleDateString('es-CL')}</span>
                         </li>
                       ))}
                     </ul>
@@ -112,7 +112,7 @@ export default function ResetNoResponseModal({
                 </div>
 
                 <div className="mb-6 space-y-2">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-faint">
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted">
                     Motivo (obligatorio)
                   </label>
                   <textarea
@@ -120,7 +120,7 @@ export default function ResetNoResponseModal({
                     onChange={(e) => setReason(e.target.value)}
                     rows={3}
                     placeholder="Ej: el técnico avisó por canal externo que estuvo enfermo"
-                    className="w-full rounded-2xl bg-surface-2 border border-divider p-3 text-sm text-foreground placeholder:text-faint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 resize-none"
+                    className="w-full rounded-2xl bg-surface-2 border border-divider p-3 text-sm text-foreground placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 resize-none"
                   />
                 </div>
 

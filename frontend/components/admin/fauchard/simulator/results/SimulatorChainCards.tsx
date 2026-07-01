@@ -32,11 +32,11 @@ function ChainCard({
         {isWinner ? <Trophy className="w-4 h-4" /> : <span className="text-xs font-black">#{entry.position}</span>}
       </div>
       <div className="min-w-0">
-        <span className={`text-[8px] font-black uppercase block ${isWinner ? 'text-emerald-600' : 'text-amber-600'}`}>
+        <span className={`text-xs font-black uppercase block ${isWinner ? 'text-emerald-600' : 'text-amber-600'}`}>
           {isWinner ? 'Asignado' : `Respaldo #${entry.position}`}
         </span>
-        <span className="text-[11px] font-bold text-foreground truncate block">{entry.fullName}</span>
-        <span className="text-[9px] text-faint">
+        <span className="text-xs font-bold text-foreground truncate block">{entry.fullName}</span>
+        <span className="text-xs text-muted">
           {entry.leagueLevel} · score {entry.score.toFixed(3)}
           {compensation != null && ` · ${formatUchQuoteClp(compensation)}`}
         </span>
@@ -63,7 +63,7 @@ export default function SimulatorChainCards({
     <div className="rounded-[2rem] border border-divider bg-surface/20 p-6 space-y-5">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <span className="text-[9px] font-black uppercase text-primary/60 block">Cadena de asignación</span>
+          <span className="text-xs font-black uppercase text-primary/60 block">Cadena de asignación</span>
           <p className="text-sm text-foreground font-medium">
             Plazo {result.config.tQuoteMinutes} min · hasta {result.assignmentPreview.attemptsBudget} intentos
           </p>
@@ -73,7 +73,7 @@ export default function SimulatorChainCards({
             <button
               type="button"
               onClick={onResetRejects}
-              className="text-[10px] font-bold uppercase text-muted hover:text-foreground px-3 py-1.5 rounded-lg border border-divider"
+              className="text-xs font-bold uppercase text-muted hover:text-foreground px-3 py-1.5 rounded-lg border border-divider"
             >
               Reiniciar rechazos ({excludedTechIds.length})
             </button>
@@ -95,7 +95,7 @@ export default function SimulatorChainCards({
           <ChainCard key={entry.technicianId} entry={entry} compensation={result.pricePreview?.cost} />
         ))}
         {result.assignmentPreview.retryChainDetails.length < result.assignmentPreview.attemptsBudget && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-dashed border-divider text-faint text-[10px] font-bold uppercase">
+          <div className="flex items-center gap-2 px-4 py-3 rounded-2xl border border-dashed border-divider text-muted text-xs font-bold uppercase">
             Cadena incompleta — solo {result.assignmentPreview.retryChainDetails.length} elegible(s)
           </div>
         )}

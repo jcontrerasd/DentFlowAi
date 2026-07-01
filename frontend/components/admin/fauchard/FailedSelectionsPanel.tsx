@@ -15,6 +15,9 @@ interface Props {
 }
 
 function failureBadge(fc: FailedCase): { label: string; className: string } {
+  if (fc.internalStatus === 'pendiente_pool') {
+    return { label: 'En cola de espera', className: 'bg-warning-hl text-warning border-warning/30' };
+  }
   if (fc.status === 'sin_asignacion_fallo') {
     return { label: 'Sin técnicos elegibles', className: 'bg-error-hl text-error border-error/30' };
   }
@@ -31,7 +34,7 @@ export default function FailedSelectionsPanel({ failedCases }: Props) {
           </div>
           <h2 className="text-lg font-bold text-foreground">Casos sin asignación</h2>
         </div>
-        <p className="text-faint text-sm">No se registraron casos fallidos en este período.</p>
+        <p className="text-muted text-sm">No se registraron casos fallidos en este período.</p>
       </div>
     );
   }
@@ -59,7 +62,7 @@ export default function FailedSelectionsPanel({ failedCases }: Props) {
                       Caso: {fc.caseId.slice(0, 8)}…
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-faint">
+                  <div className="flex items-center gap-2 text-xs text-muted">
                     <Calendar className="w-3.5 h-3.5" />
                     {format(new Date(fc.createdAt), 'd MMM, yyyy HH:mm', { locale: es })}
                   </div>

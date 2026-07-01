@@ -124,36 +124,54 @@ export async function cancelPendingPoolAction(caseId: string): Promise<ActionRes
 /** Envía el check-in al dentista a los casos que cruzaron el 50% del TTL sin aviso. */
 export async function processPendingPoolCheckInAction(): Promise<ActionResult<{ notified: number }>> {
   try {
-    const cases = await db
-      .select({
-        id: clinicalCase.id,
-        caseNumber: clinicalCase.caseNumber,
-        doctorId: clinicalCase.doctorId,
-        startedAt: clinicalCase.pendingPoolStartedAt,
-      })
-      .from(clinicalCase)
-      .where(
-        and(
-          eq(clinicalCase.internalStatus, POOL_INTERNAL_STATUS),
-          eq(clinicalCase.status, CASE_STATUSES.EN_EVALUACION),
-          sql`${clinicalCase.pendingPoolCheckinSentAt} IS NULL`,
-          isNotNull(clinicalCase.pendingPoolStartedAt),
+    // Fetch de casos y config activa en paralelo (elimina N+1 de getPoolConfigForCase por caso)
+    const [cases, activeConfigRows] = await Promise.all([
+      db
+        .select({
+          id: clinicalCase.id,
+          caseNumber: clinicalCase.caseNumber,
+          doctorId: clinicalCase.doctorId,
+          startedAt: clinicalCase.pendingPoolStartedAt,
+          anchoredTtlHours: fauchardConfig.tNoEligiblePoolHours,
+        })
+        .from(clinicalCase)
+        .leftJoin(fauchardConfig, eq(fauchardConfig.id, clinicalCase.fauchardConfigId))
+        .where(
+          and(
+            eq(clinicalCase.internalStatus, POOL_INTERNAL_STATUS),
+            eq(clinicalCase.status, CASE_STATUSES.EN_EVALUACION),
+            sql`${clinicalCase.pendingPoolCheckinSentAt} IS NULL`,
+            isNotNull(clinicalCase.pendingPoolStartedAt),
+          ),
         ),
-      );
+      db.select({ ttlHours: fauchardConfig.tNoEligiblePoolHours })
+        .from(fauchardConfig)
+        .where(eq(fauchardConfig.isActive, true))
+        .limit(1),
+    ]);
+    const activeTtlHours = activeConfigRows[0]?.ttlHours ?? 24;
 
     let notified = 0;
     const now = Date.now();
+    const updateIds: string[] = [];
+    const pendingNotifications: Array<{ doctorId: string; caseId: string; caseNumber: string | null }> = [];
+
     for (const c of cases) {
-      const { ttlHours } = await getPoolConfigForCase(c.id);
+      const ttlHours = c.anchoredTtlHours ?? activeTtlHours;
       const halfMs = (ttlHours * 3_600_000) / 2;
       if (!c.startedAt || now - new Date(c.startedAt).getTime() < halfMs) continue;
-
-      await db.update(clinicalCase).set({ pendingPoolCheckinSentAt: new Date() }).where(eq(clinicalCase.id, c.id));
-      if (c.doctorId) {
-        await notifyUser(c.doctorId, 'CHECK_IN_DENTISTA', { caseId: c.id, caseNumber: c.caseNumber });
-        notified++;
-      }
+      updateIds.push(c.id);
+      if (c.doctorId) pendingNotifications.push({ doctorId: c.doctorId, caseId: c.id, caseNumber: c.caseNumber });
     }
+
+    await Promise.all([
+      ...updateIds.map(id => db.update(clinicalCase).set({ pendingPoolCheckinSentAt: new Date() }).where(eq(clinicalCase.id, id))),
+      ...pendingNotifications.map(({ doctorId, caseId, caseNumber }) => {
+        notified++;
+        return notifyUser(doctorId, 'CHECK_IN_DENTISTA', { caseId, caseNumber });
+      }),
+    ]);
+
     return { success: true, notified };
   } catch (error) {
     return { success: false, error: String(error) };
@@ -163,27 +181,41 @@ export async function processPendingPoolCheckInAction(): Promise<ActionResult<{ 
 /** Re-encola o falla los casos que cumplieron el TTL del ciclo actual. */
 export async function processPendingPoolExpirationAction(): Promise<ActionResult<{ requeued: number; failed: number }>> {
   try {
-    const cases = await db
-      .select({
-        id: clinicalCase.id,
-        doctorId: clinicalCase.doctorId,
-        startedAt: clinicalCase.pendingPoolStartedAt,
-        cycle: clinicalCase.pendingPoolCycleCount,
-      })
-      .from(clinicalCase)
-      .where(
-        and(
-          eq(clinicalCase.internalStatus, POOL_INTERNAL_STATUS),
-          eq(clinicalCase.status, CASE_STATUSES.EN_EVALUACION),
-          isNotNull(clinicalCase.pendingPoolStartedAt),
+    // Fetch de casos + config activa en paralelo (elimina N+1 de getPoolConfigForCase por caso)
+    const [cases, activeConfigRows] = await Promise.all([
+      db
+        .select({
+          id: clinicalCase.id,
+          doctorId: clinicalCase.doctorId,
+          startedAt: clinicalCase.pendingPoolStartedAt,
+          cycle: clinicalCase.pendingPoolCycleCount,
+          anchoredTtlHours: fauchardConfig.tNoEligiblePoolHours,
+          anchoredMaxCycles: fauchardConfig.maxPoolCycles,
+        })
+        .from(clinicalCase)
+        .leftJoin(fauchardConfig, eq(fauchardConfig.id, clinicalCase.fauchardConfigId))
+        .where(
+          and(
+            eq(clinicalCase.internalStatus, POOL_INTERNAL_STATUS),
+            eq(clinicalCase.status, CASE_STATUSES.EN_EVALUACION),
+            isNotNull(clinicalCase.pendingPoolStartedAt),
+          ),
         ),
-      );
+      db.select({ ttlHours: fauchardConfig.tNoEligiblePoolHours, maxCycles: fauchardConfig.maxPoolCycles })
+        .from(fauchardConfig)
+        .where(eq(fauchardConfig.isActive, true))
+        .limit(1),
+    ]);
+    const activeTtlHours = activeConfigRows[0]?.ttlHours ?? 24;
+    const activeMaxCycles = activeConfigRows[0]?.maxCycles ?? 2;
 
     let requeued = 0;
     let failed = 0;
     const now = Date.now();
+
     for (const c of cases) {
-      const { ttlHours, maxCycles } = await getPoolConfigForCase(c.id);
+      const ttlHours = c.anchoredTtlHours ?? activeTtlHours;
+      const maxCycles = c.anchoredMaxCycles ?? activeMaxCycles;
       if (!c.startedAt || now - new Date(c.startedAt).getTime() < ttlHours * 3_600_000) continue;
 
       if ((c.cycle ?? 1) < maxCycles) {

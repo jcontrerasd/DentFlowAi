@@ -33,7 +33,7 @@ export default function SimulatorStepFiltros({
             <div>
               <h4 className="text-sm font-bold text-foreground">Embudo de filtrado</h4>
               {poolEmptyExplanation && (
-                <p className="text-[11px] text-muted mt-0.5">{poolEmptyExplanation.summaryLine}</p>
+                <p className="text-xs text-muted mt-0.5">{poolEmptyExplanation.summaryLine}</p>
               )}
             </div>
           </div>
@@ -48,7 +48,7 @@ export default function SimulatorStepFiltros({
 
           {!result.poolEmpty && (
             <details className="group">
-              <summary className="text-[10px] font-bold uppercase tracking-wider text-faint cursor-pointer list-none flex items-center gap-1">
+              <summary className="text-xs font-bold uppercase tracking-wider text-muted cursor-pointer list-none flex items-center gap-1">
                 Detalle por motivo (primer fallo)
               </summary>
               <div className="mt-3">
@@ -59,9 +59,9 @@ export default function SimulatorStepFiltros({
         </div>
       ) : (
         <div className="p-10 rounded-[2.5rem] border-2 border-dashed border-divider text-center space-y-3">
-          <Filter className="w-8 h-8 text-faint mx-auto" />
+          <Filter className="w-8 h-8 text-muted opacity-50 mx-auto" />
           <h4 className="text-sm font-bold text-foreground">Embudo de filtros</h4>
-          <p className="text-faint text-xs max-w-sm mx-auto">
+          <p className="text-muted opacity-50 text-xs max-w-sm mx-auto">
             Ejecuta la simulación para ver cuántos técnicos pasan cada filtro en orden hasta los elegibles.
           </p>
         </div>

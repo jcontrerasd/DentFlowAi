@@ -328,7 +328,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
         {[1, 2, 3, 4].map(s => (
           <div key={s} className="flex-1 flex flex-col gap-1.5">
             <div className={`h-1.5 rounded-full transition-all duration-500 ${s <= step ? 'bg-primary shadow-[0_0_8px_rgba(45,212,191,0.4)]' : 'bg-surface-2 dark:bg-surface-2'}`} />
-            <span className={`text-[9px] uppercase font-black tracking-widest ${s === step ? 'text-primary' : 'text-faint'}`}>
+            <span className={`text-[11px] uppercase font-black tracking-widest ${s === step ? 'text-primary' : 'text-muted'}`}>
               {s === 1 ? 'Paciente' : s === 2 ? 'Clínica' : s === 3 ? 'Estética' : 'Archivos'}
             </span>
           </div>
@@ -350,13 +350,13 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               </div>
               <div>
                 <h2 className="text-xl font-bold dark:text-foreground">Identificación del Caso</h2>
-                <p className="text-sm text-faint">Datos internos y de anonimización</p>
+                <p className="text-sm text-muted">Datos internos y de anonimización</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Nombre Interno</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">Nombre Interno</label>
                 <input
                   type="text"
                   placeholder="Ej: Juan Perez - Rehabilitación 4.6"
@@ -366,7 +366,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">ID Paciente (Uso Interno)</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">ID Paciente (Uso Interno)</label>
                 <input
                   type="text"
                   placeholder="Código de ficha interna"
@@ -378,18 +378,18 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">
                 Fecha y hora de entrega deseada
               </label>
               <DesiredDeliveryPicker
                 value={formData.desiredDeliveryAt}
                 onChange={(desiredDeliveryAt) => setFormData({ ...formData, desiredDeliveryAt })}
               />
-              <p className="text-[11px] text-faint px-1">Indica cuándo necesitas recibir el diseño. Debe ser una fecha futura.</p>
+              <p className="text-xs text-muted px-1">Indica cuándo necesitas recibir el diseño. Debe ser una fecha futura.</p>
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Prioridad</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">Prioridad</label>
               <div className="flex gap-3">
                 {urgencyLevels.map((p) => (
                   <button
@@ -398,7 +398,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                     className={`flex-1 py-3 rounded-xl border text-sm font-semibold capitalize transition-all ${
                       formData.urgency === p.label
                         ? 'bg-primary/10 border-primary text-primary'
-                        : 'bg-transparent border-slate-200 dark:border-divider text-faint'
+                        : 'bg-transparent border-slate-200 dark:border-divider text-muted'
                     }`}
                   >
                     {p.label}
@@ -411,7 +411,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               <button
                 onClick={nextStep}
                 disabled={!isStepValid()}
-                className="bg-primary/20 border border-primary/30 px-8 py-3 rounded-xl text-primary font-bold uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-primary/30 transition-all disabled:opacity-50"
+                className="bg-primary/20 border border-primary/30 px-8 py-3 rounded-xl text-primary font-bold uppercase tracking-wider text-xs flex items-center gap-2 hover:bg-primary/30 transition-all disabled:opacity-50"
               >
                 Continuar <ArrowRight size={16} className="font-black" />
               </button>
@@ -433,12 +433,12 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               </div>
               <div>
                 <h2 className="text-lg font-bold dark:text-foreground leading-tight">Odontograma</h2>
-                <p className="text-xs text-faint">Seleccione las piezas y el tipo de trabajo</p>
+                <p className="text-xs text-muted">Seleccione las piezas y el tipo de trabajo</p>
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Selección de Piezas (FDI)</label>
+              <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">Selección de Piezas (FDI)</label>
               <TeethSelector
                 selectedTeeth={formData.teeth}
                 onChange={teeth => setFormData({...formData, teeth})}
@@ -447,7 +447,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Restauración</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">Restauración</label>
                 <select
                   className="w-full bg-surface dark:bg-surface border border-slate-200 dark:border-divider rounded-xl px-4 py-2.5 appearance-none"
                   value={formData.restorationType}
@@ -467,7 +467,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">
+              <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">
                 ¿El caso reemplaza dientes ausentes (pónticos)?
               </label>
               <div className="flex gap-2">
@@ -494,33 +494,33 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                   No
                 </button>
               </div>
-              <p className="text-[10px] text-faint px-1">
+              <p className="text-xs text-muted px-1">
                 Distingue coronas múltiples de puentes. Se sugiere automáticamente «Sí» para restauración Puente.
               </p>
             </div>
 
             {draftClassification && (
               <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
-                <p className="text-[10px] font-black uppercase tracking-widest text-primary">Clasificación prevista</p>
+                <p className="text-xs font-black uppercase tracking-widest text-primary">Clasificación prevista</p>
                 <div className="grid grid-cols-2 gap-2 text-xs text-foreground">
-                  <span className="text-faint">Categoría</span>
+                  <span className="text-muted">Categoría</span>
                   <span className="font-medium">{draftClassification.categoryLabel}</span>
-                  <span className="text-faint">Tipo de trabajo</span>
+                  <span className="text-muted">Tipo de trabajo</span>
                   <span className="font-medium">{draftClassification.workTypeLabel}</span>
-                  <span className="text-faint">Complejidad</span>
+                  <span className="text-muted">Complejidad</span>
                   <span className="font-medium capitalize">{draftClassification.caseComplexity}</span>
                 </div>
               </div>
             )}
 
             <div className="pt-3 flex justify-between">
-              <button onClick={prevStep} className="flex items-center gap-2 text-faint font-bold hover:text-primary transition-colors">
+              <button onClick={prevStep} className="flex items-center gap-2 text-muted font-bold hover:text-primary transition-colors">
                 <ChevronLeft size={20} /> Atrás
               </button>
               <button
                 onClick={nextStep}
                 disabled={!isStepValid()}
-                className="bg-primary/20 border border-primary/30 px-6 py-2.5 rounded-xl text-primary font-bold uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-primary/30 transition-all disabled:opacity-50"
+                className="bg-primary/20 border border-primary/30 px-6 py-2.5 rounded-xl text-primary font-bold uppercase tracking-wider text-xs flex items-center gap-2 hover:bg-primary/30 transition-all disabled:opacity-50"
               >
                 Configurar Estética <ArrowRight size={16} className="font-black" />
               </button>
@@ -542,13 +542,13 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               </div>
               <div>
                 <h2 className="text-xl font-bold dark:text-foreground">Estética y Materiales</h2>
-                <p className="text-sm text-faint">Defina el acabado y notas técnicas</p>
+                <p className="text-sm text-muted">Defina el acabado y notas técnicas</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Material Sugerido</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">Material Sugerido</label>
                 <select
                   className="w-full bg-surface dark:bg-surface border border-slate-200 dark:border-divider rounded-xl px-4 py-3 appearance-none"
                   value={formData.material}
@@ -559,7 +559,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Color</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">Color</label>
                 <select
                   className="w-full bg-surface dark:bg-surface border border-slate-200 dark:border-divider rounded-xl px-4 py-3 appearance-none"
                   value={formData.shade}
@@ -578,12 +578,12 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                   : 'border-warning/30 bg-warning-hl'
               }`}>
                 {listPriceLoading ? (
-                  <p className="text-sm text-faint">Calculando precio...</p>
+                  <p className="text-sm text-muted">Calculando precio...</p>
                 ) : listPriceSale != null ? (
                   <div className="flex items-center gap-3">
                     <DollarSign size={20} className="text-primary" />
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-faint">Precio de referencia</p>
+                      <p className="text-xs font-bold uppercase tracking-wider text-muted">Precio de referencia</p>
                       <p className="text-xl font-bold text-primary">{formatUchQuoteClp(listPriceSale)}</p>
                     </div>
                   </div>
@@ -601,7 +601,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Notas Oclusales</label>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">Notas Oclusales</label>
                   <input
                     type="text"
                     placeholder="Puntos de contacto, guía, etc."
@@ -611,7 +611,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Detalle Estético</label>
+                  <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">Detalle Estético</label>
                   <input
                     type="text"
                     placeholder="Translucidez, mamelones, etc."
@@ -623,7 +623,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-faint px-1">Instrucciones Especiales</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted px-1">Instrucciones Especiales</label>
                 <textarea
                   placeholder="Instrucciones adicionales para el técnico..."
                   rows={3}
@@ -635,12 +635,12 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
             </div>
 
             <div className="pt-6 flex justify-between">
-              <button onClick={prevStep} className="flex items-center gap-2 text-faint font-bold hover:text-primary transition-colors">
+              <button onClick={prevStep} className="flex items-center gap-2 text-muted font-bold hover:text-primary transition-colors">
                 <ChevronLeft size={20} /> Atrás
               </button>
               <button
                 onClick={nextStep}
-                className="bg-primary/20 border border-primary/30 px-8 py-3 rounded-xl text-primary font-bold uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-primary/30 transition-all"
+                className="bg-primary/20 border border-primary/30 px-8 py-3 rounded-xl text-primary font-bold uppercase tracking-wider text-xs flex items-center gap-2 hover:bg-primary/30 transition-all"
               >
                 Subir Escaneos <Upload size={16} className="font-black" />
               </button>
@@ -662,7 +662,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               </div>
               <div>
                 <h2 className="text-xl font-bold dark:text-foreground">Archivos de Escaneo (CAD)</h2>
-                <p className="text-sm text-faint">Cargue los archivos STL, PLY u OBJ del paciente</p>
+                <p className="text-sm text-muted">Cargue los archivos STL, PLY u OBJ del paciente</p>
               </div>
             </div>
 
@@ -670,7 +670,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {(['superior', 'inferior', 'bite'] as const).map(key => (
                   <div key={key} className="relative">
-                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted mb-2 block text-center">
+                    <label className="text-xs font-bold uppercase tracking-widest text-muted mb-2 block text-center">
                       {key === 'bite' ? 'Registro Mordida' : `Arcada ${key}`}
                     </label>
                     <div className={`
@@ -688,13 +688,13 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                         {files[key] ? (
                           <>
                             <CheckCircle2 size={32} className="text-primary mb-2" />
-                            <span className="text-[10px] font-medium dark:text-foreground truncate max-w-full italic px-2">
+                            <span className="text-xs font-medium dark:text-foreground truncate max-w-full italic px-2">
                               {files[key]?.name}
                             </span>
                           </>
                         ) : (
                           <>
-                            <Upload size={32} className="text-muted dark:text-faint mb-2" />
+                            <Upload size={32} className="text-muted mb-2" />
                             <span className="text-xs font-semibold text-muted">Subir .STL / .PLY / .OBJ</span>
                           </>
                         )}
@@ -741,9 +741,9 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold dark:text-foreground">Documentación complementaria</p>
-                  <p className="text-xs text-faint mt-0.5">Imágenes de referencia, radiografías, PDFs u otros (JPG, PNG, PDF, DOCX · máx. 20 MB · hasta 10 archivos)</p>
+                  <p className="text-xs text-muted mt-0.5">Imágenes de referencia, radiografías, PDFs u otros (JPG, PNG, PDF, DOCX · máx. 20 MB · hasta 10 archivos)</p>
                 </div>
-                <span className="text-xs text-faint">{files.complementary.length}/10</span>
+                <span className="text-xs text-muted">{files.complementary.length}/10</span>
               </div>
               {files.complementary.length < MAX_COMPLEMENTARY_WIZ && (
                 <label className="flex items-center gap-2 cursor-pointer text-xs text-primary font-semibold hover:underline">
@@ -773,7 +773,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
             )}
 
             <div className="pt-6 flex justify-between items-center">
-              <button onClick={prevStep} className="flex items-center gap-2 text-faint font-bold hover:text-primary transition-colors">
+              <button onClick={prevStep} className="flex items-center gap-2 text-muted font-bold hover:text-primary transition-colors">
                 <ChevronLeft size={20} /> Atrás
               </button>
               <button
@@ -782,7 +782,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                   onComplete(formData, files, thumbnails);
                 }}
                 disabled={loading || !isStepValid()}
-                className="bg-primary/20 border border-primary/30 px-8 py-3.5 rounded-xl text-primary font-bold uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-primary/30 transition-all disabled:opacity-50 shadow-xl shadow-sm"
+                className="bg-primary/20 border border-primary/30 px-8 py-3.5 rounded-xl text-primary font-bold uppercase tracking-wider text-xs flex items-center gap-2 hover:bg-primary/30 transition-all disabled:opacity-50 shadow-xl shadow-sm"
               >
                 {loading ? (
                   <div className="w-4 h-4 border-2 border-primary/30 border-t-teal-500 rounded-full animate-spin" />

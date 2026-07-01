@@ -8,7 +8,7 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "mkdir -p .next && touch .next/.metadata_never_index && next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

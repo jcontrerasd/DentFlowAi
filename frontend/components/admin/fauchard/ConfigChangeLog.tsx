@@ -147,7 +147,7 @@ export default function ConfigChangeLog() {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
         <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        <p className="text-faint text-sm font-medium">Cargando historial de cambios...</p>
+        <p className="text-muted text-sm font-medium">Cargando historial de cambios...</p>
       </div>
     );
   }
@@ -165,7 +165,7 @@ export default function ConfigChangeLog() {
             <input
               type="text"
               placeholder="Filtrar por parámetro o admin..."
-              className="w-full bg-surface border border-divider rounded-xl pl-9 pr-4 py-2 text-[11px] text-foreground focus:outline-none focus:border-divider transition-colors"
+              className="w-full bg-surface border border-divider rounded-xl pl-9 pr-4 py-2 text-xs text-foreground focus:outline-none focus:border-divider transition-colors"
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
@@ -180,10 +180,10 @@ export default function ConfigChangeLog() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-surface border-b border-divider">
-              <th className="px-6 py-4 text-[9px] font-bold uppercase tracking-wider text-faint">Fecha y Hora</th>
-              <th className="px-6 py-4 text-[9px] font-bold uppercase tracking-wider text-faint">Administrador</th>
-              <th className="px-6 py-4 text-[9px] font-bold uppercase tracking-wider text-faint">Parámetro(s)</th>
-              <th className="px-6 py-4 text-[9px] font-bold uppercase tracking-wider text-faint text-center">Cambio</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted">Fecha y Hora</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted">Administrador</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted">Parámetro(s)</th>
+              <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-muted text-center">Cambio</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/50">
@@ -191,7 +191,7 @@ export default function ConfigChangeLog() {
               group.entries.length === 1 ? (
                 <tr key={group.key} className="hover:bg-surface-2/30 transition-colors group">
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-[10px] font-medium text-muted">
+                    <span className="text-xs font-medium text-muted">
                       {format(group.changedAt, "dd MMM yyyy, HH:mm", { locale: es })}
                     </span>
                   </td>
@@ -200,24 +200,24 @@ export default function ConfigChangeLog() {
                       <div className="w-6 h-6 rounded-lg bg-surface-2 flex items-center justify-center border border-divider group-hover:border-divider">
                         <User className="w-3 h-3 text-muted" />
                       </div>
-                      <span className="text-[11px] font-bold text-foreground">{group.changedByName || 'Sistema'}</span>
+                      <span className="text-xs font-bold text-foreground">{group.changedByName || 'Sistema'}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-1">
-                      <span className="text-[11px] font-black text-foreground uppercase tracking-tight">
+                      <span className="text-xs font-black text-foreground uppercase tracking-tight">
                         {KEY_LABELS[group.entries[0].parameterKey] || group.entries[0].parameterKey}
                       </span>
-                      <code className="text-[9px] text-primary/60 font-mono">{group.entries[0].parameterKey}</code>
+                      <code className="text-xs text-primary/60 font-mono">{group.entries[0].parameterKey}</code>
                     </div>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center justify-center gap-3">
-                      <span className="text-[10px] font-mono text-faint bg-surface-2 px-2 py-0.5 rounded border border-divider/30">
+                      <span className="text-xs font-mono text-muted bg-surface-2 px-2 py-0.5 rounded border border-divider/30">
                         {formatValue(group.entries[0].parameterKey, group.entries[0].oldValue)}
                       </span>
                       <ArrowRight className="w-3 h-3 text-faint" />
-                      <span className="text-[10px] font-mono text-foreground bg-primary-hl px-2 py-0.5 rounded border border-primary/20">
+                      <span className="text-xs font-mono text-foreground bg-primary-hl px-2 py-0.5 rounded border border-primary/20">
                         {formatValue(group.entries[0].parameterKey, group.entries[0].newValue)}
                       </span>
                     </div>
@@ -226,7 +226,7 @@ export default function ConfigChangeLog() {
               ) : (
                 <tr key={group.key} className="hover:bg-surface-2/30 transition-colors group">
                   <td className="px-6 py-4 whitespace-nowrap align-top">
-                    <span className="text-[10px] font-medium text-muted">
+                    <span className="text-xs font-medium text-muted">
                       {format(group.changedAt, "dd MMM yyyy, HH:mm", { locale: es })}
                     </span>
                   </td>
@@ -235,19 +235,19 @@ export default function ConfigChangeLog() {
                       <div className="w-6 h-6 rounded-lg bg-surface-2 flex items-center justify-center border border-divider">
                         <User className="w-3 h-3 text-muted" />
                       </div>
-                      <span className="text-[11px] font-bold text-foreground">{group.changedByName || 'Sistema'}</span>
+                      <span className="text-xs font-bold text-foreground">{group.changedByName || 'Sistema'}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 align-top" colSpan={2}>
                     <div className="space-y-2">
-                      <span className="text-[11px] font-black text-foreground uppercase tracking-tight">
+                      <span className="text-xs font-black text-foreground uppercase tracking-tight">
                         Actualización ({group.entries.length} parámetros)
                       </span>
                       <ul className="space-y-1.5">
                         {group.entries.map((e) => (
-                          <li key={e.id} className="flex flex-wrap items-center gap-2 text-[10px]">
+                          <li key={e.id} className="flex flex-wrap items-center gap-2 text-xs">
                             <span className="font-bold text-foreground">{KEY_LABELS[e.parameterKey] || e.parameterKey}</span>
-                            <span className="font-mono text-faint">{formatValue(e.parameterKey, e.oldValue)}</span>
+                            <span className="font-mono text-muted">{formatValue(e.parameterKey, e.oldValue)}</span>
                             <ArrowRight className="w-3 h-3 text-faint" />
                             <span className="font-mono text-primary">{formatValue(e.parameterKey, e.newValue)}</span>
                           </li>
@@ -260,7 +260,7 @@ export default function ConfigChangeLog() {
             ))}
             {filteredGroups.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-6 py-20 text-center text-faint text-sm italic font-medium">
+                <td colSpan={4} className="px-6 py-20 text-center text-muted opacity-50 text-sm italic font-medium">
                   No se encontraron registros de cambios.
                 </td>
               </tr>

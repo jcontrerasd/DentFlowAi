@@ -14,7 +14,7 @@
 
 import { db } from '@/lib/db';
 import { clinicalCase, fauchardConfig } from '@/lib/db/schema';
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
 import { CASE_STATUSES } from '@/lib/constants/dental';
 import { notifyUser } from '../../services/notifications';
@@ -59,8 +59,8 @@ export async function processDentistReviewDeadlinesAction(): Promise<ActionResul
       );
 
     const now = Date.now();
-    let remindersSent = 0;
-    let overdueNotified = 0;
+    const overdueItems: Array<{ id: string; doctorId: string; caseNumber: string | null }> = [];
+    const reminderItems: Array<{ id: string; doctorId: string; caseNumber: string | null }> = [];
 
     for (const c of cases) {
       if (!c.submittedAt || !c.doctorId) continue;
@@ -69,31 +69,29 @@ export async function processDentistReviewDeadlinesAction(): Promise<ActionResul
       const deadlineMs = new Date(c.submittedAt).getTime() + windowMs;
       const remainingMs = deadlineMs - now;
 
-      if (remainingMs <= 0) {
-        // Vencido (una vez por entrega).
-        if (!c.overdueNotifiedAt) {
-          await db
-            .update(clinicalCase)
-            .set({ reviewOverdueNotifiedAt: new Date() })
-            .where(eq(clinicalCase.id, c.id));
-          await notifyUser(c.doctorId, 'REVISION_PLAZO_VENCIDO', { caseId: c.id, caseNumber: c.caseNumber });
-          overdueNotified++;
-        }
+      if (remainingMs <= 0 && !c.overdueNotifiedAt) {
+        overdueItems.push({ id: c.id, doctorId: c.doctorId, caseNumber: c.caseNumber });
         continue;
       }
-
-      // Recordatorio cuando queda ≤ 25% del plazo (una vez por entrega).
-      if (remainingMs <= windowMs * 0.25 && !c.reminderSentAt) {
-        await db
-          .update(clinicalCase)
-          .set({ reviewReminderSentAt: new Date() })
-          .where(eq(clinicalCase.id, c.id));
-        await notifyUser(c.doctorId, 'REVISION_PLAZO_POR_VENCER', { caseId: c.id, caseNumber: c.caseNumber });
-        remindersSent++;
+      if (remainingMs > 0 && remainingMs <= windowMs * 0.25 && !c.reminderSentAt) {
+        reminderItems.push({ id: c.id, doctorId: c.doctorId, caseNumber: c.caseNumber });
       }
     }
 
-    return { success: true, remindersSent, overdueNotified };
+    // Batch updates + notificaciones en paralelo por grupo
+    const now2 = new Date();
+    await Promise.all([
+      overdueItems.length > 0
+        ? db.update(clinicalCase).set({ reviewOverdueNotifiedAt: now2 }).where(inArray(clinicalCase.id, overdueItems.map(x => x.id)))
+        : Promise.resolve(),
+      reminderItems.length > 0
+        ? db.update(clinicalCase).set({ reviewReminderSentAt: now2 }).where(inArray(clinicalCase.id, reminderItems.map(x => x.id)))
+        : Promise.resolve(),
+      ...overdueItems.map(x => notifyUser(x.doctorId, 'REVISION_PLAZO_VENCIDO', { caseId: x.id, caseNumber: x.caseNumber })),
+      ...reminderItems.map(x => notifyUser(x.doctorId, 'REVISION_PLAZO_POR_VENCER', { caseId: x.id, caseNumber: x.caseNumber })),
+    ]);
+
+    return { success: true, remindersSent: reminderItems.length, overdueNotified: overdueItems.length };
   } catch (error) {
     return { success: false, error: String(error) };
   }

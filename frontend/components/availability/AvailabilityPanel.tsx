@@ -69,9 +69,9 @@ export default function AvailabilityPanel() {
     }
   };
 
-  if (loading) return <p className="text-sm text-faint">Cargando disponibilidad…</p>;
+  if (loading) return <p className="text-sm text-muted">Cargando disponibilidad…</p>;
   if (!status || !status.enabled || !avail) {
-    return <p className="text-sm text-faint">El panel de disponibilidad no está habilitado para tu cuenta.</p>;
+    return <p className="text-sm text-muted">El panel de disponibilidad no está habilitado para tu cuenta.</p>;
   }
 
   const { level, pendingCount } = status;
@@ -83,7 +83,7 @@ export default function AvailabilityPanel() {
         <div className="flex items-center justify-between p-4 rounded-2xl bg-surface-2/40 border border-divider">
           <div>
             <p className="text-sm font-black text-foreground">{label}</p>
-            <p className="text-[10px] text-faint uppercase tracking-wider">Diseño</p>
+            <p className="text-xs text-muted uppercase tracking-wider">Diseño</p>
           </div>
           <Toggle checked={parentOn} onChange={() => updateLevel({ kind: 'capacity', capacidad: cap }, !parentOn)} />
         </div>
@@ -92,13 +92,13 @@ export default function AvailabilityPanel() {
             const val = Boolean(avail[CAT_KEY[cat][cap]]);
             return (
               <div key={cat} className="flex items-center justify-between px-4 py-2.5 rounded-xl hover:bg-surface-2/40">
-                <span className="text-[13px] text-muted">{WORK_CATEGORY_LABELS[cat]}</span>
+                <span className="text-sm text-muted">{WORK_CATEGORY_LABELS[cat]}</span>
                 <Toggle checked={val} disabled={!parentOn} onChange={() => updateLevel({ kind: 'category', categoria: cat, capacidad: cap }, !val)} />
               </div>
             );
           })}
         </div>
-        {!parentOn && <p className="text-[10px] text-faint italic px-1">Activa {label} para gestionar estas categorías.</p>}
+        {!parentOn && <p className="text-xs text-muted italic px-1">Activa {label} para gestionar estas categorías.</p>}
       </div>
     );
   };
@@ -109,7 +109,7 @@ export default function AvailabilityPanel() {
       <div className="flex items-center justify-between p-6 rounded-3xl bg-surface/40 border border-divider">
         <div>
           <h2 className="text-sm font-black text-foreground uppercase tracking-widest">Disponibilidad</h2>
-          <p className="text-[11px] text-faint mt-1 max-w-sm">
+          <p className="text-xs text-muted mt-1 max-w-sm">
             {avail.levelGlobal ? 'Estás disponible para recibir asignaciones.' : 'En pausa: no recibirás nuevas asignaciones.'}
           </p>
         </div>
@@ -125,7 +125,7 @@ export default function AvailabilityPanel() {
       {/* Capacidades y categorías */}
       <div className="p-6 rounded-3xl bg-surface/40 border border-divider space-y-4">
         <h3 className="text-sm font-black text-foreground uppercase tracking-widest">Capacidades y categorías</h3>
-        <p className="text-[11px] text-faint">
+        <p className="text-xs text-muted">
           Recibes asignaciones solo cuando el switch global, la capacidad (CAD) y la categoría están activos. Los valores se preservan aunque pauses la capacidad.
         </p>
         <div className={`flex flex-col md:flex-row gap-6 ${avail.levelGlobal ? '' : 'opacity-60'}`}>

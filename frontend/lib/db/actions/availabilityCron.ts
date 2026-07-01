@@ -17,7 +17,7 @@
 
 import { db } from '@/lib/db';
 import { technicianAvailability, user } from '@/lib/db/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
 import { getActiveConfig } from './fauchard';
 import { expireEventsOutsideWindowAction } from './noResponseEvents';
@@ -69,37 +69,41 @@ export async function processAvailabilityMaintenanceAction(): Promise<ActionResu
         ),
       );
 
-    let autoOffPreventive = 0;
-    let remindersSent = 0;
+    const autoOffIds: string[] = [];
+    const reminderIds: string[] = [];
 
     for (const row of inactive) {
       const activityMs = row.activityAt ? new Date(row.activityAt).getTime() : 0;
-
       if (activityMs < autoOffThresholdMs) {
-        // Auto-OFF preventivo.
-        await db
-          .update(technicianAvailability)
-          .set({ levelGlobal: false, inactivityReminderSentAt: null, updatedAt: new Date() })
-          .where(eq(technicianAvailability.userId, row.userId));
-        await notifyUser(row.userId, 'AUTO_OFF_PREVENTIVO', { days: config.inactivityAutoOffDays });
-        autoOffPreventive++;
+        autoOffIds.push(row.userId);
         continue;
       }
-
       // Recordatorio una sola vez por racha: sin envío previo o anterior a la
       // última actividad (al reactivarse el técnico, la marca queda "vieja").
       const reminderMs = row.reminderSentAt ? new Date(row.reminderSentAt).getTime() : null;
       if (reminderMs === null || reminderMs < activityMs) {
-        await db
-          .update(technicianAvailability)
-          .set({ inactivityReminderSentAt: new Date() })
-          .where(eq(technicianAvailability.userId, row.userId));
-        await notifyUser(row.userId, 'RECORDATORIO_ACTIVIDAD', { days: config.inactivityReminderDays });
-        remindersSent++;
+        reminderIds.push(row.userId);
       }
     }
 
-    return { success: true, windowExpired, autoOffPreventive, remindersSent };
+    // Batch updates + notificaciones en paralelo por grupo
+    const now = new Date();
+    await Promise.all([
+      autoOffIds.length > 0
+        ? db.update(technicianAvailability)
+            .set({ levelGlobal: false, inactivityReminderSentAt: null, updatedAt: now })
+            .where(inArray(technicianAvailability.userId, autoOffIds))
+        : Promise.resolve(),
+      reminderIds.length > 0
+        ? db.update(technicianAvailability)
+            .set({ inactivityReminderSentAt: now })
+            .where(inArray(technicianAvailability.userId, reminderIds))
+        : Promise.resolve(),
+      ...autoOffIds.map(id => notifyUser(id, 'AUTO_OFF_PREVENTIVO', { days: config.inactivityAutoOffDays })),
+      ...reminderIds.map(id => notifyUser(id, 'RECORDATORIO_ACTIVIDAD', { days: config.inactivityReminderDays })),
+    ]);
+
+    return { success: true, windowExpired, autoOffPreventive: autoOffIds.length, remindersSent: reminderIds.length };
   } catch (error) {
     return { success: false, error: String(error) };
   }

@@ -792,17 +792,17 @@ export default function UnifiedCaseHub({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground tracking-tight">Centro de control</h3>
-              <p className="text-[10px] text-faint mt-0.5">Actividad del caso — flujo guiado</p>
+              <p className="text-xs text-muted mt-0.5">Actividad del caso — flujo guiado</p>
               {actingAsCalidad && derivedFromCalidadName && (
                 <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary-hl border border-primary/20 w-fit">
                   <ArrowRightLeft className="w-2.5 h-2.5 text-primary shrink-0" />
-                  <span className="text-[9px] font-medium text-primary">Derivado de {derivedFromCalidadName}</span>
+                  <span className="text-[11px] font-medium text-primary">Derivado de {derivedFromCalidadName}</span>
                 </div>
               )}
               {actingAsCalidad && hasPendingDerivationOutgoing && (
                 <div className="mt-1.5 flex items-center gap-1 px-2 py-0.5 rounded-full bg-warning-hl border border-warning/20 w-fit">
                   <Clock className="w-2.5 h-2.5 text-warning shrink-0" />
-                  <span className="text-[9px] font-medium text-warning">Derivación pendiente de respuesta</span>
+                  <span className="text-[11px] font-medium text-warning">Derivación pendiente de respuesta</span>
                 </div>
               )}
               {shouldShowDesiredDeliveryInUch(caseStatus, clinicalCase?.workDeadline) &&
@@ -823,7 +823,7 @@ export default function UnifiedCaseHub({
                 aria-label="Plazo para elegir oferta"
                 title="Validez de propuesta (horas configuradas en Fauchard)"
               >
-                <span className="text-[8px] font-black text-warning/70 uppercase tracking-widest">
+                <span className="text-[11px] font-black text-warning/70 uppercase tracking-widest">
                   Plazo para elegir oferta
                 </span>
                 <motion.div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-warning-hl border border-warning/20">
@@ -840,7 +840,7 @@ export default function UnifiedCaseHub({
                 aria-label={actingAsTecnico && !actingAsDentista ? 'Plazo de revisión del dentista' : 'Plazo para revisar la entrega'}
                 title="Plazo de revisión del dentista (tDentistReviewHours)"
               >
-                <span className={`text-[8px] font-black uppercase tracking-widest ${reviewExpired ? 'text-error/80' : 'text-warning/70'}`}>
+                <span className={`text-[11px] font-black uppercase tracking-widest ${reviewExpired ? 'text-error/80' : 'text-warning/70'}`}>
                   {actingAsTecnico && !actingAsDentista
                     ? (reviewExpired ? 'Esperando — plazo vencido' : 'Revisión del dentista')
                     : (reviewExpired ? 'Respuesta vencida' : 'Plazo para revisar')}
@@ -862,7 +862,7 @@ export default function UnifiedCaseHub({
                 aria-label="Plazo de revisión de Calidad"
                 title="Plazo de revisión de Calidad (tQualityReviewHours)"
               >
-                <span className={`text-[8px] font-black uppercase tracking-widest ${qualityExpired ? 'text-error/80' : 'text-warning/70'}`}>
+                <span className={`text-[11px] font-black uppercase tracking-widest ${qualityExpired ? 'text-error/80' : 'text-warning/70'}`}>
                   {actingAsTecnico && !actingAsCalidad
                     ? (qualityExpired ? 'Calidad — plazo vencido' : 'Revisión de Calidad')
                     : (qualityExpired ? 'Plazo vencido' : 'Plazo para certificar')}
@@ -891,13 +891,13 @@ export default function UnifiedCaseHub({
               >
                 <ArrowUp className="w-3.5 h-3.5 shrink-0" />
                 <span className="text-[11px] font-black tabular-nums">{newMessageCount}</span>
-                <span className="text-[10px] font-bold uppercase tracking-wide">Nuevo{newMessageCount === 1 ? '' : 's'}</span>
+                <span className="text-xs font-bold uppercase tracking-wide">Nuevo{newMessageCount === 1 ? '' : 's'}</span>
               </button>
             )}
             <button
               onClick={onClose}
               aria-label="Cerrar Centro de Control"
-              className="w-8 h-8 rounded-full hover:bg-surface-off flex items-center justify-center text-faint hover:text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              className="w-8 h-8 rounded-full hover:bg-surface-off flex items-center justify-center text-muted hover:text-foreground transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
             >
               <X className="w-4 h-4" />
             </button>
@@ -935,7 +935,7 @@ export default function UnifiedCaseHub({
           >
             <div className="px-4 py-1.5 border-b border-divider flex-shrink-0 bg-surface">
               <div className="flex items-center gap-2">
-                <span className="text-[9px] uppercase tracking-wide text-faint flex-shrink-0">Fase</span>
+                <span className="text-[11px] uppercase tracking-wide text-muted flex-shrink-0">Fase</span>
                 <div className="flex flex-1 gap-0.5 bg-surface-2 rounded-md p-0.5">
                   {(() => {
                     const hasDerivacionEvents = roleScopedEvents.some((e) =>
@@ -955,8 +955,8 @@ export default function UnifiedCaseHub({
                         key={tab}
                         type="button"
                         onClick={() => setPhaseTab(tab)}
-                        className={`flex-1 py-1 rounded text-[10px] font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
-                          phaseTab === tab ? 'bg-surface-off text-foreground' : 'text-faint hover:text-muted hover:bg-surface-off/60'
+                        className={`flex-1 py-1 rounded text-xs font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                          phaseTab === tab ? 'bg-surface-off text-foreground' : 'text-muted hover:text-foreground hover:bg-surface-off/60'
                         }`}
                       >
                         {labels[tab]}
@@ -978,13 +978,13 @@ export default function UnifiedCaseHub({
               >
                 {showTechRevisionFromDeliveryBanner && techLatestRevisionComment && (
                   <div className="rounded-lg border-l-2 border-warning/20 bg-surface-off/40 pl-3 pr-2 py-2">
-                    <p className="text-[10px] text-faint mb-1">Ajuste requerido por el solicitante</p>
+                    <p className="text-xs text-muted mb-1">Ajuste requerido por el solicitante</p>
                     <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{techLatestRevisionComment}</p>
                   </div>
                 )}
                 {showTechCreationInstructionsBanner && (
                   <div className="rounded-lg border-l-2 border-primary/30 bg-surface-off/40 pl-3 pr-2 py-2">
-                    <p className="text-[10px] text-faint mb-1">Indicaciones del solicitante</p>
+                    <p className="text-xs text-muted mb-1">Indicaciones del solicitante</p>
                     <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{techCreationInstructions}</p>
                   </div>
                 )}
@@ -992,7 +992,7 @@ export default function UnifiedCaseHub({
                   <div className="rounded-xl px-3 py-2.5 border border-primary/20 bg-primary-hl flex items-center gap-2">
                     <Activity className="w-3.5 h-3.5 text-primary flex-shrink-0 animate-pulse" />
                     <div>
-                      <p className="text-[9px] font-bold text-indigo-200 uppercase tracking-widest">Estamos analizando tu caso</p>
+                      <p className="text-[11px] font-bold text-indigo-200 uppercase tracking-widest">Estamos analizando tu caso</p>
                       {elapsedLabel ? <p className="text-[11px] text-foreground">Publicado {elapsedLabel}</p> : null}
                     </div>
                   </div>
@@ -1001,7 +1001,7 @@ export default function UnifiedCaseHub({
                   <div className="rounded-xl px-3 py-2.5 border border-primary/30/25 bg-primary-hl flex items-start gap-2">
                     <Clock className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[9px] font-bold text-primary uppercase tracking-widest">Esperando confirmación de inicio</p>
+                      <p className="text-[11px] font-bold text-primary uppercase tracking-widest">Esperando confirmación de inicio</p>
                       <p className="text-[11px] text-foreground leading-relaxed">
                         Tu aceptación ya está registrada. Cuando el proveedor confirme el inicio del trabajo, verás aquí el avance y el plazo de entrega acordado.
                       </p>
@@ -1032,9 +1032,9 @@ export default function UnifiedCaseHub({
                     <div
                       className={`rounded-xl px-3 py-2.5 border flex items-center gap-2 ${isAlert ? 'border-warning/20 bg-warning-hl' : 'border-divider bg-surface/35'}`}
                     >
-                      <Clock className={`w-3.5 h-3.5 flex-shrink-0 ${isAlert ? 'text-warning' : 'text-faint'}`} />
+                      <Clock className={`w-3.5 h-3.5 flex-shrink-0 ${isAlert ? 'text-warning' : 'text-muted'}`} />
                       <div className="min-w-0">
-                        <p className={`text-[10px] font-medium ${isAlert ? 'text-warning' : 'text-faint'}`}>Plazo de entrega</p>
+                        <p className={`text-xs font-medium ${isAlert ? 'text-warning' : 'text-muted'}`}>Plazo de entrega</p>
                         <p className="text-[11px] text-foreground capitalize leading-snug">
                           {deadlineLabel} · {deadlineTime}
                         </p>
@@ -1294,7 +1294,7 @@ export default function UnifiedCaseHub({
                 </div>
                 <div>
                   <p className="text-xs font-black text-error leading-tight">Caso ya asignado a otro técnico</p>
-                  <p className="text-[10px] text-faint mt-0.5">Solo lectura — puedes consultar el historial de asignaciones.</p>
+                  <p className="text-xs text-muted mt-0.5">Solo lectura — puedes consultar el historial de asignaciones.</p>
                 </div>
               </div>
             </div>

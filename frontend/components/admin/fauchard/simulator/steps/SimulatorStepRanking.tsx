@@ -47,7 +47,7 @@ function AlphaOverrideSlider({
           const v = parseFloat(e.target.value);
           if (!Number.isNaN(v)) onOverrideChange(fieldKey, v);
         }}
-        className="w-[4.5rem] shrink-0 mb-0.5 rounded-lg border border-divider bg-surface px-1.5 py-1 text-[10px] font-mono font-bold text-primary text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30"
+        className="w-[4.5rem] shrink-0 mb-0.5 rounded-lg border border-divider bg-surface px-1.5 py-1 text-xs font-mono font-bold text-primary text-center tabular-nums focus:outline-none focus:ring-2 focus:ring-primary/30"
       />
     </div>
   );
@@ -88,8 +88,8 @@ export default function SimulatorStepRanking({
           <div className="flex items-center justify-between">
             <div className="flex items-start gap-1.5">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-muted">Override α (sandbox)</label>
-                <p className="text-[9px] text-faint mt-0.5">Solo afecta esta corrida; no guarda en Configuración.</p>
+                <label className="text-xs font-bold uppercase tracking-wider text-muted">Override α (sandbox)</label>
+                <p className="text-xs text-muted mt-0.5">Solo afecta esta corrida; no guarda en Configuración.</p>
               </div>
               <SimulatorParamHelpButton focusKey="sim-override" label="Override α (sandbox)" />
             </div>
@@ -111,7 +111,7 @@ export default function SimulatorStepRanking({
               <AlphaOverrideSlider label="L: Carga" fieldKey="alphaLoad" helpKey="alphaLoad" value={configOverride.alphaLoad} onOverrideChange={onOverrideChange} />
               <AlphaOverrideSlider label="N: No-respuesta" fieldKey="alphaNoResponse" helpKey="alphaNoResponse" value={configOverride.alphaNoResponse} onOverrideChange={onOverrideChange} />
               <div
-                className={`flex flex-wrap items-center gap-2 text-[10px] font-bold p-3 rounded-xl border ${
+                className={`flex flex-wrap items-center gap-2 text-xs font-bold p-3 rounded-xl border ${
                   isSumValid ? 'bg-primary/5 border-primary/20 text-primary' : 'bg-error-hl border-error/30 text-error'
                 }`}
               >
@@ -120,7 +120,7 @@ export default function SimulatorStepRanking({
                   <button
                     type="button"
                     onClick={onBalanceOverride}
-                    className="ml-auto text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg border border-current/40 hover:bg-white/5 transition-colors"
+                    className="ml-auto text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-lg border border-current/40 hover:bg-white/5 transition-colors"
                   >
                     Equilibrar a 1.000
                   </button>
@@ -133,9 +133,9 @@ export default function SimulatorStepRanking({
 
       {!result && (
         <div className="p-10 rounded-[2.5rem] border-2 border-dashed border-divider text-center space-y-3">
-          <BarChart3 className="w-8 h-8 text-faint mx-auto" />
+          <BarChart3 className="w-8 h-8 text-muted opacity-50 mx-auto" />
           <h4 className="text-sm font-bold text-foreground">Ranking Q/P/E/B/L/N</h4>
-          <p className="text-faint text-xs max-w-sm mx-auto">
+          <p className="text-muted opacity-50 text-xs max-w-sm mx-auto">
             Ejecuta la simulación para ver el score desglosado de cada técnico y quién encabeza el ranking.
           </p>
         </div>

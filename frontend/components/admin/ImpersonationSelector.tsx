@@ -59,7 +59,7 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
         <ShieldAlert className={`w-4 h-4 ${isSimulating ? 'animate-pulse' : ''}`} />
         {!collapsed && (
           <>
-            <span className="text-[10px] font-bold uppercase tracking-wider">
+            <span className="text-xs font-bold uppercase tracking-wider">
               {isSimulating ? `Mimetizado: ${simulatedProfile?.fullName || 'Usuario'}` : 'Simulación Maestro'}
             </span>
             <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
@@ -84,7 +84,7 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
               <div className="p-5 bg-gradient-to-b from-slate-800/50 to-transparent border-b border-divider">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-primary">Elegir Identidad</h3>
-                    <button onClick={() => setIsOpenWithCallback(false)} className="text-faint hover:text-foreground transition-colors">
+                    <button onClick={() => setIsOpenWithCallback(false)} className="text-muted hover:text-foreground transition-colors">
                         <X className="w-4 h-4" />
                     </button>
                 </div>
@@ -93,19 +93,19 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
                 <div className="p-1 flex gap-1 bg-background/50 rounded-xl">
                     <button 
                     onClick={() => { setRoleMode('dentista'); setSearch(''); }}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${roleMode === 'dentista' ? 'bg-primary text-inverse shadow-lg shadow-sm' : 'text-faint hover:text-muted'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-black uppercase tracking-tighter transition-all ${roleMode === 'dentista' ? 'bg-primary text-inverse shadow-lg shadow-sm' : 'text-muted hover:text-foreground'}`}
                     >
                     <GraduationCap className="w-3.5 h-3.5" /> Dentista
                     </button>
                     <button
                     onClick={() => { setRoleMode('tecnico'); setSearch(''); }}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${roleMode === 'tecnico' ? 'bg-orange-500 text-foreground shadow-lg shadow-orange-500/20' : 'text-faint hover:text-muted'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-black uppercase tracking-tighter transition-all ${roleMode === 'tecnico' ? 'bg-orange-500 text-foreground shadow-lg shadow-orange-500/20' : 'text-muted hover:text-foreground'}`}
                     >
                     <Microscope className="w-3.5 h-3.5" /> Técnico
                     </button>
                     <button
                     onClick={() => { setRoleMode('calidad'); setSearch(''); }}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-all ${roleMode === 'calidad' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' : 'text-faint hover:text-muted'}`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-black uppercase tracking-tighter transition-all ${roleMode === 'calidad' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' : 'text-muted hover:text-foreground'}`}
                     >
                     <ClipboardCheck className="w-3.5 h-3.5" /> Calidad
                     </button>
@@ -115,7 +115,7 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
               {/* Buscador */}
               <div className="px-4 py-3 bg-surface">
                  <div className="relative">
-                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-faint" />
+                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
                    <input 
                      type="text" 
                      placeholder={`Buscar ${roleMode === 'calidad' ? 'revisor' : roleMode}...`}
@@ -131,7 +131,7 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
                 {loadingUsers ? (
                   <div className="py-12 flex flex-col items-center gap-3">
                     <div className="w-6 h-6 border-2 border-primary/20 border-t-teal-500 rounded-full animate-spin" />
-                    <span className="text-[9px] text-faint font-bold uppercase tracking-widest">Consultando DB...</span>
+                    <span className="text-xs text-muted font-bold uppercase tracking-widest">Consultando DB...</span>
                   </div>
                 ) : filteredUsers.length > 0 ? (
                   <div className="space-y-1">
@@ -145,14 +145,14 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
                            <User className="w-5 h-5" />
                          </div>
                          <div className="flex-1 min-w-0">
-                           <p className="text-[11px] font-bold text-foreground truncate group-hover:text-primary transition-colors">{u.fullName}</p>
-                           <p className="text-[9px] text-faint truncate">{u.organizationName || 'Sin Organización'}</p>
+                           <p className="text-xs font-bold text-foreground truncate group-hover:text-primary transition-colors">{u.fullName}</p>
+                           <p className="text-xs text-muted truncate">{u.organizationName || 'Sin Organización'}</p>
                          </div>
                          {roleMode === 'tecnico' && u.pendingInvitations > 0 && (
                            <span
                              title={`${u.pendingInvitations} invitación(es) por cotizar`}
                              aria-label={`${u.pendingInvitations} invitaciones por cotizar`}
-                             className="flex items-center gap-1 min-w-[20px] h-5 px-1.5 rounded-full bg-orange-500/15 text-orange-400 text-[10px] font-black shrink-0"
+                             className="flex items-center gap-1 min-w-[20px] h-5 px-1.5 rounded-full bg-orange-500/15 text-orange-400 text-xs font-black shrink-0"
                            >
                              <Inbox className="w-3 h-3" />
                              {u.pendingInvitations}
@@ -166,8 +166,8 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
                   </div>
                 ) : (
                   <div className="py-10 text-center">
-                     <p className="text-faint text-[10px] font-bold uppercase tracking-wider mb-1">Sin Resultados</p>
-                     <p className="text-[9px] text-faint">Intenta con otro nombre</p>
+                     <p className="text-muted opacity-50 text-xs font-bold uppercase tracking-wider mb-1">Sin Resultados</p>
+                     <p className="text-xs text-muted opacity-50">Intenta con otro nombre</p>
                   </div>
                 )}
               </div>
@@ -177,20 +177,20 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
                 <div className="p-4 border-t border-error/20 bg-error/10">
                   {confirmStop ? (
                     <div className="space-y-3">
-                      <p className="text-[10px] text-error font-semibold text-center leading-snug">
+                      <p className="text-xs text-error font-semibold text-center leading-snug">
                         ¿Salir de la simulación de<br />
                         <span className="font-black">{simulatedProfile?.fullName || 'este usuario'}</span>?
                       </p>
                       <div className="flex gap-2">
                         <button
                           onClick={() => setConfirmStop(false)}
-                          className="flex-1 py-2.5 bg-surface hover:bg-surface-off border border-divider text-foreground text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95"
+                          className="flex-1 py-2.5 bg-surface hover:bg-surface-off border border-divider text-foreground text-xs font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95"
                         >
                           Cancelar
                         </button>
                         <button
                           onClick={() => { stopSimulation(); setIsOpenWithCallback(false); }}
-                          className="flex-1 py-2.5 bg-error hover:bg-error/80 text-inverse text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-sm"
+                          className="flex-1 py-2.5 bg-error hover:bg-error/80 text-inverse text-xs font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-sm"
                         >
                           Sí, salir
                         </button>
@@ -199,7 +199,7 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
                   ) : (
                     <button
                       onClick={() => setConfirmStop(true)}
-                      className="w-full py-3 bg-error hover:bg-error/80 text-inverse text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-sm"
+                      className="w-full py-3 bg-error hover:bg-error/80 text-inverse text-xs font-bold uppercase tracking-wider rounded-xl transition-all active:scale-95 shadow-sm"
                     >
                       Detener Simulación
                     </button>

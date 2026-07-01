@@ -295,7 +295,10 @@ export default function DentalViewer3D({
     }
   };
 
-  const validModels = models.filter(m => !!m.url);
+  const MODEL_LOAD_PRIORITY: Record<string, number> = { superior: 0, inferior: 1, bite: 2 };
+  const validModels = models
+    .filter(m => !!m.url)
+    .sort((a, b) => (MODEL_LOAD_PRIORITY[a.subType.toLowerCase()] ?? 3) - (MODEL_LOAD_PRIORITY[b.subType.toLowerCase()] ?? 3));
 
   return (
     <div 
@@ -337,25 +340,28 @@ export default function DentalViewer3D({
               solo cuando cambian los modelos, NO al agregar/editar pins. */}
           <Center key={validModels.map(m => m.url).join('|')}>
             <group ref={sceneGroupRef}>
-              {/* Suspense por modelo: el primero aparece en pantalla mientras los otros aún parsean */}
+              {/* Suspense + ErrorBoundary por modelo: carga progresiva (superior primero)
+                  y aislamiento de errores — un STL corrupto no bloquea los demás. */}
               {validModels.map((m, idx) => (
-                <Suspense key={`${m.subType}-${idx}`} fallback={null}>
-                  <Model
-                    url={m.url}
-                    color={getColor(m.subType)}
-                    visible={m.visible}
-                    opacity={m.opacity ?? 1}
-                    specularColor={specularColor}
-                    onPointerDown={(e) => {
-                      if (isAnnotateMode && sceneGroupRef.current) {
-                        e.stopPropagation();
-                        const local = sceneGroupRef.current.worldToLocal(e.point.clone());
-                        onAnnotate?.({ x: local.x, y: local.y, z: local.z });
-                        setIsAnnotateMode(false);
-                      }
-                    }}
-                  />
-                </Suspense>
+                <ErrorBoundary key={`${m.subType}-${idx}`} fallback={null}>
+                  <Suspense fallback={null}>
+                    <Model
+                      url={m.url}
+                      color={getColor(m.subType)}
+                      visible={m.visible}
+                      opacity={m.opacity ?? 1}
+                      specularColor={specularColor}
+                      onPointerDown={(e) => {
+                        if (isAnnotateMode && sceneGroupRef.current) {
+                          e.stopPropagation();
+                          const local = sceneGroupRef.current.worldToLocal(e.point.clone());
+                          onAnnotate?.({ x: local.x, y: local.y, z: local.z });
+                          setIsAnnotateMode(false);
+                        }
+                      }}
+                    />
+                  </Suspense>
+                </ErrorBoundary>
               ))}
 
                 {showAnnotations && annotations.map(anno => (
@@ -393,12 +399,12 @@ export default function DentalViewer3D({
           <div className="w-56 bg-surface backdrop-blur-md rounded-xl border border-divider shadow-xl overflow-hidden">
             {/* Header con close */}
             <div className="flex items-center justify-between px-3 py-2 border-b border-divider">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-faint">Controles</span>
+              <span className="text-xs uppercase font-bold tracking-wider text-muted">Controles</span>
               <button
                 onClick={() => setPanelOpen(false)}
                 aria-label="Ocultar controles"
                 title="Ocultar"
-                className="p-1 rounded-md text-faint hover:text-foreground hover:bg-surface-off transition-colors"
+                className="p-1 rounded-md text-muted hover:text-foreground hover:bg-surface-off transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -412,10 +418,10 @@ export default function DentalViewer3D({
                     <button
                       onClick={() => onToggleLayer?.(m.subType)}
                       className={`flex-1 flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg transition-colors ${
-                        m.visible ? 'bg-primary-hl text-foreground' : 'hover:bg-surface-off text-faint'
+                        m.visible ? 'bg-primary-hl text-foreground' : 'hover:bg-surface-off text-muted'
                       }`}
                     >
-                      <span className="text-[10px] uppercase font-bold tracking-tight truncate">{m.subType}</span>
+                      <span className="text-xs uppercase font-bold tracking-tight truncate">{m.subType}</span>
                       {m.visible ? <Eye className="w-3 h-3 shrink-0" /> : <EyeOff className="w-3 h-3 shrink-0 opacity-50" />}
                     </button>
                     {m.visible && (
@@ -440,13 +446,13 @@ export default function DentalViewer3D({
                   aria-pressed={showAnnotations}
                   title={showAnnotations ? 'Ocultar comentarios' : 'Mostrar comentarios'}
                   className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg transition-colors ${
-                    showAnnotations ? 'bg-primary-hl text-foreground' : 'hover:bg-surface-off text-faint'
+                    showAnnotations ? 'bg-primary-hl text-foreground' : 'hover:bg-surface-off text-muted'
                   }`}
                 >
-                  <span className="flex items-center gap-1.5 text-[10px] uppercase font-bold tracking-tight">
+                  <span className="flex items-center gap-1.5 text-xs uppercase font-bold tracking-tight">
                     {showAnnotations ? <MessageSquare className="w-3 h-3 shrink-0" /> : <MessageSquareOff className="w-3 h-3 shrink-0 opacity-50" />}
                     Comentarios
-                    <span className="text-faint font-semibold normal-case">({annotations.length})</span>
+                    <span className="text-muted font-semibold normal-case">({annotations.length})</span>
                   </span>
                   {showAnnotations ? <Eye className="w-3 h-3 shrink-0" /> : <EyeOff className="w-3 h-3 shrink-0 opacity-50" />}
                 </button>
@@ -455,7 +461,7 @@ export default function DentalViewer3D({
 
             {/* Fondo del visor */}
             <div className="p-2 space-y-1.5 border-b border-divider">
-              <p className="text-[10px] uppercase font-bold tracking-wider text-faint">Fondo</p>
+              <p className="text-xs uppercase font-bold tracking-wider text-muted">Fondo</p>
               <div className="grid grid-cols-3 gap-1.5">
                 {(['neutro', 'brand', 'claro'] as ViewerBg[]).map((mode) => {
                   const active = bgMode === mode;
@@ -465,7 +471,7 @@ export default function DentalViewer3D({
                       type="button"
                       onClick={() => setBgModePersist(mode)}
                       aria-pressed={active}
-                      className={`relative py-1.5 rounded-lg text-[10px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
+                      className={`relative py-1.5 rounded-lg text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 ${
                         active
                           ? 'bg-primary-hl text-primary border border-primary/30'
                           : 'text-muted hover:bg-surface-off border border-divider'

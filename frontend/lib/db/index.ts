@@ -22,7 +22,9 @@ const globalForDb = global as unknown as {
 
 export const client = globalForDb.client ?? postgres(connectionString, {
     prepare: false,
-    max: 10 // Limitamos el pool en local para evitar saturación
+    max: 10,           // conexiones máximas por instancia
+    idle_timeout: 20,  // cierra conexiones idle después de 20s (evita picos de latencia por reconexión tardía)
+    connect_timeout: 10, // falla rápido si el pool está saturado, en lugar de colgar indefinidamente
 });
 
 if (process.env.NODE_ENV !== 'production') globalForDb.client = client;
