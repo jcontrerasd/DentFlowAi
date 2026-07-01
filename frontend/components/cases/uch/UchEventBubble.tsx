@@ -790,6 +790,7 @@ export default function UchEventBubble({
             const payload = (event.payload ?? {}) as Record<string, unknown>;
             const ratingNum = Number(payload.rating);
             const rating = Number.isFinite(ratingNum) ? Math.max(0, Math.min(5, Math.round(ratingNum))) : 0;
+            const comment = typeof payload.comment === 'string' ? payload.comment.trim() : '';
             return (
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-primary">
@@ -805,6 +806,12 @@ export default function UchEventBubble({
                   ))}
                   <span className="ml-1 text-[11px] font-semibold text-foreground/95 tabular-nums">{rating}/5</span>
                 </div>
+                {comment ? (
+                  <div className="pl-5 space-y-0.5">
+                    <p className="text-xs font-medium text-muted">Comentario</p>
+                    <p className="text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/95">{comment}</p>
+                  </div>
+                ) : null}
               </div>
             );
           })()}

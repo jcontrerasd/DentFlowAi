@@ -11,6 +11,7 @@ import {
   caseAssignment,
   clinicalCase,
   dentalMaterial,
+  fauchardConfig,
   restorationType as restorationTypeTable,
   review,
   technicianSkill,
@@ -1114,6 +1115,9 @@ export async function getSimulatorSeedFromCaseAction(caseId: string): Promise<
     replacesMissingTeeth: boolean | null;
     complexityMode: 'auto' | 'manual';
     caseComplexity?: import('@/lib/constants/dental').CaseComplexity;
+    fauchardConfigId?: string;
+    fauchardConfigVersion?: number;
+    fauchardConfigCreatedAt?: Date;
   }>
 > {
   const identity = await getServerIdentity();
@@ -1127,12 +1131,16 @@ export async function getSimulatorSeedFromCaseAction(caseId: string): Promise<
         teeth: clinicalCase.teeth,
         replacesMissingTeeth: clinicalCase.replacesMissingTeeth,
         caseComplexity: clinicalCase.caseComplexity,
+        fauchardConfigId: clinicalCase.fauchardConfigId,
+        fauchardConfigVersion: fauchardConfig.version,
+        fauchardConfigCreatedAt: fauchardConfig.createdAt,
         restorationCode: restorationTypeTable.code,
         materialCode: dentalMaterial.code,
         shadeCode: vitaShade.code,
         urgencyLabel: urgencyLevel.label,
       })
       .from(clinicalCase)
+      .leftJoin(fauchardConfig, eq(fauchardConfig.id, clinicalCase.fauchardConfigId))
       .leftJoin(restorationTypeTable, eq(restorationTypeTable.id, clinicalCase.restorationTypeId))
       .leftJoin(dentalMaterial, eq(dentalMaterial.id, clinicalCase.materialId))
       .leftJoin(vitaShade, eq(vitaShade.id, clinicalCase.shadeId))
@@ -1162,6 +1170,11 @@ export async function getSimulatorSeedFromCaseAction(caseId: string): Promise<
       replacesMissingTeeth: row.replacesMissingTeeth,
       complexityMode: caseComplexity ? 'manual' : 'auto',
       ...(caseComplexity ? { caseComplexity } : {}),
+      ...(row.fauchardConfigId ? {
+        fauchardConfigId: row.fauchardConfigId,
+        ...(row.fauchardConfigVersion != null ? { fauchardConfigVersion: row.fauchardConfigVersion } : {}),
+        ...(row.fauchardConfigCreatedAt ? { fauchardConfigCreatedAt: row.fauchardConfigCreatedAt } : {}),
+      } : {}),
     };
   } catch (error) {
     return { success: false, error: String(error) };

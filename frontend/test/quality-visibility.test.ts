@@ -38,7 +38,7 @@ describe('Calidad — visibilidad de eventos (anonimato)', () => {
     expect(visible).toHaveLength(0);
   });
 
-  it('Calidad ve todos los eventos de su caso', () => {
+  it('Calidad ve todos los eventos de su caso (excepto derivaciones de otros)', () => {
     const events = [
       ev(CASE_EVENTS.REVISION_ENVIADA_CALIDAD, 'u-tech', { visibleTo: 'tecnico', qualityScoped: true }),
       ev(CASE_EVENTS.REVISION_SOLICITADA, 'u-dent', { visibleTo: 'ambos' }),
@@ -46,6 +46,67 @@ describe('Calidad — visibilidad de eventos (anonimato)', () => {
     ];
     const visible = filterCaseEventsForUchViewer(events, { id: 'u-cal', role: 'calidad' }, target, null);
     expect(visible).toHaveLength(3);
+  });
+});
+
+describe('Calidad — visibilidad de derivaciones (aislamiento entre revisores)', () => {
+  const QA1 = 'u-qa1';
+  const QA2 = 'u-qa2';
+  const QA3 = 'u-qa3';
+
+  it('el técnico asignado NO ve CASO_DERIVADO_CALIDAD', () => {
+    const events = [ev(CASE_EVENTS.CASO_DERIVADO_CALIDAD, QA1, { visibleTo: 'calidad', fromCalidadId: QA1, toCalidadId: QA2 })];
+    const visible = filterCaseEventsForUchViewer(events, { id: 'u-tech', role: 'tecnico' }, target, null);
+    expect(visible).toHaveLength(0);
+  });
+
+  it('el dentista NO ve CASO_DERIVADO_CALIDAD', () => {
+    const events = [ev(CASE_EVENTS.CASO_DERIVADO_CALIDAD, QA1, { visibleTo: 'calidad', fromCalidadId: QA1, toCalidadId: QA2 })];
+    const visible = filterCaseEventsForUchViewer(events, { id: 'u-dent', role: 'dentista' }, target, null);
+    expect(visible).toHaveLength(0);
+  });
+
+  it('QA1 (origen) SÍ ve la derivación que él inició a QA2', () => {
+    const events = [ev(CASE_EVENTS.CASO_DERIVADO_CALIDAD, QA1, { visibleTo: 'calidad', fromCalidadId: QA1, toCalidadId: QA2 })];
+    const visible = filterCaseEventsForUchViewer(events, { id: QA1, role: 'calidad' }, target, null);
+    expect(visible).toHaveLength(1);
+  });
+
+  it('QA2 (destino) SÍ ve la derivación recibida de QA1', () => {
+    const events = [ev(CASE_EVENTS.CASO_DERIVADO_CALIDAD, QA1, { visibleTo: 'calidad', fromCalidadId: QA1, toCalidadId: QA2 })];
+    const visible = filterCaseEventsForUchViewer(events, { id: QA2, role: 'calidad' }, target, null);
+    expect(visible).toHaveLength(1);
+  });
+
+  it('QA3 (no participante) NO ve el intercambio QA1↔QA2', () => {
+    const events = [
+      ev(CASE_EVENTS.CASO_DERIVADO_CALIDAD, QA1, { visibleTo: 'calidad', fromCalidadId: QA1, toCalidadId: QA2 }),
+      ev(CASE_EVENTS.DERIVACION_CALIDAD_RECHAZADA, QA2, { visibleTo: 'calidad', fromCalidadId: QA2, toCalidadId: QA1 }),
+    ];
+    const visible = filterCaseEventsForUchViewer(events, { id: QA3, role: 'calidad' }, target, null);
+    expect(visible).toHaveLength(0);
+  });
+
+  it('QA1 SÍ ve el rechazo de QA2 (toCalidadId = QA1)', () => {
+    const events = [ev(CASE_EVENTS.DERIVACION_CALIDAD_RECHAZADA, QA2, { visibleTo: 'calidad', fromCalidadId: QA2, toCalidadId: QA1 })];
+    const visible = filterCaseEventsForUchViewer(events, { id: QA1, role: 'calidad' }, target, null);
+    expect(visible).toHaveLength(1);
+  });
+
+  it('QA2 que rechazó SÍ ve el registro de su propio rechazo (fromCalidadId = QA2)', () => {
+    const events = [ev(CASE_EVENTS.DERIVACION_CALIDAD_RECHAZADA, QA2, { visibleTo: 'calidad', fromCalidadId: QA2, toCalidadId: QA1 })];
+    const visible = filterCaseEventsForUchViewer(events, { id: QA2, role: 'calidad' }, target, null);
+    expect(visible).toHaveLength(1);
+  });
+
+  it('QA1 y QA3 (nueva derivación) SÍ ven DERIVACION_CALIDAD_ACEPTADA entre ellos', () => {
+    const events = [ev(CASE_EVENTS.DERIVACION_CALIDAD_ACEPTADA, QA3, { visibleTo: 'calidad', fromCalidadId: QA1, toCalidadId: QA3 })];
+    const visibleQA1 = filterCaseEventsForUchViewer(events, { id: QA1, role: 'calidad' }, target, null);
+    const visibleQA3 = filterCaseEventsForUchViewer(events, { id: QA3, role: 'calidad' }, target, null);
+    const visibleQA2 = filterCaseEventsForUchViewer(events, { id: QA2, role: 'calidad' }, target, null);
+    expect(visibleQA1).toHaveLength(1);
+    expect(visibleQA3).toHaveLength(1);
+    expect(visibleQA2).toHaveLength(0);
   });
 });
 

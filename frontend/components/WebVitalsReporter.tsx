@@ -11,6 +11,7 @@ const ENDPOINT = process.env.NEXT_PUBLIC_LOG_ENDPOINT ?? '/api/telemetry';
  */
 export default function WebVitalsReporter() {
   useReportWebVitals((metric) => {
+    if (process.env.NODE_ENV !== 'production') return;
     const body = JSON.stringify({
       app: 'dentflowai',
       level: 'info',

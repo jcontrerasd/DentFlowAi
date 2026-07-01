@@ -7,12 +7,14 @@ import { db, infraPromise } from "@/lib/db";
 import { user, organization, file, caseAssignment, clinicalCase, userDeletionRequest } from "@/lib/db/schema";
 import { eq, sql, and, isNull, lt, or } from "drizzle-orm";
 import GCPStorageService from "@/lib/services/gcp-storage";
+import { perfLog, perfStart } from '@/lib/perfLog';
 
 /**
  * Obtiene el perfil completo de un usuario, incluyendo su organización.
  * Esta función reemplaza directamente a la query de Data Connect.
  */
 export async function getUserProfileDirect(userId: string) {
+  const t0 = perfStart();
   try {
     const result = await db
       .select({
@@ -57,8 +59,10 @@ export async function getUserProfileDirect(userId: string) {
       .where(eq(user.id, userId))
       .limit(1);
 
+    perfLog('getUserProfile.query', Date.now() - t0, { userId });
     return result[0] || null;
   } catch (error) {
+    perfLog('getUserProfile.error', Date.now() - t0, { userId, error: String(error) });
     console.error("[getUserProfileDirect] Error:", error);
     return null;
   }
@@ -184,6 +188,7 @@ export async function getTabCloseLogoutEnabledAction(): Promise<{ enabled: boole
 }
 
 export async function checkUserStatusAction(email: string) {
+  const t0 = perfStart();
   try {
     const cleanEmail = email.toLowerCase().trim();
     const [existingUser] = await db
@@ -192,9 +197,11 @@ export async function checkUserStatusAction(email: string) {
       .where(sql`LOWER(${user.email}) = ${cleanEmail}`)
       .limit(1);
 
+    perfLog('checkUserStatus.query', Date.now() - t0);
     if (!existingUser) return { exists: false, active: false, emailVerified: false };
     return { exists: true, active: existingUser.isActive, emailVerified: !!existingUser.emailVerified };
   } catch (error) {
+    perfLog('checkUserStatus.error', Date.now() - t0, { error: String(error) });
     console.error("[checkUserStatusAction] Error crítico DB:", error);
     return { exists: false, active: false, emailVerified: false };
   }
@@ -205,6 +212,7 @@ export async function checkUserStatusAction(email: string) {
  * Usado principalmente por administradores para simulación de identidad.
  */
 export async function getUsersByRoleAction(role: 'dentista' | 'tecnico' | 'calidad') {
+  const t0 = perfStart();
   try {
     const results = await db
       .select({
@@ -226,8 +234,10 @@ export async function getUsersByRoleAction(role: 'dentista' | 'tecnico' | 'calid
       .where(eq(user.role, role))
       .limit(50); // Límite razonable para el selector
     
+    perfLog('getUsersByRole.query', Date.now() - t0, { role, count: results.length });
     return results;
   } catch (error) {
+    perfLog('getUsersByRole.error', Date.now() - t0, { role, error: String(error) });
     console.error("[getUsersByRoleAction] Error:", error);
     return [];
   }

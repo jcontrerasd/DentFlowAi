@@ -46,6 +46,7 @@ export default function SimulatorWorkspace({ currentConfig, catalogOptions }: Si
   const [useOverride, setUseOverride] = useState(false);
   const [useAnchoredConfig, setUseAnchoredConfig] = useState(false);
   const [anchoredConfigId, setAnchoredConfigId] = useState('');
+  const [anchoredConfigMeta, setAnchoredConfigMeta] = useState<{ version: number; createdAt: Date } | null>(null);
   const [seedCaseId, setSeedCaseId] = useState('');
   const [seedLoading, setSeedLoading] = useState(false);
   const [teethOverride, setTeethOverride] = useState<number[] | null>(null);
@@ -199,6 +200,14 @@ export default function SimulatorWorkspace({ currentConfig, catalogOptions }: Si
       caseComplexity: res.caseComplexity ?? p.caseComplexity,
     }));
     setTeethOverride(res.teeth);
+    if (useAnchoredConfig && res.fauchardConfigId) {
+      setAnchoredConfigId(res.fauchardConfigId);
+      if (res.fauchardConfigVersion != null && res.fauchardConfigCreatedAt) {
+        setAnchoredConfigMeta({ version: res.fauchardConfigVersion, createdAt: res.fauchardConfigCreatedAt });
+      } else {
+        setAnchoredConfigMeta(null);
+      }
+    }
     setActiveStep('caso');
   };
 
@@ -260,8 +269,8 @@ export default function SimulatorWorkspace({ currentConfig, catalogOptions }: Si
             type="text"
             value={seedCaseId}
             onChange={(e) => setSeedCaseId(e.target.value)}
-            placeholder="DF-0001 o UUID — cargar escenario real"
-            title="Acepta el número de caso (DF-XXXX) o el UUID interno. Copia los parámetros clínicos del caso al simulador."
+            placeholder="DF-0001 — cargar escenario real"
+            title="Acepta el número de caso (DF-XXXX). Copia los parámetros clínicos del caso al simulador."
             className="flex-1 min-w-[10rem] bg-surface border border-divider rounded-lg px-2 py-1 text-foreground"
           />
           <Button
@@ -286,11 +295,14 @@ export default function SimulatorWorkspace({ currentConfig, catalogOptions }: Si
         {useAnchoredConfig && (
           <input
             type="text"
-            value={anchoredConfigId}
-            onChange={e => setAnchoredConfigId(e.target.value)}
-            placeholder="fauchard_config_id (UUID)"
-            title="Usa la misma config que un caso publicado; si está vacío, se usa la config activa."
-            className="flex-1 min-w-[12rem] bg-surface border border-divider rounded-lg px-2 py-1 text-foreground"
+            readOnly
+            value={
+              anchoredConfigMeta
+                ? `v${anchoredConfigMeta.version} · ${anchoredConfigMeta.createdAt.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: '2-digit' })}`
+                : anchoredConfigId.trim() || 'config activa'
+            }
+            title={anchoredConfigId || 'Se usará la config activa'}
+            className="flex-1 min-w-[10rem] bg-surface border border-divider rounded-lg px-2 py-1 text-muted cursor-default select-none"
           />
         )}
       </div>

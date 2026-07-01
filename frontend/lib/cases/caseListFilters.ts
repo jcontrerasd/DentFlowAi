@@ -357,11 +357,16 @@ export function filtersFromDashboardMetricId(
     });
   }
   if (role === 'calidad') {
+    if (metricId === 'porCalificar') {
+      return { ...DEFAULT_CASE_LIST_FILTERS, caseStatuses: [CASE_STATUSES.COMPLETADO], qualityRatingState: 'pending', techPreset: null };
+    }
+    if (metricId === 'completado') {
+      return { ...DEFAULT_CASE_LIST_FILTERS, caseStatuses: [CASE_STATUSES.COMPLETADO], qualityRatingState: 'rated', techPreset: null };
+    }
     const calidadKpiToStatuses: Record<string, string[]> = {
       porCertificar: [CASE_STATUSES.EN_REVISION_CALIDAD],
       certificadas: [CASE_STATUSES.CERTIFICADO_CALIDAD],
       enProceso: [CASE_STATUSES.EN_EJECUCION, CASE_STATUSES.CAMBIOS_EN_PROCESO, CASE_STATUSES.EN_REVISION],
-      completado: [CASE_STATUSES.COMPLETADO],
     };
     const statuses = calidadKpiToStatuses[metricId];
     if (!statuses?.length) return { ...DEFAULT_CASE_LIST_FILTERS };

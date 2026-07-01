@@ -1,8 +1,9 @@
 'use server';
 
 import { db } from '@/lib/db';
-import { clinicalCase, caseAssignment } from '@/lib/db/schema';
-import { and, eq } from 'drizzle-orm';
+import { clinicalCase, caseAssignment, review } from '@/lib/db/schema';
+import { and, eq, sql } from 'drizzle-orm';
+import { isQualityGateEnabled } from '@/lib/constants/qualityFlags';
 import { getServerIdentity } from './impersonation';
 import { perfLog, perfStart } from '@/lib/perfLog';
 import { buildActiveCaseVisibilityWhere } from '@/lib/db/caseListVisibility';
@@ -72,14 +73,27 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
   }
 
   if (isCalidad) {
+    const qualityGateOn = isQualityGateEnabled();
     const rows = await db
-      .select({ status: clinicalCase.status })
+      .select({
+        status: clinicalCase.status,
+        hasQualityReview: qualityGateOn
+          ? sql<boolean>`EXISTS (
+              SELECT 1 FROM review r
+              WHERE r.clinical_case_id = ${clinicalCase.id}
+                AND r.reviewer_id = ${identity.id as string}
+                AND r.dimension = 'quality'
+            )`.as('has_quality_review')
+          : sql<boolean>`true`.as('has_quality_review'),
+      })
       .from(clinicalCase)
       .where(whereClause);
 
     const metrics = initEmptyMetrics(CALIDAD_DASHBOARD_METRICS);
     for (const row of rows) {
-      const kpiId = classifyCalidadCaseKpi(row.status);
+      const kpiId = qualityGateOn
+        ? classifyCalidadCaseKpi(row.status, row.hasQualityReview)
+        : classifyCalidadCaseKpi(row.status);
       metrics[kpiId] = (metrics[kpiId] ?? 0) + 1;
     }
 

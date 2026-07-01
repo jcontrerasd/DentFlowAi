@@ -38,11 +38,17 @@ export function filterCaseEventsForUchViewer<T extends UchFilterableEvent>(
 
     // Calidad ve todo el hilo de su caso asignado, con excepciones específicas.
     if (identity.role === 'calidad') {
-      // El rechazo de una derivación solo lo ve el QA origen (quien recibe la notificación).
-      if (event.action === 'DERIVACION_CALIDAD_RECHAZADA') {
-        const payload = event.payload as Record<string, unknown> | null | undefined;
-        const toCalidadId = payload?.toCalidadId as string | undefined;
-        return toCalidadId != null && String(toCalidadId) === String(identity.id);
+      // Los eventos de derivación solo los ven los dos participantes directos (origen y destino).
+      if (
+        event.action === 'CASO_DERIVADO_CALIDAD' ||
+        event.action === 'DERIVACION_CALIDAD_ACEPTADA' ||
+        event.action === 'DERIVACION_CALIDAD_RECHAZADA'
+      ) {
+        const p = event.payload as Record<string, unknown> | null | undefined;
+        const fromId = p?.fromCalidadId as string | undefined;
+        const toId = p?.toCalidadId as string | undefined;
+        const me = String(identity.id);
+        return (fromId != null && String(fromId) === me) || (toId != null && String(toId) === me);
       }
       return true;
     }
@@ -51,6 +57,7 @@ export function filterCaseEventsForUchViewer<T extends UchFilterableEvent>(
     const visibleTo = payload?.visibleTo as string | undefined;
 
     if (visibleTo === 'sistema') return false;
+    if (visibleTo === 'calidad') return false;
 
     if (identity.role === 'dentista') {
       if (LEGACY_DENTIST_HIDDEN.has(event.action)) return false;
@@ -65,7 +72,7 @@ export function filterCaseEventsForUchViewer<T extends UchFilterableEvent>(
     // otros técnicos invitados/perdedores. El dentista autor las ve por su rama de arriba;
     // admin por el early-return. Funciona con eventos antiguos sin revieweeId (fallback al
     // técnico asignado del caso).
-    if (event.action === 'CALIFICACION_ENVIADA') {
+    if (event.action === 'CALIFICACION_ENVIADA' || event.action === 'CALIFICACION_ENVIADA_CALIDAD') {
       const revieweeId =
         (payload?.revieweeId as string | undefined) ?? targetCase?.assignedTechnicianId ?? null;
       return revieweeId != null && String(revieweeId) === String(identity.id);

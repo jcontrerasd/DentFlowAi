@@ -17,6 +17,7 @@ import { getSignedUrl } from '@/lib/gcs';
 import { getArchivedCaseIdsForUser } from '@/lib/db/caseUserArchiveHelpers';
 import { WORK_CATEGORY_LABELS } from '@/lib/constants/dental';
 import { applyAssignmentArchiveFlags } from '@/lib/assignments/assignmentArchiveFlags';
+import { perfLog, perfStart } from '@/lib/perfLog';
 
 export type AssignmentStatus = 'pending' | 'accepted' | 'rejected' | 'expired';
 
@@ -141,6 +142,7 @@ const assignmentSelect = {
 };
 
 export async function getMyAssignmentsAction(): Promise<AssignmentItem[]> {
+  const t0 = perfStart();
   const identity = await getServerIdentity();
   if (!identity?.id || !canActAsTecnico(identity.role)) return [];
 
@@ -164,8 +166,11 @@ export async function getMyAssignmentsAction(): Promise<AssignmentItem[]> {
 
     const mapped = rows.map((r) => mapRow(r, identity.id as string, allFiles));
     const archivedCaseIds = await getArchivedCaseIdsForUser(identity.id as string);
-    return applyAssignmentArchiveFlags(mapped, archivedCaseIds);
+    const result = applyAssignmentArchiveFlags(mapped, archivedCaseIds);
+    perfLog('getMyAssignments.total', Date.now() - t0, { count: result.length });
+    return result;
   } catch (error) {
+    perfLog('getMyAssignments.error', Date.now() - t0, { error: String(error) });
     console.error('[getMyAssignmentsAction] Error:', error);
     return [];
   }

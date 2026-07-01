@@ -17,6 +17,7 @@ import { WORK_CATEGORIES, type WorkCategory } from '@/lib/constants/dental';
 import { isAvailabilityUiTecnicoEnabled } from '@/lib/constants/availabilityFlags';
 import { computeLevelForTechnicianAction, type TechnicianLevel } from './noResponseEvents';
 import type { ActionResult } from '@/lib/types/actions';
+import { perfLog, perfStart } from '@/lib/perfLog';
 
 export type Capacity = 'cad';
 
@@ -80,16 +81,25 @@ async function createDefaultAvailability(userId: string): Promise<AvailabilityRo
  * crea con la política de migración.
  */
 export async function getAvailabilityForUserAction(userId: string): Promise<ActionResult<{ availability: AvailabilityRow | null }>> {
+  const t0 = perfStart();
   try {
     const [existing] = await db.select().from(technicianAvailability).where(eq(technicianAvailability.userId, userId)).limit(1);
-    if (existing) return { success: true, availability: existing };
+    if (existing) {
+      perfLog('getAvailability.query', Date.now() - t0, { userId, hit: true });
+      return { success: true, availability: existing };
+    }
 
     const [u] = await db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1);
-    if (u?.role !== 'tecnico') return { success: true, availability: null };
+    if (u?.role !== 'tecnico') {
+      perfLog('getAvailability.query', Date.now() - t0, { userId, hit: false });
+      return { success: true, availability: null };
+    }
 
     const created = await createDefaultAvailability(userId);
+    perfLog('getAvailability.created', Date.now() - t0, { userId });
     return { success: true, availability: created };
   } catch (error) {
+    perfLog('getAvailability.error', Date.now() - t0, { userId, error: String(error) });
     return { success: false, error: String(error) };
   }
 }
@@ -138,11 +148,13 @@ export async function updateAvailabilityLevelAction(
     else if (target.kind === 'capacity') patch.levelCad = value;
     else patch[categorySetKey(target.categoria, target.capacidad)] = value;
 
+    const t0update = perfStart();
     const [row] = await db
       .update(technicianAvailability)
       .set(patch as Record<string, unknown>)
       .where(eq(technicianAvailability.userId, input.userId))
       .returning();
+    perfLog('updateAvailabilityLevel.update', Date.now() - t0update, { userId: input.userId, targetKind: target.kind, value });
 
     // Sincronización con el campo legacy `user.is_available`: el switch global v5.0 y
     // el toggle legacy del perfil deben reflejar el mismo estado. Mantenerlos espejados
@@ -220,9 +232,15 @@ export async function computeEligibleAction(
   categoria: WorkCategory,
   capacidad: Capacity,
 ): Promise<boolean> {
+  const t0 = perfStart();
   const [row] = await db.select().from(technicianAvailability).where(eq(technicianAvailability.userId, userId)).limit(1);
-  if (!row) return false;
+  if (!row) {
+    perfLog('computeEligible.query', Date.now() - t0, { userId, result: false, reason: 'no_row' });
+    return false;
+  }
   const catKey = categorySetKey(categoria, capacidad);
-  return Boolean(row.levelGlobal && row.levelCad && row[catKey]);
+  const eligible = Boolean(row.levelGlobal && row.levelCad && row[catKey]);
+  perfLog('computeEligible.query', Date.now() - t0, { userId, categoria, eligible });
+  return eligible;
 }
 

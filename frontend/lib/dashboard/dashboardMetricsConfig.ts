@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { FileText, ShieldCheck, BadgeCheck, Hammer, Layers } from 'lucide-react';
+import { FileText, ShieldCheck, BadgeCheck, Hammer, Layers, Star } from 'lucide-react';
 import {
   getDentistKpiFichaPresentation,
   getTechKpiFichaPresentation,
@@ -72,15 +72,19 @@ export const CALIDAD_DASHBOARD_METRICS: DashboardMetricDef[] = [
   { id: 'porCertificar', label: 'En revisión calidad', statusColorKey: 'enRevision', icon: ShieldCheck, attentionBadge: true },
   { id: 'certificadas', label: 'Listas para enviar', statusColorKey: 'aceptadaPendienteInicio', icon: BadgeCheck },
   { id: 'enProceso', label: 'En proceso', statusColorKey: 'enEjecucion', icon: Hammer },
+  { id: 'porCalificar', label: 'Por calificar', statusColorKey: 'enRevision', icon: Star, attentionBadge: true },
   { id: 'completado', label: 'Completados', statusColorKey: 'completado', icon: Layers },
   { id: 'otros', label: 'Otros', statusColorKey: 'otros', icon: FileText },
 ];
 
-/** Clasifica un caso en un KPI de Calidad. Todos los casos `completado` van a ese bucket
- *  independientemente de si ya tienen calificación de calidad.
+/**
+ * Clasifica un caso en un KPI de Calidad.
+ * Si `hasQualityReview` es `false` (explícito), un caso `completado` va a `porCalificar`.
+ * Con `true` o `undefined` (flag off / sin dato) va a `completado` para mantener backward-compat.
  */
 export function classifyCalidadCaseKpi(
   status: string | null | undefined,
+  hasQualityReview?: boolean,
 ): CalidadKpiId {
   switch (status) {
     case 'enRevisionCalidad': return 'porCertificar';
@@ -88,7 +92,7 @@ export function classifyCalidadCaseKpi(
     case 'enEjecucion':
     case 'cambiosEnProceso':
     case 'enRevision': return 'enProceso';
-    case 'completado': return 'completado';
+    case 'completado': return hasQualityReview === false ? 'porCalificar' : 'completado';
     default: return 'otros';
   }
 }

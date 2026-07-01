@@ -9,6 +9,7 @@ import {
 } from '@/lib/db/schema';
 import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
+import { perfLog, perfStart } from '@/lib/perfLog';
 import { filterCaseEventsForUchViewer } from '@/lib/caseEventsUchFilter';
 import { totalUchHubUnread, type UchUnreadEvent } from '@/lib/uchUnread';
 import { canActAsTecnico } from '@/lib/auth-helpers';
@@ -55,6 +56,7 @@ export async function getCaseHubReadStateAction(caseId: string): Promise<{
   lastReadTechHubAt: string | null;
   lastReadNegHubAt: string | null;
 } | null> {
+  const t0 = perfStart();
   const identity = await getServerIdentity();
   if (!identity?.id) return null;
 
@@ -85,8 +87,10 @@ export async function getCaseHubReadStateAction(caseId: string): Promise<{
     .limit(1);
 
   if (!read) {
+    perfLog('getCaseHubReadState.total', Date.now() - t0, { caseId, found: false });
     return { lastReadTechHubAt: null, lastReadNegHubAt: null };
   }
+  perfLog('getCaseHubReadState.total', Date.now() - t0, { caseId, found: true });
   return {
     lastReadTechHubAt: read.lastReadTechHubAt ? read.lastReadTechHubAt.toISOString() : null,
     lastReadNegHubAt: read.lastReadNegHubAt ? read.lastReadNegHubAt.toISOString() : null,
@@ -190,6 +194,7 @@ async function unreadTotalForCase(
 export async function getHubUnreadCountsForCasesAction(
   caseIds: string[],
 ): Promise<{ byCaseId: Record<string, number>; total: number }> {
+  const t0 = perfStart();
   const identity = await getServerIdentity();
   if (!identity?.id) return { byCaseId: {}, total: 0 };
 
@@ -268,6 +273,7 @@ export async function getHubUnreadCountsForCasesAction(
     }
   }
 
+  perfLog('getHubUnreadCounts.total', Date.now() - t0, { caseCount: unique.length, total });
   return { byCaseId, total };
 }
 

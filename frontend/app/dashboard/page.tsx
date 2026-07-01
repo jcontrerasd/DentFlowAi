@@ -74,7 +74,10 @@ export default function DashboardHome() {
   const dashboardInitialLoadDone = useRef(false);
   const lastFetchRef = useRef<number>(0);
   const isMountedRef = useRef(true);
-  useEffect(() => { return () => { isMountedRef.current = false; }; }, []);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const fetchDashboardData = useCallback(async (opts?: { silent?: boolean }) => {
     if (!userProfile) return;
@@ -208,10 +211,10 @@ export default function DashboardHome() {
 
   // El admin no tiene "Dashboard": su primera pantalla es Observabilidad.
   // Esperar a que el contexto termine de cargar (incluida la resolución de una
-  // simulación pendiente) evita redirigir al admin a Observabilidad en la ventana
-  // transitoria en que userProfile aún es el perfil real del admin y no el simulado.
+  // simulación pendiente) evita redirigir al admin en la ventana transitoria en
+  // que userProfile aún es el perfil real del admin y no el simulado.
   useEffect(() => {
-    if (!authLoading && isAdmin) router.replace('/dashboard/admin/observability');
+    if (!authLoading && isAdmin) router.replace('/dashboard/admin/fauchard/calibracion');
   }, [authLoading, isAdmin, router]);
 
   if (loading || isAdmin) {

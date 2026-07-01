@@ -431,8 +431,11 @@ export async function submitQualityRatingAction(data: {
         payload: {
           dimension: 'quality',
           rating,
+          comment: data.comment?.trim() || null,
           revieweeId: caseRow.assigned_technician_id,
-          visibleTo: 'calidad',
+          // visibleTo:'ambos' expone el evento al dentista y al técnico asignado;
+          // el filtro en caseEventsUchFilter acota al revieweeId para el carril técnico.
+          visibleTo: 'ambos' as const,
         },
       }, tx);
 
