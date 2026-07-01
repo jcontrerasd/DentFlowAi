@@ -105,6 +105,7 @@ export default function AdminLegalCompliancePage() {
 
       {/* Registro de actividades de tratamiento */}
       <div className="bg-surface shadow-sm border border-divider rounded-[2rem] overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead className="bg-surface-2">
             <tr>
@@ -129,6 +130,7 @@ export default function AdminLegalCompliancePage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Historial de solicitudes de eliminación */}

@@ -184,10 +184,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   const menuItems = [
-    // Primera posición: Dashboard para todos los roles, excepto admin que ve
-    // "Observabilidad" en su lugar (solo admin).
+    // Primera posición: Dashboard para todos los roles excepto admin.
     ...(userProfile?.role === 'admin'
-      ? [{ name: 'Observabilidad', icon: Activity, href: '/dashboard/admin/observability' }]
+      ? []
       : [{ name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' }]),
 
     // Rutas para Dentista

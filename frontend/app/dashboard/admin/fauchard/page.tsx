@@ -4,8 +4,7 @@ import { redirect } from 'next/navigation';
 import { getServerIdentity } from '@/lib/db/actions/impersonation';
 import { getFauchardConfigAction } from '@/lib/db/actions/fauchard';
 import { isAvailabilityAdminPanelEnabled } from '@/lib/constants/availabilityFlags';
-import FauchardNav from '@/components/admin/fauchard/FauchardNav';
-import { Settings2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, SlidersHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -38,22 +37,17 @@ export default async function AdminFauchardPage() {
   const config = res.config;
 
   return (
-    <div className="flex flex-col gap-3 p-3 md:p-4 max-w-[1700px] mx-auto">
-      {/* Header compacto + subnav en una fila */}
-      <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0">
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="w-8 h-8 rounded-xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary">
-              <Settings2 className="w-4 h-4" />
+    <div className="flex flex-col gap-3 p-4 md:p-8 max-w-[1700px] mx-auto">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary">
+              <SlidersHorizontal className="w-5 h-5" />
             </div>
-            <div>
-              <h1 className="text-lg font-black text-foreground uppercase tracking-tighter leading-none">Motor Fauchard</h1>
-              <p className="text-[10px] text-faint font-medium hidden sm:block">Parámetros de asignación de técnicos</p>
-            </div>
+            <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter">Configuración</h1>
           </div>
-          <FauchardNav className="mb-0" />
+          <p className="text-faint text-sm font-medium">Parámetros globales del motor de asignación directa.</p>
         </div>
-
         <div className="flex items-center gap-3 px-3 py-1.5 rounded-2xl bg-surface/40 border border-divider shrink-0">
           <div className="flex flex-col items-end">
             <span className="text-[8px] font-bold uppercase tracking-wider text-faint">Versión</span>

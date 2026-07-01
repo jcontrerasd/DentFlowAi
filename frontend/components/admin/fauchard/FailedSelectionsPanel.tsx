@@ -16,15 +16,9 @@ interface Props {
 
 function failureBadge(fc: FailedCase): { label: string; className: string } {
   if (fc.status === 'sin_asignacion_fallo') {
-    return { label: 'Sin asignación', className: 'bg-error-hl text-error border-error/30' };
+    return { label: 'Sin técnicos elegibles', className: 'bg-error-hl text-error border-error/30' };
   }
-  if (fc.internalStatus === 'no_eligible_pool_timeout') {
-    return { label: 'Pool agotado', className: 'bg-warning-hl text-warning border-warning/30' };
-  }
-  if (fc.status === 'sin_cotizaciones_fallo') {
-    return { label: 'Sin respuesta', className: 'bg-error-hl text-error border-error/30' };
-  }
-  return { label: 'Fallo asignación', className: 'bg-error-hl text-error border-error/30' };
+  return { label: 'Pool agotado', className: 'bg-warning-hl text-warning border-warning/30' };
 }
 
 export default function FailedSelectionsPanel({ failedCases }: Props) {
@@ -76,9 +70,6 @@ export default function FailedSelectionsPanel({ failedCases }: Props) {
                 </div>
               </div>
               <p className="text-sm text-muted font-medium">{fc.reason}</p>
-              {fc.internalStatus && (
-                <p className="text-[10px] text-faint mt-1 font-mono">internal: {fc.internalStatus}</p>
-              )}
             </div>
           );
         })}

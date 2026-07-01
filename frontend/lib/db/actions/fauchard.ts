@@ -784,7 +784,6 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
     const now = new Date();
     const startDate = subDays(now, days);
     if (infraPromise) await infraPromise;
-    const config = await getActiveConfig();
 
     const technicians = await db
       .select()
@@ -798,6 +797,7 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
         compensation: caseAssignment.compensation,
         assignedAt: caseAssignment.assignedAt,
         respondedAt: caseAssignment.respondedAt,
+        scoreAtAssignment: caseAssignment.scoreAtAssignment,
       })
       .from(caseAssignment)
       .where(gte(caseAssignment.assignedAt, startDate));
@@ -815,6 +815,7 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
       expiredCount: number;
       compensations: number[];
       responseMinutes: number[];
+      scores: number[];
       lastInvitedAt: Date | null;
     };
 
@@ -833,6 +834,7 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
         expiredCount: 0,
         compensations: [],
         responseMinutes: [],
+        scores: [],
         lastInvitedAt: tech.lastInvitedAt,
       };
     }
@@ -853,13 +855,8 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
       if (row.status === 'rejected') ts.rejectedCount++;
       if (row.status === 'expired') ts.expiredCount++;
       if (row.compensation) ts.compensations.push(row.compensation);
+      if (row.scoreAtAssignment) ts.scores.push(Number(row.scoreAtAssignment));
     }
-
-    const { rankCandidatesForScenario } = await import('./assignment');
-    const { deriveScenarioFromInputs } = await import('@/lib/fauchard/assignmentScenario');
-    const scenario = deriveScenarioFromInputs('Corona Unitaria', []);
-    const ranked = await rankCandidatesForScenario(scenario, config);
-    const scoreByTech = new Map(ranked.map((r) => [r.technicianId, r.score]));
 
     const assignmentsByTechnician = Object.values(techStats).map((ts) => {
       const decided = ts.acceptedCount + ts.rejectedCount;
@@ -875,14 +872,17 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
           ts.responseMinutes.length > 0
             ? ts.responseMinutes.reduce((a, b) => a + b, 0) / ts.responseMinutes.length
             : null,
-        currentScore: scoreByTech.get(ts.technicianId) ?? 0,
+        avgScore:
+          ts.scores.length > 0
+            ? ts.scores.reduce((a, b) => a + b, 0) / ts.scores.length
+            : null,
         daysWithoutAssignment: ts.lastInvitedAt
           ? Math.floor((now.getTime() - new Date(ts.lastInvitedAt).getTime()) / 86400000)
           : 999,
       };
     });
 
-    const sortedByScore = [...assignmentsByTechnician].sort((a, b) => b.currentScore - a.currentScore);
+    const sortedByScore = [...assignmentsByTechnician].sort((a, b) => (b.avgScore ?? 0) - (a.avgScore ?? 0));
     const top25Count = Math.ceil(sortedByScore.length * 0.25);
     const topQuartile = sortedByScore.slice(0, top25Count);
     const totalAssignments = assignmentsByTechnician.reduce((acc, t) => acc + t.assignmentsCount, 0);
@@ -940,7 +940,7 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
       reason:
         c.status === INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO
           ? 'Sin técnicos elegibles para asignar'
-          : 'Pool agotado sin asignación exitosa',
+          : 'No se encontraron técnicos elegibles tras agotar la cola de espera',
       createdAt: c.updatedAt,
     }));
 

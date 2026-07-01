@@ -3,10 +3,8 @@ export const dynamic = 'force-dynamic';
 import { redirect } from 'next/navigation';
 import { getServerIdentity } from '@/lib/db/actions/impersonation';
 import { getFauchardMetricsAction } from '@/lib/db/actions/fauchard';
-import FauchardNav from '@/components/admin/fauchard/FauchardNav';
 import ConcentrationAlert from '@/components/admin/fauchard/ConcentrationAlert';
 import AssignmentDistributionChart from '@/components/admin/fauchard/AssignmentDistributionChart';
-import TechnicianRankingTable from '@/components/admin/fauchard/TechnicianRankingTable';
 import AssignmentMetricsPanel from '@/components/admin/fauchard/AssignmentMetricsPanel';
 import FailedSelectionsPanel from '@/components/admin/fauchard/FailedSelectionsPanel';
 import { Activity, AlertTriangle } from 'lucide-react';
@@ -34,7 +32,6 @@ export default async function AdminFauchardMonitorPage({ searchParams }: { searc
   return (
     <div className="flex flex-col gap-10 p-4 md:p-8 max-w-[1700px] mx-auto">
       <Header days={days} />
-      <FauchardNav />
 
       <div className="space-y-12">
         <ConcentrationAlert alerts={metrics.alerts} topQuartileShare={metrics.topQuartileShare} />
@@ -48,7 +45,6 @@ export default async function AdminFauchardMonitorPage({ searchParams }: { searc
           </div>
         </div>
 
-        <TechnicianRankingTable data={metrics.assignmentsByTechnician} />
         <FailedSelectionsPanel failedCases={metrics.failedCases} />
       </div>
     </div>

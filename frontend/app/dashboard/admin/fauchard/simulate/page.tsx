@@ -9,7 +9,6 @@ import {
   listUrgencyLevelsAction,
 } from '@/lib/db/actions/catalogs';
 import { getFauchardConfigAction } from '@/lib/db/actions/fauchard';
-import FauchardNav from '@/components/admin/fauchard/FauchardNav';
 import SimulatorWorkspace from '@/components/admin/fauchard/simulator/SimulatorWorkspace';
 import { SimulatorHelpHost } from '@/components/admin/fauchard/SimulatorHelp';
 import { FlaskConical, AlertTriangle } from 'lucide-react';
@@ -45,22 +44,17 @@ export default async function AdminFauchardSimulatePage() {
   }
 
   return (
-    <div className="flex flex-col gap-3 p-3 md:p-4 max-w-[1700px] mx-auto">
-      <header className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary shrink-0">
-            <FlaskConical className="w-4 h-4" />
+    <div className="flex flex-col gap-3 p-4 md:p-8 max-w-[1700px] mx-auto">
+      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-primary-hl border border-primary/20 flex items-center justify-center text-primary">
+              <FlaskConical className="w-5 h-5" />
+            </div>
+            <h1 className="text-2xl font-black text-foreground uppercase tracking-tighter">Simulador</h1>
           </div>
-          <div className="min-w-0">
-            <h1 className="text-xl font-black text-foreground uppercase tracking-tighter leading-tight">
-              Simulador Sandbox
-            </h1>
-            <p className="text-faint text-xs font-medium truncate sm:whitespace-normal">
-              Caso virtual, precio de lista y asignación directa con la config activa.
-            </p>
-          </div>
+          <p className="text-faint text-sm font-medium">Caso virtual, precio de lista y asignación directa con la config activa.</p>
         </div>
-        <FauchardNav className="!mb-0 shrink-0" />
       </header>
 
       <SimulatorWorkspace

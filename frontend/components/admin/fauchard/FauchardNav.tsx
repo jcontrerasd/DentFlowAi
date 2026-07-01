@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Settings2, Activity, FlaskConical } from 'lucide-react';
+import { Settings2, Activity, FlaskConical, Gauge } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export default function FauchardNav({ className }: { className?: string }) {
@@ -11,8 +11,9 @@ export default function FauchardNav({ className }: { className?: string }) {
   // Demo guiada (guided-demo) queda descolgada del menú: accesible por URL directa.
   // sandbox-diagram redirige a /simulate (eliminado en favor del funnel workspace).
   const links = [
+    { href: '/dashboard/admin/fauchard/monitor', label: 'Monitoreo', icon: Activity },
+    { href: '/dashboard/admin/fauchard/calibracion', label: 'Diagnóstico', icon: Gauge },
     { href: '/dashboard/admin/fauchard', label: 'Configuración', icon: Settings2 },
-    { href: '/dashboard/admin/fauchard/monitor', label: 'Monitoreo y Equidad', icon: Activity },
     { href: '/dashboard/admin/fauchard/simulate', label: 'Simulador', icon: FlaskConical },
   ];
 

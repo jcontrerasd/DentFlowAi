@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { toggleTechnicianAvailabilityAdminAction } from '@/lib/db/actions/fauchard';
 import {
   User,
   Trophy,
@@ -11,37 +10,25 @@ import {
   Medal,
   TrendingUp
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 
 interface TechnicianRankingTableProps {
   data: any[];
+  days: number;
 }
 
-/** Color de la categoría (badge + texto), consistente en toda la tabla. */
 function leagueColor(league: string): string {
   const l = (league ?? '').toLowerCase();
   if (l === 'elite') return 'text-primary';
   if (l === 'oro') return 'text-warning';
   if (l === 'plata') return 'text-muted';
-  return 'text-orange-600'; // bronce
+  return 'text-orange-600';
 }
 
-export default function TechnicianRankingTable({ data }: TechnicianRankingTableProps) {
-  const [techs, setTechs] = useState(data);
+export default function TechnicianRankingTable({ data, days }: TechnicianRankingTableProps) {
   const [filter, setFilter] = useState('');
   const [leagueFilter, setLeagueFilter] = useState('all');
-  const [processingId, setProcessingId] = useState<string | null>(null);
 
-  const handleToggleAvailability = async (id: string, current: boolean) => {
-    setProcessingId(id);
-    const res = await toggleTechnicianAvailabilityAdminAction(id, !current);
-    if (res.success) {
-      setTechs(prev => prev.map(t => t.technicianId === id ? { ...t, isAvailable: !current } : t));
-    }
-    setProcessingId(null);
-  };
-
-  const filtered = techs.filter(t => {
+  const filtered = data.filter(t => {
     const matchesSearch = t.fullName.toLowerCase().includes(filter.toLowerCase());
     const matchesLeague = leagueFilter === 'all' || t.leagueLevel.toLowerCase() === leagueFilter;
     return matchesSearch && matchesLeague;
@@ -54,7 +41,7 @@ export default function TechnicianRankingTable({ data }: TechnicianRankingTableP
           <Activity className="w-5 h-5 text-primary" />
           <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">Ranking de Técnicos</h3>
         </div>
-        
+
         <div className="flex items-center gap-3 w-full md:w-auto">
           <div className="relative flex-1 md:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-faint" />
@@ -66,7 +53,7 @@ export default function TechnicianRankingTable({ data }: TechnicianRankingTableP
               onChange={(e) => setFilter(e.target.value)}
             />
           </div>
-          <select 
+          <select
             className="bg-surface border border-divider rounded-xl px-3 py-2 text-[11px] font-bold text-muted outline-none uppercase tracking-widest"
             value={leagueFilter}
             onChange={(e) => setLeagueFilter(e.target.value)}
@@ -80,13 +67,13 @@ export default function TechnicianRankingTable({ data }: TechnicianRankingTableP
         </div>
       </div>
 
-      <div className="rounded-[2.5rem] border border-divider overflow-hidden bg-surface/20">
+      <div className="rounded-[2.5rem] border border-divider overflow-x-auto bg-surface/20">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-surface border-b border-divider text-[9px] font-bold uppercase tracking-wider text-faint">
               <th className="px-6 py-5">Técnico</th>
-              <th className="px-6 py-5">Score Actual</th>
-              <th className="px-6 py-5">Desempeño (30d)</th>
+              <th className="px-6 py-5">Score Prom.</th>
+              <th className="px-6 py-5">{`Desempeño (${days}d)`}</th>
               <th className="px-6 py-5">Tasa Resp.</th>
               <th className="px-6 py-5">Últ. Asig.</th>
               <th className="px-6 py-5 text-center">Estado</th>
@@ -101,7 +88,6 @@ export default function TechnicianRankingTable({ data }: TechnicianRankingTableP
                       <div className="w-8 h-8 rounded-xl bg-surface-2 border border-divider flex items-center justify-center text-muted">
                         <User className="w-4 h-4" />
                       </div>
-                      {/* Badge de categoría junto al avatar */}
                       <span
                         className={`absolute -bottom-1.5 -right-1.5 w-4 h-4 rounded-full bg-surface border border-divider flex items-center justify-center ${leagueColor(t.leagueLevel)}`}
                         title={`Categoría: ${t.leagueLevel}`}
@@ -127,53 +113,50 @@ export default function TechnicianRankingTable({ data }: TechnicianRankingTableP
                 <td className="px-6 py-5">
                   <div className="flex items-center gap-2">
                     <Trophy className="w-3 h-3 text-primary" />
-                    <span className="text-xs font-mono font-bold text-foreground">{t.currentScore.toFixed(3)}</span>
+                    {t.avgScore != null
+                      ? <span className="text-xs font-mono font-bold text-foreground">{t.avgScore.toFixed(3)}</span>
+                      : <span className="text-xs font-mono text-faint">—</span>
+                    }
                   </div>
                 </td>
                 <td className="px-6 py-5">
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 text-[10px] font-medium text-muted">
-                      <span>Asig: <b className="text-foreground">{t.assignmentsCount ?? t.invitationsCount ?? 0}</b></span>
+                      <span>Asig: <b className="text-foreground">{t.assignmentsCount}</b></span>
                       <span className="w-1 h-1 bg-surface-off rounded-full" />
-                      <span>Acept: <b className="text-primary">{t.acceptedCount ?? 0}</b></span>
+                      <span>Acept: <b className="text-primary">{t.acceptedCount}</b></span>
                       <span className="w-1 h-1 bg-surface-off rounded-full" />
-                      <span>Exp: <b className="text-warning">{t.expiredCount ?? 0}</b></span>
+                      <span>Exp: <b className="text-warning">{t.expiredCount}</b></span>
                     </div>
                     <div className="w-20 h-1 bg-surface-2 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary"
-                        style={{ width: `${(t.acceptRate ?? t.winRate ?? 0) * 100}%` }}
+                        style={{ width: `${t.acceptRate * 100}%` }}
                       />
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-5">
-                  <span className={`text-[10px] font-mono font-bold ${(t.technicianResponseRate ?? t.responseRate ?? 0) > 0.8 ? 'text-primary' : (t.technicianResponseRate ?? t.responseRate ?? 0) > 0.5 ? 'text-warning' : 'text-error'}`}>
-                    {((t.technicianResponseRate ?? t.responseRate ?? 0) * 100).toFixed(0)}%
+                  <span className={`text-[10px] font-mono font-bold ${t.technicianResponseRate > 0.8 ? 'text-primary' : t.technicianResponseRate > 0.5 ? 'text-warning' : 'text-error'}`}>
+                    {(t.technicianResponseRate * 100).toFixed(0)}%
                   </span>
                 </td>
                 <td className="px-6 py-5">
                   <div className="flex items-center gap-1.5 text-[10px] font-medium text-faint">
                     <Clock className="w-3 h-3" />
-                    {(t.daysWithoutAssignment ?? t.daysWithoutInvitation) === 999 ? 'Nunca' : `${t.daysWithoutAssignment ?? t.daysWithoutInvitation}d ago`}
+                    {t.daysWithoutAssignment === 999 ? 'Nunca' : `hace ${t.daysWithoutAssignment}d`}
                   </div>
                 </td>
                 <td className="px-6 py-5">
                   <div className="flex items-center justify-center">
-                    <button
-                      onClick={() => handleToggleAvailability(t.technicianId, t.isAvailable)}
-                      disabled={processingId === t.technicianId}
-                      className={`
-                        relative w-12 h-6 rounded-full transition-all duration-300 flex items-center px-1
-                        ${t.isAvailable ? 'bg-primary-hl border border-primary/30' : 'bg-error/20 border border-error/20'}
-                        ${processingId === t.technicianId ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
-                      `}
-                    >
-                      <motion.div
-                        animate={{ x: t.isAvailable ? 24 : 0 }}
-                        className={`w-4 h-4 rounded-full shadow-lg ${t.isAvailable ? 'bg-primary' : 'bg-error'}`}
-                      />
-                    </button>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-semibold ${
+                      t.isAvailable
+                        ? 'bg-primary-hl text-primary border-primary/20'
+                        : 'bg-error-hl text-error border-error/30'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${t.isAvailable ? 'bg-primary' : 'bg-error'}`} />
+                      {t.isAvailable ? 'Disponible' : 'No disponible'}
+                    </span>
                   </div>
                 </td>
               </tr>

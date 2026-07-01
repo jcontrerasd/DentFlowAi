@@ -112,27 +112,27 @@ export async function getObservabilityMetricsAction(days = 30): Promise<ActionRe
         GROUP BY ci.clinical_case_id
       ) t
     `);
-    // 13 · funnel
+    // 13 · funnel (flujo v2 solo_diseno)
     const m13 = await one(sql`
       SELECT count(*) FILTER (WHERE published_at IS NOT NULL)::int AS published,
-             count(*) FILTER (WHERE proposal_expires_at IS NOT NULL)::int AS proposal,
-             count(*) FILTER (WHERE assigned_technician_id IS NOT NULL)::int AS accepted,
+             count(*) FILTER (WHERE assigned_technician_id IS NOT NULL)::int AS proposal,
+             count(*) FILTER (WHERE status IN ('enRevision', 'completado') OR completed_at IS NOT NULL)::int AS accepted,
              count(*) FILTER (WHERE completed_at IS NOT NULL)::int AS completed
       FROM clinical_case WHERE published_at > ${windowStart}
     `);
 
     const metrics: ObservabilityMetric[] = [
       { id: 1, label: 'Técnicos en Nivel 2 o 3', hint: 'Si > 30%, suavizar αN o subir umbrales', kind: 'pct', value: pct(Number(m1.at_level ?? 0), Number(m1.total ?? 0)), available: true },
-      { id: 2, label: 'Invitaciones sin respuesta', hint: 'Si crece tras rollout: plazos cortos o sanción mal calibrada', kind: 'pct', value: pct(Number(m2.expired ?? 0), Number(m2.total ?? 0)), available: true },
+      { id: 2, label: 'Asignaciones sin respuesta', hint: 'Si crece: plazo de respuesta corto o sanción mal calibrada', kind: 'pct', value: pct(Number(m2.expired ?? 0), Number(m2.total ?? 0)), available: true },
       { id: 3, label: 'Auto-OFF preventivos', hint: 'Requiere historial de auto-OFF (Fase 6)', kind: 'pct', value: null, available: false },
       { id: 4, label: 'Reactivación < 7d post auto-OFF', hint: 'Requiere historial de auto-OFF (Fase 6)', kind: 'pct', value: null, available: false },
       { id: 5, label: 'Casos en espera de pool', hint: 'Si > 20%: problema de oferta, no de parámetros', kind: 'pct', value: pct(Number(m5.pooled ?? 0), Number(m5.active ?? 0)), available: true },
       { id: 6, label: 'Reemplazos exitosos', hint: 'Si < 20%, ajustar replacementCutoffMinutes', kind: 'pct', value: pct(Number(m6.ok ?? 0), Number(m6.total ?? 0)), available: true },
       { id: 7, label: 'Respuesta media del dentista', hint: 'Si la mayoría < 24h, bajar tDentistReviewHours', kind: 'hours', value: m7.h != null ? Number(m7.h) : null, available: true },
-      { id: 8, label: 'Score promedio al invitar', hint: 'Si todo en franja angosta, re-tunear α', kind: 'num', value: m8.avg != null ? Number(m8.avg) : null, available: true },
+      { id: 8, label: 'Score promedio al asignar', hint: 'Si todo en franja angosta, re-tunear α', kind: 'num', value: m8.avg != null ? Number(m8.avg) : null, available: true },
       { id: 9, label: 'Rechazo explícito vs no-respuesta', hint: 'Si es bajo, el botón "Rechazar" no es visible/claro', kind: 'pct', value: pct(Number(m9.explicit ?? 0), Number(m9.explicit ?? 0) + Number(m9.expired ?? 0)), available: true },
-      { id: 10, label: 'Tiempo medio del técnico al cotizar', hint: 'Muy bajo = sobre-compromiso; muy alto = saturación', kind: 'minutes', value: m10.m != null ? Number(m10.m) : null, available: true },
-      { id: 11, label: 'Cotizaciones por caso', hint: 'Si la mayoría recibe 1, falta oferta o nInvited bajo', kind: 'num', value: m11.avg != null ? Number(m11.avg) : null, available: true },
+      { id: 10, label: 'Tiempo medio del técnico al responder', hint: 'Muy bajo = sobre-compromiso; muy alto = saturación', kind: 'minutes', value: m10.m != null ? Number(m10.m) : null, available: true },
+      { id: 11, label: 'Asignaciones por caso', hint: 'Si la mayoría recibe 1, falta oferta o nInvited bajo', kind: 'num', value: m11.avg != null ? Number(m11.avg) : null, available: true },
       { id: 12, label: 'Check-ins respondidos', hint: 'Requiere tracking de respuesta al check-in (Fase 6)', kind: 'pct', value: null, available: false },
     ];
 

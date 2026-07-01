@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getServerIdentity } from '@/lib/db/actions/impersonation';
-import FauchardNav from '@/components/admin/fauchard/FauchardNav';
 import GuidedDemoClient from './GuidedDemoClient';
 import { BookOpen } from 'lucide-react';
 
@@ -34,8 +33,6 @@ export default async function GuidedDemoPage() {
           </p>
         </div>
       </header>
-
-      <FauchardNav />
 
       <GuidedDemoClient />
     </div>
