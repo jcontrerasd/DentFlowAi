@@ -7,54 +7,39 @@ This version has breaking changes — APIs, conventions, and file structure may 
 ## Reglas de convención DentFlowAi (Next.js 15 / React 19)
 
 ### Identidad y autenticación
-- **Siempre** usar `getServerIdentity()` de `@/lib/db/actions/impersonation` para obtener `userId` y `role` en Server Actions. Nunca leer el JWT directamente.
-- En Client Components: `useAuth()` de `@/context/AuthContext`. El perfil puede ser simulado (impersonación admin).
-- Para impersonación en el UCH: `uchPresentationRole` se pasa explícitamente al componente desde la página.
+- **Siempre** usar `getServerIdentity()` de `@/lib/db/actions/impersonation` en Server Actions. Nunca leer el JWT directamente.
+- En Client Components: `useAuth()` de `@/context/AuthContext`.
+- Para impersonación en el UCH: `uchPresentationRole` se pasa explícitamente desde la página.
 
 ### Server Actions
 - Viven solo en `frontend/lib/db/actions/*.ts`.
 - Retornan `{ success: boolean; data?: T; error?: string }`.
 - Validar `identity.role` antes de cualquier mutación.
-- No crear API routes para mutaciones internas.
 
 ### Componentes
-- Client Components solo con `'use client'`; Server Components por defecto.
 - Rutas `[id]` son Client Components → `useParams()`, no `await params`.
-- Feedback: `useToast()` de `@/context/ToastContext`. Nunca `alert()`.
-- Iconos: solo `lucide-react`.
-- Estilos: solo Tailwind utility classes.
+- Feedback: `useToast()`. Iconos: solo `lucide-react`. Estilos: solo Tailwind.
 
 ### UCH — reglas específicas
-- No crear overlays `fixed inset-0` dentro del UCH para acciones del caso.
-- Las acciones van embebidas en el hilo como filas expandibles (`buildUchTimelineRows`).
-- El countdown de **aceptación de asignación** va **solo** en el header del UCH (técnico), no duplicado en la ficha.
+- No crear overlays `fixed inset-0` dentro del UCH. Las acciones van embebidas en el hilo como filas expandibles (`buildUchTimelineRows`).
+- El countdown de aceptación de asignación va **solo** en el header del UCH (técnico).
 - No desmontar el UCH al cerrar el panel — usar `uchPanelMounted` + animación `framer-motion`.
-- Para el carril de burbujas: usar `resolveUchThreadLane()` de `lib/uchThreadLane.ts`, no implementar lógica propia.
-- El split de `CASO_PUBLICADO` para dentistas está en `lib/uchCasoPublicadoSplit.ts` — aplicar en `filteredEvents` del UCH, no en el servidor.
+- Carril de burbujas: usar `resolveUchThreadLane()` de `lib/uchThreadLane.ts`, no implementar lógica propia.
+- Split de `CASO_PUBLICADO` para dentistas: aplicar en `filteredEvents` del UCH (cliente), no en servidor.
 
 ### Base de datos
-- No escribir SQL ni queries Drizzle fuera de `frontend/lib/db/actions/`.
-- Migraciones: solo vía `infrastructure.ts` en runtime. NO usar `drizzle-kit push` en producción.
-- `logCaseEvent()` de `cases.ts` para registrar cualquier evento en el hilo UCH.
+- No escribir queries Drizzle fuera de `frontend/lib/db/actions/`.
+- Migraciones: solo vía `infrastructure.ts` en runtime.
+- `logCaseEvent()` de `cases.ts` para registrar eventos en el hilo UCH.
 
-### Tipos de servicio y asignación (producto activo)
-- `SERVICE_TYPES` en `dental.ts` expone solo `solo_diseno`. Asignación directa: `publishCaseAction` → `classifyCaseAction` → `runAssignmentAction` → `assignCaseAction` con score **Q/P/E/B/L/N** (`assignmentScore.ts`).
-- Wizard (`CaseCreationWizard`): solo diseño + scans; sin radio de 3 tipos. Publicar requiere regla de precio (`listPriceSale`).
-- Técnico **acepta o rechaza** la asignación — no cotiza. Precio/plazo vienen de catálogo + `desiredDeliveryAt`.
-- Legacy en schema/BD: `integral`/`solo_fabricacion`, `submitQuoteAction`, comparativo — no usar en flujos nuevos.
+### Producto activo: `solo_diseno` con asignación directa CAD/CAM
+- Flujo: `publishCaseAction` → `classifyCaseAction` → `runAssignmentAction` (score Q/P/E/B/L/N).
+- Técnico **acepta o rechaza** — no cotiza. Precio/plazo vienen de catálogo.
+- Rechazo individual (flag `REJECTION_INDIVIDUAL_ENABLED`): `UchRejectInvitationDialog` → `rejectInvitationIndividualAction` → `tryReplaceAfterRejectAction`. No cuenta como no-respuesta.
+- `integral`/`solo_fabricacion` y flujo de cotización son **legacy** — no usar en flujos nuevos.
+
+### Notificaciones
+- Via **EmailJS** en `lib/services/notifications.ts`. Envío real gated por `NOTIFICATIONS_LIVE`.
 
 ### Tests
-- Vitest + Testing Library. Archivos en `frontend/test/`.
-- Correr `npm run type-check` y, cuando aplique, `npm run test:run` antes de marcar una tarea como completada.
-
-### Dirección geográfica del usuario (v5.7)
-- Columnas en tabla `user`: `country`, `region`, `comuna`, `address`, `address_number` (`addressNumber`), `address_office` (`addressOffice`). Todas TEXT nullable.
-- Datos geográficos en `lib/constants/addressData.ts`: `REGIONS_BY_COUNTRY` (9 países; Chile completo) y `SUPPORTED_COUNTRIES`. Importar desde `@/lib/constants/addressData`.
-- Selects en cascada País → Región → Comuna en registro (`auth/register`) y perfil (`dashboard/profile`) para ambos roles.
-
-### Disponibilidad del técnico (v5.0, flag `AVAILABILITY_MODEL_ENABLED`)
-- 3 niveles jerárquicos (global · CAD/CAM · 7 categorías) → regla AND triple en `availability.ts`. Rechazo individual ≠ rechazo masivo.
-- **Rechazo individual en UCH** (flag `REJECTION_INDIVIDUAL_ENABLED`): botón "Rechazar asignación" en `UchFauchardActionsPanel` → `UchRejectInvitationDialog` → `rejectInvitationIndividualAction`. Solo el técnico asignado mientras la asignación esté `pending`. No cuenta como no-respuesta; dispara reemplazo automático (`tryReplaceAfterRejectAction`).
-- Sanción rolling 14d (`noResponseEvents.ts`): nivel 3 = auto-OFF. Cola `pendiente_pool` (`poolQueue.ts`) cuando no hay elegibles.
-- **Crons (v5.0)**: `/api/cron/process-availability` (hora) y `/api/cron/process-pool-queue` (cada 2 min), header `Authorization: Bearer ${CRON_SECRET}`, inertes con el flag off.
-- Notificaciones via **EmailJS** (no Resend) en `lib/services/notifications.ts`. **Envío real gated por `NOTIFICATIONS_LIVE`** — si no es `true`, `notifyUser` loguea sin enviar.
+- Correr `npm run type-check` y `npm run test:run` antes de marcar una tarea como completada.
