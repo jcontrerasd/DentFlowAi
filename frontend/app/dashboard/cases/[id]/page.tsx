@@ -17,6 +17,7 @@ import {
   Upload,
   RotateCcw,
   Globe,
+  ChevronDown,
 } from 'lucide-react';
 import { creationInstructionsText } from '@/lib/cases/instructions';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
@@ -359,6 +360,7 @@ function CaseDetailPageContent() {
   // Cumplimiento legal (Ley 21.719 / Ley 20.584): declaración del dentista de contar con el
   // consentimiento del paciente, requerida para publicar. Se reinicia cada vez que se abre el modal.
   const [patientConsentChecked, setPatientConsentChecked] = useState(false);
+  const [consentExampleOpen, setConsentExampleOpen] = useState(false);
   // v5.0 — pendiente_pool / republicar (modelo de disponibilidad).
   const [republicarOpen, setRepublicarOpen] = useState(false);
   const [checkInOpen, setCheckInOpen] = useState(false);
@@ -2298,17 +2300,19 @@ function CaseDetailPageContent() {
                           ? String(res.caseNumber)
                           : res.newCaseId.slice(0, 8);
                       showSuccessToastMessage(`Copia creada: ${label}`);
-                      setClinicalCase(null);
-                      setCaseEvents([]);
+                      // No apagar isCloning en éxito — el overlay cubre el flash
+                      // de "Caso no encontrado" hasta que el nuevo route desmonte.
                       router.replace(`/dashboard/cases/${res.newCaseId}`);
                     } else {
+                      setIsCloning(false);
                       showErrorToast(
                         (!res.success && 'error' in res ? res.error : null) ||
                           'No se pudo crear la copia',
                       );
                     }
-                  } finally {
+                  } catch {
                     setIsCloning(false);
+                    showErrorToast('No se pudo crear la copia');
                   }
                 }}
                 onDownloadCase={() => void handleDownloadCase()}
@@ -3283,7 +3287,7 @@ function CaseDetailPageContent() {
             initial={{ opacity: 0, scale: 0.92, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 20 }}
-            className="bg-surface/98 backdrop-blur-xl border border-primary/30 p-8 rounded-[2.5rem] max-w-lg w-full shadow-[0_50px_100px_rgba(20,184,166,0.15)] space-y-6"
+            className="bg-surface/98 backdrop-blur-xl border border-primary/30 p-8 rounded-[2.5rem] max-w-lg w-full max-h-[85vh] overflow-y-auto shadow-[0_50px_100px_rgba(20,184,166,0.15)] space-y-6"
           >
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 bg-primary-hl rounded-2xl flex items-center justify-center text-primary flex-shrink-0">
@@ -3314,7 +3318,7 @@ function CaseDetailPageContent() {
             {/* Resumen del caso (UX-019) */}
             <div className="rounded-2xl border border-divider bg-surface-2 p-4">
               <p className="mb-3 text-[9px] font-bold uppercase tracking-wider text-faint">Resumen del caso</p>
-              <div className="max-h-[min(52vh,28rem)] space-y-2.5 overflow-y-auto pr-1">
+              <div className="max-h-[min(30vh,16rem)] space-y-2.5 overflow-y-auto pr-1">
                 {buildPublishCaseSummaryRows(clinicalCase).map(r => (
                   <div key={r.label} className="flex items-start justify-between gap-3 text-xs">
                     <span className="shrink-0 text-faint">{r.label}</span>
@@ -3325,18 +3329,42 @@ function CaseDetailPageContent() {
             </div>
 
             {/* Cumplimiento legal (Ley 21.719 / Ley 20.584) — declaración del dentista, no firma del paciente */}
-            <label className="flex items-start gap-3 rounded-2xl border border-divider bg-surface-2 p-4 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={patientConsentChecked}
-                onChange={(e) => setPatientConsentChecked(e.target.checked)}
-                className="mt-0.5 w-4 h-4 accent-primary shrink-0"
-              />
-              <span className="text-xs text-foreground leading-relaxed">
-                Declaro contar con el consentimiento del paciente para el tratamiento de sus datos clínicos
-                (Ley 21.719 / Ley 20.584).
-              </span>
-            </label>
+            <div className="rounded-2xl border border-divider bg-surface-2 p-4 space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={patientConsentChecked}
+                  onChange={(e) => setPatientConsentChecked(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-primary shrink-0"
+                />
+                <span className="text-xs text-foreground leading-relaxed">
+                  Declaro contar con el consentimiento del paciente para el tratamiento de sus datos clínicos
+                  (Ley 21.719 / Ley 20.584).
+                </span>
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setConsentExampleOpen(o => !o)}
+                className="flex items-center gap-1 text-[11px] text-faint hover:text-foreground transition-colors duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 rounded-sm"
+              >
+                <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${consentExampleOpen ? 'rotate-180' : ''}`} />
+                {consentExampleOpen ? 'Ocultar ejemplos' : '¿Qué cuenta como consentimiento?'}
+              </button>
+
+              <div className={`overflow-hidden transition-all duration-200 ${consentExampleOpen ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className="pt-1 border-t border-divider">
+                  <p className="text-[11px] text-faint leading-relaxed mt-2">
+                    Cualquier documento donde el paciente haya autorizado el uso de sus datos clínicos para la elaboración de su restauración. Por ejemplo:
+                  </p>
+                  <ul className="mt-1.5 space-y-1 text-[11px] text-faint list-disc list-inside">
+                    <li>Ficha clínica firmada</li>
+                    <li>Formulario de consentimiento informado (físico o digital)</li>
+                    <li>Autorización registrada en ficha electrónica</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
 
             <div className="flex gap-4">
               <Button variant="ghost" className="flex-1 py-3.5" onClick={() => setIsPublishing(false)}>
