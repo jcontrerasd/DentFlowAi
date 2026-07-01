@@ -4,6 +4,7 @@ import { es } from 'date-fns/locale';
 
 interface FailedCase {
   caseId: string;
+  caseNumber?: string | null;
   reason: string;
   status?: string;
   internalStatus?: string | null;
@@ -59,7 +60,7 @@ export default function FailedSelectionsPanel({ failedCases }: Props) {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-medium text-muted uppercase tracking-wider">
-                      Caso: {fc.caseId.slice(0, 8)}…
+                      {fc.caseNumber ?? fc.caseId.slice(0, 8)}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted">

@@ -917,6 +917,7 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
     const failedCasesData = await db
       .select({
         caseId: clinicalCase.id,
+        caseNumber: clinicalCase.caseNumber,
         status: clinicalCase.status,
         internalStatus: clinicalCase.internalStatus,
         updatedAt: clinicalCase.updatedAt,
@@ -941,6 +942,7 @@ export async function getFauchardMetricsAction(days: number = 30): Promise<Actio
 
     const failedCases = failedCasesData.map((c) => ({
       caseId: c.caseId,
+      caseNumber: c.caseNumber,
       status: c.status,
       internalStatus: c.internalStatus,
       reason:
