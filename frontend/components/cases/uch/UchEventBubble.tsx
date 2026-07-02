@@ -4,7 +4,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Image from 'next/image';
 import {
-  Activity, AlertCircle, Box, CheckCircle2, ChevronDown, Download, Eye, FileCheck2, FileText, GitBranch, Hammer, MessageSquareWarning, ShieldAlert, Star, User, XCircle,
+  Activity, AlertCircle, Box, CheckCircle2, CornerDownRight, Download, FileCheck2, FileText, GitBranch, Hammer, MessageSquareWarning, ScanSearch, ShieldAlert, Star, User, XCircle,
 } from 'lucide-react';
 import UchDeriveQualityDialog from '@/components/cases/uch/UchDeriveQualityDialog';
 import { resolveUchThreadLane } from '@/lib/uchThreadLane';
@@ -36,7 +36,7 @@ function QualityReviewControls({
   onCertifyQuality?: (comment: string) => Promise<boolean | void>;
   onQualityRequestChanges?: (reason: string) => Promise<boolean | void>;
   onDeriveQuality?: () => void;
-  onViewRejectedDelivery?: (deliveryId: string, version: number, files: string[]) => void;
+  onViewRejectedDelivery?: (deliveryId: string, version: number, files: string[], reason?: string) => void;
   caseId: string;
   comment: string;
   setComment: (v: string) => void;
@@ -48,50 +48,29 @@ function QualityReviewControls({
   const [changesStep, setChangesStep] = React.useState<'choose' | 'confirm'>('choose');
   const [busy, setBusy] = React.useState<null | 'certify' | 'changes'>(null);
   const [deriveOpen, setDeriveOpen] = React.useState(false);
-  const [contextExpanded, setContextExpanded] = React.useState(true);
 
   return (
     <div className={`pt-2 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'} space-y-2`}>
       {dentistRejectionContext && (
-        <div className="rounded-md border border-warning/40 bg-warning/5 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setContextExpanded((v) => !v)}
-            className="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-left hover:bg-warning/10 transition-colors"
-          >
-            <div className="flex items-center gap-1.5 text-warning">
-              <AlertCircle className="w-3 h-3 flex-shrink-0" aria-hidden />
-              <span className="text-[11px] font-semibold">
-                Ajuste solicitado por el solicitante (v{dentistRejectionContext.version})
-              </span>
-            </div>
-            <ChevronDown
-              className={`w-3 h-3 text-warning/70 transition-transform duration-150 ${contextExpanded ? 'rotate-180' : ''}`}
-              aria-hidden
-            />
-          </button>
-          {contextExpanded && (
-            <div className="px-2.5 pb-2 space-y-2">
-              <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
-                {dentistRejectionContext.reason}
-              </p>
-              {dentistRejectionContext.files.length > 0 && onViewRejectedDelivery && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onViewRejectedDelivery(
-                      dentistRejectionContext.deliveryId,
-                      dentistRejectionContext.version,
-                      dentistRejectionContext.files,
-                    )
-                  }
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:text-primary/80 transition-colors"
-                >
-                  <Eye className="w-3 h-3" aria-hidden />
-                  Ver entrega marcada
-                </button>
-              )}
-            </div>
+        <div className="flex items-center gap-1.5 text-[11px] text-muted">
+          <CornerDownRight className="w-3 h-3 flex-shrink-0" aria-hidden />
+          <span>Calidad solicitó ajustes en v{dentistRejectionContext.version}</span>
+          {dentistRejectionContext.files.length > 0 && onViewRejectedDelivery && (
+            <button
+              type="button"
+              onClick={() =>
+                onViewRejectedDelivery(
+                  dentistRejectionContext.deliveryId,
+                  dentistRejectionContext.version,
+                  dentistRejectionContext.files,
+                  dentistRejectionContext.reason,
+                )
+              }
+              className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border border-warning/40 text-warning hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warning/40 transition-colors"
+            >
+              <ScanSearch className="w-3 h-3" aria-hidden />
+              Ver ajuste en 3D
+            </button>
           )}
         </div>
       )}
@@ -241,7 +220,7 @@ type UchEventBubbleProps = {
   onDownloadRevisionZip?: (zipKey: string, versionLabel: string, files: string[]) => void | Promise<void>;
   downloadingRevisionZipId?: string | null;
   /** Visor 3D: abre el modal de revisión 3D para una entrega. */
-  onView3D?: (deliveryId: string, version: number, files: string[], dentistNote?: string) => void;
+  onView3D?: (deliveryId: string, version: number, files: string[], dentistNote?: string, readonly?: boolean) => void;
   /** true cuando esta burbuja corresponde a la entrega pendiente de revisión (dentista). */
   isPendingDelivery?: boolean;
   /** Handlers de revisión movidos desde UchDentistReviewPanel */
@@ -271,7 +250,7 @@ type UchEventBubbleProps = {
   qualityAttachments?: File[];
   setQualityAttachments?: (files: File[]) => void;
   /** Abre el visor 3D de la entrega rechazada por el dentista (en modo solo lectura). */
-  onViewRejectedDelivery?: (deliveryId: string, version: number, files: string[]) => void;
+  onViewRejectedDelivery?: (deliveryId: string, version: number, files: string[], reason?: string) => void;
 };
 
 export default function UchEventBubble({
@@ -311,6 +290,7 @@ export default function UchEventBubble({
   const { lane, showAsFauchard } = resolveUchThreadLane(event, {
     actingAsDentista,
     actingAsTecnico,
+    actingAsCalidad,
     viewingAsAdmin,
     currentUserId: currentUser?.id,
     uchPresentationRole,
@@ -676,7 +656,7 @@ export default function UchEventBubble({
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 text-warning">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="text-[11px] font-bold">Ajuste requerido por el solicitante</span>
+                  <span className="text-[11px] font-bold">Solicitud de Ajuste</span>
                 </div>
                 <p className="text-xs font-medium text-muted">Detalle del ajuste</p>
                 {adjustmentText ? (
@@ -688,11 +668,11 @@ export default function UchEventBubble({
                   <div className={`pt-1.5 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'}`}>
                     <button
                       type="button"
-                      onClick={() => onView3D!(solDeliveryId ?? event.id, solVersion ?? 1, solFiles, adjustmentText || undefined)}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border border-jade/30 text-jade hover:bg-jade-hl hover:text-jade-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-jade/30 transition-colors"
+                      onClick={() => onView3D!(solDeliveryId ?? event.id, solVersion ?? 1, solFiles, adjustmentText || undefined, true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border border-warning/40 text-warning hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warning/40 transition-colors"
                     >
-                      <Box className="w-3 h-3" aria-hidden />
-                      Ver en 3D
+                      <ScanSearch className="w-3 h-3" aria-hidden />
+                      Ver ajuste en 3D
                     </button>
                   </div>
                 )}
@@ -725,11 +705,11 @@ export default function UchEventBubble({
                   <div className={`pt-1.5 border-t ${isSelfLane ? 'border-primary/30' : 'border-divider'}`}>
                     <button
                       type="button"
-                      onClick={() => onView3D!(calDeliveryId ?? event.id, calVersion ?? 1, calFiles, adjustmentText || undefined)}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border border-jade/30 text-jade hover:bg-jade-hl hover:text-jade-hover focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-jade/30 transition-colors"
+                      onClick={() => onView3D!(calDeliveryId ?? event.id, calVersion ?? 1, calFiles, adjustmentText || undefined, true)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded border border-warning/40 text-warning hover:bg-warning/10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-warning/40 transition-colors"
                     >
-                      <Box className="w-3 h-3" aria-hidden />
-                      Ver en 3D
+                      <ScanSearch className="w-3 h-3" aria-hidden />
+                      Ver ajuste en 3D
                     </button>
                   </div>
                 )}

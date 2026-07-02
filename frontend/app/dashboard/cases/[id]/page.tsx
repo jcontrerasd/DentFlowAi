@@ -967,6 +967,14 @@ function CaseDetailPageContent() {
     showSuccessToastMessage('Anotación pendiente — usa Grabar para confirmar');
   };
 
+  const handleDeleteAnnotation = (id: string) => {
+    if (stagedAnnotationAdds.some(s => s.tempId === id)) {
+      setStagedAnnotationAdds(prev => prev.filter(s => s.tempId !== id));
+    } else {
+      setStagedAnnotationRemovals(prev => new Set([...prev, id]));
+    }
+  };
+
   const handleSaveChanges = async (): Promise<boolean> => {
     if (!editForm || !clinicalCase || !user) return false;
 
@@ -2579,6 +2587,7 @@ function CaseDetailPageContent() {
                   onToggleLayer={toggleSubtype}
                   onOpacityChange={handleOpacityChange}
                   onAnnotate={canEditForm ? setSelectedCoords : undefined}
+                  onDeleteAnnotation={fieldsEditable ? handleDeleteAnnotation : undefined}
                   canAnnotate={canEditForm}
                 >
                   {selectedCoords && (

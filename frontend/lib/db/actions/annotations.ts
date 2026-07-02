@@ -33,6 +33,31 @@ export async function deleteAnnotationAction(id: string) {
   return { success: true };
 }
 
+export async function deleteDeliveryAnnotationAction(annotationId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const identity = await getServerIdentity();
+    if (!identity?.id) return { success: false, error: 'No autenticado' };
+
+    const [row] = await db
+      .select({ userId: annotation.userId, deliveryId: annotation.deliveryId })
+      .from(annotation)
+      .where(eq(annotation.id, annotationId))
+      .limit(1);
+
+    if (!row) return { success: false, error: 'Anotación no encontrada' };
+    if (!row.deliveryId) return { success: false, error: 'Operación no permitida' };
+    if (row.userId !== identity.id && !identity.isSystemAdmin) {
+      return { success: false, error: 'Solo el autor puede eliminar esta anotación' };
+    }
+
+    await db.delete(annotation).where(eq(annotation.id, annotationId));
+    return { success: true };
+  } catch (error) {
+    console.error('[deleteDeliveryAnnotationAction] Error:', error);
+    return { success: false, error: 'Error al eliminar anotación' };
+  }
+}
+
 export async function createDeliveryAnnotationAction(input: {
   caseId: string;
   deliveryId: string;

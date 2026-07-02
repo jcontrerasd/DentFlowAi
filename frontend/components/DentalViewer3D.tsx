@@ -164,7 +164,9 @@ function Model({
   return <primitive object={result} onPointerDown={onPointerDown} />;
 }
 
-function Pin({ position, text, color = '#e11d48' }: { position: [number, number, number], text: string, user: string, color?: string }) {
+function Pin({ position, text, color = '#e11d48', onDelete }: { position: [number, number, number], text: string, user: string, color?: string, onDelete?: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+
   return (
     <group position={position}>
       <mesh>
@@ -182,9 +184,38 @@ function Pin({ position, text, color = '#e11d48' }: { position: [number, number,
         <meshBasicMaterial color={color} transparent opacity={0.2} />
       </mesh>
 
-      <Html zIndexRange={[100, 0]} style={{ pointerEvents: 'none' }}>
-        <div className="bg-surface backdrop-blur-md border border-divider/60 px-2.5 py-1.5 rounded-lg shadow-lg select-none whitespace-nowrap" style={{ transform: 'translate(14px, -50%)' }}>
-          <p className="text-sm text-foreground/80 font-medium leading-none">{text}</p>
+      <Html zIndexRange={[100, 0]} style={{ pointerEvents: onDelete ? 'auto' : 'none' }}>
+        <div className="bg-surface backdrop-blur-md border border-divider/60 rounded-lg shadow-lg select-none whitespace-nowrap" style={{ transform: 'translate(14px, -50%)' }}>
+          {confirming ? (
+            <div className="flex items-center gap-2 px-2.5 py-1.5">
+              <span className="text-xs text-foreground/70 font-medium">¿Eliminar?</span>
+              <button
+                onClick={() => setConfirming(false)}
+                className="text-xs text-muted hover:text-foreground px-1.5 py-0.5 rounded transition-colors"
+              >
+                No
+              </button>
+              <button
+                onClick={() => onDelete?.()}
+                className="text-xs text-error font-semibold hover:text-error/80 px-1.5 py-0.5 rounded transition-colors"
+              >
+                Sí
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5">
+              <p className="text-sm text-foreground/80 font-medium leading-none">{text}</p>
+              {onDelete && (
+                <button
+                  onClick={() => setConfirming(true)}
+                  aria-label="Eliminar anotación"
+                  className="ml-1 text-muted hover:text-error transition-colors leading-none"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </Html>
     </group>
@@ -206,20 +237,22 @@ interface DentalModel {
   opacity?: number;
 }
 
-export default function DentalViewer3D({ 
-  models, 
+export default function DentalViewer3D({
+  models,
   annotations = [],
   onToggleLayer,
   onOpacityChange,
   onAnnotate,
+  onDeleteAnnotation,
   canAnnotate = true,
   children
-}: { 
-  models: DentalModel[], 
+}: {
+  models: DentalModel[],
   annotations?: DentalAnnotation[],
   onToggleLayer?: (subType: string) => void,
   onOpacityChange?: (subType: string, opacity: number) => void,
   onAnnotate?: (coords: { x: number, y: number, z: number }) => void,
+  onDeleteAnnotation?: (id: string) => void,
   canAnnotate?: boolean,
   children?: React.ReactNode
 }) {
@@ -371,6 +404,7 @@ export default function DentalViewer3D({
                     text={anno.text}
                     user={anno.user?.fullName || 'Usuario'}
                     color={anno.color}
+                    onDelete={onDeleteAnnotation ? () => onDeleteAnnotation(anno.id) : undefined}
                   />
                 ))}
               </group>

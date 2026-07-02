@@ -59,7 +59,8 @@ function CasesPageContent() {
   const requestIdRef = useRef(0);
 
   const role = resolveCaseListViewRole(userProfile?.role);
-  const isDentist = role === 'dentista';
+  const isCalidad = userProfile?.role === 'calidad';
+  const isDentist = role === 'dentista' && !isCalidad;
   const userId = userProfile?.id ?? '';
   const profileReady = !authLoading && !!userProfile;
 
@@ -354,6 +355,7 @@ function CasesPageContent() {
                   key={c.id}
                   c={c}
                   isDentist={isDentist}
+                  isCalidad={isCalidad}
                   hubUchUnread={hubUnreadByCase[c.id] ?? 0}
                   serverClockAnchor={listServerClock}
                   myBid={myBid}

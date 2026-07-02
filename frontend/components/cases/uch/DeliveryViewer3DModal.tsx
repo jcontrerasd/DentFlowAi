@@ -8,6 +8,7 @@ import NewAnnotationOverlay from '@/components/cases/NewAnnotationOverlay';
 import { getDeliverySignedFilesAction } from '@/lib/db/actions/cases';
 import {
   createDeliveryAnnotationAction,
+  deleteDeliveryAnnotationAction,
   listDeliveryAnnotationsAction,
 } from '@/lib/db/actions/annotations';
 import { useToast } from '@/context/ToastContext';
@@ -237,6 +238,15 @@ export default function DeliveryViewer3DModal({
     }
   };
 
+  const handleDeleteAnnotation = async (id: string) => {
+    const result = await deleteDeliveryAnnotationAction(id);
+    if (result.success) {
+      setAnnotations((prev) => prev.filter((a) => a.id !== id));
+    } else {
+      showError(result.error ?? 'Error al eliminar anotación');
+    }
+  };
+
   const handleApproveClick = async () => {
     if (approveStep === 'choose') {
       setApproveStep('confirm');
@@ -308,6 +318,7 @@ export default function DeliveryViewer3DModal({
               models={models}
               annotations={annotations}
               onAnnotate={canAnnotate ? handleAnnotate : undefined}
+              onDeleteAnnotation={canAnnotate ? handleDeleteAnnotation : undefined}
               canAnnotate={canAnnotate}
               onToggleLayer={(subType) =>
                 setModels((prev) =>
@@ -353,7 +364,7 @@ export default function DeliveryViewer3DModal({
         {viewerRole !== 'dentista' && dentistNote && (
           <div className="border-t border-divider px-4 py-3 shrink-0">
             <div className="space-y-1">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">Comentario del dentista</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">Comentario</p>
               <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{dentistNote}</p>
             </div>
           </div>
@@ -455,6 +466,7 @@ export default function DeliveryViewer3DModal({
       {/* Footer de revisión QA (solo revisor de Calidad con entrega pending) */}
       {canReviewQuality && (
         <div className="border-t border-divider px-4 py-3 shrink-0 space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">Comentario</p>
           <textarea
             rows={2}
             placeholder="Comentario para el técnico (obligatorio para solicitar ajustes)…"

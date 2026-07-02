@@ -1,6 +1,6 @@
 /**
  * Carril del hilo UCH (izquierda = hilo / recibido, derecha = propio) y cuándo la cabecera
- * debe mostrarse como voz Fauchard. Tablas A (dentista) y B (técnico) codificadas de forma explícita.
+ * debe mostrarse como voz Fauchard. Tablas A (dentista), B (técnico) y C (calidad).
  */
 
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
@@ -29,6 +29,7 @@ function resolvePersistedAuthorId(event: UchThreadLaneEvent): string | undefined
 export type UchThreadLaneViewer = {
   actingAsDentista: boolean;
   actingAsTecnico: boolean;
+  actingAsCalidad?: boolean;
   currentUserId: string | undefined;
   /** Admin sin simulación: supervisión con layout clínico (tabla A). */
   viewingAsAdmin?: boolean;
@@ -36,7 +37,8 @@ export type UchThreadLaneViewer = {
   uchPresentationRole?: 'dentista' | 'tecnico';
 };
 
-function primaryPresentationRole(viewer: UchThreadLaneViewer): 'dentista' | 'tecnico' {
+function primaryPresentationRole(viewer: UchThreadLaneViewer): 'dentista' | 'tecnico' | 'calidad' {
+  if (viewer.actingAsCalidad) return 'calidad';
   if (viewer.viewingAsAdmin) return 'dentista';
   if (viewer.uchPresentationRole === 'dentista' || viewer.uchPresentationRole === 'tecnico') {
     return viewer.uchPresentationRole;
@@ -48,7 +50,7 @@ function primaryPresentationRole(viewer: UchThreadLaneViewer): 'dentista' | 'tec
 }
 
 /**
- * Tabla A (dentista) y Tabla B (técnico): primera coincidencia por rol gana.
+ * Tabla A (dentista), Tabla B (técnico) y Tabla C (calidad): primera coincidencia por rol gana.
  * Casos clave: TRABAJO_INICIADO al dentista con `presentationAuthor: fauchard` → hilo + Fauchard;
  * cierres comparativa al técnico (`visibleTo: tecnico`) → hilo + Fauchard;
  * emisiones propias del técnico (cotización, entrega, etc.) → carril propio.
@@ -68,6 +70,15 @@ export function resolveUchThreadLane(
 
   const role = primaryPresentationRole(viewer);
 
+  if (role === 'calidad') {
+    return resolveCalidadTableC(event.action, {
+      samePersistedAuthor,
+      maskedUserIsFauchard,
+      presentationAuthor,
+      visibleTo,
+    });
+  }
+
   if (role === 'dentista') {
     return resolveDentistaTableA(event.action, {
       visibleTo,
@@ -86,6 +97,63 @@ export function resolveUchThreadLane(
     maskedUserIsFauchard,
     authorRole: event.user?.role ?? null,
   });
+}
+
+/**
+ * Tabla C — calidad reviewer.
+ *
+ * ASIGNACION_CALIDAD: user_id = el calidad asignado, pero el emisor real es Fauchard.
+ * Nunca debe aparecer como "Yo" aunque samePersistedAuthor sea true.
+ *
+ * Acciones propias de calidad (REVISION_SOLICITADA_CALIDAD, CALIDAD_CERTIFICADA,
+ * CASO_DERIVADO_CALIDAD, DERIVACION_CALIDAD_ACEPTADA, DERIVACION_CALIDAD_RECHAZADA,
+ * CALIFICACION_ENVIADA_CALIDAD): self si sameAuthor, thread si otro revisor de calidad.
+ *
+ * REVISION_ENVIADA_CALIDAD: la envía el técnico → siempre thread.
+ */
+function resolveCalidadTableC(
+  action: string,
+  ctx: {
+    samePersistedAuthor: boolean;
+    maskedUserIsFauchard: boolean;
+    presentationAuthor: 'fauchard' | undefined;
+    visibleTo: string | undefined;
+  },
+): { lane: UchThreadLane; showAsFauchard: boolean } {
+  const { samePersistedAuthor, maskedUserIsFauchard, presentationAuthor } = ctx;
+
+  // C — Fauchard asignó al calidad: aunque user_id == viewer, es emisión del sistema.
+  if (action === CASE_EVENTS.ASIGNACION_CALIDAD) {
+    return { lane: 'thread', showAsFauchard: true };
+  }
+
+  // C — Entrega del técnico a calidad: recibido con voz Fauchard (técnico anónimo para calidad).
+  if (action === CASE_EVENTS.REVISION_ENVIADA_CALIDAD) {
+    return { lane: 'thread', showAsFauchard: true };
+  }
+
+  // C — Acciones emitidas por un revisor de calidad: propio si mismo autor, thread si par.
+  const calidadSelfEmitActions = new Set<string>([
+    CASE_EVENTS.REVISION_SOLICITADA_CALIDAD,
+    CASE_EVENTS.CALIDAD_CERTIFICADA,
+    CASE_EVENTS.CASO_DERIVADO_CALIDAD,
+    CASE_EVENTS.DERIVACION_CALIDAD_ACEPTADA,
+    CASE_EVENTS.DERIVACION_CALIDAD_RECHAZADA,
+    CASE_EVENTS.CALIFICACION_ENVIADA_CALIDAD,
+  ]);
+  if (calidadSelfEmitActions.has(action)) {
+    return samePersistedAuthor
+      ? { lane: 'self', showAsFauchard: false }
+      : { lane: 'thread', showAsFauchard: false };
+  }
+
+  // C — Orquestación del sistema (CASO_CLASIFICADO, TRABAJO_INICIADO, etc.)
+  if (maskedUserIsFauchard || presentationAuthor === 'fauchard') {
+    return { lane: 'thread', showAsFauchard: true };
+  }
+
+  // C — Resto: thread sin voz especial.
+  return { lane: 'thread', showAsFauchard: false };
 }
 
 function resolveDentistaTableA(
