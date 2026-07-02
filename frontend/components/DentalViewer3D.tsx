@@ -1,12 +1,13 @@
 'use client';
 
-import { Suspense, useRef, useState, useEffect, useCallback } from 'react';
+import { Suspense, useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Canvas, useLoader, type ThreeEvent } from '@react-three/fiber';
 import { STLLoader, PLYLoader, OBJLoader } from '@/lib/three-loaders';
 import {
   OrbitControls,
   Center,
   Html,
+  Line,
 } from '@react-three/drei';
 import type { Group } from 'three';
 import * as THREE from 'three';
@@ -22,6 +23,7 @@ import {
   Navigation,
   RefreshCcw,
   Settings2,
+  Spline,
   X,
   ZoomIn,
   ZoomOut,
@@ -96,14 +98,16 @@ function Model({
   visible,
   opacity = 1,
   specularColor = '#3a4a5c',
-  onPointerDown
+  onPointerDown,
+  onDoubleClick,
 }: {
   url: string,
   color: string,
   visible: boolean,
   opacity?: number,
   specularColor?: string,
-  onPointerDown?: (e: ThreeEvent<PointerEvent>) => void
+  onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
+  onDoubleClick?: (e: ThreeEvent<MouseEvent>) => void;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
   
@@ -124,6 +128,7 @@ function Model({
         ref={meshRef}
         geometry={result}
         onPointerDown={onPointerDown}
+        onDoubleClick={onDoubleClick}
       >
         {/* Phong: highlights especulares suaves para percibir relieve dental,
             sin el costo de PBR/HDRI. Specular tono neutro frío. */}
@@ -161,7 +166,7 @@ function Model({
     }
   });
 
-  return <primitive object={result} onPointerDown={onPointerDown} />;
+  return <primitive object={result} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} />;
 }
 
 function Pin({ position, text, color = '#e11d48', onDelete }: { position: [number, number, number], text: string, user: string, color?: string, onDelete?: () => void }) {
@@ -222,6 +227,94 @@ function Pin({ position, text, color = '#e11d48', onDelete }: { position: [numbe
   );
 }
 
+type Point3D = { x: number; y: number; z: number };
+
+function PolylineRender({ points, color = '#e11d48', opacity = 1, onDelete, onDeletePoint }: {
+  points: Point3D[];
+  color?: string;
+  opacity?: number;
+  onDelete?: () => void;
+  onDeletePoint?: (index: number) => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  const curvePoints = useMemo(() => {
+    if (points.length < 2) return null;
+    const vecs = points.map(p => new THREE.Vector3(p.x, p.y, p.z));
+    const pts = points.length === 2
+      ? vecs
+      : new THREE.CatmullRomCurve3(vecs, false).getPoints(Math.max(80, points.length * 20));
+    // Cerrar añadiendo el primer punto al final
+    return [...pts, pts[0]];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(points)]);
+
+  // Punto medio para anclar el botón × de eliminar todo el trazado
+  const midPoint: Point3D | null = points.length >= 2
+    ? points[Math.floor(points.length / 2)]
+    : points.length === 1 ? points[0] : null;
+
+  return (
+    <group>
+      {/* Línea curva cerrada — lineWidth requiere Line de drei (Line2 internamente) */}
+      {curvePoints && (
+        <Line
+          points={curvePoints}
+          color={color}
+          lineWidth={2.5}
+          transparent={opacity < 1}
+          opacity={opacity}
+        />
+      )}
+
+      {/* Esferas en puntos de control solo durante el dibujo (onDeletePoint activo) */}
+      {onDeletePoint && points.map((p, i) => (
+        <group key={i} position={[p.x, p.y, p.z]}>
+          <mesh>
+            <sphereGeometry args={[0.25, 10, 10]} />
+            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} transparent={opacity < 1} opacity={opacity} />
+          </mesh>
+          <Html zIndexRange={[100, 0]} style={{ pointerEvents: 'auto' }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDeletePoint(i); }}
+              aria-label="Eliminar punto"
+              title="Eliminar punto"
+              className="w-5 h-5 flex items-center justify-center bg-surface/90 border border-divider/60 hover:bg-error-hl rounded-full text-muted hover:text-error transition-colors shadow-sm"
+              style={{ transform: 'translate(-50%, -50%)' }}
+            >
+              <X className="w-2.5 h-2.5" />
+            </button>
+          </Html>
+        </group>
+      ))}
+
+      {/* Botón × en punto medio para eliminar todo el trazado */}
+      {onDelete && midPoint && (
+        <group position={[midPoint.x, midPoint.y, midPoint.z]}>
+          <Html zIndexRange={[100, 0]} style={{ pointerEvents: 'auto' }}>
+            <div className="bg-surface backdrop-blur-md border border-divider/60 rounded-lg shadow-lg select-none whitespace-nowrap" style={{ transform: 'translate(10px, -50%)' }}>
+              {confirming ? (
+                <div className="flex items-center gap-2 px-2.5 py-1.5">
+                  <span className="text-xs text-foreground/70 font-medium">¿Eliminar?</span>
+                  <button onClick={() => setConfirming(false)} className="text-xs text-muted hover:text-foreground px-1.5 py-0.5 rounded transition-colors">No</button>
+                  <button onClick={() => onDelete()} className="text-xs text-error font-semibold hover:text-error/80 px-1.5 py-0.5 rounded transition-colors">Sí</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 px-2 py-1.5">
+                  <Spline className="w-3 h-3 text-muted" />
+                  <button onClick={() => setConfirming(true)} aria-label="Eliminar trazado" className="text-muted hover:text-error transition-colors leading-none">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+            </div>
+          </Html>
+        </group>
+      )}
+    </group>
+  );
+}
+
 interface DentalAnnotation {
   id: string;
   text: string;
@@ -240,19 +333,25 @@ interface DentalModel {
 export default function DentalViewer3D({
   models,
   annotations = [],
+  polylines = [],
   onToggleLayer,
   onOpacityChange,
   onAnnotate,
   onDeleteAnnotation,
+  onPolylineComplete,
+  onDeletePolyline,
   canAnnotate = true,
   children
 }: {
   models: DentalModel[],
   annotations?: DentalAnnotation[],
+  polylines?: Array<{ id: string; points: Point3D[] }>,
   onToggleLayer?: (subType: string) => void,
   onOpacityChange?: (subType: string, opacity: number) => void,
   onAnnotate?: (coords: { x: number, y: number, z: number }) => void,
   onDeleteAnnotation?: (id: string) => void,
+  onPolylineComplete?: (points: Point3D[]) => void,
+  onDeletePolyline?: (id: string) => void,
   canAnnotate?: boolean,
   children?: React.ReactNode
 }) {
@@ -263,7 +362,11 @@ export default function DentalViewer3D({
   const controlsRef = useRef<any>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAnnotateMode, setIsAnnotateMode] = useState(false);
+  const [isPolylineMode, setIsPolylineMode] = useState(false);
+  const [inProgressPoints, setInProgressPoints] = useState<Point3D[]>([]);
   const [showAnnotations, setShowAnnotations] = useState(true);
+  const [showPolylines, setShowPolylines] = useState(true);
+  const [confirmingPolylineId, setConfirmingPolylineId] = useState<string | null>(null);
   const [mountKey, setMountKey] = useState(0);
   const [panelOpen, setPanelOpen] = useState(true);
   const [bgMode, setBgMode] = useState<ViewerBg>('brand');
@@ -278,6 +381,14 @@ export default function DentalViewer3D({
     setBgMode(mode);
     try { window.localStorage.setItem(VIEWER_BG_STORAGE_KEY, mode); } catch { /* ignore */ }
   }, []);
+
+  const finalizePolyline = useCallback(() => {
+    if (inProgressPoints.length >= 2) {
+      onPolylineComplete?.(inProgressPoints);
+    }
+    setInProgressPoints([]);
+    setIsPolylineMode(false);
+  }, [inProgressPoints, onPolylineComplete]);
 
   const bgColor = VIEWER_BG_COLORS[bgMode];
   const isLightBg = bgMode === 'claro';
@@ -339,7 +450,7 @@ export default function DentalViewer3D({
       style={{ backgroundColor: bgColor }}
       className={`w-full rounded-[2.5rem] border border-divider overflow-hidden relative group shadow-2xl transition-all ${
         isFullscreen ? 'h-screen fixed inset-0 z-[9999] rounded-none' : 'h-[600px]'
-      } ${isAnnotateMode ? 'cursor-crosshair' : 'cursor-default'}`}
+      } ${(isAnnotateMode || isPolylineMode) ? 'cursor-crosshair' : 'cursor-default'}`}
     >
 
       <ErrorBoundary 
@@ -390,6 +501,16 @@ export default function DentalViewer3D({
                           const local = sceneGroupRef.current.worldToLocal(e.point.clone());
                           onAnnotate?.({ x: local.x, y: local.y, z: local.z });
                           setIsAnnotateMode(false);
+                        } else if (isPolylineMode && sceneGroupRef.current) {
+                          e.stopPropagation();
+                          const local = sceneGroupRef.current.worldToLocal(e.point.clone());
+                          setInProgressPoints(prev => [...prev, { x: local.x, y: local.y, z: local.z }]);
+                        }
+                      }}
+                      onDoubleClick={(e: ThreeEvent<MouseEvent>) => {
+                        if (isPolylineMode) {
+                          e.stopPropagation();
+                          finalizePolyline();
                         }
                       }}
                     />
@@ -407,6 +528,25 @@ export default function DentalViewer3D({
                     onDelete={onDeleteAnnotation ? () => onDeleteAnnotation(anno.id) : undefined}
                   />
                 ))}
+
+                <group visible={showPolylines}>
+                  {polylines.map(pl => (
+                    <PolylineRender
+                      key={pl.id}
+                      points={pl.points}
+                      color="#e11d48"
+                    />
+                  ))}
+                </group>
+
+                {inProgressPoints.length > 0 && (
+                  <PolylineRender
+                    points={inProgressPoints}
+                    color="#e11d48"
+                    opacity={0.6}
+                    onDeletePoint={(i) => setInProgressPoints(prev => prev.filter((_, idx) => idx !== i))}
+                  />
+                )}
               </group>
             </Center>
 
@@ -418,8 +558,8 @@ export default function DentalViewer3D({
         </Canvas>
       </ErrorBoundary>
 
-      {/* Interface Overlay — panel flotante compacto + toggle */}
-      <div className="absolute top-4 right-4 z-20">
+      {/* Interface Overlay — panel flotante compacto + toggle. z-[150] supera el zIndexRange de Html R3F (max 100) */}
+      <div className="absolute top-4 right-4 z-[150]">
         {!panelOpen ? (
           <button
             onClick={() => setPanelOpen(true)}
@@ -493,6 +633,86 @@ export default function DentalViewer3D({
               </div>
             )}
 
+            {/* Trazados — toggle + lista con eliminar por ítem */}
+            {(polylines.length > 0 || inProgressPoints.length > 0) && (
+              <div className="p-2 border-b border-divider space-y-1">
+                {/* Header toggle */}
+                <button
+                  onClick={() => setShowPolylines((v) => !v)}
+                  aria-pressed={showPolylines}
+                  title={showPolylines ? 'Ocultar trazados' : 'Mostrar trazados'}
+                  className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg transition-colors ${
+                    showPolylines ? 'bg-primary-hl text-foreground' : 'hover:bg-surface-off text-muted'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 text-xs uppercase font-bold tracking-tight">
+                    <Spline className="w-3 h-3 shrink-0" />
+                    Trazados
+                    <span className="text-muted font-semibold normal-case">({polylines.length})</span>
+                  </span>
+                  {showPolylines ? <Eye className="w-3 h-3 shrink-0" /> : <EyeOff className="w-3 h-3 shrink-0 opacity-50" />}
+                </button>
+
+                {/* Lista de trazados guardados con doble confirmación de borrado */}
+                {showPolylines && onDeletePolyline && polylines.length > 0 && (
+                  <div className="space-y-0.5 pt-0.5">
+                    {polylines.map((pl, idx) => (
+                      <div key={pl.id} className="rounded-lg overflow-hidden">
+                        {confirmingPolylineId === pl.id ? (
+                          <div className="flex items-center gap-1.5 px-2 py-1.5 bg-error-hl">
+                            <span className="text-xs text-error font-medium flex-1">¿Eliminar zona {idx + 1}?</span>
+                            <button
+                              onClick={() => setConfirmingPolylineId(null)}
+                              className="text-xs text-muted hover:text-foreground px-1.5 py-0.5 rounded transition-colors"
+                            >
+                              No
+                            </button>
+                            <button
+                              onClick={() => { onDeletePolyline(pl.id); setConfirmingPolylineId(null); }}
+                              className="text-xs text-error font-semibold hover:text-error/80 px-1.5 py-0.5 rounded transition-colors"
+                            >
+                              Sí
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 px-2 py-1 hover:bg-surface-off group">
+                            <Spline className="w-3 h-3 text-error shrink-0" />
+                            <span className="text-xs text-muted flex-1">Zona {idx + 1}</span>
+                            <button
+                              onClick={() => setConfirmingPolylineId(pl.id)}
+                              aria-label={`Eliminar zona ${idx + 1}`}
+                              className="opacity-0 group-hover:opacity-100 text-muted hover:text-error transition-all"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {inProgressPoints.length > 0 && (
+                  <div className="flex items-center gap-1 px-2">
+                    <span className="text-xs text-muted flex-1">{inProgressPoints.length} puntos</span>
+                    <button
+                      onClick={finalizePolyline}
+                      disabled={inProgressPoints.length < 2}
+                      className="text-xs text-primary font-semibold hover:text-primary/80 px-1.5 py-0.5 rounded transition-colors disabled:opacity-40"
+                    >
+                      Finalizar
+                    </button>
+                    <button
+                      onClick={() => { setInProgressPoints([]); setIsPolylineMode(false); }}
+                      className="text-xs text-muted hover:text-foreground px-1.5 py-0.5 rounded transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Fondo del visor */}
             <div className="p-2 space-y-1.5 border-b border-divider">
               <p className="text-xs uppercase font-bold tracking-wider text-muted">Fondo</p>
@@ -544,7 +764,7 @@ export default function DentalViewer3D({
 
               {canAnnotate && (
                 <button
-                  onClick={() => setIsAnnotateMode(!isAnnotateMode)}
+                  onClick={() => { setIsAnnotateMode(!isAnnotateMode); setIsPolylineMode(false); }}
                   aria-label={isAnnotateMode ? 'Salir de modo anotación' : 'Anotar punto'}
                   title={isAnnotateMode ? 'Salir' : 'Anotar'}
                   className={`flex-1 inline-flex items-center justify-center py-2 rounded-lg transition-colors ${
@@ -552,6 +772,19 @@ export default function DentalViewer3D({
                   }`}
                 >
                   {isAnnotateMode ? <MessageSquarePlus className="w-4 h-4 animate-pulse" /> : <Navigation className="w-4 h-4" />}
+                </button>
+              )}
+
+              {onPolylineComplete && (
+                <button
+                  onClick={() => { setIsPolylineMode(!isPolylineMode); setIsAnnotateMode(false); if (isPolylineMode) setInProgressPoints([]); }}
+                  aria-label={isPolylineMode ? 'Salir de modo trazado' : 'Trazar delimitación'}
+                  title={isPolylineMode ? 'Salir del trazado' : 'Trazar'}
+                  className={`flex-1 inline-flex items-center justify-center py-2 rounded-lg transition-colors ${
+                    isPolylineMode ? 'bg-error-hl text-error' : 'text-muted hover:text-foreground hover:bg-surface-off'
+                  }`}
+                >
+                  <Spline className={`w-4 h-4 ${isPolylineMode ? 'animate-pulse' : ''}`} />
                 </button>
               )}
 
