@@ -2641,10 +2641,10 @@ function CaseDetailPageContent() {
                   onToggleLayer={toggleSubtype}
                   onOpacityChange={handleOpacityChange}
                   onAnnotate={canEditForm ? setSelectedCoords : undefined}
-                  onDeleteAnnotation={fieldsEditable ? handleDeleteAnnotation : undefined}
+                  onDeleteAnnotation={canEditForm ? handleDeleteAnnotation : undefined}
                   polylines={displayedPolylines}
-                  onPolylineComplete={fieldsEditable ? handlePolylineComplete : undefined}
-                  onDeletePolyline={fieldsEditable ? handleDeletePolyline : undefined}
+                  onPolylineComplete={canEditForm ? handlePolylineComplete : undefined}
+                  onDeletePolyline={canEditForm ? handleDeletePolyline : undefined}
                   canAnnotate={canEditForm}
                 >
                   {selectedCoords && (

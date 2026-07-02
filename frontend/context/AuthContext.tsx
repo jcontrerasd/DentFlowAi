@@ -86,8 +86,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSimulatedProfile(profile as UserProfile);
           setIsSimulating(true);
         } else {
-          // Stale simId — user was deleted. Clear it so admin sees their own profile.
+          // Stale simId — user was deleted. Clear localStorage and the httpOnly cookie
+          // so the next server call doesn't find a dangling impersonation cookie.
           localStorage.removeItem('dentflow_simulated_id');
+          stopSimulationAction().catch(() => {});
         }
       } else {
         setUserProfile(profile as UserProfile);

@@ -189,7 +189,7 @@ export default function NewCasePage() {
             Volver al Panel
           </button>
           <h1 className="text-4xl serif-font dark:text-foreground">Nuevo Caso</h1>
-          <p className="text-faint">Inicie el flujo de trabajo CAD/CAM completando el expediente</p>
+          <p className="text-faint">Inicie el expediente clínico para su caso de diseño</p>
         </div>
       </div>
 

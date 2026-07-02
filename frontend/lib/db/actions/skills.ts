@@ -6,7 +6,26 @@ import { eq, and } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { auth } from '@/auth';
 import { WORK_TYPES } from '@/lib/constants/dental';
-import { ensureTechnicianAvailabilityAction } from './availability';
+import { ensureTechnicianAvailabilityAction, reconcileLevelCadAfterSkillsAction } from './availability';
+import { LEAGUE_ORDER, type League } from '@/lib/league';
+
+/** Deriva la liga inicial de un técnico a partir de sus skills declaradas.
+ *  Umbral idéntico al badge "Categoría estimada" de SkillMatrixForm. */
+function leagueFromSkills(skills: SkillInput[]): League {
+  const levels = skills.map(s => s.designLevel).filter(l => l > 0);
+  if (levels.length === 0) return 'bronce';
+  const avg = levels.reduce((a, b) => a + b, 0) / levels.length;
+  if (avg >= 6) return 'elite';
+  if (avg >= 4.5) return 'oro';
+  if (avg >= 3) return 'plata';
+  return 'bronce';
+}
+
+/** Sincroniza la liga del técnico con la liga derivada de sus skills declaradas. */
+async function syncLeagueFromSkills(userId: string, skills: SkillInput[]): Promise<void> {
+  const league = leagueFromSkills(skills);
+  await db.update(user).set({ leagueLevel: league, updatedAt: new Date() }).where(eq(user.id, userId));
+}
 
 export type SkillRow = {
   workType: string;
@@ -103,8 +122,10 @@ export async function updateSkillsAction(skills: SkillInput[]) {
     // fila. Best-effort: un fallo aquí no debe impedir guardar la matriz de habilidades.
     try {
       await ensureTechnicianAvailabilityAction(identity.id);
+      await reconcileLevelCadAfterSkillsAction(identity.id);
+      await syncLeagueFromSkills(identity.id, skills);
     } catch (availErr) {
-      console.error('[updateSkillsAction] No se pudo asegurar disponibilidad:', availErr);
+      console.error('[updateSkillsAction] No se pudo asegurar disponibilidad/liga:', availErr);
     }
 
     return { success: true };
@@ -240,7 +261,11 @@ export async function updateTechnicianSkillsAdmin(technicianId: string, skills: 
           });
       }
     }
-    try { await ensureTechnicianAvailabilityAction(technicianId); } catch {}
+    try {
+      await ensureTechnicianAvailabilityAction(technicianId);
+      await reconcileLevelCadAfterSkillsAction(technicianId);
+      await syncLeagueFromSkills(technicianId, skills);
+    } catch {}
     return { success: true };
   } catch (error) {
     console.error('[updateTechnicianSkillsAdmin] Error:', error);
