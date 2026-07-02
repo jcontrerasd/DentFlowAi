@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { SlidersHorizontal, History, Trophy } from 'lucide-react';
+import { SlidersHorizontal, History, Trophy, Layers } from 'lucide-react';
 import { fauchardParamPanel } from '@/lib/constants/fauchardHelp';
 import FauchardWeightsPanel from '@/components/admin/fauchard/FauchardWeightsPanel';
 import FauchardFiltersPanel from '@/components/admin/fauchard/FauchardFiltersPanel';
@@ -12,11 +12,25 @@ import LeagueConfigPanel from '@/components/admin/fauchard/LeagueConfigPanel';
 import FauchardLabPanel from '@/components/admin/fauchard/FauchardLabPanel';
 import GlobalSaveBar from '@/components/admin/fauchard/GlobalSaveBar';
 import { FauchardDraftProvider } from '@/components/admin/fauchard/FauchardDraftContext';
+import VersionHistoryClient from '@/components/admin/fauchard/VersionHistoryClient';
 import { motion, AnimatePresence } from 'framer-motion';
+import type { ConfigVersionMeta, ConfigVersionKpis } from '@/lib/db/actions/fauchard';
 
-type Space = 'parametros' | 'categorias' | 'historial';
+type Space = 'parametros' | 'categorias' | 'historial' | 'versiones';
 
-export function TabClient({ config, showAvailabilityPanel = false }: { config: any; showAvailabilityPanel?: boolean }) {
+export function TabClient({
+  config,
+  showAvailabilityPanel = false,
+  versions = [],
+  initialKpisCache = {},
+  isSystemAdmin = false,
+}: {
+  config: any;
+  showAvailabilityPanel?: boolean;
+  versions?: ConfigVersionMeta[];
+  initialKpisCache?: Record<string, ConfigVersionKpis>;
+  isSystemAdmin?: boolean;
+}) {
   const searchParams = useSearchParams();
   const [space, setSpace] = useState<Space>('parametros');
   // Parámetro a enfocar cuando se llega vía deep-link (`?space=...&focus=<key>`).
@@ -31,7 +45,7 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
   useEffect(() => {
     const fParam = searchParams.get('focus');
     const sParam = searchParams.get('space');
-    if (sParam && ['parametros', 'categorias', 'historial'].includes(sParam)) {
+    if (sParam && ['parametros', 'categorias', 'historial', 'versiones'].includes(sParam)) {
       setSpace(sParam as Space);
     } else if (fParam) {
       // Si llega focus sin space, asume el espacio de parámetros del modelo.
@@ -46,6 +60,7 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
     { id: 'parametros', label: 'Parámetros', icon: SlidersHorizontal },
     { id: 'categorias', label: 'Categorías', icon: Trophy },
     { id: 'historial', label: 'Historial', icon: History },
+    { id: 'versiones', label: 'Versiones', icon: Layers },
   ];
 
   return (
@@ -120,6 +135,11 @@ export function TabClient({ config, showAvailabilityPanel = false }: { config: a
           {space === 'historial' && (
             <div className="bg-surface/20 border border-divider rounded-2xl p-4 md:p-5 shadow-inner">
               <ConfigChangeLog />
+            </div>
+          )}
+          {space === 'versiones' && (
+            <div className="bg-surface/20 border border-divider rounded-2xl shadow-inner overflow-hidden">
+              <VersionHistoryClient versions={versions} activeConfig={config} initialKpisCache={initialKpisCache} isSystemAdmin={isSystemAdmin} />
             </div>
           )}
         </motion.div>
