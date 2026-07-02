@@ -10,13 +10,11 @@ import {
   UchHubIcon,
 } from '@/components/cases/CaseFichaHubAndServiceIcons';
 import { formatCaseIdAndPac } from '@/lib/cases/caseDisplay';
-import CaseViewerStatusStripe from '@/components/cases/CaseViewerStatusStripe';
-import StatusBadge, { statusLabel, statusIcon } from '@/components/ui/StatusBadge';
-import type { CaseViewerStatusInput } from '@/lib/cases/caseViewerStatusPresentation';
-import type { InvitationStatusForKpi } from '@/lib/dashboard/classifyCaseForDashboardKpi';
+import { statusLabel, statusIcon } from '@/components/ui/StatusBadge';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { dispatchCaseHubToggle } from '@/lib/caseHubToggleEvent';
 import { getDentistCardZone, getTechnicianCardCta } from '@/lib/cases/dentistCardPresentation';
+import { maskCaseStatusForViewer } from '@/lib/cases/qualityStatusMasking';
 
 const CASE_CARD_SHELL =
   'bg-surface border border-divider/35 rounded-[1.5rem] shadow-sm shadow-black/40 ring-1 ring-inset ring-white/[0.07] transition-colors duration-150 hover:bg-surface-off hover:border-primary/30 hover:ring-teal-500/10 focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/30';
@@ -126,7 +124,7 @@ export default function MarketplaceCaseCard({
 }: MarketplaceCaseCardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { userProfile: authUserProfile } = useAuth();
+  useAuth();
 
   const inviteExpirySource = invitation?.expiresAt || c.invitationExpiresAt;
   const inviteDeadlineMs = useDeadlineMs(inviteExpirySource ?? null);
@@ -140,32 +138,6 @@ export default function MarketplaceCaseCard({
   const proposalCountdownText = proposalRemaining < 0 ? null : formatCountdownHMS(proposalRemaining);
 
   const unreadCount = useMemo(() => hubUchUnread ?? 0, [hubUchUnread]);
-
-  const techStatusInput: CaseViewerStatusInput | null = useMemo(() => {
-    if (isDentist || !authUserProfile?.id) return null;
-    const invStatus = (myBid?.status ?? null) as InvitationStatusForKpi;
-    return {
-      caseStatus: String(c.status ?? ''),
-      assignedTechnicianId: c.assignedTechnicianId ?? null,
-      technicianUserId: String(authUserProfile.id),
-      invitationStatus: invStatus,
-    };
-  }, [isDentist, authUserProfile?.id, myBid?.status, c.status, c.assignedTechnicianId]);
-
-  const techCountdownRight =
-    countdownText &&
-    techStatusInput &&
-    (techStatusInput.invitationStatus === 'pending' ||
-      (techStatusInput.invitationStatus === 'quoted' &&
-        techStatusInput.caseStatus === 'enEvaluacion') ||
-      ((techStatusInput.caseStatus === 'enEvaluacion' ||
-        techStatusInput.caseStatus === 'propuestaLista') &&
-        (techStatusInput.invitationStatus === 'accepted' ||
-          techStatusInput.invitationStatus === 'confirmed'))) ? (
-      <div className="font-mono text-[11px] tabular-nums tracking-normal text-warning opacity-90">
-        {countdownText}
-      </div>
-    ) : null;
 
   const dentistZone = useMemo(
     () =>
@@ -182,16 +154,6 @@ export default function MarketplaceCaseCard({
     [isDentist, c],
   );
 
-  const dentistCountdown =
-    String(c.status ?? '') === 'enEvaluacion'
-      ? countdownText
-      : String(c.status ?? '') === 'propuestaLista'
-        ? proposalCountdownText
-        : null;
-  const dentistCountdownPulses =
-    (String(c.status ?? '') === 'enEvaluacion' && remaining > 0) ||
-    (String(c.status ?? '') === 'propuestaLista' && proposalRemaining > 0);
-
   const technicianCta = !isDentist
     ? getTechnicianCardCta({
         invitationStatus: myBid?.status ?? null,
@@ -207,9 +169,10 @@ export default function MarketplaceCaseCard({
         : 'Abrir Centro de control';
 
   const status = String(c.status ?? '');
-  const accentClass = STATUS_ACCENT[status] ?? 'border-l-divider';
-  const textColorClass = STATUS_TEXT[status] ?? 'text-muted';
-  const StatusIcon = statusIcon(status);
+  const displayStatus = isDentist ? maskCaseStatusForViewer(status, 'dentista') : status;
+  const accentClass = STATUS_ACCENT[displayStatus] ?? 'border-l-divider';
+  const textColorClass = STATUS_TEXT[displayStatus] ?? 'text-muted';
+  const StatusIcon = statusIcon(displayStatus);
   const metaLine = formatCaseIdAndPac(c.caseNumber, c.patientIdAnon);
   const ctaClass = dentistZone?.ctaVariant === 'primary' ? CTA_BUTTON_PRIMARY : CTA_BUTTON_NEUTRAL;
   const ctaLabel = isDentist ? dentistZone?.ctaLabel ?? 'Ver caso' : technicianCta ?? 'Ver caso';
@@ -235,7 +198,7 @@ export default function MarketplaceCaseCard({
           <div className="flex items-center gap-1.5 min-w-0">
             <StatusIcon className={`w-3.5 h-3.5 shrink-0 ${textColorClass}`} aria-hidden />
             <span className={`text-[11px] font-bold uppercase tracking-wider truncate ${textColorClass}`}>
-              {statusLabel(status)}
+              {statusLabel(displayStatus)}
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -305,44 +268,17 @@ export default function MarketplaceCaseCard({
           </div>
         )}
 
-        {/* Zona adaptativa */}
-        <div className="flex-1 mb-4">
-          {isDentist && dentistZone ? (
-            <div className="w-full rounded-xl bg-background/80 border border-divider px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <dentistZone.icon className={`w-4 h-4 shrink-0 ${dentistZone.iconClass}`} aria-hidden />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
-                  {dentistZone.primary}
-                </span>
-                {dentistCountdown && (
-                  <span
-                    className={`ml-auto font-mono text-[11px] tabular-nums tracking-normal text-warning ${
-                      dentistCountdownPulses ? 'animate-pulse' : ''
-                    }`}
-                  >
-                    {dentistCountdown}
-                  </span>
-                )}
-              </div>
-            </div>
-          ) : isCalidad ? (
-            <div className="w-full min-h-10 flex items-center gap-2 px-3 rounded-xl bg-background border border-divider">
-              <StatusBadge status={status} />
-              {c.qualityRatingPending && (
-                <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-warning bg-warning-hl px-1.5 py-0.5 rounded-md shrink-0">
-                  <ClipboardCheck className="w-3 h-3" aria-hidden />
-                  Por calificar
-                </span>
-              )}
-            </div>
-          ) : !isDentist && techStatusInput ? (
-            <CaseViewerStatusStripe
-              input={techStatusInput}
-              invitedAt={invitation?.invitedAt ?? myBid?.invitedAt ?? myBid?.createdAt}
-              countdownRight={techCountdownRight}
-            />
-          ) : null}
-        </div>
+        {/* Chip "Calificar" para rol calidad */}
+        {isCalidad && c.qualityRatingPending && (
+          <div className="flex items-center gap-1.5 mb-3">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-warning bg-warning-hl px-1.5 py-0.5 rounded-md">
+              <ClipboardCheck className="w-3 h-3" aria-hidden />
+              Calificar
+            </span>
+          </div>
+        )}
+
+        <div className="flex-1" />
 
         {/* CTA único */}
         <button
