@@ -65,12 +65,10 @@ function dentistActions(input: GetCaseDetailActionStateInput): CaseDetailActions
 
   return {
     save: action(
-      draft && !!input.isEditing && !!input.isFormDirty,
+      draft && !!input.isFormDirty,
       !draft
         ? 'Solo disponible en borrador'
-        : !input.isEditing
-          ? 'Activa modo edición para guardar'
-          : 'No hay cambios por guardar',
+        : 'No hay cambios por guardar',
     ),
     publish: action(
       draft && !published && !!input.hasListPrice && !!input.hasDesiredDeliveryAt,

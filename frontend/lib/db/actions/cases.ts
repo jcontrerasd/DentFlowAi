@@ -508,7 +508,6 @@ export async function listCasesByOrganization(
           .from(review)
           .where(and(
             inArray(review.clinicalCaseId, completedIds),
-            eq(review.reviewerId, userId as string),
             eq(review.dimension, 'quality'),
           ));
         qualityRatedCaseIds = new Set(reviewed.map((r) => r.clinicalCaseId));

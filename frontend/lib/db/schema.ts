@@ -958,6 +958,7 @@ export const caseQualityAssignment = pgTable("case_quality_assignment", {
   calidadUserId: text("calidad_user_id").notNull().references(() => user.id),
   status: text("status").default('active').notNull(),
   assignedAt: timestamp("assigned_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  firstViewedAt: timestamp("first_viewed_at", { withTimezone: true, mode: 'date' }),
   derivedToId: text("derived_to_id").references(() => user.id, { onDelete: 'set null' }),
   derivationReasonId: uuid("derivation_reason_id").references(() => qualityDerivationReason.id),
   derivationComment: text("derivation_comment"),

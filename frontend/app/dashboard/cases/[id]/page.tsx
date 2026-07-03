@@ -53,7 +53,7 @@ import {
   requestQualityRevisionAction,
   sendToDentistAction,
 } from '@/lib/db/actions/quality';
-import { createAnnotationAction, deleteAnnotationAction } from '@/lib/db/actions/annotations';
+import { createAnnotationAction, deleteAnnotationAction, createPolylineAnnotationAction, deletePolylineAnnotationAction } from '@/lib/db/actions/annotations';
 import { registerFileAction, logFileDownloadAction, deleteCaseFileAction } from '@/lib/db/actions/files';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -91,6 +91,7 @@ import { dispatchDashboardMetricsRefresh } from '@/lib/dashboard/dashboardRefres
 import { getMyInvitationForCaseAction } from '@/lib/db/actions/invitations';
 import type { InvitationItem } from '@/lib/db/actions/invitations';
 import { getCaseHubReadStateAction, markCaseHubReadAction } from '@/lib/db/actions/hubRead';
+import { markQualityAssignmentViewedAction } from '@/lib/db/actions/quality';
 import { countUnreadNegChannel, countUnreadTechChannel, filterOthersNegChannel, filterOthersTechChannel, type UchUnreadEvent } from '@/lib/uchUnread';
 import { dispatchHubUnreadRefresh } from '@/lib/hubUnreadEvents';
 import {
@@ -347,10 +348,17 @@ function CaseDetailPageContent() {
     coordinates: { x: number; y: number; z: number };
     createdAt: string;
   };
+  type StagedPolylineAdd = {
+    tempId: string;
+    points: Array<{ x: number; y: number; z: number }>;
+    createdAt: string;
+  };
   const [stagedFileAdds, setStagedFileAdds] = useState<StagedFileAdd[]>([]);
   const [stagedFileRemovals, setStagedFileRemovals] = useState<Set<string>>(new Set());
   const [stagedAnnotationAdds, setStagedAnnotationAdds] = useState<StagedAnnotationAdd[]>([]);
   const [stagedAnnotationRemovals, setStagedAnnotationRemovals] = useState<Set<string>>(new Set());
+  const [stagedPolylineAdds, setStagedPolylineAdds] = useState<StagedPolylineAdd[]>([]);
+  const [stagedPolylineRemovals, setStagedPolylineRemovals] = useState<Set<string>>(new Set());
   const [newAnnotationText, setNewAnnotationText] = useState('');
   const [savingAnnotation, setSavingAnnotation] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -899,6 +907,12 @@ function CaseDetailPageContent() {
     void fetchData();
   }, [id, sessionUserId, profileUserId, router, ingestCasePayloadFromServer]);
 
+  // Marca la asignación de calidad como vista la primera vez que el revisor entra al caso.
+  useEffect(() => {
+    if (!actingAsCalidad || !id) return;
+    void markQualityAssignmentViewedAction(String(id));
+  }, [actingAsCalidad, id]);
+
   // Firma de URLs GCS en background: corre en cuanto cambia el listado de archivos del caso,
   // sin bloquear el cierre del spinner "Sincronizando expediente". El visor 3D y la lista de
   // descargas muestran su propio estado vacío hasta que llegan las URLs.
@@ -967,8 +981,33 @@ function CaseDetailPageContent() {
     showSuccessToastMessage('Anotación pendiente — usa Grabar para confirmar');
   };
 
+  const handleDeleteAnnotation = (id: string) => {
+    if (stagedAnnotationAdds.some(s => s.tempId === id)) {
+      setStagedAnnotationAdds(prev => prev.filter(s => s.tempId !== id));
+    } else {
+      setStagedAnnotationRemovals(prev => new Set([...prev, id]));
+    }
+  };
+
+  const handlePolylineComplete = (points: Array<{ x: number; y: number; z: number }>) => {
+    setStagedPolylineAdds(prev => [{
+      tempId: `staged-poly-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      points,
+      createdAt: new Date().toISOString(),
+    }, ...prev]);
+    showSuccessToastMessage('Trazado pendiente — usa Grabar para confirmar');
+  };
+
+  const handleDeletePolyline = (id: string) => {
+    if (stagedPolylineAdds.some(s => s.tempId === id)) {
+      setStagedPolylineAdds(prev => prev.filter(s => s.tempId !== id));
+    } else {
+      setStagedPolylineRemovals(prev => new Set([...prev, id]));
+    }
+  };
+
   const handleSaveChanges = async (): Promise<boolean> => {
-    if (!editForm || !clinicalCase || !user) return false;
+    if (!clinicalCase || !user) return false;
 
     // Validación: el caso debe quedar con al menos un archivo tras grabar.
     if (clinicalCase.status === 'borrador') {
@@ -1057,37 +1096,49 @@ function CaseDetailPageContent() {
         });
       }
 
-      // 5) Actualizar campos de texto del row.
-      const payload = {
-        ...editForm,
-        ...(editForm?.desiredDeliveryAt
-          ? { desiredDeliveryAt: new Date(editForm.desiredDeliveryAt).toISOString() }
-          : {}),
-      };
-      await updateClinicalCaseAction(id as string, payload);
+      // 4b) Borrar y crear polilíneas staged.
+      for (const polyId of stagedPolylineRemovals) {
+        if (annotationIdsKilledByCascade.has(polyId)) continue;
+        await deletePolylineAnnotationAction(polyId);
+      }
+      for (const staged of stagedPolylineAdds) {
+        await createPolylineAnnotationAction({ caseId: id as string, points: staged.points });
+      }
+
+      // 5) Actualizar campos de texto del row (solo si el formulario está activo).
+      if (editForm) {
+        const payload = {
+          ...editForm,
+          ...(editForm.desiredDeliveryAt
+            ? { desiredDeliveryAt: new Date(editForm.desiredDeliveryAt).toISOString() }
+            : {}),
+        };
+        await updateClinicalCaseAction(id as string, payload);
+      }
 
       // 6) Refetch + regenerar signed URLs (visor 3D / descargas) + revoke previews + limpiar staging.
       const refreshed = await getCaseDetails(id as string);
       if (refreshed && !(refreshed as any)._error) {
         ingestCasePayloadFromServer(refreshed);
-        // Sincronizar editForm con los valores del servidor para que isFormDirty
-        // quede false sin necesidad de salir y volver a entrar (borrador permanece en edición).
-        setEditForm({
-          internalName: (refreshed as any).internalName,
-          patientIdAnon: (refreshed as any).patientIdAnon || '',
-          urgency: (refreshed as any).urgency ?? '',
-          teeth: ((refreshed as any).teeth as number[]) || [],
-          restorationType: (refreshed as any).restorationTypeCode ?? '',
-          material: (refreshed as any).materialCode ?? '',
-          shade: (refreshed as any).shadeCode ?? '',
-          notesEsthetic: (refreshed as any).notesEsthetic || '',
-          notesOclusal: (refreshed as any).notesOclusal || '',
-          doctorNotes: ((refreshed as any).specialInstructions ?? (refreshed as any).doctorNotes) || '',
-          desiredDeliveryAt: toLocalDatetimeValue((refreshed as any).desiredDeliveryAt),
-          status: (refreshed as any).status,
-          serviceType: (refreshed as any).serviceType,
-          replacesMissingTeeth: (refreshed as any).replacesMissingTeeth ?? null,
-        });
+        // Sincronizar editForm con los valores del servidor (solo si estaba activo).
+        if (editForm) {
+          setEditForm({
+            internalName: (refreshed as any).internalName,
+            patientIdAnon: (refreshed as any).patientIdAnon || '',
+            urgency: (refreshed as any).urgency ?? '',
+            teeth: ((refreshed as any).teeth as number[]) || [],
+            restorationType: (refreshed as any).restorationTypeCode ?? '',
+            material: (refreshed as any).materialCode ?? '',
+            shade: (refreshed as any).shadeCode ?? '',
+            notesEsthetic: (refreshed as any).notesEsthetic || '',
+            notesOclusal: (refreshed as any).notesOclusal || '',
+            doctorNotes: ((refreshed as any).specialInstructions ?? (refreshed as any).doctorNotes) || '',
+            desiredDeliveryAt: toLocalDatetimeValue((refreshed as any).desiredDeliveryAt),
+            status: (refreshed as any).status,
+            serviceType: (refreshed as any).serviceType,
+            replacesMissingTeeth: (refreshed as any).replacesMissingTeeth ?? null,
+          });
+        }
         const refreshedFiles = ((refreshed as any).files ?? []) as any[];
         if (refreshedFiles.length > 0) {
           const viewerUrls: Record<string, string> = {};
@@ -1106,18 +1157,20 @@ function CaseDetailPageContent() {
           }));
           setFileUrls(viewerUrls);
           setDownloadUrls(allUrls);
-          setLocalAnnotations(((refreshed as any).annotations ?? []) as any[]);
         } else {
           setFileUrls({});
           setDownloadUrls({});
-          setLocalAnnotations([]);
         }
+        // Siempre sincronizar anotaciones desde el servidor (incluye polilíneas recién guardadas).
+        setLocalAnnotations(((refreshed as any).annotations ?? []) as any[]);
       }
       stagedFileAdds.forEach(s => URL.revokeObjectURL(s.previewUrl));
       setStagedFileAdds([]);
       setStagedFileRemovals(new Set());
       setStagedAnnotationAdds([]);
       setStagedAnnotationRemovals(new Set());
+      setStagedPolylineAdds([]);
+      setStagedPolylineRemovals(new Set());
 
       if (clinicalCase.status !== 'borrador') {
         setIsEditing(false);
@@ -1156,6 +1209,8 @@ function CaseDetailPageContent() {
     setStagedFileRemovals(new Set());
     setStagedAnnotationAdds([]);
     setStagedAnnotationRemovals(new Set());
+    setStagedPolylineAdds([]);
+    setStagedPolylineRemovals(new Set());
     setSelectedCoords(null);
     setNewAnnotationText('');
     setIsEditing(false);
@@ -1798,7 +1853,7 @@ function CaseDetailPageContent() {
   }, [clinicalCase?.files, stagedFileRemovals, stagedFileAdds]);
 
   const displayedAnnotations = useMemo(() => {
-    const existing = (localAnnotations ?? []).filter((a: any) => !stagedAnnotationRemovals.has(a.id));
+    const existing = (localAnnotations ?? []).filter((a: any) => !Array.isArray(a.coordinates) && !stagedAnnotationRemovals.has(a.id));
     const added = stagedAnnotationAdds.map(s => ({
       id: s.tempId,
       text: s.text,
@@ -1809,6 +1864,14 @@ function CaseDetailPageContent() {
     }));
     return [...added, ...existing];
   }, [localAnnotations, stagedAnnotationRemovals, stagedAnnotationAdds, user, authUserProfile?.fullName]);
+
+  const displayedPolylines = useMemo(() => {
+    const existing = (localAnnotations ?? [])
+      .filter((a: any) => Array.isArray(a.coordinates) && !stagedPolylineRemovals.has(a.id))
+      .map((a: any) => ({ id: a.id, points: a.coordinates as Array<{ x: number; y: number; z: number }> }));
+    const added = stagedPolylineAdds.map(s => ({ id: s.tempId, points: s.points }));
+    return [...added, ...existing];
+  }, [localAnnotations, stagedPolylineRemovals, stagedPolylineAdds]);
 
   /**
    * Modelos para el visor 3D: existentes (signed URL) menos removals + staged adds (blob URL).
@@ -1937,16 +2000,22 @@ function CaseDetailPageContent() {
     });
   };
 
+  // Anotaciones y polilíneas pueden modificarse sin activar el modo edición de formulario
+  // (fieldsEditable basta; canEditForm requiere botón Editar activo).
+  const hasStagedAnnotationOrPolylineChanges =
+    fieldsEditable &&
+    !!clinicalCase &&
+    (stagedAnnotationAdds.length > 0 ||
+      stagedAnnotationRemovals.size > 0 ||
+      stagedPolylineAdds.length > 0 ||
+      stagedPolylineRemovals.size > 0);
+
   const isFormDirty =
-    canEditForm && clinicalCase
-      ? (
-          formSnapshot(editForm) !== formSnapshot(clinicalCase) ||
-          stagedFileAdds.length > 0 ||
-          stagedFileRemovals.size > 0 ||
-          stagedAnnotationAdds.length > 0 ||
-          stagedAnnotationRemovals.size > 0
-        )
-      : false;
+    (canEditForm && clinicalCase
+      ? formSnapshot(editForm) !== formSnapshot(clinicalCase) ||
+        stagedFileAdds.length > 0 ||
+        stagedFileRemovals.size > 0
+      : false) || hasStagedAnnotationOrPolylineChanges;
 
   const detailActions = useMemo(
     () =>
@@ -2579,6 +2648,10 @@ function CaseDetailPageContent() {
                   onToggleLayer={toggleSubtype}
                   onOpacityChange={handleOpacityChange}
                   onAnnotate={canEditForm ? setSelectedCoords : undefined}
+                  onDeleteAnnotation={canEditForm ? handleDeleteAnnotation : undefined}
+                  polylines={displayedPolylines}
+                  onPolylineComplete={canEditForm ? handlePolylineComplete : undefined}
+                  onDeletePolyline={canEditForm ? handleDeletePolyline : undefined}
                   canAnnotate={canEditForm}
                 >
                   {selectedCoords && (
@@ -2811,7 +2884,7 @@ function CaseDetailPageContent() {
           })()}
         </div>
 
-        <div className="lg:col-span-4 flex flex-col gap-4 relative z-[100]">
+        <div className="lg:col-span-4 flex flex-col gap-4 relative z-[200]">
           {/* PANEL DE EVALUACIÓN Y CIERRE (DENTISTA) REMOVIDO PARA MOVER A PANEL LATERAL */}
 
           {/* RESPUESTA A SOLICITUDES (DENTISTA) */}

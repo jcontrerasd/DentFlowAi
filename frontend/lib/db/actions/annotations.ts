@@ -33,6 +33,97 @@ export async function deleteAnnotationAction(id: string) {
   return { success: true };
 }
 
+export async function deleteDeliveryAnnotationAction(annotationId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const identity = await getServerIdentity();
+    if (!identity?.id) return { success: false, error: 'No autenticado' };
+
+    const [row] = await db
+      .select({ userId: annotation.userId, deliveryId: annotation.deliveryId })
+      .from(annotation)
+      .where(eq(annotation.id, annotationId))
+      .limit(1);
+
+    if (!row) return { success: false, error: 'Anotación no encontrada' };
+    if (!row.deliveryId) return { success: false, error: 'Operación no permitida' };
+    if (row.userId !== identity.id && !identity.isSystemAdmin) {
+      return { success: false, error: 'Solo el autor puede eliminar esta anotación' };
+    }
+
+    await db.delete(annotation).where(eq(annotation.id, annotationId));
+    return { success: true };
+  } catch (error) {
+    console.error('[deleteDeliveryAnnotationAction] Error:', error);
+    return { success: false, error: 'Error al eliminar anotación' };
+  }
+}
+
+export async function createPolylineAnnotationAction(input: {
+  caseId: string;
+  deliveryId?: string;
+  points: Array<{ x: number; y: number; z: number }>;
+}): Promise<{ success: boolean; annotation?: Record<string, unknown>; error?: string }> {
+  try {
+    const identity = await getServerIdentity();
+    if (!identity?.id) return { success: false, error: 'No autenticado' };
+
+    if (input.deliveryId) {
+      const [delivery] = await db
+        .select({ clinicalCaseId: clinicalCaseDelivery.clinicalCaseId })
+        .from(clinicalCaseDelivery)
+        .where(eq(clinicalCaseDelivery.id, input.deliveryId))
+        .limit(1);
+      if (!delivery || delivery.clinicalCaseId !== input.caseId) {
+        return { success: false, error: 'Entrega no encontrada' };
+      }
+    }
+
+    const [newAnnotation] = await db
+      .insert(annotation)
+      .values({
+        clinicalCaseId: input.caseId,
+        ...(input.deliveryId ? { deliveryId: input.deliveryId } : {}),
+        userId: identity.id,
+        text: '',
+        coordinates: input.points,
+        isResolved: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+
+    return { success: true, annotation: newAnnotation as Record<string, unknown> };
+  } catch (error) {
+    console.error('[createPolylineAnnotationAction] Error:', error);
+    return { success: false, error: 'Error al guardar trazado' };
+  }
+}
+
+export async function deletePolylineAnnotationAction(annotationId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const identity = await getServerIdentity();
+    if (!identity?.id) return { success: false, error: 'No autenticado' };
+
+    const [row] = await db
+      .select({ userId: annotation.userId, coordinates: annotation.coordinates })
+      .from(annotation)
+      .where(eq(annotation.id, annotationId))
+      .limit(1);
+
+    if (!row) return { success: false, error: 'Trazado no encontrado' };
+    if (!Array.isArray(row.coordinates)) return { success: false, error: 'Operación no permitida' };
+    if (row.userId !== identity.id && !identity.isSystemAdmin) {
+      return { success: false, error: 'Solo el autor puede eliminar este trazado' };
+    }
+
+    await db.delete(annotation).where(eq(annotation.id, annotationId));
+    return { success: true };
+  } catch (error) {
+    console.error('[deletePolylineAnnotationAction] Error:', error);
+    return { success: false, error: 'Error al eliminar trazado' };
+  }
+}
+
 export async function createDeliveryAnnotationAction(input: {
   caseId: string;
   deliveryId: string;

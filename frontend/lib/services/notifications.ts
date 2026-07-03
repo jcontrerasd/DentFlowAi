@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { user } from "@/lib/db/schema";
+import { user, clinicalCase } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { pushEmailPreview } from "@/lib/services/emailPreviewBuffer";
 
@@ -287,15 +287,15 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   },
   REVISION_PENDIENTE: {
     subject: 'Fauchard: nueva entrega lista para revisión',
-    body: (data) => `Hola,\n\nFauchard te informa que hay una nueva versión del diseño lista para revisión en el caso ${data.caseId}. Ingresa al Hub del caso para aprobar o solicitar ajustes.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+    body: (data) => `Hola,\n\nFauchard te informa que hay una nueva versión del diseño lista para revisión en el caso ${data.caseNumber || data.caseId}. Ingresa al Hub del caso para aprobar o solicitar ajustes.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
   CAMBIOS_SOLICITADOS: {
     subject: 'Fauchard: solicitud de ajustes en el caso',
-    body: (data) => `Hola ${data.name},\n\nFauchard te informa que el solicitante del caso ${data.caseId} solicitó ajustes al diseño. Revisa la bitácora del caso.\n\nVer caso: ${baseUrl()}/dashboard/bids/${data.caseId}`,
+    body: (data) => `Hola ${data.name},\n\nFauchard te informa que el solicitante del caso ${data.caseNumber || data.caseId} solicitó ajustes al diseño. Revisa la bitácora del caso.\n\nVer caso: ${baseUrl()}/dashboard/bids/${data.caseId}`,
   },
   TRABAJO_APROBADO: {
     subject: 'Fauchard: diseño aprobado por el solicitante',
-    body: (data) => `Hola ${data.name},\n\nFauchard confirma que el solicitante aprobó el diseño del caso ${data.caseId}. Revisa los próximos pasos en tu panel.\n\nVer caso: ${baseUrl()}/dashboard/bids/${data.caseId}`,
+    body: (data) => `Hola ${data.name},\n\nFauchard confirma que el solicitante aprobó el diseño del caso ${data.caseNumber || data.caseId}. Revisa los próximos pasos en tu panel.\n\nVer caso: ${baseUrl()}/dashboard/bids/${data.caseId}`,
   },
   PROPUESTA_RECHAZADA_DENTISTA: {
     subject: 'Fauchard: actualización en tu invitación',
@@ -303,7 +303,7 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   },
   COMPARATIVO_EXPIRADO_DENTISTA: {
     subject: 'Fauchard: ventana comparativa cerrada',
-    body: (data) => `Hola,\n\nFauchard te informa que venció el plazo para elegir una oferta en el caso ${data.caseId}. El caso quedó cerrado en esta ronda; puedes crear un nuevo caso si lo necesitas.\n\nVer panel: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+    body: (data) => `Hola,\n\nFauchard te informa que venció el plazo para elegir una oferta en el caso ${data.caseNumber || data.caseId}. El caso quedó cerrado en esta ronda; puedes crear un nuevo caso si lo necesitas.\n\nVer panel: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
   SUSPENSION_TEMPORAL: {
     subject: 'Fauchard: cuenta pausada temporalmente',
@@ -311,7 +311,7 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   },
   SIN_COTIZACIONES_FALLO: {
     subject: '⚠️ Alerta: Caso sin cotizaciones disponibles',
-    body: (data) => `Atención Admin,\n\nEl caso ${data.caseId} no ha podido ser asignado por falta de técnicos disponibles en el pool. Requiere intervención manual.`,
+    body: (data) => `Atención Admin,\n\nEl caso ${data.caseNumber || data.caseId} no ha podido ser asignado por falta de técnicos disponibles en el pool. Requiere intervención manual.`,
   },
   CASO_ASIGNADO_OTRO: {
     subject: 'Fauchard: caso asignado a otra oferta',
@@ -403,6 +403,16 @@ export async function notifyUser(userId: string, type: NotificationType, data: a
       .from(user)
       .where(eq(user.id, userId))
       .limit(1);
+
+    // Resolver caseNumber desde DB si se pasó caseId pero no caseNumber
+    if (data?.caseId && !data?.caseNumber) {
+      const [caseRow] = await db
+        .select({ caseNumber: clinicalCase.caseNumber })
+        .from(clinicalCase)
+        .where(eq(clinicalCase.id, data.caseId))
+        .limit(1);
+      if (caseRow?.caseNumber) data = { ...data, caseNumber: caseRow.caseNumber };
+    }
 
     if (!userData?.email) return { success: false, error: 'User email not found' };
 

@@ -1190,8 +1190,8 @@ export default function UnifiedCaseHub({
                       formatActivityTimestamp={formatActivityTimestamp}
                       onDownloadRevisionZip={handleDownloadAll}
                       downloadingRevisionZipId={downloadingVersionId}
-                      onView3D={(deliveryId, version, files, dentistNote) =>
-                        setViewer3DState({ deliveryId, version, files, dentistNote })
+                      onView3D={(deliveryId, version, files, dentistNote, readonly) =>
+                        setViewer3DState({ deliveryId, version, files, dentistNote, readonly })
                       }
                       isPendingDelivery={(() => {
                         if (!pendingDeliveryForReview || !actingAsDentista || caseStatus !== 'enRevision') return false;
@@ -1249,8 +1249,8 @@ export default function UnifiedCaseHub({
                       }}
                       onDeriveQuality={() => { onInvitationUpdate?.(); }}
                       dentistRejectionContext={lastDentistRejection ?? undefined}
-                      onViewRejectedDelivery={(deliveryId, version, files) =>
-                        setViewer3DState({ deliveryId, version, files, readonly: true })
+                      onViewRejectedDelivery={(deliveryId, version, files, reason) =>
+                        setViewer3DState({ deliveryId, version, files, dentistNote: reason, readonly: true })
                       }
                     />
                   );

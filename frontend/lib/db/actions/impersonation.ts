@@ -92,6 +92,16 @@ export async function getServerIdentity() {
           isSystemAdmin,
           adminId: session.user.id
         };
+      } else {
+        // La cookie apunta a un usuario que ya no existe (borrado, cookie stale).
+        // Limpiarla automáticamente y continuar como el admin real — así el admin
+        // no queda bloqueado y no puede operar accidentalmente con su propio id
+        // en una pantalla que esperaba al usuario simulado.
+        console.warn('[getServerIdentity] Cookie de impersonación inválida (userId no existe), limpiando:', impersonateId);
+        try {
+          const cookieStore = await cookies();
+          cookieStore.delete('dentflow_impersonate_id');
+        } catch { /* best-effort */ }
       }
     }
 
@@ -143,6 +153,11 @@ export async function startSimulationAction(userId: string) {
     const isAdmin = (session?.user as any)?.role === 'admin' || session?.user?.email === 'jaime.contreras.d@gmail.com';
     
     if (!isAdmin) return { success: false, error: "No autorizado" };
+
+    // Refrescar lastLoginAt del usuario simulado para que el filtro de inactividad
+    // de Fauchard no lo excluya por no hacer login propio (la impersonación no pasa
+    // por auth.config.ts donde se escribe este campo).
+    await db.update(user).set({ lastLoginAt: new Date() }).where(eq(user.id, userId));
 
     const cookieStore = await cookies();
     cookieStore.set('dentflow_impersonate_id', userId, {

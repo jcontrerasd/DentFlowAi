@@ -80,6 +80,35 @@ export interface FauchardConfigRow {
   changeReason: string | null;
 }
 
+/** Metadatos que se excluyen al comparar/copiar versiones de config. */
+const METADATA_KEYS = new Set([
+  'id', 'version', 'isActive', 'updatedBy', 'createdAt', 'updatedAt', 'changeReason',
+]);
+
+/** Metadata mínima de una versión de config para el historial. */
+export interface ConfigVersionMeta {
+  id: string;
+  version: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedByName: string | null;
+  changeReason: string | null;
+}
+
+/** KPIs agregados de los casos evaluados bajo una versión de config.
+ *  Campos alineados con AssignmentMetricsPanel del monitor. */
+export interface ConfigVersionKpis {
+  totalCasesPublished: number;
+  /** Resp ÷ Asig — técnicos que respondieron (aceptaron o rechazaron) */
+  technicianResponseRate: number | null;
+  /** Acept ÷ Resp — de las respuestas, cuántas terminaron en aceptado */
+  technicianAcceptanceRate: number | null;
+  /** Minutos promedio entre assignedAt y respondedAt */
+  avgResponseMinutes: number | null;
+  /** Casos con status sin_asignacion_fallo */
+  failedCasesCount: number;
+}
+
 /** Capacidades (CAD) requeridas — la app solo opera en modo solo_diseno. */
 function capacitiesForServiceType(_serviceType: string): Capacity[] {
   return ['cad'];
@@ -686,10 +715,8 @@ export async function updateFauchardParamsAction(
         changeReason: reason?.trim() || null,
       };
 
-      const metadataKeys = ['id', 'version', 'isActive', 'updatedBy', 'createdAt', 'updatedAt'];
-
       for (const [key, rawValue] of Object.entries(effectiveParams)) {
-        if (key in current && !metadataKeys.includes(key)) {
+        if (key in current && !METADATA_KEYS.has(key)) {
           const oldValue = current[key as keyof typeof current];
           const newValue = (ACTIVE_ALPHA_KEYS as readonly string[]).includes(key)
             ? roundAlphaWeight(Number(rawValue))
@@ -768,6 +795,136 @@ export async function getFauchardConfigLogAction(limit = 100): Promise<ActionRes
     return { success: true, logs };
   } catch (error) {
     console.error('[getFauchardConfigLogAction] Error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// ─── S6-04: Listar todas las versiones de config (Admin) ─────────────────────
+
+export async function listAllConfigVersionsAction(): Promise<ActionResult<{ versions: ConfigVersionMeta[] }>> {
+  const identity = await getServerIdentity();
+  if (!identity?.isSystemAdmin && identity?.role !== 'admin') return { success: false, error: 'No autorizado' };
+
+  try {
+    if (infraPromise) await infraPromise;
+    const versions = await db
+      .select({
+        id: fauchardConfig.id,
+        version: fauchardConfig.version,
+        isActive: fauchardConfig.isActive,
+        createdAt: fauchardConfig.createdAt,
+        changeReason: fauchardConfig.changeReason,
+        updatedByName: user.fullName,
+      })
+      .from(fauchardConfig)
+      .leftJoin(user, eq(fauchardConfig.updatedBy, user.id))
+      .orderBy(desc(fauchardConfig.version));
+
+    return { success: true, versions: versions as ConfigVersionMeta[] };
+  } catch (error) {
+    console.error('[listAllConfigVersionsAction] Error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// ─── S6-05: KPIs agregados por versión de config (Admin) ─────────────────────
+
+export async function getConfigVersionKpisAction(configId: string): Promise<ActionResult<{ kpis: ConfigVersionKpis }>> {
+  const identity = await getServerIdentity();
+  if (!identity?.isSystemAdmin && identity?.role !== 'admin') return { success: false, error: 'No autorizado' };
+
+  const empty: ConfigVersionKpis = {
+    totalCasesPublished: 0,
+    technicianResponseRate: null,
+    technicianAcceptanceRate: null,
+    avgResponseMinutes: null,
+    failedCasesCount: 0,
+  };
+
+  try {
+    if (infraPromise) await infraPromise;
+
+    const cases = await db
+      .select({ id: clinicalCase.id, status: clinicalCase.status })
+      .from(clinicalCase)
+      .where(eq(clinicalCase.fauchardConfigId, configId));
+
+    if (cases.length === 0) return { success: true, kpis: empty };
+
+    const caseIds = cases.map((c) => c.id);
+    const assignments = await db
+      .select({
+        status: caseAssignment.status,
+        assignedAt: caseAssignment.assignedAt,
+        respondedAt: caseAssignment.respondedAt,
+      })
+      .from(caseAssignment)
+      .where(inArray(caseAssignment.clinicalCaseId, caseIds));
+
+    const total = cases.length;
+    const failedCasesCount = cases.filter((c) => c.status === 'sin_asignacion_fallo').length;
+
+    const responded = assignments.filter((a) => a.respondedAt !== null).length;
+    const accepted = assignments.filter((a) => a.status === 'accepted').length;
+
+    const responseTimes = assignments
+      .filter((a) => a.respondedAt !== null)
+      .map((a) => (a.respondedAt!.getTime() - a.assignedAt.getTime()) / 60000);
+
+    const kpis: ConfigVersionKpis = {
+      totalCasesPublished: total,
+      technicianResponseRate: assignments.length > 0 ? responded / assignments.length : null,
+      technicianAcceptanceRate: responded > 0 ? accepted / responded : null,
+      avgResponseMinutes: responseTimes.length > 0 ? responseTimes.reduce((s, v) => s + v, 0) / responseTimes.length : null,
+      failedCasesCount,
+    };
+
+    return { success: true, kpis };
+  } catch (error) {
+    console.error('[getConfigVersionKpisAction] Error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// ─── S6-06: Obtener versión completa por id (Admin) ──────────────────────────
+
+export async function getConfigVersionFullAction(configId: string): Promise<ActionResult<{ config: FauchardConfigRow }>> {
+  const identity = await getServerIdentity();
+  if (!identity?.isSystemAdmin && identity?.role !== 'admin') return { success: false, error: 'No autorizado' };
+
+  try {
+    const config = await loadFauchardConfigById(configId);
+    return { success: true, config };
+  } catch (error) {
+    console.error('[getConfigVersionFullAction] Error:', error);
+    return { success: false, error: String(error) };
+  }
+}
+
+// ─── S6-07: Restaurar una versión anterior como nueva versión activa (Admin) ──
+
+export async function restoreConfigVersionAction(
+  sourceConfigId: string,
+  reason: string,
+): Promise<ActionResult<{ newVersion: number; persisted?: boolean }>> {
+  const identity = await getServerIdentity();
+  if (!identity?.isSystemAdmin) return { success: false, error: 'No autorizado — solo el administrador del sistema puede restaurar versiones' };
+
+  try {
+    const source = await loadFauchardConfigById(sourceConfigId);
+
+    // Extraer solo los parámetros editables (excluir metadata)
+    const params: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(source)) {
+      if (!METADATA_KEYS.has(key)) {
+        params[key] = value;
+      }
+    }
+
+    const compositeReason = `Restauración de V${source.version}: ${reason.trim()}`;
+    return updateFauchardParamsAction(params, compositeReason);
+  } catch (error) {
+    console.error('[restoreConfigVersionAction] Error:', error);
     return { success: false, error: String(error) };
   }
 }

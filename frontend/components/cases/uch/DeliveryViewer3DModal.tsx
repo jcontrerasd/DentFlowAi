@@ -8,14 +8,19 @@ import NewAnnotationOverlay from '@/components/cases/NewAnnotationOverlay';
 import { getDeliverySignedFilesAction } from '@/lib/db/actions/cases';
 import {
   createDeliveryAnnotationAction,
+  deleteDeliveryAnnotationAction,
+  createPolylineAnnotationAction,
+  deletePolylineAnnotationAction,
   listDeliveryAnnotationsAction,
 } from '@/lib/db/actions/annotations';
 import { useToast } from '@/context/ToastContext';
 
+type Point3D = { x: number; y: number; z: number };
+
 interface DentalAnnotation {
   id: string;
   text: string;
-  coordinates: { x: number; y: number; z: number };
+  coordinates: Point3D | Point3D[];
   user: { fullName: string; role?: string };
 }
 
@@ -237,6 +242,37 @@ export default function DeliveryViewer3DModal({
     }
   };
 
+  const handleDeleteAnnotation = async (id: string) => {
+    const result = await deleteDeliveryAnnotationAction(id);
+    if (result.success) {
+      setAnnotations((prev) => prev.filter((a) => a.id !== id));
+    } else {
+      showError(result.error ?? 'Error al eliminar anotación');
+    }
+  };
+
+  const handlePolylineComplete = async (points: Point3D[]) => {
+    const result = await createPolylineAnnotationAction({ caseId, deliveryId, points });
+    if (result.success && result.annotation) {
+      const anno = result.annotation as { id: string; coordinates: Point3D[] };
+      setAnnotations((prev) => [
+        ...prev,
+        { id: anno.id, text: '', coordinates: anno.coordinates, user: { fullName: 'Tú', role: viewerRole } },
+      ]);
+    } else {
+      showError((result.error as string | undefined) ?? 'Error al guardar trazado');
+    }
+  };
+
+  const handleDeletePolyline = async (id: string) => {
+    const result = await deletePolylineAnnotationAction(id);
+    if (result.success) {
+      setAnnotations((prev) => prev.filter((a) => a.id !== id));
+    } else {
+      showError(result.error ?? 'Error al eliminar trazado');
+    }
+  };
+
   const handleApproveClick = async () => {
     if (approveStep === 'choose') {
       setApproveStep('confirm');
@@ -306,8 +342,14 @@ export default function DeliveryViewer3DModal({
           {loadState === 'ready' && (
             <DentalViewer3D
               models={models}
-              annotations={annotations}
+              annotations={annotations.filter(a => !Array.isArray(a.coordinates)) as (DentalAnnotation & { coordinates: Point3D })[]}
+              polylines={annotations
+                .filter(a => Array.isArray(a.coordinates))
+                .map(a => ({ id: a.id, points: a.coordinates as Point3D[] }))}
               onAnnotate={canAnnotate ? handleAnnotate : undefined}
+              onDeleteAnnotation={canAnnotate ? handleDeleteAnnotation : undefined}
+              onPolylineComplete={canAnnotate ? handlePolylineComplete : undefined}
+              onDeletePolyline={canAnnotate ? handleDeletePolyline : undefined}
               canAnnotate={canAnnotate}
               onToggleLayer={(subType) =>
                 setModels((prev) =>
@@ -353,7 +395,7 @@ export default function DeliveryViewer3DModal({
         {viewerRole !== 'dentista' && dentistNote && (
           <div className="border-t border-divider px-4 py-3 shrink-0">
             <div className="space-y-1">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">Comentario del dentista</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">Comentario</p>
               <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{dentistNote}</p>
             </div>
           </div>
@@ -455,6 +497,7 @@ export default function DeliveryViewer3DModal({
       {/* Footer de revisión QA (solo revisor de Calidad con entrega pending) */}
       {canReviewQuality && (
         <div className="border-t border-divider px-4 py-3 shrink-0 space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-warning">Comentario</p>
           <textarea
             rows={2}
             placeholder="Comentario para el técnico (obligatorio para solicitar ajustes)…"

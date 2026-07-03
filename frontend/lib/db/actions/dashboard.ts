@@ -2,7 +2,7 @@
 
 import { db } from '@/lib/db';
 import { clinicalCase, caseAssignment, review } from '@/lib/db/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { isQualityGateEnabled } from '@/lib/constants/qualityFlags';
 import { getServerIdentity } from './impersonation';
 import { perfLog, perfStart } from '@/lib/perfLog';
@@ -75,25 +75,26 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
   if (isCalidad) {
     const qualityGateOn = isQualityGateEnabled();
     const rows = await db
-      .select({
-        status: clinicalCase.status,
-        hasQualityReview: qualityGateOn
-          ? sql<boolean>`EXISTS (
-              SELECT 1 FROM review r
-              WHERE r.clinical_case_id = ${clinicalCase.id}
-                AND r.reviewer_id = ${identity.id as string}
-                AND r.dimension = 'quality'
-            )`.as('has_quality_review')
-          : sql<boolean>`true`.as('has_quality_review'),
-      })
+      .select({ id: clinicalCase.id, status: clinicalCase.status })
       .from(clinicalCase)
       .where(whereClause);
 
+    let qualityRatedIds = new Set<string>();
+    if (qualityGateOn) {
+      const completedIds = rows.filter((r) => r.status === 'completado').map((r) => r.id);
+      if (completedIds.length > 0) {
+        const rated = await db
+          .select({ clinicalCaseId: review.clinicalCaseId })
+          .from(review)
+          .where(and(inArray(review.clinicalCaseId, completedIds), eq(review.dimension, 'quality')));
+        qualityRatedIds = new Set(rated.map((r) => r.clinicalCaseId));
+      }
+    }
+
     const metrics = initEmptyMetrics(CALIDAD_DASHBOARD_METRICS);
     for (const row of rows) {
-      const kpiId = qualityGateOn
-        ? classifyCalidadCaseKpi(row.status, row.hasQualityReview)
-        : classifyCalidadCaseKpi(row.status);
+      const hasQualityReview = qualityGateOn ? qualityRatedIds.has(row.id) : undefined;
+      const kpiId = classifyCalidadCaseKpi(row.status, hasQualityReview);
       metrics[kpiId] = (metrics[kpiId] ?? 0) + 1;
     }
 

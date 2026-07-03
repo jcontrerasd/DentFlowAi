@@ -117,6 +117,38 @@ export async function ensureTechnicianAvailabilityAction(userId: string): Promis
   return getAvailabilityForUserAction(userId);
 }
 
+/**
+ * Reconcilia `level_cad` con el estado real de skills de diseño del técnico.
+ * Corrige el caso degenerado en que el infrastructure-backfill creó la fila
+ * con `level_cad = false` ANTES de que el técnico declarara sus habilidades, y
+ * `ensureTechnicianAvailabilityAction` (ON CONFLICT DO NOTHING) no la actualizó.
+ *
+ * Solo actualiza si la fila ya existe con `levelCad = false` pero hay al menos
+ * una skill con `designLevel > 0`. Operación idempotente y best-effort.
+ */
+export async function reconcileLevelCadAfterSkillsAction(userId: string): Promise<void> {
+  const [row] = await db
+    .select({ levelCad: technicianAvailability.levelCad })
+    .from(technicianAvailability)
+    .where(eq(technicianAvailability.userId, userId))
+    .limit(1);
+
+  if (!row || row.levelCad) return; // no existe o ya está en true → nada que hacer
+
+  const skills = await db
+    .select({ designLevel: technicianSkill.designLevel })
+    .from(technicianSkill)
+    .where(eq(technicianSkill.userId, userId));
+  const hasCad = skills.some((s) => (s.designLevel ?? 0) > 0);
+
+  if (hasCad) {
+    await db
+      .update(technicianAvailability)
+      .set({ levelCad: true, updatedAt: new Date() })
+      .where(eq(technicianAvailability.userId, userId));
+  }
+}
+
 export type AvailabilityTarget =
   | { kind: 'global' }
   | { kind: 'capacity'; capacidad: Capacity }

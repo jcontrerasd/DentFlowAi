@@ -138,7 +138,7 @@ export default function CaseDetailManagementBar({
 
   return (
     <div
-      className="flex items-center gap-1.5 flex-wrap justify-end"
+      className="flex items-center gap-1.5 justify-end"
       role="toolbar"
       aria-label="Acciones del Caso"
     >

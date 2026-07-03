@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { redirect } from 'next/navigation';
 import { getServerIdentity } from '@/lib/db/actions/impersonation';
-import { getFauchardConfigAction } from '@/lib/db/actions/fauchard';
+import { getFauchardConfigAction, listAllConfigVersionsAction, getConfigVersionKpisAction } from '@/lib/db/actions/fauchard';
+import type { ConfigVersionKpis } from '@/lib/db/actions/fauchard';
 import { isAvailabilityAdminPanelEnabled } from '@/lib/constants/availabilityFlags';
 import { AlertTriangle, SlidersHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
@@ -20,7 +21,21 @@ export default async function AdminFauchardPage() {
     redirect('/dashboard');
   }
 
-  const res = await getFauchardConfigAction();
+  const isSystemAdmin = identity.isSystemAdmin ?? false;
+
+  const [res, versionsRes] = await Promise.all([
+    getFauchardConfigAction(),
+    listAllConfigVersionsAction(),
+  ]);
+
+  // Precarga KPIs de versiones inactivas en el servidor para evitar flicker en cliente
+  const versions = versionsRes.success ? versionsRes.versions : [];
+  const inactiveVersions = versions.filter((v) => !v.isActive);
+  const kpisResults = await Promise.all(
+    inactiveVersions.map((v) => getConfigVersionKpisAction(v.id).then((r) => ({ id: v.id, kpis: r.success ? r.kpis : null })))
+  );
+  const initialKpisCache: Record<string, ConfigVersionKpis> = {};
+  for (const r of kpisResults) if (r.kpis) initialKpisCache[r.id] = r.kpis;
 
   if (!res.success) {
     return (
@@ -63,7 +78,13 @@ export default async function AdminFauchardPage() {
         </div>
       </header>
 
-      <TabContainer config={config} showAvailabilityPanel={isAvailabilityAdminPanelEnabled()} />
+      <TabContainer
+        config={config}
+        showAvailabilityPanel={isAvailabilityAdminPanelEnabled()}
+        versions={versions}
+        initialKpisCache={initialKpisCache}
+        isSystemAdmin={isSystemAdmin}
+      />
     </div>
   );
 }
@@ -71,12 +92,31 @@ export default async function AdminFauchardPage() {
 // Client Component for Tabs
 import { Suspense } from 'react';
 import { TabClient } from './TabClient';
+import type { ConfigVersionMeta } from '@/lib/db/actions/fauchard';
 
-function TabContainer({ config, showAvailabilityPanel }: { config: any; showAvailabilityPanel: boolean }) {
+function TabContainer({
+  config,
+  showAvailabilityPanel,
+  versions,
+  initialKpisCache,
+  isSystemAdmin,
+}: {
+  config: any;
+  showAvailabilityPanel: boolean;
+  versions: ConfigVersionMeta[];
+  initialKpisCache: Record<string, ConfigVersionKpis>;
+  isSystemAdmin: boolean;
+}) {
   // Suspense: TabClient usa useSearchParams (deep-link de parámetros vía ?focus=).
   return (
     <Suspense fallback={null}>
-      <TabClient config={config} showAvailabilityPanel={showAvailabilityPanel} />
+      <TabClient
+        config={config}
+        showAvailabilityPanel={showAvailabilityPanel}
+        versions={versions}
+        initialKpisCache={initialKpisCache}
+        isSystemAdmin={isSystemAdmin}
+      />
     </Suspense>
   );
 }

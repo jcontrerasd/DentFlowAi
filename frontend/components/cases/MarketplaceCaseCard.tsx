@@ -10,15 +10,12 @@ import {
   UchHubIcon,
 } from '@/components/cases/CaseFichaHubAndServiceIcons';
 import { formatCaseIdAndPac } from '@/lib/cases/caseDisplay';
-import CaseViewerStatusStripe from '@/components/cases/CaseViewerStatusStripe';
-import StatusBadge from '@/components/ui/StatusBadge';
-import type { CaseViewerStatusInput } from '@/lib/cases/caseViewerStatusPresentation';
-import type { InvitationStatusForKpi } from '@/lib/dashboard/classifyCaseForDashboardKpi';
+import { statusLabel, statusIcon } from '@/components/ui/StatusBadge';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
 import { dispatchCaseHubToggle } from '@/lib/caseHubToggleEvent';
 import { getDentistCardZone, getTechnicianCardCta } from '@/lib/cases/dentistCardPresentation';
+import { maskCaseStatusForViewer } from '@/lib/cases/qualityStatusMasking';
 
-/** Marco de ficha sobre fondo oscuro: borde + aro interior muy suave. */
 const CASE_CARD_SHELL =
   'bg-surface border border-divider/35 rounded-[1.5rem] shadow-sm shadow-black/40 ring-1 ring-inset ring-white/[0.07] transition-colors duration-150 hover:bg-surface-off hover:border-primary/30 hover:ring-teal-500/10 focus-within:outline-none focus-within:ring-2 focus-within:ring-primary/30';
 
@@ -42,6 +39,55 @@ function formatCaseDateShort(value: unknown): string | null {
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${day} ${dd}/${mon}/${yy}, ${hh}:${mm}`;
 }
+
+function formatDeadlineRelative(value: unknown): { label: string | null; urgent: boolean } {
+  if (!value) return { label: null, urgent: false };
+  const d = value instanceof Date ? value : new Date(value as string);
+  if (Number.isNaN(d.getTime())) return { label: null, urgent: false };
+  const diffMs = d.getTime() - Date.now();
+  if (diffMs < 0) return { label: 'Vencido', urgent: true };
+  const diffH = diffMs / (1000 * 60 * 60);
+  if (diffH < 48) return { label: `en ${Math.ceil(diffH)}h`, urgent: true };
+  const diffD = diffMs / (1000 * 60 * 60 * 24);
+  if (diffD < 7) return { label: `en ${Math.ceil(diffD)} días`, urgent: false };
+  const day = DAYS_ES[d.getDay()];
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mon = MONTHS_ES[d.getMonth()];
+  return { label: `${day} ${dd}/${mon}`, urgent: false };
+}
+
+// Full class names so Tailwind detects them at build time
+const STATUS_ACCENT: Record<string, string> = {
+  borrador: 'border-l-divider',
+  cerrado: 'border-l-divider',
+  enEvaluacion: 'border-l-primary',
+  aceptadaPendienteInicio: 'border-l-primary',
+  enEjecucion: 'border-l-primary',
+  propuestaLista: 'border-l-warning',
+  enRevision: 'border-l-warning',
+  enRevisionCalidad: 'border-l-warning',
+  cambiosEnProceso: 'border-l-warning',
+  pausado: 'border-l-warning',
+  completado: 'border-l-jade',
+  rechazado: 'border-l-error',
+  cancelado: 'border-l-error',
+};
+
+const STATUS_TEXT: Record<string, string> = {
+  borrador: 'text-muted',
+  cerrado: 'text-muted',
+  enEvaluacion: 'text-primary',
+  aceptadaPendienteInicio: 'text-primary',
+  enEjecucion: 'text-primary',
+  propuestaLista: 'text-warning',
+  enRevision: 'text-warning',
+  enRevisionCalidad: 'text-warning',
+  cambiosEnProceso: 'text-warning',
+  pausado: 'text-warning',
+  completado: 'text-jade',
+  rechazado: 'text-error',
+  cancelado: 'text-error',
+};
 
 function countFiles(c: any): number {
   const files = c?.files || c?.files_on_clinicalCase;
@@ -78,7 +124,7 @@ export default function MarketplaceCaseCard({
 }: MarketplaceCaseCardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { userProfile: authUserProfile } = useAuth();
+  useAuth();
 
   const inviteExpirySource = invitation?.expiresAt || c.invitationExpiresAt;
   const inviteDeadlineMs = useDeadlineMs(inviteExpirySource ?? null);
@@ -92,32 +138,6 @@ export default function MarketplaceCaseCard({
   const proposalCountdownText = proposalRemaining < 0 ? null : formatCountdownHMS(proposalRemaining);
 
   const unreadCount = useMemo(() => hubUchUnread ?? 0, [hubUchUnread]);
-
-  const techStatusInput: CaseViewerStatusInput | null = useMemo(() => {
-    if (isDentist || !authUserProfile?.id) return null;
-    const invStatus = (myBid?.status ?? null) as InvitationStatusForKpi;
-    return {
-      caseStatus: String(c.status ?? ''),
-      assignedTechnicianId: c.assignedTechnicianId ?? null,
-      technicianUserId: String(authUserProfile.id),
-      invitationStatus: invStatus,
-    };
-  }, [isDentist, authUserProfile?.id, myBid?.status, c.status, c.assignedTechnicianId]);
-
-  const techCountdownRight =
-    countdownText &&
-    techStatusInput &&
-    (techStatusInput.invitationStatus === 'pending' ||
-      (techStatusInput.invitationStatus === 'quoted' &&
-        techStatusInput.caseStatus === 'enEvaluacion') ||
-      ((techStatusInput.caseStatus === 'enEvaluacion' ||
-        techStatusInput.caseStatus === 'propuestaLista') &&
-        (techStatusInput.invitationStatus === 'accepted' ||
-          techStatusInput.invitationStatus === 'confirmed'))) ? (
-      <div className="font-mono text-[11px] tabular-nums tracking-normal text-warning opacity-90">
-        {countdownText}
-      </div>
-    ) : null;
 
   const dentistZone = useMemo(
     () =>
@@ -134,16 +154,6 @@ export default function MarketplaceCaseCard({
     [isDentist, c],
   );
 
-  const dentistCountdown =
-    String(c.status ?? '') === 'enEvaluacion'
-      ? countdownText
-      : String(c.status ?? '') === 'propuestaLista'
-        ? proposalCountdownText
-        : null;
-  const dentistCountdownPulses =
-    (String(c.status ?? '') === 'enEvaluacion' && remaining > 0) ||
-    (String(c.status ?? '') === 'propuestaLista' && proposalRemaining > 0);
-
   const technicianCta = !isDentist
     ? getTechnicianCardCta({
         invitationStatus: myBid?.status ?? null,
@@ -158,137 +168,129 @@ export default function MarketplaceCaseCard({
         ? 'Abrir o cerrar Centro de control'
         : 'Abrir Centro de control';
 
-  const uchHubOpenButton = (
-    <motion.div className="flex shrink-0 items-center gap-1">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          const casePath = `/dashboard/cases/${c.id}`;
-          if (pathname === casePath) {
-            dispatchCaseHubToggle(c.id);
-            return;
-          }
-          router.push(`${casePath}?openHub=1`);
-        }}
-        className="flex h-[42px] w-10 shrink-0 items-center justify-center rounded-xl border border-divider/80 bg-background/80 text-muted transition-colors duration-150 hover:bg-surface-off hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-        title={hubAriaLabel}
-        aria-label={hubAriaLabel}
-      >
-        <UchHubIcon className="h-4 w-4" />
-      </button>
-      <CaseHubUnreadBadge count={unreadCount} />
-    </motion.div>
-  );
-
-  const isPublished = Boolean(c.publishedAt);
-  const caseDateLabel = formatCaseDateShort(c.publishedAt ?? c.updatedAt);
-  const caseDatePrefix = isPublished ? 'F.Publicación' : 'F.Borrador';
-  const deliveryDateLabel = formatCaseDateShort(c.desiredDeliveryAt);
+  const status = String(c.status ?? '');
+  const displayStatus = isDentist ? maskCaseStatusForViewer(status, 'dentista') : status;
+  const accentClass = STATUS_ACCENT[displayStatus] ?? 'border-l-divider';
+  const textColorClass = STATUS_TEXT[displayStatus] ?? 'text-muted';
+  const StatusIcon = statusIcon(displayStatus);
   const metaLine = formatCaseIdAndPac(c.caseNumber, c.patientIdAnon);
-
   const ctaClass = dentistZone?.ctaVariant === 'primary' ? CTA_BUTTON_PRIMARY : CTA_BUTTON_NEUTRAL;
   const ctaLabel = isDentist ? dentistZone?.ctaLabel ?? 'Ver caso' : technicianCta ?? 'Ver caso';
+
+  const isHighPriority = c.urgency === 'Alta' || c.urgency === 'Urgente' || c.urgency === 'alta' || c.urgency === 'urgente';
+  const deadline = formatDeadlineRelative(c.desiredDeliveryAt);
+
+  const isPublished = Boolean(c.publishedAt);
+  const pubDateLabel = formatCaseDateShort(c.publishedAt ?? c.updatedAt);
+  const pubDatePrefix = isPublished ? 'F.Pub' : 'Borrador';
 
   return (
     <motion.div
       key={c.id}
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`${CASE_CARD_SHELL} transition-all group relative overflow-hidden backdrop-blur-sm flex flex-col h-full min-w-[260px]`}
+      className={`${CASE_CARD_SHELL} border-l-4 ${accentClass} transition-all group relative overflow-hidden backdrop-blur-sm flex flex-col h-full min-w-[260px]`}
     >
       <div className="p-4 flex flex-col flex-1 text-sm">
-        {/* Header: chips + fecha */}
-        <div className="flex flex-col gap-1 mb-3">
-          <div className="flex items-center justify-between gap-1.5">
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-primary bg-primary-hl px-1.5 py-0.5 rounded-md">
-                {c.restorationType || 'General'}
-              </span>
-              <CaseServiceTypeBadge serviceType={c.serviceType} />
-            </div>
-            {(caseDateLabel || deliveryDateLabel) && (
-              <div className="text-[11px] font-mono text-muted shrink-0 ml-1 flex flex-col items-end">
-                {caseDateLabel && <span><span className="text-muted/70">{caseDatePrefix} :</span> {caseDateLabel}</span>}
-                {deliveryDateLabel && <span><span className="text-muted/70">F.Entrega :</span> {deliveryDateLabel}</span>}
-              </div>
-            )}
+
+        {/* Header: estado + hub */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <StatusIcon className={`w-3.5 h-3.5 shrink-0 ${textColorClass}`} aria-hidden />
+            <span className={`text-[11px] font-bold uppercase tracking-wider truncate ${textColorClass}`}>
+              {statusLabel(displayStatus)}
+            </span>
           </div>
-          <span
-            className={`text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md w-fit ${
-              c.urgency === 'Alta' || c.urgency === 'Urgente'
-                ? 'bg-error-hl text-error'
-                : 'bg-primary-hl text-primary'
-            }`}
-          >
-            Prioridad {c.urgency || 'Normal'}
-          </span>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const casePath = `/dashboard/cases/${c.id}`;
+                if (pathname === casePath) {
+                  dispatchCaseHubToggle(c.id);
+                  return;
+                }
+                router.push(`${casePath}?openHub=1`);
+              }}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-divider/60 bg-background/60 text-muted transition-colors duration-150 hover:bg-surface-off hover:border-primary/30 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              title={hubAriaLabel}
+              aria-label={hubAriaLabel}
+            >
+              <UchHubIcon className="h-3.5 w-3.5" />
+            </button>
+            <CaseHubUnreadBadge count={unreadCount} />
+          </div>
         </div>
 
-        {/* Título + metadata en una línea */}
+        {/* Nombre + meta */}
         <div className="mb-3">
           <h3 className="text-lg serif-font text-foreground group-hover:text-primary transition-colors uppercase tracking-tight line-clamp-2 leading-tight">
             {c.internalName || c.restorationType || 'Caso Dental'}
           </h3>
           {metaLine && (
-            <p className="text-muted text-xs mt-1 font-bold uppercase tracking-wide">{metaLine}</p>
+            <p className="text-muted text-xs mt-0.5 font-bold uppercase tracking-wide">{metaLine}</p>
           )}
         </div>
 
-        {/* Zona adaptativa */}
-        <div className="flex-1 mb-4">
-          {isDentist && dentistZone ? (
-            <div className="w-full rounded-xl bg-background/80 border border-divider px-3 py-2.5">
-              <div className="flex items-center gap-2">
-                <dentistZone.icon className={`w-4 h-4 shrink-0 ${dentistZone.iconClass}`} aria-hidden />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
-                  {dentistZone.primary}
-                </span>
-                {dentistCountdown && (
-                  <span
-                    className={`ml-auto font-mono text-[11px] tabular-nums tracking-normal text-warning ${
-                      dentistCountdownPulses ? 'animate-pulse' : ''
-                    }`}
-                  >
-                    {dentistCountdown}
-                  </span>
-                )}
-              </div>
-            </div>
-          ) : isCalidad ? (
-            <div className="w-full min-h-10 flex items-center gap-2 px-3 rounded-xl bg-background border border-divider">
-              <StatusBadge status={String(c.status ?? '')} />
-              {c.qualityRatingPending && (
-                <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-warning bg-warning-hl px-1.5 py-0.5 rounded-md shrink-0">
-                  <ClipboardCheck className="w-3 h-3" aria-hidden />
-                  Por calificar
-                </span>
-              )}
-            </div>
-          ) : !isDentist && techStatusInput ? (
-            <CaseViewerStatusStripe
-              input={techStatusInput}
-              invitedAt={invitation?.invitedAt ?? myBid?.invitedAt ?? myBid?.createdAt}
-              countdownRight={techCountdownRight}
-            />
-          ) : null}
+        {/* Chips: tipo + CAD + prioridad (solo si alta/urgente) */}
+        <div className="flex items-center gap-1.5 flex-wrap mb-3">
+          {c.restorationType && (
+            <span className="text-[11px] font-bold uppercase tracking-wider text-primary bg-primary-hl px-1.5 py-0.5 rounded-md">
+              {c.restorationType}
+            </span>
+          )}
+          <CaseServiceTypeBadge serviceType={c.serviceType} />
+          {isHighPriority && (
+            <span className="text-[11px] font-bold uppercase tracking-wider text-error bg-error-hl px-1.5 py-0.5 rounded-md">
+              ⚠ {c.urgency}
+            </span>
+          )}
         </div>
 
-        {/* Pie: hub + CTA */}
-        <div className="flex w-full gap-2">
-          {uchHubOpenButton}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              onSelectCase(c);
-            }}
-            className={ctaClass}
+        {/* Deadline pill */}
+        {deadline.label && (
+          <div
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold uppercase tracking-wider mb-3 ${
+              deadline.urgent
+                ? 'bg-error-hl text-error border-error/20'
+                : 'bg-surface-off text-muted border-divider'
+            }`}
           >
-            {ctaLabel}
-            <ChevronRight className="w-3 h-3 shrink-0 group-hover/btn:translate-x-1 transition-transform" />
-          </button>
-        </div>
+            <span className="opacity-70">Entrega</span>
+            <span>{deadline.label}</span>
+            {pubDateLabel && (
+              <span className="ml-auto font-mono text-[10px] opacity-60 normal-case tracking-normal">
+                {pubDatePrefix} {pubDateLabel}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Chip "Calificar" para rol calidad */}
+        {isCalidad && c.qualityRatingPending && (
+          <div className="flex items-center gap-1.5 mb-3">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-warning bg-warning-hl px-1.5 py-0.5 rounded-md">
+              <ClipboardCheck className="w-3 h-3" aria-hidden />
+              Calificar
+            </span>
+          </div>
+        )}
+
+        <div className="flex-1" />
+
+        {/* CTA único */}
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            onSelectCase(c);
+          }}
+          className={ctaClass}
+        >
+          {ctaLabel}
+          <ChevronRight className="w-3 h-3 shrink-0 group-hover/btn:translate-x-1 transition-transform" />
+        </button>
       </div>
     </motion.div>
   );

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { getUsersByRoleAction } from '@/lib/db/actions/user';
 import { motion, AnimatePresence } from 'framer-motion';
-import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus, Inbox, ClipboardCheck } from 'lucide-react';
+import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus, Inbox, ClipboardCheck, ShieldCheck } from 'lucide-react';
 
 export default function ImpersonationSelector({ onOpenChange, collapsed }: { onOpenChange?: (open: boolean) => void; collapsed?: boolean }) {
   const { user, userProfile, isSimulating, startSimulation, stopSimulation, simulatedProfile } = useAuth();
@@ -156,6 +156,16 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
                            >
                              <Inbox className="w-3 h-3" />
                              {u.pendingInvitations}
+                           </span>
+                         )}
+                         {roleMode === 'calidad' && u.activeQualityAssignments > 0 && (
+                           <span
+                             title={`${u.activeQualityAssignments} caso(s) en revisión activa`}
+                             aria-label={`${u.activeQualityAssignments} casos en revisión activa`}
+                             className="flex items-center gap-1 min-w-[20px] h-5 px-1.5 rounded-full bg-amber-500/15 text-amber-400 text-xs font-black shrink-0"
+                           >
+                             <ShieldCheck className="w-3 h-3" />
+                             {u.activeQualityAssignments}
                            </span>
                          )}
                          <div className="opacity-0 group-hover:opacity-100 transition-opacity">

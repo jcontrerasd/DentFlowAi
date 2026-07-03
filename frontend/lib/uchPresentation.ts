@@ -84,6 +84,12 @@ export function shouldPresentUchEventAsFauchard(
     return false;
   }
 
+  if (viewer.role === 'calidad') {
+    // El técnico es anónimo para Calidad: sus entregas se presentan como Fauchard.
+    if (authorRole === 'tecnico') return true;
+    return false;
+  }
+
   if (viewer.role === 'tecnico') {
     if (authorRole === 'dentista') return true;
     // Calidad es anónima para el técnico: sus eventos se presentan como Fauchard.
@@ -120,7 +126,7 @@ export function sanitizeUchPayloadForViewer(
     delete raw.qualityReviewerId;
   }
 
-  if (viewerRole === 'dentista') {
+  if (viewerRole === 'dentista' || viewerRole === 'calidad') {
     delete raw.technicianId;
     delete raw.revieweeId;
   }

@@ -106,7 +106,7 @@ export default function DashboardRecentCasesSection({
             !isDentist ? buildInvitationPropForCard(viewerInv) : undefined;
 
           return (
-            <motion.div key={c.id} className="min-w-[300px] md:min-w-[380px] snap-start">
+            <motion.div key={c.id} className="min-w-[300px] md:min-w-[420px] lg:min-w-[460px] snap-start">
               <MarketplaceCaseCard
                 c={c}
                 isDentist={isDentist}

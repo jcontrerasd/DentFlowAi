@@ -399,7 +399,9 @@ export async function buildFunnelStagesForScenario(
   } = await import('@/lib/fauchard/funnelStagePredicates');
 
   const { leagueMode } = await buildEligiblePoolForScenario(scenario, config, excludeTechIds);
-  const leagueFilterMode = leagueMode ?? 'strict';
+  // Si el pool quedó vacío (leagueMode=null), usar 'expand' para que el funnel
+  // muestre la razón real de exclusión de cada técnico en el modo más permisivo.
+  const leagueFilterMode = leagueMode ?? 'expand';
 
   const simScenario = scenarioToSimulationScenario(scenario);
   const availabilityOn = isAvailabilityEnabled();
