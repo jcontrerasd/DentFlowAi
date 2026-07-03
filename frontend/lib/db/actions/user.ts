@@ -228,10 +228,10 @@ export async function getUsersByRoleAction(role: 'dentista' | 'tecnico' | 'calid
           SELECT count(*)::int FROM ${caseAssignment} ci
           WHERE ci.technician_id = ${user.id} AND ci.status = 'pending'
         )`,
-        // Casos con revisión de calidad activa (solo relevante para rol 'calidad').
+        // Casos de calidad asignados que el revisor aún no ha abierto (first_viewed_at IS NULL).
         activeQualityAssignments: sql<number>`(
           SELECT count(*)::int FROM case_quality_assignment cqa
-          WHERE cqa.calidad_user_id = ${user.id} AND cqa.status = 'active'
+          WHERE cqa.calidad_user_id = ${user.id} AND cqa.status = 'active' AND cqa.first_viewed_at IS NULL
         )`,
       })
       .from(user)

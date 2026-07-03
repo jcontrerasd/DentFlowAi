@@ -91,6 +91,7 @@ import { dispatchDashboardMetricsRefresh } from '@/lib/dashboard/dashboardRefres
 import { getMyInvitationForCaseAction } from '@/lib/db/actions/invitations';
 import type { InvitationItem } from '@/lib/db/actions/invitations';
 import { getCaseHubReadStateAction, markCaseHubReadAction } from '@/lib/db/actions/hubRead';
+import { markQualityAssignmentViewedAction } from '@/lib/db/actions/quality';
 import { countUnreadNegChannel, countUnreadTechChannel, filterOthersNegChannel, filterOthersTechChannel, type UchUnreadEvent } from '@/lib/uchUnread';
 import { dispatchHubUnreadRefresh } from '@/lib/hubUnreadEvents';
 import {
@@ -905,6 +906,12 @@ function CaseDetailPageContent() {
     };
     void fetchData();
   }, [id, sessionUserId, profileUserId, router, ingestCasePayloadFromServer]);
+
+  // Marca la asignación de calidad como vista la primera vez que el revisor entra al caso.
+  useEffect(() => {
+    if (!actingAsCalidad || !id) return;
+    void markQualityAssignmentViewedAction(String(id));
+  }, [actingAsCalidad, id]);
 
   // Firma de URLs GCS en background: corre en cuanto cambia el listado de archivos del caso,
   // sin bloquear el cierre del spinner "Sincronizando expediente". El visor 3D y la lista de
@@ -2877,7 +2884,7 @@ function CaseDetailPageContent() {
           })()}
         </div>
 
-        <div className="lg:col-span-4 flex flex-col gap-4 relative z-[100]">
+        <div className="lg:col-span-4 flex flex-col gap-4 relative z-[200]">
           {/* PANEL DE EVALUACIÓN Y CIERRE (DENTISTA) REMOVIDO PARA MOVER A PANEL LATERAL */}
 
           {/* RESPUESTA A SOLICITUDES (DENTISTA) */}

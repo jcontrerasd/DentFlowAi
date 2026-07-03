@@ -738,3 +738,28 @@ export async function rejectDerivedQualityReviewAction(
     return { success: false, error: 'Fallo al rechazar la derivación' };
   }
 }
+
+/**
+ * Marca como "visto" la asignación de calidad activa para el caso.
+ * Idempotente: solo escribe first_viewed_at si aún es NULL.
+ * Llamado desde la página del caso cuando actingAsCalidad entra por primera vez.
+ */
+export async function markQualityAssignmentViewedAction(caseId: string): Promise<void> {
+  const identity = await getServerIdentity();
+  if (!identity?.id || !canActAsCalidad(identity.role)) return;
+  try {
+    await db
+      .update(caseQualityAssignment)
+      .set({ firstViewedAt: new Date() })
+      .where(
+        and(
+          eq(caseQualityAssignment.clinicalCaseId, caseId),
+          eq(caseQualityAssignment.calidadUserId, identity.id as string),
+          eq(caseQualityAssignment.status, 'active'),
+          sql`${caseQualityAssignment.firstViewedAt} IS NULL`,
+        ),
+      );
+  } catch (error) {
+    console.error('Error marking quality assignment as viewed:', error);
+  }
+}

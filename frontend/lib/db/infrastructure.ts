@@ -5,7 +5,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 // Cambiar la versión fuerza re-ejecución aunque el proceso no se reinicie
 /** v5.25 — data_export_request: solicitudes asíncronas de exportación de datos (portabilidad, Ley 21.719). */
 /** v5.26 — Índices de rendimiento: cobertura compuesta para Fauchard, UCH polling, crons y quality gate. */
-export const INFRA_VERSION = 'v5.25';
+/** v5.27 — case_quality_assignment.first_viewed_at: marca cuándo el revisor abrió el caso por primera vez (contador nuevo en ImpersonationSelector). */
+export const INFRA_VERSION = 'v5.27';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -1832,6 +1833,17 @@ export async function ensureInfrastructure(db: any) {
       console.log('[DB] v5.25 data_export_request: tabla + índices.');
     } catch (e) {
       console.error('[DB] v5.25 error:', e);
+    }
+
+    // v5.27 — case_quality_assignment.first_viewed_at
+    try {
+      await db.execute(sql`
+        ALTER TABLE case_quality_assignment
+          ADD COLUMN IF NOT EXISTS first_viewed_at TIMESTAMPTZ;
+      `);
+      console.log('[DB] v5.27 case_quality_assignment.first_viewed_at: columna agregada.');
+    } catch (e) {
+      console.error('[DB] v5.27 error:', e);
     }
 
     globalForInfra.infrastructureChecked = INFRA_VERSION;
