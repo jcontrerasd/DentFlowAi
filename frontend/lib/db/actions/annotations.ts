@@ -124,6 +124,52 @@ export async function deletePolylineAnnotationAction(annotationId: string): Prom
   }
 }
 
+const MAX_POLYLINE_POINTS = 500;
+
+export async function updatePolylineAnnotationAction(
+  annotationId: string,
+  points: Array<{ x: number; y: number; z: number }>,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const identity = await getServerIdentity();
+    if (!identity?.id) return { success: false, error: 'No autenticado' };
+
+    if (!Array.isArray(points) || points.length < 2 || points.length > MAX_POLYLINE_POINTS) {
+      return { success: false, error: 'Trazado inválido' };
+    }
+    for (const p of points) {
+      if (!Number.isFinite(p?.x) || !Number.isFinite(p?.y) || !Number.isFinite(p?.z)) {
+        return { success: false, error: 'Trazado inválido' };
+      }
+    }
+
+    const [row] = await db
+      .select({ userId: annotation.userId, coordinates: annotation.coordinates })
+      .from(annotation)
+      .where(eq(annotation.id, annotationId))
+      .limit(1);
+
+    if (!row) return { success: false, error: 'Trazado no encontrado' };
+    if (!Array.isArray(row.coordinates)) return { success: false, error: 'Operación no permitida' };
+    if (row.userId !== identity.id && !identity.isSystemAdmin) {
+      return { success: false, error: 'Solo el autor puede editar este trazado' };
+    }
+
+    await db
+      .update(annotation)
+      .set({
+        coordinates: points.map((p) => ({ x: p.x, y: p.y, z: p.z })),
+        updatedAt: new Date(),
+      })
+      .where(eq(annotation.id, annotationId));
+
+    return { success: true };
+  } catch (error) {
+    console.error('[updatePolylineAnnotationAction] Error:', error);
+    return { success: false, error: 'Error al actualizar trazado' };
+  }
+}
+
 export async function createDeliveryAnnotationAction(input: {
   caseId: string;
   deliveryId: string;

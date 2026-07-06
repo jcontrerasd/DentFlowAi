@@ -40,7 +40,8 @@
     "react-dom": "19.0.0",
     "react-error-boundary": "^6.1.1",
     "recharts": "^3.8.1",
-    "three": "^0.183.2"
+    "three": "^0.183.2",
+    "three-mesh-bvh": "^0.8.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",

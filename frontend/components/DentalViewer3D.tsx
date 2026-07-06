@@ -10,8 +10,26 @@ import {
   Line,
 } from '@react-three/drei';
 import type { Group } from 'three';
+import type { OrbitControls as ThreeOrbitControls } from 'three-stdlib';
 import * as THREE from 'three';
 import { ErrorBoundary, type FallbackProps } from 'react-error-boundary';
+import {
+  dedupeConsecutive,
+  dist3,
+  distToSegment,
+  capClosedPolyline,
+  PERSIST_MAX_POINTS,
+  PERSIST_RESAMPLE_TARGET,
+} from '@/lib/viewer3d/polylineGeometry';
+import {
+  installBVHRaycast,
+  scheduleBoundsTree,
+  closestSurfacePoint,
+  pickHomeMesh,
+  wrapClosedPolylineToSurface,
+  type SurfaceWrap,
+} from '@/lib/viewer3d/surfaceProjection';
+import PolylineNodeEditor from '@/components/viewer3d/PolylineNodeEditor';
 import {
   AlertTriangle,
   Eye,
@@ -21,6 +39,7 @@ import {
   MessageSquareOff,
   MessageSquarePlus,
   Navigation,
+  Pencil,
   RefreshCcw,
   Settings2,
   Spline,
@@ -30,6 +49,23 @@ import {
 } from 'lucide-react';
 
 type ViewerBg = 'neutro' | 'brand' | 'claro';
+
+// Umbrales del trazado freehand (px de pantalla — densidad constante independiente del zoom).
+const DRAG_THRESHOLD_PX = 6;      // distinguir clic discreto de arrastre freehand
+const SAMPLE_MIN_PX = 5;          // distancia mínima entre muestras durante el arrastre
+const CLOSE_SNAP_PX = 12;         // radio de cierre automático sobre el punto inicial
+const CLOSE_ARM_PX = 24;          // hay que alejarse esto del inicio antes de poder cerrar
+const MIN_POINTS_TO_CLOSE = 3;
+const DEDUPE_MIN_DIST = 0.05;     // mm — colapsa muestras casi duplicadas
+const CURVE_GRAB_NODE_RADIUS = 1.2; // mm — distancia para tomar nodo existente al agarrar la curva
+
+// Raycast acelerado por BVH para todos los meshes (sin boundsTree cae al nativo —
+// STLThumbnail y demás Canvas no cambian de comportamiento).
+if (typeof window !== 'undefined') installBVHRaycast();
+
+function screenDist(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
 
 const VIEWER_BG_STORAGE_KEY = 'dentflow_viewer_bg';
 const VIEWER_BG_COLORS: Record<ViewerBg, string> = {
@@ -99,7 +135,10 @@ function Model({
   opacity = 1,
   specularColor = '#3a4a5c',
   onPointerDown,
+  onPointerMove,
   onDoubleClick,
+  onMeshReady,
+  onMeshUnmount,
 }: {
   url: string,
   color: string,
@@ -107,17 +146,39 @@ function Model({
   opacity?: number,
   specularColor?: string,
   onPointerDown?: (e: ThreeEvent<PointerEvent>) => void;
+  onPointerMove?: (e: ThreeEvent<PointerEvent>) => void;
   onDoubleClick?: (e: ThreeEvent<MouseEvent>) => void;
+  onMeshReady?: (mesh: THREE.Mesh) => void;
+  onMeshUnmount?: (mesh: THREE.Mesh) => void;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
-  
+
   // Determinar el cargador según la extensión
   const extension = getModelExtension(url);
-  
+
   const loader: typeof STLLoader | typeof PLYLoader | typeof OBJLoader =
     extension === 'ply' ? PLYLoader : extension === 'obj' ? OBJLoader : STLLoader;
 
   const result = useLoader(loader, url);
+
+  // Registro de meshes de superficie para la proyección de trazados (BVH).
+  // Debe ir ANTES del early return por !visible para mantener el orden de hooks;
+  // al ocultarse el modelo el componente retorna null → cleanup desregistra.
+  useEffect(() => {
+    if (!visible || !onMeshReady) return;
+    const registered: THREE.Mesh[] = [];
+    if (result instanceof THREE.BufferGeometry) {
+      if (meshRef.current) registered.push(meshRef.current);
+    } else {
+      result.traverse((child: THREE.Object3D) => {
+        if (child instanceof THREE.Mesh) registered.push(child);
+      });
+    }
+    for (const m of registered) onMeshReady(m);
+    return () => {
+      for (const m of registered) onMeshUnmount?.(m);
+    };
+  }, [result, visible, onMeshReady, onMeshUnmount]);
 
   if (!visible) return null;
 
@@ -128,6 +189,7 @@ function Model({
         ref={meshRef}
         geometry={result}
         onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
         onDoubleClick={onDoubleClick}
       >
         {/* Phong: highlights especulares suaves para percibir relieve dental,
@@ -166,7 +228,7 @@ function Model({
     }
   });
 
-  return <primitive object={result} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} />;
+  return <primitive object={result} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onDoubleClick={onDoubleClick} />;
 }
 
 function Pin({ position, text, color = '#e11d48', onDelete }: { position: [number, number, number], text: string, user: string, color?: string, onDelete?: () => void }) {
@@ -229,25 +291,43 @@ function Pin({ position, text, color = '#e11d48', onDelete }: { position: [numbe
 
 type Point3D = { x: number; y: number; z: number };
 
-function PolylineRender({ points, color = '#e11d48', opacity = 1, onDelete, onDeletePoint }: {
+function FreehandLine({ points }: { points: Point3D[] }) {
+  // Overlay durante el arrastre: la cámara está bloqueada mirando la superficie,
+  // la oclusión es irrelevante — depthTest off evita costo de proyección por frame.
+  return (
+    <Line
+      points={points.map(p => [p.x, p.y, p.z] as [number, number, number])}
+      color="#e11d48"
+      lineWidth={2.5}
+      transparent
+      opacity={0.6}
+      depthTest={false}
+      renderOrder={999}
+    />
+  );
+}
+
+function PolylineRender({ points, color = '#e11d48', opacity = 1, surfaceWrap, onDelete, onDeletePoint, onEdit, onHoverChange }: {
   points: Point3D[];
   color?: string;
   opacity?: number;
+  surfaceWrap: SurfaceWrap;
   onDelete?: () => void;
   onDeletePoint?: (index: number) => void;
+  onEdit?: () => void;
+  onHoverChange?: (hovering: boolean) => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
-  const curvePoints = useMemo(() => {
+  // Pipeline de display: chaikin → resample → proyección al mesh + offset por
+  // normal (0.12mm). La línea abraza la superficie y respeta la oclusión real.
+  const displayPoints = useMemo(() => {
     if (points.length < 2) return null;
-    const vecs = points.map(p => new THREE.Vector3(p.x, p.y, p.z));
-    const pts = points.length === 2
-      ? vecs
-      : new THREE.CatmullRomCurve3(vecs, false).getPoints(Math.max(80, points.length * 20));
-    // Cerrar añadiendo el primer punto al final
-    return [...pts, pts[0]];
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(points)]);
+    const wrapped = points.length === 2 ? points : surfaceWrap.wrap(points, 'full');
+    const vecs = wrapped.map(p => new THREE.Vector3(p.x, p.y, p.z));
+    return [...vecs, vecs[0]];
+  }, [points, surfaceWrap]);
 
   // Punto medio para anclar el botón × de eliminar todo el trazado
   const midPoint: Point3D | null = points.length >= 2
@@ -257,22 +337,51 @@ function PolylineRender({ points, color = '#e11d48', opacity = 1, onDelete, onDe
   return (
     <group>
       {/* Línea curva cerrada — lineWidth requiere Line de drei (Line2 internamente) */}
-      {curvePoints && (
-        <Line
-          points={curvePoints}
-          color={color}
-          lineWidth={2.5}
-          transparent={opacity < 1}
-          opacity={opacity}
-        />
+      {displayPoints && (
+        <>
+          {/* Pase principal: depth test normal — la línea se oculta detrás de
+              geometría que la tapa; el offset por normal evita el z-fighting. */}
+          <Line
+            points={displayPoints}
+            color={hovered && onEdit ? '#ff6b6b' : color}
+            lineWidth={hovered && onEdit ? 4 : 2.5}
+            transparent={opacity < 1}
+            opacity={opacity}
+          />
+          {/* Pase fantasma: GreaterDepth dibuja SOLO la porción tapada, atenuada */}
+          <Line
+            points={displayPoints}
+            color={color}
+            lineWidth={2.5}
+            transparent
+            opacity={0.15}
+            depthFunc={THREE.GreaterDepth}
+            depthWrite={false}
+          />
+          {/* Hit-line ancha invisible: clic fácil sobre el lazo sin puntería fina.
+              depthWrite=false — si escribiera depth activaría el fantasma encima. */}
+          {onEdit && (
+            <Line
+              points={displayPoints}
+              color={color}
+              lineWidth={16}
+              transparent
+              opacity={0}
+              depthWrite={false}
+              onPointerOver={(e) => { e.stopPropagation(); setHovered(true); onHoverChange?.(true); }}
+              onPointerOut={() => { setHovered(false); onHoverChange?.(false); }}
+              onClick={(e) => { e.stopPropagation(); onHoverChange?.(false); onEdit(); }}
+            />
+          )}
+        </>
       )}
 
       {/* Esferas en puntos de control solo durante el dibujo (onDeletePoint activo) */}
       {onDeletePoint && points.map((p, i) => (
         <group key={i} position={[p.x, p.y, p.z]}>
-          <mesh>
+          <mesh renderOrder={999}>
             <sphereGeometry args={[0.25, 10, 10]} />
-            <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.5} transparent={opacity < 1} opacity={opacity} />
+            <meshBasicMaterial color={color} transparent={opacity < 1} opacity={opacity} depthTest={false} />
           </mesh>
           <Html zIndexRange={[100, 0]} style={{ pointerEvents: 'auto' }}>
             <button
@@ -339,6 +448,7 @@ export default function DentalViewer3D({
   onAnnotate,
   onDeleteAnnotation,
   onPolylineComplete,
+  onPolylineUpdate,
   onDeletePolyline,
   canAnnotate = true,
   children
@@ -351,6 +461,7 @@ export default function DentalViewer3D({
   onAnnotate?: (coords: { x: number, y: number, z: number }) => void,
   onDeleteAnnotation?: (id: string) => void,
   onPolylineComplete?: (points: Point3D[]) => void,
+  onPolylineUpdate?: (id: string, points: Point3D[]) => void,
   onDeletePolyline?: (id: string) => void,
   canAnnotate?: boolean,
   children?: React.ReactNode
@@ -358,8 +469,7 @@ export default function DentalViewer3D({
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneGroupRef = useRef<Group>(null);
   // Ref a OrbitControls para zoom imperativo desde los botones.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const controlsRef = useRef<any>(null);
+  const controlsRef = useRef<ThreeOrbitControls | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isAnnotateMode, setIsAnnotateMode] = useState(false);
   const [isPolylineMode, setIsPolylineMode] = useState(false);
@@ -370,6 +480,25 @@ export default function DentalViewer3D({
   const [mountKey, setMountKey] = useState(0);
   const [panelOpen, setPanelOpen] = useState(true);
   const [bgMode, setBgMode] = useState<ViewerBg>('brand');
+
+  // ── Meshes de superficie para proyección de trazados (BVH) ────────────────
+  const surfaceMeshesRef = useRef<Set<THREE.Mesh>>(new Set());
+  const bvhCancelsRef = useRef<Map<THREE.Mesh, () => void>>(new Map());
+  const [surfaceVersion, setSurfaceVersion] = useState(0);
+
+  const handleMeshReady = useCallback((mesh: THREE.Mesh) => {
+    surfaceMeshesRef.current.add(mesh);
+    setSurfaceVersion(v => v + 1);
+  }, []);
+
+  const handleMeshUnmount = useCallback((mesh: THREE.Mesh) => {
+    surfaceMeshesRef.current.delete(mesh);
+    bvhCancelsRef.current.get(mesh)?.();
+    bvhCancelsRef.current.delete(mesh);
+    // El boundsTree queda cacheado en la geometría (useLoader la comparte):
+    // re-montar el modelo reutiliza el BVH gratis.
+    setSurfaceVersion(v => v + 1);
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -382,13 +511,339 @@ export default function DentalViewer3D({
     try { window.localStorage.setItem(VIEWER_BG_STORAGE_KEY, mode); } catch { /* ignore */ }
   }, []);
 
-  const finalizePolyline = useCallback(() => {
-    if (inProgressPoints.length >= 2) {
-      onPolylineComplete?.(inProgressPoints);
-    }
-    setInProgressPoints([]);
+  // Máquina de estados del trazo freehand. Refs mutables: las muestras llegan a
+  // frecuencia de pointermove y no deben depender de closures con estado stale.
+  const inProgressRef = useRef<Point3D[]>([]);
+  const drawRef = useRef<{
+    phase: 'idle' | 'pending' | 'dragging';
+    candidate: Point3D | null;
+    startScreen: { x: number; y: number };
+    lastScreen: { x: number; y: number };
+    leftStart: boolean;
+  }>({ phase: 'idle', candidate: null, startScreen: { x: 0, y: 0 }, lastScreen: { x: 0, y: 0 }, leftStart: false });
+  const [isFreehandDragging, setIsFreehandDragging] = useState(false);
+
+  const setControlsEnabled = useCallback((enabled: boolean) => {
+    if (controlsRef.current) controlsRef.current.enabled = enabled;
+  }, []);
+
+  const syncInProgress = useCallback((pts: Point3D[]) => {
+    inProgressRef.current = pts;
+    setInProgressPoints(pts);
+  }, []);
+
+  const resetStroke = useCallback(() => {
+    drawRef.current.phase = 'idle';
+    drawRef.current.candidate = null;
+    setIsFreehandDragging(false);
+    setControlsEnabled(true);
+  }, [setControlsEnabled]);
+
+  const cancelDrawing = useCallback(() => {
+    syncInProgress([]);
+    drawRef.current.leftStart = false;
+    resetStroke();
     setIsPolylineMode(false);
-  }, [inProgressPoints, onPolylineComplete]);
+  }, [syncInProgress, resetStroke]);
+
+  const completeWithPoints = useCallback((pts: Point3D[]) => {
+    // Conservar fidelidad de superficie: los puntos vienen del mesh (e.point =
+    // intersección 3D real). Deduplicar a 0.3mm y capear al límite del servidor
+    // (MAX_POLYLINE_POINTS=500) resampleando por arco si el trazo es muy largo.
+    const cleaned = capClosedPolyline(
+      dedupeConsecutive(pts, 0.3),
+      PERSIST_MAX_POINTS,
+      PERSIST_RESAMPLE_TARGET,
+    );
+    if (cleaned.length >= 2) {
+      onPolylineComplete?.(cleaned);
+    }
+    syncInProgress([]);
+    drawRef.current.leftStart = false;
+    resetStroke();
+    setIsPolylineMode(false);
+  }, [onPolylineComplete, syncInProgress, resetStroke]);
+
+  const finalizePolyline = useCallback(() => {
+    completeWithPoints(inProgressRef.current);
+  }, [completeWithPoints]);
+
+  /** Proyección a px de pantalla del primer punto del trazo (para el cierre automático). */
+  const projectFirstPointToScreen = useCallback((camera: THREE.Camera, canvas: HTMLCanvasElement) => {
+    const first = inProgressRef.current[0];
+    if (!first || !sceneGroupRef.current) return null;
+    const v = new THREE.Vector3(first.x, first.y, first.z);
+    sceneGroupRef.current.localToWorld(v);
+    v.project(camera);
+    return { x: ((v.x + 1) / 2) * canvas.clientWidth, y: ((1 - v.y) / 2) * canvas.clientHeight };
+  }, []);
+
+  const handleStrokePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
+    if (!sceneGroupRef.current || e.nativeEvent.button !== 0) return;
+    e.stopPropagation();
+    const cursor = { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
+    const canvas = e.nativeEvent.target as HTMLCanvasElement;
+    const startProj = projectFirstPointToScreen(e.camera, canvas);
+    if (startProj) {
+      const toStart = screenDist(cursor, startProj);
+      if (toStart > CLOSE_ARM_PX) drawRef.current.leftStart = true;
+      else if (
+        drawRef.current.leftStart &&
+        toStart < CLOSE_SNAP_PX &&
+        inProgressRef.current.length >= MIN_POINTS_TO_CLOSE
+      ) {
+        completeWithPoints(inProgressRef.current);
+        return;
+      }
+    }
+    // Bloquea OrbitControls: arrastrar sobre el mesh dibuja; sobre el fondo sigue rotando.
+    setControlsEnabled(false);
+    const local = sceneGroupRef.current.worldToLocal(e.point.clone());
+    drawRef.current.phase = 'pending';
+    drawRef.current.candidate = { x: local.x, y: local.y, z: local.z };
+    drawRef.current.startScreen = cursor;
+    drawRef.current.lastScreen = cursor;
+  }, [projectFirstPointToScreen, completeWithPoints, setControlsEnabled]);
+
+  const handleStrokePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
+    const d = drawRef.current;
+    if (d.phase === 'idle' || !sceneGroupRef.current) return;
+    const cursor = { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
+    const canvas = e.nativeEvent.target as HTMLCanvasElement;
+
+    if (d.phase === 'pending') {
+      if (screenDist(cursor, d.startScreen) <= DRAG_THRESHOLD_PX) return;
+      d.phase = 'dragging';
+      setIsFreehandDragging(true);
+      if (d.candidate) syncInProgress([...inProgressRef.current, d.candidate]);
+      d.candidate = null;
+      d.lastScreen = d.startScreen;
+    }
+
+    if (screenDist(cursor, d.lastScreen) < SAMPLE_MIN_PX) return;
+
+    const startProj = projectFirstPointToScreen(e.camera, canvas);
+    if (startProj) {
+      const toStart = screenDist(cursor, startProj);
+      if (toStart > CLOSE_ARM_PX) d.leftStart = true;
+      else if (d.leftStart && toStart < CLOSE_SNAP_PX && inProgressRef.current.length >= MIN_POINTS_TO_CLOSE) {
+        completeWithPoints(inProgressRef.current);
+        return;
+      }
+    }
+
+    const local = sceneGroupRef.current.worldToLocal(e.point.clone());
+    const p = { x: local.x, y: local.y, z: local.z };
+    const last = inProgressRef.current[inProgressRef.current.length - 1];
+    if (!last || dist3(last, p) > 1e-6) {
+      syncInProgress([...inProgressRef.current, p]);
+    }
+    d.lastScreen = cursor;
+  }, [projectFirstPointToScreen, completeWithPoints, syncInProgress]);
+
+  // ── Edición por nodos de un trazado guardado ──────────────────────────────
+  const [editingPolylineId, setEditingPolylineId] = useState<string | null>(null);
+  const [editingPoints, setEditingPoints] = useState<Point3D[]>([]);
+  const editingPointsRef = useRef<Point3D[]>([]);
+  const nodeDragRef = useRef<number | null>(null);
+  const [isNodeDragging, setIsNodeDragging] = useState(false);
+
+  // Gating del build BVH: solo cuando hay trazados o modo trazado/edición activo.
+  // Visores sin trazados no pagan CPU (0.5-2s por malla grande) ni memoria del BVH.
+  const needsSurfaceProjection = polylines.length > 0 || isPolylineMode || editingPolylineId !== null;
+  useEffect(() => {
+    if (!needsSurfaceProjection) return;
+    for (const mesh of surfaceMeshesRef.current) {
+      if (bvhCancelsRef.current.has(mesh)) continue;
+      bvhCancelsRef.current.set(
+        mesh,
+        scheduleBoundsTree(mesh.geometry, () => setSurfaceVersion(v => v + 1)),
+      );
+    }
+  }, [needsSurfaceProjection, surfaceVersion, polylines.length]);
+
+  // Servicio de proyección para los renders de trazados. `version` invalida los
+  // memos downstream cuando se registra un mesh o termina un build de BVH.
+  const surfaceWrap = useMemo<SurfaceWrap>(() => ({
+    version: surfaceVersion,
+    wrap: (pts, quality) => {
+      const meshes = [...surfaceMeshesRef.current];
+      const home = pickHomeMesh(pts, meshes);
+      return quality === 'drag'
+        ? wrapClosedPolylineToSurface(pts, home, { spacing: 0.7, iterations: 1 })
+        : wrapClosedPolylineToSurface(pts, home);
+    },
+  }), [surfaceVersion]);
+
+  const syncEditingPoints = useCallback((pts: Point3D[]) => {
+    editingPointsRef.current = pts;
+    setEditingPoints(pts);
+  }, []);
+
+  const stopEditingPolyline = useCallback((save: boolean) => {
+    if (save && editingPolylineId && onPolylineUpdate && editingPointsRef.current.length >= 2) {
+      // Cap también al editar: la action de update rechaza >500 puntos y hay
+      // trazados legacy densos creados antes de que el cap existiera.
+      onPolylineUpdate(
+        editingPolylineId,
+        capClosedPolyline(editingPointsRef.current, PERSIST_MAX_POINTS, PERSIST_RESAMPLE_TARGET),
+      );
+    }
+    setEditingPolylineId(null);
+    syncEditingPoints([]);
+    nodeDragRef.current = null;
+    setIsNodeDragging(false);
+    setControlsEnabled(true);
+  }, [editingPolylineId, onPolylineUpdate, syncEditingPoints, setControlsEnabled]);
+
+  const startEditingPolyline = useCallback((pl: { id: string; points: Point3D[] }) => {
+    if (isPolylineMode) cancelDrawing();
+    setIsAnnotateMode(false);
+    setEditingPolylineId(pl.id);
+    syncEditingPoints(pl.points.map(p => ({ ...p })));
+  }, [isPolylineMode, cancelDrawing, syncEditingPoints]);
+
+  const handleNodePointerDown = useCallback((index: number, e: ThreeEvent<PointerEvent>) => {
+    if (e.nativeEvent.button !== 0) return;
+    e.stopPropagation();
+    setControlsEnabled(false);
+    document.body.style.cursor = 'grabbing';
+    nodeDragRef.current = index;
+    setIsNodeDragging(true);
+  }, [setControlsEnabled]);
+
+  // Cursor sobre el lazo (curva o nodo): bloquear la cámara para que un clic
+  // levemente desviado no rote el modelo — comportamiento estándar CAD.
+  const handleEditHoverChange = useCallback((hovering: boolean) => {
+    if (nodeDragRef.current !== null) return;
+    setControlsEnabled(!hovering);
+    document.body.style.cursor = hovering ? 'grab' : '';
+  }, [setControlsEnabled]);
+
+  // Los puntos tomados de la curva de display flotan +0.12mm sobre el mesh
+  // (offset por normal); antes de convertirlos en nodos crudos se devuelven
+  // a la superficie contra el mesh dueño del trazado en edición.
+  const snapToEditingSurface = useCallback((p: Point3D): Point3D => {
+    const home = pickHomeMesh(editingPointsRef.current, [...surfaceMeshesRef.current]);
+    if (!home) return p;
+    const hit = closestSurfacePoint(home, p);
+    return hit ? hit.point : p;
+  }, []);
+
+  // Agarrar la curva en cualquier punto: toma el nodo más cercano si está a
+  // mano; si no, inserta un nodo nuevo justo donde se agarró y lo arrastra.
+  const handleCurvePointerDown = useCallback((worldPoint: THREE.Vector3, e: ThreeEvent<PointerEvent>) => {
+    if (e.nativeEvent.button !== 0 || !sceneGroupRef.current) return;
+    e.stopPropagation();
+    setControlsEnabled(false);
+    document.body.style.cursor = 'grabbing';
+    const local = sceneGroupRef.current.worldToLocal(worldPoint.clone());
+    const p = snapToEditingSurface({ x: local.x, y: local.y, z: local.z });
+    const pts = editingPointsRef.current;
+    let nearest = 0;
+    let nearestDist = Infinity;
+    pts.forEach((q, i) => {
+      const d = dist3(p, q);
+      if (d < nearestDist) { nearestDist = d; nearest = i; }
+    });
+    if (nearestDist <= CURVE_GRAB_NODE_RADIUS) {
+      nodeDragRef.current = nearest;
+    } else {
+      let seg = 0;
+      let segDist = Infinity;
+      for (let i = 0; i < pts.length; i++) {
+        const d = distToSegment(p, pts[i], pts[(i + 1) % pts.length]);
+        if (d < segDist) { segDist = d; seg = i; }
+      }
+      syncEditingPoints([...pts.slice(0, seg + 1), p, ...pts.slice(seg + 1)]);
+      nodeDragRef.current = seg + 1;
+    }
+    setIsNodeDragging(true);
+  }, [setControlsEnabled, syncEditingPoints, snapToEditingSurface]);
+
+  // El mesh dental entrega el punto de superficie: el nodo activo se re-proyecta ahí.
+  // Si el rayo no toca el mesh, no llega evento y el nodo conserva su última posición válida.
+  const handleNodeDragMove = useCallback((e: ThreeEvent<PointerEvent>) => {
+    const i = nodeDragRef.current;
+    if (i === null || !sceneGroupRef.current) return;
+    const local = sceneGroupRef.current.worldToLocal(e.point.clone());
+    const pts = editingPointsRef.current.slice();
+    pts[i] = { x: local.x, y: local.y, z: local.z };
+    syncEditingPoints(pts);
+  }, [syncEditingPoints]);
+
+  const handleInsertNode = useCallback((segmentIndex: number) => {
+    const pts = editingPointsRef.current;
+    const a = pts[segmentIndex];
+    const b = pts[(segmentIndex + 1) % pts.length];
+    if (!a || !b) return;
+    // El midpoint de una cuerda cae dentro/fuera del mesh — snapearlo a superficie.
+    const mid = snapToEditingSurface({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
+    const next = [...pts.slice(0, segmentIndex + 1), mid, ...pts.slice(segmentIndex + 1)];
+    syncEditingPoints(next);
+  }, [syncEditingPoints, snapToEditingSurface]);
+
+  const handleDeleteNode = useCallback((index: number) => {
+    const pts = editingPointsRef.current;
+    if (pts.length <= 3) return;
+    syncEditingPoints(pts.filter((_, i) => i !== index));
+  }, [syncEditingPoints]);
+
+  // Soltar nodo (pointerup global) + Esc descarta la edición.
+  useEffect(() => {
+    if (!editingPolylineId) return;
+    const release = () => {
+      if (nodeDragRef.current !== null) {
+        nodeDragRef.current = null;
+        setIsNodeDragging(false);
+        setControlsEnabled(true);
+        document.body.style.cursor = '';
+      }
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') stopEditingPolyline(false);
+    };
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerup', release);
+      window.removeEventListener('pointercancel', release);
+      window.removeEventListener('keydown', onKey);
+      setControlsEnabled(true);
+      document.body.style.cursor = '';
+    };
+  }, [editingPolylineId, stopEditingPolyline, setControlsEnabled]);
+
+  // Cierre del gesto (pointerup global: cubre soltar fuera del mesh o del canvas) + Esc.
+  useEffect(() => {
+    if (!isPolylineMode) return;
+    const settle = () => {
+      const d = drawRef.current;
+      if (d.phase === 'pending' && d.candidate) {
+        // Clic discreto: comportamiento original de punto por punto.
+        syncInProgress([...inProgressRef.current, d.candidate]);
+      } else if (d.phase === 'dragging') {
+        // Fin de un arrastre freehand: deduplicar denso (0.3mm) conservando la
+        // fidelidad de superficie — el editor subsamplea los handles visibles.
+        syncInProgress(dedupeConsecutive(inProgressRef.current, 0.3));
+      }
+      if (d.phase !== 'idle') resetStroke();
+      d.candidate = null;
+    };
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') cancelDrawing();
+    };
+    window.addEventListener('pointerup', settle);
+    window.addEventListener('pointercancel', settle);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('pointerup', settle);
+      window.removeEventListener('pointercancel', settle);
+      window.removeEventListener('keydown', onKey);
+      setControlsEnabled(true);
+    };
+  }, [isPolylineMode, syncInProgress, resetStroke, cancelDrawing, setControlsEnabled]);
 
   const bgColor = VIEWER_BG_COLORS[bgMode];
   const isLightBg = bgMode === 'claro';
@@ -412,6 +867,23 @@ export default function DentalViewer3D({
     const clamped = Math.min(Math.max(newDist, min), max);
     offset.setLength(clamped);
     cam.position.copy(target).add(offset);
+    c.update();
+  };
+
+  /**
+   * Restaura el encuadre inicial: el modelo está centrado en el origen por
+   * <Center>, así que target (0,0,0) + posición [0,0,120] replican la carga.
+   * (OrbitControls.reset() depende del estado capturado en la construcción,
+   * poco confiable con zoomToCursor + makeDefault.)
+   */
+  const resetCamera = () => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const cam = c.object as THREE.PerspectiveCamera;
+    c.target.set(0, 0, 0);
+    cam.position.set(0, 0, 120);
+    cam.zoom = 1;
+    cam.updateProjectionMatrix();
     c.update();
   };
 
@@ -501,18 +973,19 @@ export default function DentalViewer3D({
                           const local = sceneGroupRef.current.worldToLocal(e.point.clone());
                           onAnnotate?.({ x: local.x, y: local.y, z: local.z });
                           setIsAnnotateMode(false);
-                        } else if (isPolylineMode && sceneGroupRef.current) {
-                          e.stopPropagation();
-                          const local = sceneGroupRef.current.worldToLocal(e.point.clone());
-                          setInProgressPoints(prev => [...prev, { x: local.x, y: local.y, z: local.z }]);
+                        } else if (isPolylineMode) {
+                          handleStrokePointerDown(e);
                         }
                       }}
+                      onPointerMove={isPolylineMode ? handleStrokePointerMove : (editingPolylineId ? handleNodeDragMove : undefined)}
                       onDoubleClick={(e: ThreeEvent<MouseEvent>) => {
                         if (isPolylineMode) {
                           e.stopPropagation();
                           finalizePolyline();
                         }
                       }}
+                      onMeshReady={handleMeshReady}
+                      onMeshUnmount={handleMeshUnmount}
                     />
                   </Suspense>
                 </ErrorBoundary>
@@ -530,22 +1003,48 @@ export default function DentalViewer3D({
                 ))}
 
                 <group visible={showPolylines}>
-                  {polylines.map(pl => (
+                  {polylines.filter(pl => pl.id !== editingPolylineId).map(pl => (
                     <PolylineRender
                       key={pl.id}
                       points={pl.points}
                       color="#e11d48"
+                      surfaceWrap={surfaceWrap}
+                      onEdit={canAnnotate && onPolylineUpdate && !isPolylineMode && !editingPolylineId
+                        ? () => startEditingPolyline(pl)
+                        : undefined}
                     />
                   ))}
                 </group>
 
-                {inProgressPoints.length > 0 && (
-                  <PolylineRender
-                    points={inProgressPoints}
-                    color="#e11d48"
-                    opacity={0.6}
-                    onDeletePoint={(i) => setInProgressPoints(prev => prev.filter((_, idx) => idx !== i))}
+                {editingPolylineId && editingPoints.length > 0 && (
+                  <PolylineNodeEditor
+                    points={editingPoints}
+                    surfaceWrap={surfaceWrap}
+                    isNodeDragging={isNodeDragging}
+                    onNodePointerDown={handleNodePointerDown}
+                    onCurvePointerDown={handleCurvePointerDown}
+                    onHoverChange={handleEditHoverChange}
+                    onInsertNode={handleInsertNode}
+                    onDeleteNode={handleDeleteNode}
                   />
+                )}
+
+                {/* Durante el arrastre freehand: render ligero (Line directa, sin CatmullRom
+                    ni un <Html> por muestra — cientos de nodos DOM congelarían el frame). */}
+                {inProgressPoints.length > 0 && (
+                  isFreehandDragging ? (
+                    inProgressPoints.length >= 2 && (
+                      <FreehandLine points={inProgressPoints} />
+                    )
+                  ) : (
+                    <PolylineRender
+                      points={inProgressPoints}
+                      color="#e11d48"
+                      opacity={0.6}
+                      surfaceWrap={surfaceWrap}
+                      onDeletePoint={(i) => syncInProgress(inProgressRef.current.filter((_, idx) => idx !== i))}
+                    />
+                  )
                 )}
               </group>
             </Center>
@@ -554,6 +1053,9 @@ export default function DentalViewer3D({
             ref={controlsRef}
             makeDefault
             enableDamping={true}
+            dampingFactor={0.15}
+            screenSpacePanning={true}
+            zoomToCursor={true}
           />
         </Canvas>
       </ErrorBoundary>
@@ -634,7 +1136,7 @@ export default function DentalViewer3D({
             )}
 
             {/* Trazados — toggle + lista con eliminar por ítem */}
-            {(polylines.length > 0 || inProgressPoints.length > 0) && (
+            {(polylines.length > 0 || inProgressPoints.length > 0 || isPolylineMode) && (
               <div className="p-2 border-b border-divider space-y-1">
                 {/* Header toggle */}
                 <button
@@ -654,11 +1156,28 @@ export default function DentalViewer3D({
                 </button>
 
                 {/* Lista de trazados guardados con doble confirmación de borrado */}
-                {showPolylines && onDeletePolyline && polylines.length > 0 && (
+                {showPolylines && (onDeletePolyline || onPolylineUpdate) && polylines.length > 0 && (
                   <div className="space-y-0.5 pt-0.5">
                     {polylines.map((pl, idx) => (
                       <div key={pl.id} className="rounded-lg overflow-hidden">
-                        {confirmingPolylineId === pl.id ? (
+                        {editingPolylineId === pl.id ? (
+                          <div className="flex items-center gap-1.5 px-2 py-1.5 bg-primary-hl">
+                            <Pencil className="w-3 h-3 text-primary shrink-0" />
+                            <span className="text-xs text-primary font-medium flex-1">Editando zona {idx + 1}</span>
+                            <button
+                              onClick={() => stopEditingPolyline(true)}
+                              className="text-xs text-primary font-semibold hover:text-primary/80 px-1.5 py-0.5 rounded transition-colors"
+                            >
+                              Guardar
+                            </button>
+                            <button
+                              onClick={() => stopEditingPolyline(false)}
+                              className="text-xs text-muted hover:text-foreground px-1.5 py-0.5 rounded transition-colors"
+                            >
+                              Descartar
+                            </button>
+                          </div>
+                        ) : confirmingPolylineId === pl.id ? (
                           <div className="flex items-center gap-1.5 px-2 py-1.5 bg-error-hl">
                             <span className="text-xs text-error font-medium flex-1">¿Eliminar zona {idx + 1}?</span>
                             <button
@@ -668,7 +1187,7 @@ export default function DentalViewer3D({
                               No
                             </button>
                             <button
-                              onClick={() => { onDeletePolyline(pl.id); setConfirmingPolylineId(null); }}
+                              onClick={() => { onDeletePolyline?.(pl.id); setConfirmingPolylineId(null); }}
                               className="text-xs text-error font-semibold hover:text-error/80 px-1.5 py-0.5 rounded transition-colors"
                             >
                               Sí
@@ -678,13 +1197,25 @@ export default function DentalViewer3D({
                           <div className="flex items-center gap-1 px-2 py-1 hover:bg-surface-off group">
                             <Spline className="w-3 h-3 text-error shrink-0" />
                             <span className="text-xs text-muted flex-1">Zona {idx + 1}</span>
-                            <button
-                              onClick={() => setConfirmingPolylineId(pl.id)}
-                              aria-label={`Eliminar zona ${idx + 1}`}
-                              className="opacity-0 group-hover:opacity-100 text-muted hover:text-error transition-all"
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
+                            {onPolylineUpdate && canAnnotate && (
+                              <button
+                                onClick={() => startEditingPolyline(pl)}
+                                aria-label={`Editar zona ${idx + 1}`}
+                                title="Editar nodos"
+                                className="opacity-0 group-hover:opacity-100 text-muted hover:text-primary transition-all"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </button>
+                            )}
+                            {onDeletePolyline && (
+                              <button
+                                onClick={() => setConfirmingPolylineId(pl.id)}
+                                aria-label={`Eliminar zona ${idx + 1}`}
+                                className="opacity-0 group-hover:opacity-100 text-muted hover:text-error transition-all"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -703,12 +1234,18 @@ export default function DentalViewer3D({
                       Finalizar
                     </button>
                     <button
-                      onClick={() => { setInProgressPoints([]); setIsPolylineMode(false); }}
+                      onClick={cancelDrawing}
                       className="text-xs text-muted hover:text-foreground px-1.5 py-0.5 rounded transition-colors"
                     >
                       Cancelar
                     </button>
                   </div>
+                )}
+
+                {isPolylineMode && (
+                  <p className="text-[10px] text-muted px-2 pt-0.5 leading-snug">
+                    Arrastra para dibujar libre · clic para puntos · acércate al inicio para cerrar · Esc cancela
+                  </p>
                 )}
               </div>
             )}
@@ -743,6 +1280,13 @@ export default function DentalViewer3D({
               </div>
             </div>
 
+            {/* Hint de navegación */}
+            <div className="px-3 py-1.5 border-b border-divider">
+              <p className="text-[10px] text-muted leading-snug">
+                Rotar: arrastrar · Mover: clic derecho · Zoom: scroll sobre el modelo · ⟳ centrar
+              </p>
+            </div>
+
             {/* Zoom + acciones en una sola fila */}
             <div className="flex items-center gap-1 p-2">
               <button
@@ -761,6 +1305,14 @@ export default function DentalViewer3D({
               >
                 <ZoomOut className="w-4 h-4" />
               </button>
+              <button
+                onClick={resetCamera}
+                aria-label="Centrar modelo"
+                title="Centrar modelo"
+                className="flex-1 inline-flex items-center justify-center py-2 rounded-lg text-muted hover:text-foreground hover:bg-surface-off transition-colors"
+              >
+                <RefreshCcw className="w-4 h-4" />
+              </button>
 
               {canAnnotate && (
                 <button
@@ -777,7 +1329,15 @@ export default function DentalViewer3D({
 
               {onPolylineComplete && (
                 <button
-                  onClick={() => { setIsPolylineMode(!isPolylineMode); setIsAnnotateMode(false); if (isPolylineMode) setInProgressPoints([]); }}
+                  onClick={() => {
+                    if (isPolylineMode) {
+                      cancelDrawing();
+                    } else {
+                      if (editingPolylineId) stopEditingPolyline(false);
+                      setIsPolylineMode(true);
+                      setIsAnnotateMode(false);
+                    }
+                  }}
                   aria-label={isPolylineMode ? 'Salir de modo trazado' : 'Trazar delimitación'}
                   title={isPolylineMode ? 'Salir del trazado' : 'Trazar'}
                   className={`flex-1 inline-flex items-center justify-center py-2 rounded-lg transition-colors ${

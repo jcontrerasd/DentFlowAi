@@ -53,7 +53,7 @@ import {
   requestQualityRevisionAction,
   sendToDentistAction,
 } from '@/lib/db/actions/quality';
-import { createAnnotationAction, deleteAnnotationAction, createPolylineAnnotationAction, deletePolylineAnnotationAction } from '@/lib/db/actions/annotations';
+import { createAnnotationAction, deleteAnnotationAction, createPolylineAnnotationAction, deletePolylineAnnotationAction, updatePolylineAnnotationAction } from '@/lib/db/actions/annotations';
 import { registerFileAction, logFileDownloadAction, deleteCaseFileAction } from '@/lib/db/actions/files';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -359,6 +359,8 @@ function CaseDetailPageContent() {
   const [stagedAnnotationRemovals, setStagedAnnotationRemovals] = useState<Set<string>>(new Set());
   const [stagedPolylineAdds, setStagedPolylineAdds] = useState<StagedPolylineAdd[]>([]);
   const [stagedPolylineRemovals, setStagedPolylineRemovals] = useState<Set<string>>(new Set());
+  // Ediciones de nodos de trazados ya persistidos (id → puntos nuevos); staged igual que adds/removals.
+  const [stagedPolylineUpdates, setStagedPolylineUpdates] = useState<Map<string, Array<{ x: number; y: number; z: number }>>>(new Map());
   const [newAnnotationText, setNewAnnotationText] = useState('');
   const [savingAnnotation, setSavingAnnotation] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -1003,7 +1005,23 @@ function CaseDetailPageContent() {
       setStagedPolylineAdds(prev => prev.filter(s => s.tempId !== id));
     } else {
       setStagedPolylineRemovals(prev => new Set([...prev, id]));
+      setStagedPolylineUpdates(prev => {
+        if (!prev.has(id)) return prev;
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
     }
+  };
+
+  const handlePolylineUpdate = (id: string, points: Array<{ x: number; y: number; z: number }>) => {
+    if (stagedPolylineAdds.some(s => s.tempId === id)) {
+      // Trazado aún no persistido: mutar el staged add directamente.
+      setStagedPolylineAdds(prev => prev.map(s => (s.tempId === id ? { ...s, points } : s)));
+    } else {
+      setStagedPolylineUpdates(prev => new Map(prev).set(id, points));
+    }
+    showSuccessToastMessage('Edición pendiente — usa Grabar para confirmar');
   };
 
   const handleSaveChanges = async (): Promise<boolean> => {
@@ -1096,10 +1114,17 @@ function CaseDetailPageContent() {
         });
       }
 
-      // 4b) Borrar y crear polilíneas staged.
+      // 4b) Borrar, actualizar y crear polilíneas staged.
       for (const polyId of stagedPolylineRemovals) {
         if (annotationIdsKilledByCascade.has(polyId)) continue;
         await deletePolylineAnnotationAction(polyId);
+      }
+      for (const [polyId, points] of stagedPolylineUpdates) {
+        if (annotationIdsKilledByCascade.has(polyId) || stagedPolylineRemovals.has(polyId)) continue;
+        const updateResult = await updatePolylineAnnotationAction(polyId, points);
+        if (!updateResult.success) {
+          throw new Error(updateResult.error || 'No se pudo actualizar un trazado');
+        }
       }
       for (const staged of stagedPolylineAdds) {
         await createPolylineAnnotationAction({ caseId: id as string, points: staged.points });
@@ -1171,6 +1196,7 @@ function CaseDetailPageContent() {
       setStagedAnnotationRemovals(new Set());
       setStagedPolylineAdds([]);
       setStagedPolylineRemovals(new Set());
+      setStagedPolylineUpdates(new Map());
 
       if (clinicalCase.status !== 'borrador') {
         setIsEditing(false);
@@ -1211,6 +1237,7 @@ function CaseDetailPageContent() {
     setStagedAnnotationRemovals(new Set());
     setStagedPolylineAdds([]);
     setStagedPolylineRemovals(new Set());
+    setStagedPolylineUpdates(new Map());
     setSelectedCoords(null);
     setNewAnnotationText('');
     setIsEditing(false);
@@ -1868,10 +1895,13 @@ function CaseDetailPageContent() {
   const displayedPolylines = useMemo(() => {
     const existing = (localAnnotations ?? [])
       .filter((a: any) => Array.isArray(a.coordinates) && !stagedPolylineRemovals.has(a.id))
-      .map((a: any) => ({ id: a.id, points: a.coordinates as Array<{ x: number; y: number; z: number }> }));
+      .map((a: any) => ({
+        id: a.id,
+        points: stagedPolylineUpdates.get(a.id) ?? (a.coordinates as Array<{ x: number; y: number; z: number }>),
+      }));
     const added = stagedPolylineAdds.map(s => ({ id: s.tempId, points: s.points }));
     return [...added, ...existing];
-  }, [localAnnotations, stagedPolylineRemovals, stagedPolylineAdds]);
+  }, [localAnnotations, stagedPolylineRemovals, stagedPolylineAdds, stagedPolylineUpdates]);
 
   /**
    * Modelos para el visor 3D: existentes (signed URL) menos removals + staged adds (blob URL).
@@ -2008,7 +2038,8 @@ function CaseDetailPageContent() {
     (stagedAnnotationAdds.length > 0 ||
       stagedAnnotationRemovals.size > 0 ||
       stagedPolylineAdds.length > 0 ||
-      stagedPolylineRemovals.size > 0);
+      stagedPolylineRemovals.size > 0 ||
+      stagedPolylineUpdates.size > 0);
 
   const isFormDirty =
     (canEditForm && clinicalCase
@@ -2651,6 +2682,7 @@ function CaseDetailPageContent() {
                   onDeleteAnnotation={canEditForm ? handleDeleteAnnotation : undefined}
                   polylines={displayedPolylines}
                   onPolylineComplete={canEditForm ? handlePolylineComplete : undefined}
+                  onPolylineUpdate={canEditForm ? handlePolylineUpdate : undefined}
                   onDeletePolyline={canEditForm ? handleDeletePolyline : undefined}
                   canAnnotate={canEditForm}
                 >
