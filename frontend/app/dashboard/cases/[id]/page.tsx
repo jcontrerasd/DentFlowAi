@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createInflightDedup } from '@/lib/inflightDedup';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -47,6 +48,7 @@ import CheckInDentistaModal from '@/components/cases/CheckInDentistaModal';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
 import Link from 'next/link';
+import { SCAN_SLOTS } from '@/components/cases/CaseCreationWizard';
 import { startWorkAction } from '@/lib/db/actions/proposal';
 import {
   certifyQualityAction,
@@ -287,6 +289,24 @@ function CaseDetailPageContent() {
     }
     setClinicalCase((prev: any) => mergeClinicalCaseUpdate(prev, rest));
   }, []);
+
+  // Refetch centralizado del caso tras mutaciones. Deduplica por id: si ya hay un
+  // refresh in-flight, los callers concurrentes comparten esa misma promesa.
+  // Ventana conocida: un refresh que arrancó antes del commit de otra mutación
+  // podría ingerir estado previo a ella; cada caller espera su mutación antes de
+  // refrescar, así que en la práctica la ventana es de decenas de ms.
+  const refreshCaseDedupRef = useRef(createInflightDedup<any | null>());
+  const refreshCase = useCallback(async (): Promise<any | null> => {
+    if (!id) return null;
+    return refreshCaseDedupRef.current(String(id), async () => {
+      const c = await getCaseDetails(id as string);
+      if (c && !(c as any)._error) {
+        ingestCasePayloadFromServer(c);
+        return c;
+      }
+      return null;
+    });
+  }, [id, ingestCasePayloadFromServer]);
 
   useEffect(() => {
     setServerClockAnchor(null);
@@ -643,8 +663,7 @@ function CaseDetailPageContent() {
         showSuccessToastMessage(data.approved ? "Solicitud aprobada" : "Solicitud rechazada");
       }
       // Refrescar datos
-      const updatedCase = await getCaseDetails(id as string);
-      if (updatedCase && !(updatedCase as any)._error) ingestCasePayloadFromServer(updatedCase);
+      await refreshCase();
       await loadCaseEvents();
       dispatchDashboardMetricsRefresh();
       return true;
@@ -1068,8 +1087,6 @@ function CaseDetailPageContent() {
 
         await registerFileAction({
           caseId: id as string,
-          organizationId: clinicalCase.organizationId,
-          uploaderId,
           filename: staged.filename,
           category: staged.category,
           subType: staged.subType,
@@ -1142,9 +1159,8 @@ function CaseDetailPageContent() {
       }
 
       // 6) Refetch + regenerar signed URLs (visor 3D / descargas) + revoke previews + limpiar staging.
-      const refreshed = await getCaseDetails(id as string);
-      if (refreshed && !(refreshed as any)._error) {
-        ingestCasePayloadFromServer(refreshed);
+      const refreshed = await refreshCase();
+      if (refreshed) {
         // Sincronizar editForm con los valores del servidor (solo si estaba activo).
         if (editForm) {
           setEditForm({
@@ -1259,9 +1275,8 @@ function CaseDetailPageContent() {
         }
         return;
       }
-      const updatedCase = await getCaseDetails(id as string);
-      if (updatedCase && !(updatedCase as any)._error) ingestCasePayloadFromServer(updatedCase);
-      else setClinicalCase((prev: any) => ({ ...prev, status: 'enEvaluacion', publishedAt: new Date() }));
+      const updatedCase = await refreshCase();
+      if (!updatedCase) setClinicalCase((prev: any) => ({ ...prev, status: 'enEvaluacion', publishedAt: new Date() }));
       const inPool = (updatedCase as { internalStatus?: string } | null)?.internalStatus === POOL_INTERNAL_STATUS;
       const assigned = (updatedCase as { internalStatus?: string } | null)?.internalStatus === INTERNAL_CASE_STATUSES.ASIGNACION_PENDIENTE;
       showSuccessToastMessage(
@@ -1354,7 +1369,7 @@ function CaseDetailPageContent() {
     }
   };
 
-  const MAX_CLINICAL_FILES = 3;
+  const MAX_CLINICAL_FILES = 5;
   const ALLOWED_CLINICAL_EXTS = ['stl', 'ply', 'obj', 'jpg', 'jpeg', 'png'];
 
   const MAX_COMPLEMENTARY_FILES = 10;
@@ -1363,7 +1378,6 @@ function CaseDetailPageContent() {
 
   const uploadComplementaryFiles = async (files: File[], subType: 'general' | 'revision_reference' | 'quality_reference') => {
     if (!clinicalCase || !user) return;
-    const uploaderId = (user as any).id || (user as any).uid;
     const folder = subType === 'general' ? 'complementary'
       : subType === 'revision_reference' ? 'revision-attachments'
       : 'quality-attachments';
@@ -1378,8 +1392,6 @@ function CaseDetailPageContent() {
       if (!res.ok) throw new Error(`Fallo en la subida de ${file.name}`);
       await registerFileAction({
         caseId: id as string,
-        organizationId: clinicalCase.organizationId,
-        uploaderId,
         filename: file.name,
         category: 'complementary',
         subType,
@@ -1795,9 +1807,9 @@ function CaseDetailPageContent() {
         .map((f: any) => f.subType),
       ...stagedFileAdds.map(s => s.subType),
     ]);
-    const slot = (['superior', 'inferior', 'bite'] as const).find(s => !usedSubTypes.has(s));
+    const slot = SCAN_SLOTS.find(s => !usedSubTypes.has(s));
     if (!slot) {
-      showErrorToast('No hay slots disponibles (superior/inferior/bite ocupados).');
+      showErrorToast('No hay slots disponibles (superior/inferior/bite/lateralDerecho/lateralIzquierdo ocupados).');
       return;
     }
     const subType: string = slot;
@@ -2569,8 +2581,7 @@ function CaseDetailPageContent() {
           caseId={id as string}
           startedAt={clinicalCase?.pendingPoolStartedAt}
           onCancelled={async () => {
-            const refreshed = await getCaseDetails(id as string);
-            if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+            await refreshCase();
             await loadCaseEvents();
             showSuccessToastMessage('Publicación cancelada. El caso quedó cerrado.');
             dispatchDashboardMetricsRefresh();
@@ -2586,8 +2597,7 @@ function CaseDetailPageContent() {
         caseId={id as string}
         caseLabel={clinicalCase?.caseNumber ? `#${clinicalCase.caseNumber}` : undefined}
         onDone={async () => {
-          const refreshed = await getCaseDetails(id as string);
-          if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+          await refreshCase();
           await loadCaseEvents();
           showSuccessToastMessage('Caso republicado. Estamos buscando técnicos disponibles.');
           dispatchDashboardMetricsRefresh();
@@ -2601,8 +2611,7 @@ function CaseDetailPageContent() {
         caseId={id as string}
         caseLabel={clinicalCase?.caseNumber ? `#${clinicalCase.caseNumber}` : undefined}
         onCancelled={async () => {
-          const refreshed = await getCaseDetails(id as string);
-          if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+          await refreshCase();
           await loadCaseEvents();
           showSuccessToastMessage('Publicación cancelada. El caso quedó cerrado.');
           dispatchDashboardMetricsRefresh();
@@ -2966,12 +2975,11 @@ function CaseDetailPageContent() {
                   myInvitation={myInvitation}
                   techOfferRejectedView={techOfferRejectedView}
                   onInvitationUpdate={async () => {
-                    const [invRes, c] = await Promise.all([
+                    const [invRes] = await Promise.all([
                       getMyInvitationForCaseAction(id as string),
-                      getCaseDetails(id as string),
+                      refreshCase(),
                     ]);
                     setMyInvitation(invRes.data);
-                    if (c && !(c as any)._error) ingestCasePayloadFromServer(c);
                     await loadCaseEvents();
                   }}
                   onClose={() => setIsHubOpen(false)}

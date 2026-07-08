@@ -68,6 +68,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }, 300);
   }, []);
 
+  // Evita un setHubBellTotal pendiente tras desmontar el layout.
+  useEffect(() => {
+    return () => {
+      if (hubUnreadTimerRef.current) clearTimeout(hubUnreadTimerRef.current);
+    };
+  }, []);
+
   useEffect(() => {
     if (userProfile?.image) {
       // Avatares de Google (ajuste login, Fase 2) ya son una URL externa servible directo
@@ -101,8 +108,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       } catch {}
     };
     loadPending();
-    const interval = setInterval(loadPending, 60_000); // refresh cada minuto
-    return () => clearInterval(interval);
+    // El polling no corre con la pestaña en background; al volver a visible
+    // se refresca de inmediato en vez de esperar el próximo tick.
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      loadPending();
+    }, 60_000); // refresh cada minuto
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') loadPending();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [userProfile?.role]);
 
   useEffect(() => {
@@ -116,15 +135,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
     };
     loadHub();
-    const interval = setInterval(loadHub, 60_000);
+    const interval = setInterval(() => {
+      if (document.hidden) return;
+      loadHub();
+    }, 60_000);
     return () => clearInterval(interval);
   }, [userProfile?.role]);
 
   useEffect(() => {
     if (userProfile?.role !== 'dentista' && userProfile?.role !== 'tecnico') return;
     const onFocus = () => debouncedFetchHubUnread();
+    // Al volver a la pestaña, visibilitychange y focus disparan casi simultáneos;
+    // ambos pasan por el debounce de 300ms y colapsan en una sola llamada.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') debouncedFetchHubUnread();
+    };
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [userProfile?.role, debouncedFetchHubUnread]);
 
   useEffect(() => {

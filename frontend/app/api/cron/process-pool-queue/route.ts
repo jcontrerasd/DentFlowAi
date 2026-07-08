@@ -4,6 +4,7 @@ import {
   processPendingPoolCheckInAction,
   processPendingPoolExpirationAction,
 } from '@/lib/db/actions/poolQueue';
+import { requireCronAuth } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,11 +20,8 @@ export const dynamic = 'force-dynamic';
  * casos en pool porque Fauchard no encola con el flag off).
  */
 async function handle(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = requireCronAuth(req);
+  if (authError) return authError;
 
   const reevaluation = await processPendingPoolReevaluationAction();
   if (!reevaluation.success) {

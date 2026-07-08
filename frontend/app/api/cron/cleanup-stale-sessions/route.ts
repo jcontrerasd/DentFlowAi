@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { sessions } from '@/lib/db/schema';
 import { sql } from 'drizzle-orm';
+import { requireCronAuth } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,11 +16,8 @@ export const dynamic = 'force-dynamic';
  * igual, a más tardar SESSION_STALE_TTL_SECONDS después del último heartbeat.
  */
 async function handle(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = requireCronAuth(req);
+  if (authError) return authError;
 
   if (process.env.TAB_CLOSE_LOGOUT_ENABLED !== 'true') {
     return NextResponse.json({ ok: true, skipped: true });

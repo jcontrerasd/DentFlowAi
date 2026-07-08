@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { processAvailabilityMaintenanceAction } from '@/lib/db/actions/availabilityCron';
 import { processDentistReviewDeadlinesAction } from '@/lib/db/actions/dentistReviewCron';
 import { processQualityReviewDeadlinesAction } from '@/lib/db/actions/qualityReviewCron';
+import { requireCronAuth } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,11 +16,8 @@ export const dynamic = 'force-dynamic';
  * `AVAILABILITY_MODEL_ENABLED` está apagado (las actions retornan skipped).
  */
 async function handle(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = requireCronAuth(req);
+  if (authError) return authError;
 
   const res = await processAvailabilityMaintenanceAction();
   if (!res.success) {

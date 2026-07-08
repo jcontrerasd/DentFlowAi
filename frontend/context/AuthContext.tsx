@@ -1,7 +1,8 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useRef, ReactNode, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { getUserProfileDirect } from '@/lib/db/actions/user';
 import { startSimulationAction, stopSimulationAction } from '@/lib/db/actions/impersonation';
+import { createInflightDedup } from '@/lib/inflightDedup';
 
 export interface UserProfile {
   id: string;
@@ -77,10 +78,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // en la ventana transitoria en que el perfil real (admin) ya cargó pero el simulado no.
   const [simulationLoading, setSimulationLoading] = useState(false);
 
+  // Colapsa fetches de perfil genuinamente concurrentes (double-effect de StrictMode,
+  // varios consumidores al montar, refreshProfile solapado) en una sola query.
+  // No cachea resultados: al asentarse la promesa, la siguiente llamada vuelve a la DB.
+  const profileDedupRef = useRef(createInflightDedup<Awaited<ReturnType<typeof getUserProfileDirect>>>());
+
   const fetchProfile = useCallback(async (userId: string, isSimulated: boolean = false) => {
     if (!isSimulated) setProfileLoading(true);
     try {
-      const profile = await getUserProfileDirect(userId);
+      const profile = await profileDedupRef.current(
+        `${userId}:${isSimulated ? 'sim' : 'real'}`,
+        () => getUserProfileDirect(userId),
+      );
       if (isSimulated) {
         if (profile) {
           setSimulatedProfile(profile as UserProfile);
@@ -106,19 +115,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // Función para iniciar simulación
+  // Función para iniciar simulación. Propaga el error al caller (que muestra el toast);
+  // no usamos alert() por convención del proyecto.
   const startSimulation = async (userId: string) => {
-    try {
-      const res = await startSimulationAction(userId);
-      if (res.success) {
-        localStorage.setItem('dentflow_simulated_id', userId);
-        window.location.href = '/dashboard';
-      } else {
-        alert(res.error || "No se pudo iniciar la simulación");
-      }
-    } catch (err) {
-      console.error("Simulation error:", err);
+    const res = await startSimulationAction(userId);
+    if (!res.success) {
+      throw new Error(res.error || 'No se pudo iniciar la simulación');
     }
+    localStorage.setItem('dentflow_simulated_id', userId);
+    window.location.href = '/dashboard';
   };
 
   // Función para detener simulación

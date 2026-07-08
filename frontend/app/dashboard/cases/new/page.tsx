@@ -7,7 +7,7 @@ import { createClinicalCaseAction, getUploadUrlAction } from '@/lib/db/actions/c
 import { registerFileAction } from '@/lib/db/actions/files';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { CaseCreationWizard, CaseFormData, CaseFiles } from '@/components/cases/CaseCreationWizard';
+import { CaseCreationWizard, CaseFormData, CaseFiles, SCAN_SLOTS } from '@/components/cases/CaseCreationWizard';
 import { logError } from '@/lib/logger';
 import { isContactGuardError } from '@/lib/contactGuard/clientHelpers';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
@@ -59,14 +59,14 @@ export default function NewCasePage() {
 
       // 2. Subir archivos a GCS vía Signed URLs.
       type UploadEntry = {
-        key: 'superior' | 'inferior' | 'bite' | 'designFile';
+        key: (typeof SCAN_SLOTS)[number] | 'designFile';
         file: File;
         category: 'scan' | 'design_upload';
         subType: string;
         folder: 'scans' | 'design';
       };
 
-      const uploads: UploadEntry[] = (['superior', 'inferior', 'bite'] as const)
+      const uploads: UploadEntry[] = SCAN_SLOTS
         .filter((k) => !!files[k])
         .map((k) => ({ key: k, file: files[k] as File, category: 'scan' as const, subType: k, folder: 'scans' as const }));
 
@@ -119,11 +119,9 @@ export default function NewCasePage() {
           }
         }
 
-        // 4. Registrar archivo en DB PostgreSQL
+        // 4. Registrar archivo en DB PostgreSQL (org/uploader los deriva el servidor)
         await registerFileAction({
           caseId: caseId,
-          organizationId: orgId,
-          uploaderId: doctorId,
           filename: file.name,
           category,
           subType,
@@ -144,8 +142,6 @@ export default function NewCasePage() {
         if (!res.ok) throw new Error(`Fallo al subir ${file.name}`);
         await registerFileAction({
           caseId,
-          organizationId: orgId,
-          uploaderId: doctorId,
           filename: file.name,
           category: 'complementary',
           subType: 'general',

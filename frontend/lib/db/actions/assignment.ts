@@ -40,7 +40,7 @@ import {
 } from '@/lib/fauchard/assignmentScore';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { isAvailabilityEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
-import { computeEligibleAction, ensureTechnicianAvailabilityAction } from './availability';
+import { computeEligibleAction, computeEligibleBatch, ensureTechnicianAvailabilityAction } from './availability';
 import { computeLevelForTechnicianAction } from './noResponseEvents';
 import {
   getActiveConfig,
@@ -147,6 +147,28 @@ export async function deriveScenarioFromCase(caseId: string): Promise<ResolvedSc
 interface BatchFilterSets {
   cooldownSet: Set<string>;
   skillSet: Set<string>;
+  /** Técnicos elegibles por disponibilidad (AND triple), precalculado en lote. */
+  eligibleSet?: Set<string>;
+}
+
+/**
+ * Precalcula en lote el set de técnicos elegibles por disponibilidad (AND triple).
+ * Devuelve `undefined` si el flag está off (Fauchard no aplica ese filtro).
+ * Para técnicos sin fila de disponibilidad (raro) aplica el self-heal
+ * `ensureTechnicianAvailabilityAction` 1-a-1 y reevalúa, preservando la paridad
+ * exacta con el antiguo filtro por-técnico.
+ */
+async function prefetchEligibleSet(
+  techIds: string[],
+  category: ResolvedScenario['category'],
+): Promise<Set<string> | undefined> {
+  if (!isAvailabilityEnabled()) return undefined;
+  const { eligible, missing } = await computeEligibleBatch(techIds, category, 'cad');
+  for (const id of missing) {
+    await ensureTechnicianAvailabilityAction(id);
+    if (await computeEligibleAction(id, category, 'cad')) eligible.add(id);
+  }
+  return eligible;
 }
 
 async function checkTechnicianPassesFilters(
@@ -209,13 +231,18 @@ async function checkTechnicianPassesFilters(
   }
 
   if (isAvailabilityEnabled()) {
-    const t0avail = perfStart();
-    await ensureTechnicianAvailabilityAction(tech.id);
-    if (!(await computeEligibleAction(tech.id, scenario.category, 'cad'))) {
-      perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'ineligible' });
-      return { ok: false, reason: 'availability_filter' };
+    if (batch?.eligibleSet) {
+      // Elegibilidad precalculada en lote (self-heal de filas faltantes ya aplicado por el caller).
+      if (!batch.eligibleSet.has(tech.id)) return { ok: false, reason: 'availability_filter' };
+    } else {
+      const t0avail = perfStart();
+      await ensureTechnicianAvailabilityAction(tech.id);
+      if (!(await computeEligibleAction(tech.id, scenario.category, 'cad'))) {
+        perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'ineligible' });
+        return { ok: false, reason: 'availability_filter' };
+      }
+      perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'eligible' });
     }
-    perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'eligible' });
   }
 
   return { ok: true };
@@ -269,6 +296,7 @@ export async function buildEligiblePoolForScenario(
   const batch: BatchFilterSets = {
     cooldownSet: new Set(recentAssignments.map(r => r.technicianId)),
     skillSet: new Set(eligibleSkills.map(s => s.userId)),
+    eligibleSet: await prefetchEligibleSet(techIds, scenario.category),
   };
 
   for (const mode of ['strict', 'expand'] as const) {
@@ -341,6 +369,7 @@ export async function evaluateTechniciansForScenario(
   const evalBatch: BatchFilterSets = {
     cooldownSet: new Set(recentAssignments.map(r => r.technicianId)),
     skillSet: new Set(eligibleSkills.map(s => s.userId)),
+    eligibleSet: await prefetchEligibleSet(universeIds, scenario.category),
   };
 
   const excluded: Record<ExclusionReason, number> = {
@@ -1024,10 +1053,17 @@ export async function acceptAssignmentAction(assignmentId: string): Promise<Acti
     const proposedDeliveryDays = computeProposedDeliveryDays(cCase.publishedAt, cCase.desiredDeliveryAt);
 
     await db.transaction(async (tx) => {
-      await tx
+      // Guard de atomicidad: el UPDATE solo procede si la asignación SIGUE pendiente.
+      // Cierra el TOCTOU entre el `select` de validación y esta escritura (aceptación
+      // concurrente, expiración o reemplazo simultáneo).
+      const accepted = await tx
         .update(caseAssignment)
         .set({ status: 'accepted', respondedAt: now, updatedAt: now })
-        .where(eq(caseAssignment.id, assignmentId));
+        .where(and(eq(caseAssignment.id, assignmentId), eq(caseAssignment.status, 'pending')))
+        .returning({ id: caseAssignment.id });
+      if (accepted.length === 0) {
+        throw new Error('ASSIGNMENT_NOT_PENDING');
+      }
 
       await tx
         .update(clinicalCase)
@@ -1060,6 +1096,9 @@ export async function acceptAssignmentAction(assignmentId: string): Promise<Acti
 
     return { success: true };
   } catch (error) {
+    if (error instanceof Error && error.message === 'ASSIGNMENT_NOT_PENDING') {
+      return { success: false, error: 'Esta asignación ya no está pendiente' };
+    }
     console.error('[acceptAssignmentAction]', error);
     return { success: false, error: String(error) };
   }

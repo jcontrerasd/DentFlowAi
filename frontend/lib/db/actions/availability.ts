@@ -11,7 +11,7 @@
 
 import { db } from '@/lib/db';
 import { technicianAvailability, technicianSkill, user, caseAssignment } from '@/lib/db/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { WORK_CATEGORIES, type WorkCategory } from '@/lib/constants/dental';
 import { isAvailabilityUiTecnicoEnabled } from '@/lib/constants/availabilityFlags';
@@ -274,5 +274,40 @@ export async function computeEligibleAction(
   const eligible = Boolean(row.levelGlobal && row.levelCad && row[catKey]);
   perfLog('computeEligible.query', Date.now() - t0, { userId, categoria, eligible });
   return eligible;
+}
+
+/**
+ * Versión en lote de `computeEligibleAction` — una sola query para N técnicos.
+ * Evalúa el AND triple (`levelGlobal ∧ levelCad ∧ cat<cat><cap>`) en memoria.
+ *
+ * Devuelve el set de técnicos elegibles (de los que ya tienen fila) y la lista de
+ * los que carecen de fila (`missing`), para que el caller aplique el self-heal
+ * `ensureTechnicianAvailabilityAction` 1-a-1 solo sobre ellos (caso raro) y preserve
+ * la paridad exacta con el filtro por-técnico.
+ */
+export async function computeEligibleBatch(
+  userIds: string[],
+  categoria: WorkCategory,
+  capacidad: Capacity,
+): Promise<{ eligible: Set<string>; missing: string[] }> {
+  const eligible = new Set<string>();
+  const missing: string[] = [];
+  if (userIds.length === 0) return { eligible, missing };
+
+  const t0 = perfStart();
+  const rows = await db
+    .select()
+    .from(technicianAvailability)
+    .where(inArray(technicianAvailability.userId, userIds));
+  const catKey = categorySetKey(categoria, capacidad);
+  const byId = new Map(rows.map((r) => [r.userId, r]));
+
+  for (const id of userIds) {
+    const row = byId.get(id);
+    if (!row) { missing.push(id); continue; }
+    if (row.levelGlobal && row.levelCad && row[catKey]) eligible.add(id);
+  }
+  perfLog('computeEligible.batch', Date.now() - t0, { candidates: userIds.length, eligible: eligible.size, missing: missing.length });
+  return { eligible, missing };
 }
 

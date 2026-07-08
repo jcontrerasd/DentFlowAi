@@ -4,15 +4,18 @@ import { db } from "@/lib/db";
 import { file, clinicalCase, annotation } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getServerIdentity } from "@/lib/db/actions/impersonation";
+import { userCanAccessClinicalCase } from "@/lib/db/caseListVisibility";
 import GCPStorageService from "@/lib/services/gcp-storage";
 
 /**
  * Registra un nuevo archivo asociado a un caso clínico.
+ *
+ * `organizationId` y `uploaderId` se derivan de la identidad del servidor —nunca
+ * del cliente— y el acceso al caso se valida con `userCanAccessClinicalCase`, para
+ * que nadie pueda adjuntar archivos a casos de otra organización ni forjar la autoría.
  */
 export async function registerFileAction(data: {
   caseId: string;
-  organizationId: string;
-  uploaderId: string;
   filename: string;
   category: string;
   subType?: string;
@@ -22,12 +25,41 @@ export async function registerFileAction(data: {
   thumbnailPath?: string;
 }) {
   try {
+    const identity = await getServerIdentity();
+    if (!identity?.id) {
+      return { success: false as const, error: 'No autorizado' };
+    }
+
+    const [caseRow] = await db
+      .select({
+        organizationId: clinicalCase.organizationId,
+        doctorId: clinicalCase.doctorId,
+        status: clinicalCase.status,
+        assignedTechnicianId: clinicalCase.assignedTechnicianId,
+      })
+      .from(clinicalCase)
+      .where(eq(clinicalCase.id, data.caseId))
+      .limit(1);
+
+    if (!caseRow) {
+      return { success: false as const, error: 'Caso no encontrado' };
+    }
+
+    const hasAccess = await userCanAccessClinicalCase(
+      { id: identity.id, role: identity.role, orgId: identity.orgId ?? null, isSystemAdmin: identity.isSystemAdmin },
+      data.caseId,
+      caseRow,
+    );
+    if (!hasAccess) {
+      return { success: false as const, error: 'No autorizado' };
+    }
+
     const [newFile] = await db
       .insert(file as any)
       .values({
         clinicalCaseId: data.caseId,
-        organizationId: data.organizationId,
-        uploaderId: data.uploaderId,
+        organizationId: identity.orgId,
+        uploaderId: identity.id,
         filename: data.filename,
         category: data.category,
         subType: data.subType || 'default',
@@ -39,11 +71,11 @@ export async function registerFileAction(data: {
         updatedAt: new Date(),
       })
       .returning();
-    
-    return newFile;
+
+    return { success: true as const, data: newFile };
   } catch (error) {
     console.error("[registerFileAction] Error:", error);
-    throw error;
+    return { success: false as const, error: 'Error al registrar el archivo' };
   }
 }
 
