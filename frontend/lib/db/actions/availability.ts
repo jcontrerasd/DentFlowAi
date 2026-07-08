@@ -4,9 +4,8 @@
  * Disponibilidad declarada del técnico (v5.0) — modelo de 3 niveles con regla
  * de elegibilidad AND triple. Ver Doc Servicio Orquestado/flujo_tiempos.md §1.
  *
- * Todo el sistema vive detrás de `AVAILABILITY_MODEL_ENABLED`; estas actions son
- * la fuente de verdad del estado, pero Fauchard solo las consulta cuando el flag
- * está on (ver fauchard.ts).
+ * Estas actions son la fuente de verdad del estado de disponibilidad;
+ * Fauchard las consulta en cada corrida (ver fauchard.ts / assignment.ts).
  */
 
 import { db } from '@/lib/db';
@@ -190,9 +189,7 @@ export async function updateAvailabilityLevelAction(
 
     // Sincronización con el campo legacy `user.is_available`: el switch global v5.0 y
     // el toggle legacy del perfil deben reflejar el mismo estado. Mantenerlos espejados
-    // evita que diverjan entre las superficies (badge del header / panel / perfil) y que
-    // Fauchard lea estados contradictorios según el flag activo (`AVAILABILITY_MODEL_ENABLED`
-    // lee levelGlobal; con el flag off el filtro legacy lee `user.is_available`).
+    // evita que diverjan entre las superficies (badge del header / panel / perfil).
     if (target.kind === 'global') {
       await db
         .update(user)

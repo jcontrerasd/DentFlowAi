@@ -27,13 +27,10 @@ const ORG = '00000000-0000-0000-0000-0000006006aa';
 const CASE = '00000000-0000-0000-0000-0000006006bb';
 
 describe.runIf(runIntegration)('evento CASO_EN_COLA al encolar', () => {
-  let prevModel: string | undefined;
   let prevPool: string | undefined;
 
   beforeAll(async () => {
-    prevModel = process.env.AVAILABILITY_MODEL_ENABLED;
     prevPool = process.env.POOL_PENDIENTE_ENABLED;
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
     process.env.POOL_PENDIENTE_ENABLED = 'true';
     await ensureInfrastructure(db);
 
@@ -58,7 +55,6 @@ describe.runIf(runIntegration)('evento CASO_EN_COLA al encolar', () => {
     await db.execute(sql`DELETE FROM "user" WHERE id IN (${TECH}, ${DOCTOR})`);
     await db.execute(sql`DELETE FROM restoration_type WHERE code='rest_cola'`);
     await db.execute(sql`DELETE FROM organization WHERE id=${ORG}`);
-    if (prevModel === undefined) delete process.env.AVAILABILITY_MODEL_ENABLED; else process.env.AVAILABILITY_MODEL_ENABLED = prevModel;
     if (prevPool === undefined) delete process.env.POOL_PENDIENTE_ENABLED; else process.env.POOL_PENDIENTE_ENABLED = prevPool;
   });
 

@@ -1425,9 +1425,7 @@ export async function ensureInfrastructure(db: any) {
     // ─────────────────────────────────────────────────────────────────────────
     // v5.0 — Modelo de disponibilidad del técnico, sanción rolling y cola pool.
     // Ver Doc Servicio Orquestado/{flujo_tiempos,plan_flujo_tiempos}.md.
-    // Todas las tablas/columnas se crean siempre (idempotente); el comportamiento
-    // queda inerte hasta encender AVAILABILITY_MODEL_ENABLED. El único paso gated
-    // es el backfill de technician_availability (más abajo).
+    // Todas las tablas/columnas se crean siempre (idempotente).
     // ─────────────────────────────────────────────────────────────────────────
 
     // 1) Disponibilidad declarada (modelo aplanado: 1 fila por técnico).
@@ -1673,24 +1671,20 @@ export async function ensureInfrastructure(db: any) {
         WHERE is_active = TRUE;
     `);
 
-    // 7) Backfill de disponibilidad — SOLO si el modelo está habilitado.
-    //    Evita correr el INSERT masivo en cada deploy con el feature apagado.
+    // 7) Backfill de disponibilidad. Idempotente (ON CONFLICT DO NOTHING).
     //    Inferencia CAD/CAM desde technician_skill; categorías todo ON; caso
     //    degenerado (sin skills) → global ON, CAD/CAM OFF.
-    if (process.env.AVAILABILITY_MODEL_ENABLED === 'true') {
-      await db.execute(sql`
-        INSERT INTO technician_availability (user_id, level_global, level_cad, level_cam)
-        SELECT
-          u.id,
-          TRUE,
-          EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.design_level > 0),
-          EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.fabrication_level > 0)
-        FROM "user" u
-        WHERE u.role = 'tecnico'
-        ON CONFLICT (user_id) DO NOTHING;
-      `);
-      console.log("[DB] v5.0 backfill de technician_availability ejecutado (flag ON).");
-    }
+    await db.execute(sql`
+      INSERT INTO technician_availability (user_id, level_global, level_cad, level_cam)
+      SELECT
+        u.id,
+        TRUE,
+        EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.design_level > 0),
+        EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.fabrication_level > 0)
+      FROM "user" u
+      WHERE u.role = 'tecnico'
+      ON CONFLICT (user_id) DO NOTHING;
+    `);
 
     // v5.9 — Asignación directa: case_invitation → case_assignment + columnas renombradas
     await migrateCaseInvitationToAssignment(db);

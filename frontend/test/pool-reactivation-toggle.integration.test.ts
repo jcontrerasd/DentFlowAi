@@ -32,13 +32,10 @@ async function caseInternalStatus() {
 }
 
 describe.runIf(runIntegration)('reactivación de pool al encender capacidad (H8)', () => {
-  let prevModel: string | undefined;
   let prevPool: string | undefined;
 
   beforeAll(async () => {
-    prevModel = process.env.AVAILABILITY_MODEL_ENABLED;
     prevPool = process.env.POOL_PENDIENTE_ENABLED;
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
     process.env.POOL_PENDIENTE_ENABLED = 'true';
     await ensureInfrastructure(db);
 
@@ -65,7 +62,6 @@ describe.runIf(runIntegration)('reactivación de pool al encender capacidad (H8)
     await db.execute(sql`DELETE FROM "user" WHERE id IN (${TECH}, ${DOCTOR})`);
     await db.execute(sql`DELETE FROM restoration_type WHERE code='rest_h8t'`);
     await db.execute(sql`DELETE FROM organization WHERE id=${ORG}`);
-    if (prevModel === undefined) delete process.env.AVAILABILITY_MODEL_ENABLED; else process.env.AVAILABILITY_MODEL_ENABLED = prevModel;
     if (prevPool === undefined) delete process.env.POOL_PENDIENTE_ENABLED; else process.env.POOL_PENDIENTE_ENABLED = prevPool;
   });
 

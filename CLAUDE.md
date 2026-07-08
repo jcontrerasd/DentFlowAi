@@ -57,9 +57,9 @@ Durante `enEvaluacion`, `internalStatus` puede ser `asignacionPendiente` o `pend
 
 **Config:** Global: `getActiveConfig()` · Por caso: `getConfigForCase(caseId)` (usa `fauchard_config_id` anclado si existe).
 
-## Modelo de disponibilidad (flag `AVAILABILITY_MODEL_ENABLED`)
+## Modelo de disponibilidad
 
-Sistema de 3 niveles jerárquicos (global · CAD/CAM · 7 categorías). Sin el flag, Fauchard usa `user.is_available`.
+Sistema de 3 niveles jerárquicos (global · CAD · 7 categorías). Comportamiento único del motor — el flag `AVAILABILITY_MODEL_ENABLED` fue retirado del sistema (ya no existe).
 
 - **Elegibilidad AND triple** sin caché — `computeEligibleAction` en cada corrida.
 - **Sanción rolling 14d** (`noResponseEvents.ts`): nivel 1 warning · nivel 2 penalización score · nivel 3 auto-OFF.
@@ -104,6 +104,15 @@ Modera campos libres (notas, trackingId) — bloquea intentos de saltarse el mar
 - Buckets: `dentflowai-assets-prod` / `dentflowai-assets-dev`.
 - Proxy local (`app/api/local-gcs-proxy/route.ts`) descomprime gzip (fake-gcs no hace decompressive transcoding).
 
+## Notificaciones por email (EmailJS)
+
+`lib/services/notifications.ts`. Tres flags en `.env.local`:
+- `NOTIFICATIONS_LIVE` — compuerta de envío real de correos de negocio; si no es `true`, se loguean como `[STUB-EMAIL]`. En prod `deploy_gui.py` la fuerza a `true`.
+- `EMAIL_OVERRIDE_TO` — redirige el envío real a esa dirección (asunto: `[→ destinatario-original]`). Vacío en prod.
+- `NEXT_PUBLIC_DEMO_EMAIL_PREVIEW` — modal en pantalla con el correo que se enviaría; independiente de los otros dos y muestra el destinatario original. Apagar en prod.
+
+**Excepciones al gate y al override:** `sendCriticalAuthEmail` (verificación/reset) y los tipos sin categoría (`DATOS_EXPORTACION_LISTA`, legal) se envían aunque `NOTIFICATIONS_LIVE` esté off; los de auth además **ignoran** `EMAIL_OVERRIDE_TO` y llegan al destinatario real.
+
 ## Sistema de tema
 
 `components/theme/ThemeProvider.tsx` + tokens en `app/theme.css`. No usar `next-themes`.
@@ -112,9 +121,9 @@ Modera campos libres (notas, trackingId) — bloquea intentos de saltarse el mar
 
 `docker compose up -d` levanta PostgreSQL 16 (puerto 5432) y fake-gcs-server (puerto 4443). `.env.local` apunta a localhost.
 
-## GUI de Deploy
+## Deploy
 
-`frontend/deploy_gui.py` — Python/Tkinter. STAGING: desde `develop` o `v2`. PRODUCTION: solo desde `main`. `deploy.sh` no recorta comentarios inline de `.env.local`; la GUI sí.
+`frontend/deploy_gui.py` (Python/Tkinter) es la **herramienta oficial y única** de deploy — `deploy.sh` ya no existe; no usar `gcloud` manual. STAGING: desde `develop` o `v2`. PRODUCTION: solo desde `main`. Los flags v5.0 y `NOTIFICATIONS_LIVE` se confirman por checkbox en cada deploy (en prod la GUI fuerza `NOTIFICATIONS_LIVE=true`). La GUI sí recorta comentarios inline de `.env.local`.
 
 ## Flujo Git
 

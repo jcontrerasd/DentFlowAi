@@ -47,11 +47,8 @@ async function resetEventsAndInvites() {
 }
 
 describe.runIf(runIntegration)('orquestación de sanción rolling (auditoría 4)', () => {
-  let prevFlag: string | undefined;
 
   beforeAll(async () => {
-    prevFlag = process.env.AVAILABILITY_MODEL_ENABLED;
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
     await ensureInfrastructure(db);
     // Umbrales deterministas 1/2/3.
     await db.execute(sql`UPDATE fauchard_config SET level_1_threshold=1, level_2_threshold=2, level_3_threshold=3 WHERE is_active=true`);
@@ -74,7 +71,6 @@ describe.runIf(runIntegration)('orquestación de sanción rolling (auditoría 4)
     await db.execute(sql`DELETE FROM technician_availability WHERE user_id=${TECH}`);
     await db.execute(sql`DELETE FROM "user" WHERE id IN (${TECH}, 'test-sanction-admin')`);
     await db.execute(sql`DELETE FROM organization WHERE id=${ORG}`);
-    if (prevFlag === undefined) delete process.env.AVAILABILITY_MODEL_ENABLED; else process.env.AVAILABILITY_MODEL_ENABLED = prevFlag;
   });
 
   beforeEach(resetEventsAndInvites);

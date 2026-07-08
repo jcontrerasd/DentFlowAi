@@ -26,8 +26,7 @@ import { subDays } from 'date-fns';
 import { CASE_STATUSES, INTERNAL_CASE_STATUSES, SERVICE_TYPES, WORK_TYPE_LABELS, WORK_CATEGORY_LABELS, type CaseComplexity } from '@/lib/constants/dental';
 import { resolveScenario, categoryForWorkType } from '@/lib/fauchard/caseWorkType';
 import type { ActionResult } from '@/lib/types/actions';
-// ─── v5.0 — Modelo de disponibilidad / sanción rolling (gated por flag) ───
-import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
+// ─── v5.0 — Modelo de disponibilidad / sanción rolling ───
 import { levelToScoreN, POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { computeEligibleAction, ensureTechnicianAvailabilityAction, type Capacity } from './availability';
 import { computeLevelForTechnicianAction, recordNoResponseEventAction } from './noResponseEvents';
@@ -265,9 +264,8 @@ export async function runFauchardAction(caseId: string): Promise<{
 
 // ─── v5.0 — Helpers de elegibilidad, reemplazo y reactivación de cola ────────
 
-/** ¿El técnico cumple el AND triple para el caso? (true si el modelo está apagado). */
+/** ¿El técnico cumple el AND triple para el caso? */
 export async function isTechnicianEligibleForCaseAction(caseId: string, technicianId: string): Promise<boolean> {
-  if (!isAvailabilityEnabled()) return true;
   const [cRow] = await db
     .select({ cc: clinicalCase, restorationCode: restorationTypeTable.label })
     .from(clinicalCase)
@@ -444,60 +442,31 @@ export async function evaluateQuotesAction(_caseId: string) {
 
 export async function penalizeNoResponseAction(technicianId: string, invitationId?: string) {
   try {
-    // ─── v5.0: sanción rolling gradual cuando el modelo está habilitado ───
-    if (isAvailabilityEnabled()) {
-      await recordNoResponseEventAction(technicianId, invitationId ?? null);
-      const lvl = await computeLevelForTechnicianAction(technicianId);
+    // Sanción rolling gradual (v5.0): evento en ventana + nivel 1/2/3.
+    await recordNoResponseEventAction(technicianId, invitationId ?? null);
+    const lvl = await computeLevelForTechnicianAction(technicianId);
 
-      if (lvl.level >= 3) {
-        // Nivel 3 → Auto-OFF del switch global + auto-rechazo de pendientes + email.
-        await db
-          .update(technicianAvailability)
-          .set({ levelGlobal: false, updatedAt: new Date() })
-          .where(eq(technicianAvailability.userId, technicianId));
+    if (lvl.level >= 3) {
+      // Nivel 3 → Auto-OFF del switch global + auto-rechazo de pendientes + email.
+      await db
+        .update(technicianAvailability)
+        .set({ levelGlobal: false, updatedAt: new Date() })
+        .where(eq(technicianAvailability.userId, technicianId));
 
-        const pendings = await db
-          .select({ id: caseAssignment.id })
-          .from(caseAssignment)
-          .where(and(eq(caseAssignment.technicianId, technicianId), eq(caseAssignment.status, 'pending')));
-        if (pendings.length) {
-          const { autoRejectOnAutoOffAction } = await import('./rejection');
-          await autoRejectOnAutoOffAction(technicianId, pendings.map((p) => p.id));
-        }
-        await notifyUser(technicianId, 'NIVEL_3_AUTO_OFF', { count: lvl.count });
-      } else if (lvl.level === 2) {
-        // Nivel 2 → penalización al score (ya aplicada vía −αN·N) + email informativo.
-        await notifyUser(technicianId, 'NIVEL_2_ALCANZADO', { count: lvl.count });
+      const pendings = await db
+        .select({ id: caseAssignment.id })
+        .from(caseAssignment)
+        .where(and(eq(caseAssignment.technicianId, technicianId), eq(caseAssignment.status, 'pending')));
+      if (pendings.length) {
+        const { autoRejectOnAutoOffAction } = await import('./rejection');
+        await autoRejectOnAutoOffAction(technicianId, pendings.map((p) => p.id));
       }
-      // Nivel 1 → solo aviso in-app (sin email); se refleja en el panel del técnico (Fase 4).
-      return;
+      await notifyUser(technicianId, 'NIVEL_3_AUTO_OFF', { count: lvl.count });
+    } else if (lvl.level === 2) {
+      // Nivel 2 → penalización al score (ya aplicada vía −αN·N) + email informativo.
+      await notifyUser(technicianId, 'NIVEL_2_ALCANZADO', { count: lvl.count });
     }
-
-    // ─── Modelo legacy (flag off): exclusión binaria + suspensión a las 3 ───
-    const [tech] = await db
-      .select()
-      .from(user)
-      .where(eq(user.id, technicianId))
-      .limit(1);
-
-    const newCount = (tech?.consecutiveNoResponse ?? 0) + 1;
-
-    if (newCount >= 3) {
-      // Suspensión temporal: 48 horas
-      const suspendedUntil = new Date(Date.now() + 48 * 3600000);
-      await db.update(user)
-        .set({ consecutiveNoResponse: newCount, suspendedUntil, updatedAt: new Date() })
-        .where(eq(user.id, technicianId));
-
-      await notifyUser(technicianId, 'SUSPENSION_TEMPORAL' as any, {
-        reason: 'no_response',
-        until: suspendedUntil.toISOString(),
-      });
-    } else {
-      await db.update(user)
-        .set({ consecutiveNoResponse: newCount, updatedAt: new Date() })
-        .where(eq(user.id, technicianId));
-    }
+    // Nivel 1 → solo aviso in-app (sin email); se refleja en el panel del técnico (Fase 4).
   } catch (error) {
     console.error('[penalizeNoResponseAction] Error:', error);
   }

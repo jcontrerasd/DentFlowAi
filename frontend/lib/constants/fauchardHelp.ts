@@ -591,9 +591,9 @@ export const SIMULATOR_HELP: FauchardHelpSection = {
       label: 'Filtros duros (resumen)',
       symbol: 'sim-filters',
       description:
-        'Conjunto de exclusiones previas al score: disponibilidad global, suspensión, inactividad, cooldown, liga (con expansión), skill mínimo y AND-triple v5.0 (gated).',
+        'Conjunto de exclusiones previas al score: disponibilidad global, suspensión, inactividad, cooldown, liga (con expansión), skill mínimo y AND-triple v5.0.',
       example:
-        'El embudo de resultados desglosa cuántos técnicos cayeron en cada motivo. availability_filter solo aplica con AVAILABILITY_MODEL_ENABLED activo.',
+        'El embudo de resultados desglosa cuántos técnicos cayeron en cada motivo, incluido availability_filter (AND-triple de disponibilidad).',
       links: [{ key: 'tCooldownMinutes' }, { key: 'dInactivityDays' }],
     },
     {
@@ -608,7 +608,6 @@ export const SIMULATOR_HELP: FauchardHelpSection = {
   notes: [
     'Parámetros de Configuración que no influyen en esta simulación: nInvited, tProposalHours, platformFee y plazos post-asignación (revisión dentista, cola pool, sanción rolling). Nota: wLoadDays y cMax eran controles inertes y se retiraron de la configuración.',
     'Para cambiar valores persistentes, usa Configuración Fauchard (/dashboard/admin/fauchard). El panel "Parámetros activos" muestra solo los que afectan el motor de asignación directa.',
-    'El filtro AND-triple de disponibilidad v5.0 solo aplica con AVAILABILITY_MODEL_ENABLED activo en el entorno.',
   ],
 };
 

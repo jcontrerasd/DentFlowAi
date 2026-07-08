@@ -37,14 +37,11 @@ async function seedTech(id: string, opts: { available: boolean }) {
 }
 
 describe.runIf(runIntegration)('reemplazo automático tras rechazo (Fase 5)', () => {
-  let prevFlag: string | undefined;
   let restorationId: string;
   let urgencyId: string;
   let reasonId: string;
 
   beforeAll(async () => {
-    prevFlag = process.env.AVAILABILITY_MODEL_ENABLED;
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
     await ensureInfrastructure(db);
 
     await db.execute(sql`INSERT INTO organization (id, name, rut, type, is_active) VALUES (${ORG}, 'F5 Org', 'rut-f5', 'clinica', true) ON CONFLICT (id) DO NOTHING`);
@@ -74,8 +71,6 @@ describe.runIf(runIntegration)('reemplazo automático tras rechazo (Fase 5)', ()
     await db.execute(sql`DELETE FROM "user" WHERE id IN (${REJECTER}, ${KEEPER}, ${CANDIDATE})`);
     await db.execute(sql`DELETE FROM restoration_type WHERE code = 'rest_f5t'`);
     await db.execute(sql`DELETE FROM organization WHERE id = ${ORG}`);
-    if (prevFlag === undefined) delete process.env.AVAILABILITY_MODEL_ENABLED;
-    else process.env.AVAILABILITY_MODEL_ENABLED = prevFlag;
   });
 
   async function seedInvitations(keeperExpiresInMin: number) {

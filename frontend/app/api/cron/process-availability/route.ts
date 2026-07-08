@@ -12,8 +12,7 @@ export const dynamic = 'force-dynamic';
  * GET se acepta para pruebas manuales (curl / navegador).
  *
  * Corre dos tareas: mantenimiento de disponibilidad (sanción/inactividad) y la
- * escalación del countdown de revisión del dentista. Inerte si
- * `AVAILABILITY_MODEL_ENABLED` está apagado (las actions retornan skipped).
+ * escalación del countdown de revisión del dentista.
  */
 async function handle(req: NextRequest) {
   const authError = requireCronAuth(req);

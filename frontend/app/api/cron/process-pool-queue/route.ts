@@ -16,8 +16,7 @@ export const dynamic = 'force-dynamic';
  * 1. Reevaluación: intenta asignar si ya hay técnicos elegibles.
  * 2. Check-in al dentista al 50% del TTL del ciclo.
  * 3. Expiración del ciclo: re-encola o falla a `sin_cotizaciones_fallo`.
- * Inerte si `AVAILABILITY_MODEL_ENABLED` está apagado (las actions no encuentran
- * casos en pool porque Fauchard no encola con el flag off).
+ * Inerte con `POOL_PENDIENTE_ENABLED` apagado (Fauchard no encola casos).
  */
 async function handle(req: NextRequest) {
   const authError = requireCronAuth(req);

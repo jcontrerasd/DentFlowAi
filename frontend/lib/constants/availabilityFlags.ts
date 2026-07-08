@@ -14,11 +14,6 @@ function flag(name: string): boolean {
   return process.env[name] === 'true';
 }
 
-/** Master switch — habilita filtro AND triple en Fauchard, score con αN y cola pendiente_pool. */
-export function isAvailabilityEnabled(): boolean {
-  return flag('AVAILABILITY_MODEL_ENABLED');
-}
-
 /** Muestra badge global en header y panel de disponibilidad al técnico. */
 export function isAvailabilityUiTecnicoEnabled(): boolean {
   return flag('AVAILABILITY_UI_TECNICO_ENABLED');

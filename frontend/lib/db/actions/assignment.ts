@@ -39,7 +39,7 @@ import {
   parseAssignmentWeights,
 } from '@/lib/fauchard/assignmentScore';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
-import { isAvailabilityEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
+import { isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
 import { computeEligibleAction, computeEligibleBatch, ensureTechnicianAvailabilityAction } from './availability';
 import { computeLevelForTechnicianAction } from './noResponseEvents';
 import {
@@ -153,7 +153,6 @@ interface BatchFilterSets {
 
 /**
  * Precalcula en lote el set de técnicos elegibles por disponibilidad (AND triple).
- * Devuelve `undefined` si el flag está off (Fauchard no aplica ese filtro).
  * Para técnicos sin fila de disponibilidad (raro) aplica el self-heal
  * `ensureTechnicianAvailabilityAction` 1-a-1 y reevalúa, preservando la paridad
  * exacta con el antiguo filtro por-técnico.
@@ -161,8 +160,7 @@ interface BatchFilterSets {
 async function prefetchEligibleSet(
   techIds: string[],
   category: ResolvedScenario['category'],
-): Promise<Set<string> | undefined> {
-  if (!isAvailabilityEnabled()) return undefined;
+): Promise<Set<string>> {
   const { eligible, missing } = await computeEligibleBatch(techIds, category, 'cad');
   for (const id of missing) {
     await ensureTechnicianAvailabilityAction(id);
@@ -230,19 +228,17 @@ async function checkTechnicianPassesFilters(
     if (!skill) return { ok: false, reason: 'insufficient_skill' };
   }
 
-  if (isAvailabilityEnabled()) {
-    if (batch?.eligibleSet) {
-      // Elegibilidad precalculada en lote (self-heal de filas faltantes ya aplicado por el caller).
-      if (!batch.eligibleSet.has(tech.id)) return { ok: false, reason: 'availability_filter' };
-    } else {
-      const t0avail = perfStart();
-      await ensureTechnicianAvailabilityAction(tech.id);
-      if (!(await computeEligibleAction(tech.id, scenario.category, 'cad'))) {
-        perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'ineligible' });
-        return { ok: false, reason: 'availability_filter' };
-      }
-      perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'eligible' });
+  if (batch?.eligibleSet) {
+    // Elegibilidad precalculada en lote (self-heal de filas faltantes ya aplicado por el caller).
+    if (!batch.eligibleSet.has(tech.id)) return { ok: false, reason: 'availability_filter' };
+  } else {
+    const t0avail = perfStart();
+    await ensureTechnicianAvailabilityAction(tech.id);
+    if (!(await computeEligibleAction(tech.id, scenario.category, 'cad'))) {
+      perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'ineligible' });
+      return { ok: false, reason: 'availability_filter' };
     }
+    perfLog('checkFilters.availability_query', Date.now() - t0avail, { techId: tech.id, result: 'eligible' });
   }
 
   return { ok: true };
@@ -433,7 +429,6 @@ export async function buildFunnelStagesForScenario(
   const leagueFilterMode = leagueMode ?? 'expand';
 
   const simScenario = scenarioToSimulationScenario(scenario);
-  const availabilityOn = isAvailabilityEnabled();
   const now = new Date();
   const inactivityThreshold = new Date(now.getTime() - config.dInactivityDays * 86400000);
   const cooldownThreshold = new Date(now.getTime() - config.tCooldownMinutes * 60000);
@@ -485,7 +480,6 @@ export async function buildFunnelStagesForScenario(
   type StageDef = {
     id: import('@/lib/fauchard/simulationTypes').FunnelStageId;
     filter: (tech: TechRow) => boolean;
-    skipped?: boolean;
   };
 
   const stageDefs: StageDef[] = [
@@ -523,18 +517,10 @@ export async function buildFunnelStagesForScenario(
     },
   ];
 
-  if (availabilityOn) {
-    stageDefs.push({
-      id: 'availability_filter',
-      filter: () => true,
-    });
-  } else {
-    stageDefs.push({
-      id: 'availability_filter',
-      filter: () => true,
-      skipped: true,
-    });
-  }
+  stageDefs.push({
+    id: 'availability_filter',
+    filter: () => true,
+  });
 
   stageDefs.push({ id: 'eligible', filter: () => true });
 
@@ -542,7 +528,7 @@ export async function buildFunnelStagesForScenario(
   let remaining: TechRow[] = [...universe];
 
   for (const def of stageDefs) {
-    const meta = getFunnelStageMeta(def.id, simScenario, availabilityOn);
+    const meta = getFunnelStageMeta(def.id, simScenario);
 
     if (def.id === 'universe') {
       stages.push({
@@ -555,20 +541,7 @@ export async function buildFunnelStagesForScenario(
       continue;
     }
 
-    if (def.id === 'availability_filter' && def.skipped) {
-      stages.push({
-        id: 'availability_filter',
-        label: `${meta.label} (inactiva)`,
-        countAfter: remaining.length,
-        dropped: 0,
-        fixHint: meta.fixHint,
-        reason: meta.reason,
-        skipped: true,
-      });
-      continue;
-    }
-
-    if (def.id === 'availability_filter' && availabilityOn) {
+    if (def.id === 'availability_filter') {
       const next: TechRow[] = [];
       const t0avail = perfStart();
       for (const tech of remaining) {
@@ -718,7 +691,6 @@ async function rankPool(
   const techIds = pool.map((t) => t.id);
   const data = await bulkAssignmentData(techIds, config, workType);
   const weights = parseAssignmentWeights(config);
-  const availabilityOn = isAvailabilityEnabled();
   // Piso del divisor de carga: configurable vía fauchard_config.loadReferenceMin (default 5).
   const loadBaseline = config.loadReferenceMin ?? 5;
   const maxLoad = Math.max(loadBaseline, ...Array.from(data.activeLoads.values()), 1);
@@ -744,11 +716,8 @@ async function rankPool(
     const designLevel = skillRow?.designLevel ?? 0;
     const activeLoad = data.activeLoads.get(tech.id) ?? 0;
 
-    let sanctionLevel = 0 as 0 | 1 | 2 | 3;
-    if (availabilityOn) {
-      const lvl = await computeLevelForTechnicianAction(tech.id);
-      sanctionLevel = lvl.level;
-    }
+    const lvl = await computeLevelForTechnicianAction(tech.id);
+    const sanctionLevel: 0 | 1 | 2 | 3 = lvl.level;
 
     const daysSinceAssignment = tech.lastInvitedAt
       ? Math.floor((now - new Date(tech.lastInvitedAt).getTime()) / 86400000)
@@ -871,7 +840,7 @@ export async function runAssignmentAction(caseId: string): Promise<{
     const config = await getConfigForCase(caseId);
 
     if (!ranked.length) {
-      if (isAvailabilityEnabled() && isPoolPendienteEnabled()) {
+      if (isPoolPendienteEnabled()) {
         const [cCase] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
         const wasAlreadyInPool = cCase?.internalStatus === POOL_INTERNAL_STATUS;
         if (!wasAlreadyInPool) {

@@ -4,21 +4,19 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-const { identityMock, dbSelectMock, dbUpdateMock, logCaseEventMock, tryReplaceMock, availabilityEnabledMock } =
+const { identityMock, dbSelectMock, dbUpdateMock, logCaseEventMock, tryReplaceMock } =
   vi.hoisted(() => ({
     identityMock: vi.fn(),
     dbSelectMock: vi.fn(),
     dbUpdateMock: vi.fn(),
     logCaseEventMock: vi.fn(),
     tryReplaceMock: vi.fn(),
-    availabilityEnabledMock: vi.fn(),
   }));
 
 vi.mock('@/lib/db/actions/impersonation', () => ({ getServerIdentity: identityMock }));
 vi.mock('@/lib/db/actions/cases', () => ({ logCaseEvent: logCaseEventMock }));
 vi.mock('@/lib/db/actions/replacement', () => ({ tryReplaceAfterRejectAction: tryReplaceMock }));
 vi.mock('@/lib/constants/availabilityFlags', () => ({
-  isAvailabilityEnabled: availabilityEnabledMock,
   isRejectionIndividualEnabled: () => true,
 }));
 vi.mock('@/lib/uchPresentation', () => ({ UCH_PAYLOAD_PRESENTATION_FAUCHARD: {} }));
@@ -51,7 +49,6 @@ describe('rejectInvitationIndividualAction (Fase 5)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     identityMock.mockResolvedValue({ id: TECH, role: 'tecnico', isSystemAdmin: false });
-    availabilityEnabledMock.mockReturnValue(false);
     dbUpdateMock.mockReturnValue({ set: () => ({ where: () => Promise.resolve() }) });
     logCaseEventMock.mockResolvedValue(undefined);
     tryReplaceMock.mockResolvedValue({ success: true, replaced: true });
@@ -108,8 +105,7 @@ describe('rejectInvitationIndividualAction (Fase 5)', () => {
     if (!res.success) expect(res.error).toMatch(/comentario/i);
   });
 
-  it('dispara reemplazo cuando el modelo está habilitado', async () => {
-    availabilityEnabledMock.mockReturnValue(true);
+  it('dispara reemplazo automático tras el rechazo', async () => {
     queueSelects([INV], [{ id: 'r1', code: 'rej_001', isActive: true }]);
     const res = await rejectInvitationIndividualAction('inv-1', 'r1');
     expect(res.success).toBe(true);

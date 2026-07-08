@@ -12,7 +12,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { logCaseEvent } from './cases';
 import { CASE_EVENTS } from '@/lib/constants/caseEvents';
-import { isAvailabilityEnabled, isRejectionIndividualEnabled } from '@/lib/constants/availabilityFlags';
+import { isRejectionIndividualEnabled } from '@/lib/constants/availabilityFlags';
 import { tryReplaceAfterRejectAction } from './replacement';
 import type { ActionResult } from '@/lib/types/actions';
 
@@ -110,11 +110,8 @@ export async function rejectInvitationIndividualAction(
       },
     });
 
-    let replacementSent = false;
-    if (isAvailabilityEnabled()) {
-      const rep = await tryReplaceAfterRejectAction(invitationId);
-      replacementSent = rep.success && rep.replaced === true;
-    }
+    const rep = await tryReplaceAfterRejectAction(invitationId);
+    const replacementSent = rep.success && rep.replaced === true;
 
     return { success: true, replacementSent };
   } catch (error) {
@@ -201,7 +198,6 @@ async function rejectInvitationsInternal(
       .where(inArray(caseAssignment.id, targets.map((t) => t.id)));
 
     let replacementsSent = 0;
-    const replace = isAvailabilityEnabled();
     for (const inv of targets) {
       await logCaseEvent({
         caseId: inv.clinicalCaseId,
@@ -217,10 +213,8 @@ async function rejectInvitationsInternal(
           rejectionComment: uchEvent.displayComment ?? null,
         },
       });
-      if (replace) {
-        const rep = await tryReplaceAfterRejectAction(inv.id);
-        if (rep.success && rep.replaced) replacementsSent++;
-      }
+      const rep = await tryReplaceAfterRejectAction(inv.id);
+      if (rep.success && rep.replaced) replacementsSent++;
     }
 
     return { success: true, rejected: targets.length, replacementsSent };
