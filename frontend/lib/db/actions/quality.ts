@@ -317,7 +317,7 @@ export async function sendToDentistAction(caseId: string): Promise<ActionResult>
  * (el caso continúa; al entregar se degradará a flujo legacy directo al dentista).
  */
 export async function assignQualityReviewerAction(caseId: string, tx?: any): Promise<{ success: boolean; assigned: boolean; reviewerId?: string; error?: string }> {
-  if (!isQualityGateEnabled()) return { success: true, assigned: false };
+  if (!(await isQualityGateEnabled())) return { success: true, assigned: false };
 
   const run = async (client: any) => {
     const caseRow = await loadCaseGuardRow(client, caseId);
@@ -381,7 +381,7 @@ export async function submitQualityRatingAction(data: {
   rating: number;
   comment?: string;
 }): Promise<ActionResult> {
-  if (!isQualityGateEnabled()) return { success: false, error: 'Compuerta de Calidad desactivada' };
+  if (!(await isQualityGateEnabled())) return { success: false, error: 'Compuerta de Calidad desactivada' };
 
   const identity = await getServerIdentity();
   if (!identity?.id) return { success: false, error: 'No autorizado' };

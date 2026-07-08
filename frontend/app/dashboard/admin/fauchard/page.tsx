@@ -80,7 +80,7 @@ export default async function AdminFauchardPage() {
 
       <TabContainer
         config={config}
-        showAvailabilityPanel={isAvailabilityAdminPanelEnabled()}
+        showAvailabilityPanel={await isAvailabilityAdminPanelEnabled()}
         versions={versions}
         initialKpisCache={initialKpisCache}
         isSystemAdmin={isSystemAdmin}

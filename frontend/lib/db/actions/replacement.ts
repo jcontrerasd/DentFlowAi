@@ -52,7 +52,7 @@ export async function tryReplaceAfterRejectAction(
 
     if (!next) {
       const reason = prior.length >= maxAttempts ? 'max_attempts' : 'no_candidate';
-      if (isPoolPendienteEnabled()) {
+      if (await isPoolPendienteEnabled()) {
         const [cCase] = await db.select({ internalStatus: clinicalCase.internalStatus })
           .from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
         if (cCase && cCase.internalStatus !== POOL_INTERNAL_STATUS) {

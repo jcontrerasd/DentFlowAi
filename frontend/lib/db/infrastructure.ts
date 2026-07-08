@@ -6,7 +6,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 /** v5.25 — data_export_request: solicitudes asíncronas de exportación de datos (portabilidad, Ley 21.719). */
 /** v5.26 — Índices de rendimiento: cobertura compuesta para Fauchard, UCH polling, crons y quality gate. */
 /** v5.27 — case_quality_assignment.first_viewed_at: marca cuándo el revisor abrió el caso por primera vez (contador nuevo en ImpersonationSelector). */
-export const INFRA_VERSION = 'v5.27';
+/** v5.28 — feature_flag + feature_flag_log: flags administrables desde el panel admin, con seed desde env y auditoría. Se retira AVAILABILITY_MODEL_ENABLED (modelo incondicional). */
+export const INFRA_VERSION = 'v5.28';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -201,6 +202,13 @@ export async function ensureIncrementalInfrastructure(db: any) {
     await ensureQualityGateInfrastructure(db);
   } catch (e) {
     console.error("[Infrastructure] Error creando infraestructura de Calidad (v5.19):", e);
+  }
+
+  // v5.28 — Feature flags administrables desde el panel admin.
+  try {
+    await ensureFeatureFlagInfrastructure(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando infraestructura de feature flags (v5.28):", e);
   }
 
   // v5.19 — user.organization_id pasa a nullable para soportar usuarios sin org (admin, calidad).
@@ -509,6 +517,66 @@ export async function ensureQualityGateInfrastructure(db: any) {
     );
     CREATE INDEX IF NOT EXISTS cqa_case_idx ON case_quality_assignment(clinical_case_id);
     CREATE INDEX IF NOT EXISTS cqa_calidad_status_idx ON case_quality_assignment(calidad_user_id, status);
+  `);
+}
+
+/**
+ * v5.28 — DDL idempotente de feature flags administrables + seed desde env.
+ * El seed toma el valor actual de `process.env` (ON CONFLICT DO NOTHING), así el
+ * corte a DB es transparente: el día de la migración cada flag conserva el valor
+ * que tenía en el ambiente. Después, la fuente de verdad es la tabla (env queda
+ * como fallback de arranque/DB caída — ver lib/featureFlags.ts).
+ */
+export async function ensureFeatureFlagInfrastructure(db: any) {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS feature_flag (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      value_type TEXT NOT NULL DEFAULT 'boolean',
+      description TEXT,
+      updated_by TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS feature_flag_key_uidx ON feature_flag(key);`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS feature_flag_log (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      flag_key TEXT NOT NULL,
+      changed_by TEXT NOT NULL REFERENCES "user"(id),
+      old_value TEXT,
+      new_value TEXT,
+      changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS ffl_flag_key_idx ON feature_flag_log(flag_key);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS ffl_changed_by_idx ON feature_flag_log(changed_by);`);
+
+  // Seed idempotente desde env (booleans + TTL numérico).
+  const boolSeed: [string, string][] = [
+    ['AVAILABILITY_UI_TECNICO_ENABLED', 'Badge y panel de disponibilidad del técnico'],
+    ['AVAILABILITY_ADMIN_PANEL_ENABLED', 'Pestaña admin "Plazos y sanciones" + observabilidad'],
+    ['REJECTION_INDIVIDUAL_ENABLED', 'Botón "Rechazar invitación" en el UCH del técnico'],
+    ['POOL_PENDIENTE_ENABLED', 'Cola pendiente_pool cuando no hay técnicos elegibles'],
+    ['LEAGUE_ENGINE_ENABLED', 'Motor de ligas: ascensos/descensos automáticos + cron diario'],
+    ['QUALITY_GATE_ENABLED', 'Revisión de calidad de casos completados'],
+  ];
+  for (const [key, description] of boolSeed) {
+    const value = process.env[key] === 'true' ? 'true' : 'false';
+    await db.execute(sql`
+      INSERT INTO feature_flag (key, value, value_type, description)
+      VALUES (${key}, ${value}, 'boolean', ${description})
+      ON CONFLICT (key) DO NOTHING;
+    `);
+  }
+  const ttlRaw = Number(process.env.EMAIL_VERIFICATION_TTL_MINUTES);
+  const ttlSeed = Number.isFinite(ttlRaw) && ttlRaw > 0 ? String(ttlRaw) : '15';
+  await db.execute(sql`
+    INSERT INTO feature_flag (key, value, value_type, description)
+    VALUES ('EMAIL_VERIFICATION_TTL_MINUTES', ${ttlSeed}, 'number', 'Minutos de validez del link de verificación de email')
+    ON CONFLICT (key) DO NOTHING;
   `);
 }
 

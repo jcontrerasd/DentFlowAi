@@ -73,7 +73,7 @@ export async function getDashboardMetricsAction(): Promise<DashboardMetricsResul
   }
 
   if (isCalidad) {
-    const qualityGateOn = isQualityGateEnabled();
+    const qualityGateOn = await isQualityGateEnabled();
     const rows = await db
       .select({ id: clinicalCase.id, status: clinicalCase.status })
       .from(clinicalCase)

@@ -38,7 +38,7 @@ export function startLocalCronScheduler(): void {
   };
 
   const runPoolReevaluation = async () => {
-    if (!isPoolPendienteEnabled()) return;
+    if (!(await isPoolPendienteEnabled())) return;
     try {
       const res = await processPendingPoolReevaluationAction();
       if (res.success && (res.assigned ?? 0) > 0) {

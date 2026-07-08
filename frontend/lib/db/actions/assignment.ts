@@ -840,7 +840,7 @@ export async function runAssignmentAction(caseId: string): Promise<{
     const config = await getConfigForCase(caseId);
 
     if (!ranked.length) {
-      if (isPoolPendienteEnabled()) {
+      if (await isPoolPendienteEnabled()) {
         const [cCase] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
         const wasAlreadyInPool = cCase?.internalStatus === POOL_INTERNAL_STATUS;
         if (!wasAlreadyInPool) {

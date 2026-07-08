@@ -14,6 +14,11 @@ interface FauchardHelpWindowProps {
   section: FauchardHelpSection;
   /** Clave de parámetro a la que hacer scroll + resaltar al abrir (link "Ver ejemplo →"). */
   focusKey?: string | null;
+  /** Ventana más ancha (600px en vez de 440px). Usar cuando `symbol` lleva nombres largos
+   *  (ej. claves de env var completas, ver featureFlagsHelp.ts) que no caben en el ancho
+   *  pensado para símbolos cortos (Q, αQ). Clases estáticas a propósito — Tailwind no
+   *  reconoce anchos arbitrarios interpolados en runtime. */
+  wide?: boolean;
 }
 
 /** Alto de la cabecera sticky (h-20). La ventana no sube por detrás de ella. */
@@ -43,7 +48,7 @@ const HELP_OPEN_EVENT = 'fauchard-help-open';
  *
  * El contenido se pasa como datos (`FauchardHelpSection`).
  */
-export default function FauchardHelpWindow({ isOpen, onClose, section, focusKey }: FauchardHelpWindowProps) {
+export default function FauchardHelpWindow({ isOpen, onClose, section, focusKey, wide }: FauchardHelpWindowProps) {
   const router = useRouter();
   const helpId = useId();
   const onCloseRef = useRef(onClose);
@@ -146,7 +151,9 @@ export default function FauchardHelpWindow({ isOpen, onClose, section, focusKey 
           exit={{ opacity: 0, scale: 0.96 }}
           transition={{ duration: 0.18 }}
           style={{ ...positionStyle, resize: 'both', overflow: 'hidden' }}
-          className="fixed z-[60] flex flex-col rounded-[1.75rem] border border-divider bg-surface/95 shadow-2xl backdrop-blur-xl w-[min(440px,92vw)] h-[min(560px,80vh)] min-w-[320px] min-h-[240px] max-w-[95vw] max-h-[90vh]"
+          className={`fixed z-[60] flex flex-col rounded-[1.75rem] border border-divider bg-surface/95 shadow-2xl backdrop-blur-xl h-[min(560px,80vh)] min-w-[320px] min-h-[240px] max-w-[95vw] max-h-[90vh] ${
+            wide ? 'w-[min(600px,92vw)]' : 'w-[min(440px,92vw)]'
+          }`}
         >
           {/* Barra de título — zona de arrastre */}
           <div
@@ -197,7 +204,7 @@ export default function FauchardHelpWindow({ isOpen, onClose, section, focusKey 
                             {numText}
                           </span>
                         ) : param.symbol ? (
-                          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-primary-hl px-1.5 text-xs font-black text-primary">
+                          <span className="inline-flex h-6 items-center justify-center rounded-md bg-primary-hl px-1.5 text-xs font-black text-primary whitespace-normal break-all text-left">
                             {param.symbol}
                           </span>
                         ) : null}

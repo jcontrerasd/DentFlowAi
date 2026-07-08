@@ -233,7 +233,7 @@ export async function getMyAvailabilityStatusAction(): Promise<ActionResult<{
   const emptyLevel: TechnicianLevel = { level: 0, count: 0, nextExitDate: null };
   if (!identity?.id) return { success: false, error: 'No autenticado' };
 
-  const enabled = isAvailabilityUiTecnicoEnabled() && identity.role === 'tecnico';
+  const enabled = (await isAvailabilityUiTecnicoEnabled()) && identity.role === 'tecnico';
   if (!enabled) {
     return { success: true, enabled: false, availability: null, level: emptyLevel, pendingCount: 0 };
   }

@@ -423,6 +423,36 @@ export const fauchardConfigLog = pgTable("fauchard_config_log", {
   index("acl_changed_by_idx").on(table.changedBy),
 ]);
 
+// v5.28 — Feature flags administrables desde el panel admin. Key-value simple
+// (sin copy-on-write: no se ancla por caso). `value` guarda 'true'/'false' o un
+// número como texto según `valueType`. Env queda como seed inicial y fallback.
+export const featureFlag = pgTable("feature_flag", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  key: text("key").notNull(),
+  value: text("value").notNull(),
+  /** 'boolean' | 'number' */
+  valueType: text("value_type").notNull().default('boolean'),
+  description: text("description"),
+  updatedBy: text("updated_by").references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("feature_flag_key_uidx").on(table.key),
+]);
+
+// v5.28 — Log inmutable de cambios de feature flags (espejo de fauchard_config_log)
+export const featureFlagLog = pgTable("feature_flag_log", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  flagKey: text("flag_key").notNull(),
+  changedBy: text("changed_by").notNull().references(() => user.id),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  changedAt: timestamp("changed_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  index("ffl_flag_key_idx").on(table.flagKey),
+  index("ffl_changed_by_idx").on(table.changedBy),
+]);
+
 // Asignación directa Fauchard (1 técnico por intento; aceptar/rechazar, sin cotización)
 export const caseAssignment = pgTable("case_assignment", {
   id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),

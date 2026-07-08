@@ -129,7 +129,7 @@ export async function getCaseReviewDeadlineAt(caseId: string): Promise<Date | nu
  * si el flag de Calidad está off o no hay entrega registrada. Lee config anclada o activa.
  */
 export async function getCaseQualityReviewDeadlineAt(caseId: string): Promise<Date | null> {
-  if (!isQualityGateEnabled()) return null;
+  if (!(await isQualityGateEnabled())) return null;
 
   const [row] = await db
     .select({

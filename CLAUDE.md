@@ -28,7 +28,7 @@ No ejecutar `npm run validate:full` salvo pedido explícito. Usar solo lo necesa
 ## Restricciones críticas
 <important>NUNCA acceder a la DB desde componentes — solo Server Actions en frontend/lib/db/actions/</important>
 <important>getServerIdentity() es el único resolver de identidad — soporta impersonación admin</important>
-<important>Migraciones en runtime vía infrastructure.ts (INFRA_VERSION actual: v5.25) — NO usar drizzle-kit push en producción</important>
+<important>Migraciones en runtime vía infrastructure.ts (INFRA_VERSION actual: v5.28) — NO usar drizzle-kit push en producción</important>
 <important>Leer frontend/AGENTS.md antes de escribir código Next.js</important>
 
 ## Roles del sistema
@@ -69,6 +69,15 @@ Sistema de 3 niveles jerárquicos (global · CAD · 7 categorías). Comportamien
 ## Motor de ligas (flag `LEAGUE_ENGINE_ENABLED`)
 
 4 categorías fijas (Bronce/Plata/Oro/Élite). Gating por liga en `runAssignmentAction`. Ascenso/descenso automático via `processLeagueMaintenanceAction`. Cron diario: `/api/cron/process-league`.
+
+## Feature flags administrables (v5.28)
+
+6 flags booleanos + `EMAIL_VERIFICATION_TTL_MINUTES` viven en la tabla `feature_flag` (con log de auditoría `feature_flag_log`), editables en `/dashboard/admin/feature-flags` — cambios en segundos, sin deploy.
+
+- `AVAILABILITY_UI_TECNICO_ENABLED`, `AVAILABILITY_ADMIN_PANEL_ENABLED`, `REJECTION_INDIVIDUAL_ENABLED`, `POOL_PENDIENTE_ENABLED`, `LEAGUE_ENGINE_ENABLED`, `QUALITY_GATE_ENABLED`, `EMAIL_VERIFICATION_TTL_MINUTES`.
+- Lectura server-only vía `lib/featureFlags.ts` (`getFlag`/`getNumericSetting`): caché de 30s por instancia; si la DB no responde o la key no existe, cae a `process.env` (bootstrap/fallback).
+- Escritura: `lib/db/actions/featureFlags.ts` (guard `isSystemAdmin`, whitelist de keys, invalida caché tras cada cambio).
+- `deploy_gui.py` ya no gestiona estos flags — sus valores en `.env.local` son solo el seed inicial de la migración v5.28.
 
 ## UCH — Reglas de Diseño
 

@@ -48,7 +48,7 @@ function buildRejectionContent(headline: string, reasonLabel?: string | null, co
  * Component). El botón "Rechazar invitación" se monta solo si `enabled` es true.
  */
 export async function getRejectionUiEnabledAction(): Promise<{ enabled: boolean }> {
-  return { enabled: isRejectionIndividualEnabled() };
+  return { enabled: await isRejectionIndividualEnabled() };
 }
 
 /**

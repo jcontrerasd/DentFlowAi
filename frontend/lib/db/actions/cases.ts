@@ -498,7 +498,7 @@ export async function listCasesByOrganization(
     // Calidad: marca por caso "por calificar" (completado sin review dimension='quality' del revisor).
     const isCalidad = role === 'calidad';
     let qualityRatedCaseIds = new Set<string>();
-    if (isCalidad && isQualityGateEnabled()) {
+    if (isCalidad && (await isQualityGateEnabled())) {
       const completedIds = results
         .filter((c: any) => c.status === 'completado')
         .map((c: any) => c.id);
@@ -736,7 +736,7 @@ export async function getCaseDetails(caseId: string) {
     // Calculamos qualityGateActive ANTES de anonimizar qualityReviewerId.
     // El técnico necesita saber si su entrega va a Calidad, pero sin ver la identidad del revisor.
     const qualityGateActive =
-      isQualityGateEnabled() &&
+      (await isQualityGateEnabled()) &&
       cCase.serviceType === 'solo_diseno' &&
       !!(cCase as any).qualityReviewerId;
 
@@ -1050,7 +1050,7 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
   // Lazy quality assignment: si el flag está on pero quality_reviewer_id quedó NULL,
   // intentar asignar ANTES de abrir la transacción principal para evitar deadlock.
   // (Dentro de la tx principal se volvería a leer el valor ya persistido.)
-  if (isQualityGateEnabled()) {
+  if (await isQualityGateEnabled()) {
     try {
       const { assignQualityReviewerAction } = await import('./quality');
       await assignQualityReviewerAction(caseId);
@@ -1095,7 +1095,7 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
 
       const effectiveReviewerId = (caseRow?.quality_reviewer_id as string | null) ?? null;
 
-      const useQualityGate = isQualityGateEnabled()
+      const useQualityGate = (await isQualityGateEnabled())
         && caseRow?.service_type === 'solo_diseno'
         && !!effectiveReviewerId;
       const targetStatus = useQualityGate ? 'enRevisionCalidad' : 'enRevision';
@@ -1423,7 +1423,7 @@ export async function approveWorkAction(
       // debe calificar al técnico. La señal "por calificar" persiste en sus superficies
       // hasta que envíe la nota; esta notificación lo avisa al cierre. Gateada por el flag
       // (sin Quality Gate no hay quality_reviewer_id asignado).
-      if (isQualityGateEnabled() && updatedCase?.qualityReviewerId) {
+      if ((await isQualityGateEnabled()) && updatedCase?.qualityReviewerId) {
         await notifyUser(updatedCase.qualityReviewerId, 'CALIDAD_POR_CALIFICAR', {
           caseId,
           caseNumber: updatedCase.caseNumber,

@@ -19,6 +19,7 @@ import {
   CreditCard,
   DollarSign,
   ShieldCheck,
+  ToggleLeft,
 } from 'lucide-react';
 import Link from 'next/link';
 import { signOut } from 'next-auth/react';
@@ -256,6 +257,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { name: 'Catálogo UI', icon: ListChecks, href: '/dashboard/admin/catalogos' },
       { name: 'Precios', icon: DollarSign, href: '/dashboard/admin/prices' },
       { name: 'Cumplimiento Legal', icon: ShieldCheck, href: '/dashboard/admin/legal' },
+      { name: 'Feature Flags', icon: ToggleLeft, href: '/dashboard/admin/feature-flags' },
     ] : []),
   ];
 
