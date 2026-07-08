@@ -49,6 +49,30 @@ export const FEATURE_FLAGS_HELP: FauchardHelpSection = {
       example:
         'Varios dentistas se registran desde la clínica pero abren el correo horas después, y el link ya expiró. Lo subes de 15 a 60 desde el admin y el problema desaparece — sin deploy ni reinicio.',
     },
+    {
+      label: 'Timeout de sesión',
+      symbol: 'SESSION_TIMEOUTS_ENABLED',
+      description:
+        'Cierra la sesión automáticamente por inactividad o al superar el tiempo máximo desde el login, validado en el servidor (no solo en la cookie del navegador).',
+      example:
+        'Un usuario deja la sesión abierta toda la noche en un computador compartido. Con el flag encendido, la sesión expira sola por inactividad (ver "Minutos de inactividad") aunque nadie la cierre manualmente.',
+    },
+    {
+      label: 'Minutos de inactividad',
+      symbol: 'SESSION_IDLE_TIMEOUT_MINUTES',
+      description:
+        'Minutos sin actividad antes de cerrar la sesión (solo aplica con "Timeout de sesión" encendido). Cada acción del usuario la renueva. Por defecto: 120.',
+      example:
+        'Los técnicos se quejan de que la sesión se cierra mientras revisan un modelo 3D sin interactuar con el servidor. Subes el valor desde el admin sin necesidad de deploy.',
+    },
+    {
+      label: 'Horas máximas de sesión',
+      symbol: 'SESSION_ABSOLUTE_TIMEOUT_HOURS',
+      description:
+        'Horas máximas desde el login antes de forzar un nuevo inicio de sesión, sin importar la actividad (solo aplica con "Timeout de sesión" encendido). Por defecto: 8.',
+      example:
+        'Se detecta que conviene acortar la ventana máxima de una sesión robada. Bajas el valor desde el admin y el cambio aplica de inmediato a las próximas verificaciones.',
+    },
   ],
   notes: [
     'Los valores editables aquí viven en la tabla feature_flag; .env.local queda solo como respaldo de arranque o si la base de datos no responde.',
@@ -116,15 +140,33 @@ export function getFeatureFlagImpact(
         : `El plazo de revisión de Calidad de ${hrs} deja de aplicarse a partir de ahora — no se borra de la configuración, solo queda sin uso. Efecto inmediato: toda entrega nueva del técnico salta directo al dentista, sin pasar por un revisor de Calidad ni por ese plazo. Los casos que ya estén en revisión de Calidad en este momento no se mueven automáticamente al apagar el flag — siguen su curso ahí hasta que el revisor los complete; el cambio solo afecta entregas nuevas desde este momento en adelante.`;
     }
 
+    case 'SESSION_TIMEOUTS_ENABLED':
+      return direction === 'on'
+        ? 'A partir de ahora el servidor valida en cada acción si la sesión sigue vigente: se cierra sola tras el número de minutos de inactividad configurado, o al cumplirse las horas máximas desde el login, lo que ocurra primero. Las sesiones abiertas en este momento quedan cubiertas de inmediato — su reloj de inactividad y de tiempo máximo arranca a partir de este cambio, no las expulsa retroactivamente.'
+        : 'El servidor deja de cerrar sesiones por inactividad o por tiempo máximo. Las sesiones vuelven a depender solo de la cookie del navegador (hasta 8 horas, salvo que se ajuste por variable de entorno). Los minutos de inactividad y las horas máximas configurados no se borran, solo quedan sin uso hasta que reenciendas el flag.';
+
     default:
       return 'Este cambio no tiene una descripción de impacto registrada — revisa el código antes de aplicarlo.';
   }
 }
 
-/** Impacto del TTL de verificación de email — depende del valor nuevo, no es on/off. */
-export function emailVerificationTtlImpact(fromMinutes: string, toMinutes: string): string {
-  const fromN = Number(fromMinutes);
-  const toN = Number(toMinutes);
+/** Impacto de un flag numérico (TTL de verificación, timeouts de sesión) — depende del valor nuevo, no es on/off. */
+export function getNumericFlagImpact(key: string, fromValue: string, toValue: string): string {
+  const fromN = Number(fromValue);
+  const toN = Number(toValue);
   const direction = toN > fromN ? 'más tiempo' : toN < fromN ? 'menos tiempo' : 'el mismo tiempo';
-  return `Todo link de verificación que se genere después de guardar este cambio será válido por ${toMinutes} minutos (antes: ${fromMinutes}) — es decir, los usuarios que se registren desde ahora tendrán ${direction} para hacer clic antes de que el link expire y tengan que pedir uno nuevo. Los links que ya fueron enviados antes de este cambio conservan el plazo con el que se generaron originalmente: esto no los alarga ni los acorta retroactivamente, así que nadie que ya tenga un correo de verificación en su bandeja se ve afectado.`;
+
+  switch (key) {
+    case 'EMAIL_VERIFICATION_TTL_MINUTES':
+      return `Todo link de verificación que se genere después de guardar este cambio será válido por ${toValue} minutos (antes: ${fromValue}) — es decir, los usuarios que se registren desde ahora tendrán ${direction} para hacer clic antes de que el link expire y tengan que pedir uno nuevo. Los links que ya fueron enviados antes de este cambio conservan el plazo con el que se generaron originalmente: esto no los alarga ni los acorta retroactivamente, así que nadie que ya tenga un correo de verificación en su bandeja se ve afectado.`;
+
+    case 'SESSION_IDLE_TIMEOUT_MINUTES':
+      return `Desde este cambio, cualquier sesión (con "Timeout de sesión" encendido) se cerrará tras ${toValue} minutos sin actividad (antes: ${fromValue}) — los usuarios tendrán ${direction} antes de ser desconectados por inactividad. Las sesiones ya abiertas usan el nuevo valor en su próxima verificación, no se cierran de golpe al guardar.`;
+
+    case 'SESSION_ABSOLUTE_TIMEOUT_HOURS':
+      return `Desde este cambio, ninguna sesión (con "Timeout de sesión" encendido) podrá superar ${toValue} horas desde el login (antes: ${fromValue}), sin importar la actividad — ${direction} antes de tener que iniciar sesión de nuevo. Las sesiones ya abiertas quedan sujetas al nuevo tope en su próxima verificación.`;
+
+    default:
+      return `El valor cambia de ${fromValue} a ${toValue}.`;
+  }
 }

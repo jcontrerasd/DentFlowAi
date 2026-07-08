@@ -7,6 +7,7 @@ import { user, sessions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 
 import { getForcedIdentity } from './test-identity';
+import { getSessionTimeoutConfig, evaluateSessionTimeout, touchSessionActivity } from '@/lib/db/sessionTimeouts';
 
 /**
  * Motor de resolución de identidad delegada.
@@ -29,20 +30,30 @@ export async function getServerIdentity() {
       return null;
     }
 
-    // Fase 1/4/5 (ajuste login): con single-session o tab-close-logout activos, una sesión
-    // válida en el JWT puede haber sido invalidada por nosotros (otro login la reemplazó, o el
-    // cron de inactividad la expiró). Verificamos contra nuestra tabla `sessions` propia — sin
-    // esto activado, cero queries extra (mismo costo que hoy).
+    // Fase 1/4/5 (ajuste login): con single-session, tab-close-logout o timeout de sesión
+    // (v5.29) activos, una sesión válida en el JWT puede haber sido invalidada por nosotros
+    // (otro login la reemplazó, o venció por inactividad/tope absoluto). Verificamos contra
+    // nuestra tabla `sessions` propia — sin nada de esto activado, cero queries extra.
+    const timeoutCfg = await getSessionTimeoutConfig();
     const ownSessionTrackingActive = process.env.SINGLE_SESSION_ENABLED === 'true'
-      || process.env.TAB_CLOSE_LOGOUT_ENABLED === 'true';
+      || process.env.TAB_CLOSE_LOGOUT_ENABLED === 'true'
+      || timeoutCfg.enabled;
     if (ownSessionTrackingActive) {
       const sid = (session.user as any).sid;
       if (!sid) return null;
-      const [row] = await db.select({ sessionToken: sessions.sessionToken })
+      const [row] = await db.select({
+        sessionToken: sessions.sessionToken,
+        createdAt: sessions.createdAt,
+        lastActivityAt: sessions.lastActivityAt,
+      })
         .from(sessions)
         .where(eq(sessions.sessionToken, sid))
         .limit(1);
       if (!row) return null;
+      if (timeoutCfg.enabled) {
+        if (evaluateSessionTimeout(row, new Date(), timeoutCfg) !== 'valid') return null;
+        await touchSessionActivity(sid, row.lastActivityAt);
+      }
     }
 
     const cookieStore = await cookies();
@@ -114,28 +125,38 @@ export async function getServerIdentity() {
 
 /**
  * Fase 4 (ajuste login): chequeo liviano para que la UI (dashboard/layout.tsx) detecte
- * que la sesión actual fue invalidada (otro login la reemplazó) y cierre sesión client-side.
- * Con SINGLE_SESSION_ENABLED/TAB_CLOSE_LOGOUT_ENABLED off, siempre retorna válido sin query
- * extra (mismo criterio de gating que getServerIdentity).
+ * que la sesión actual fue invalidada (otro login la reemplazó, o venció por timeout v5.29)
+ * y cierre sesión client-side. Con todo apagado, siempre retorna válido sin query extra
+ * (mismo criterio de gating que getServerIdentity).
  */
-export async function validateOwnSessionAction(): Promise<{ valid: boolean }> {
+export async function validateOwnSessionAction(): Promise<{ valid: boolean; reason?: 'session_replaced' | 'session_expired' }> {
   if (infraPromise) await infraPromise;
   try {
+    const timeoutCfg = await getSessionTimeoutConfig();
     const ownSessionTrackingActive = process.env.SINGLE_SESSION_ENABLED === 'true'
-      || process.env.TAB_CLOSE_LOGOUT_ENABLED === 'true';
+      || process.env.TAB_CLOSE_LOGOUT_ENABLED === 'true'
+      || timeoutCfg.enabled;
     if (!ownSessionTrackingActive) return { valid: true };
 
     const session = await auth();
     if (!session?.user) return { valid: true }; // sin sesión: nada que invalidar, login ya redirige
 
     const sid = (session.user as any).sid;
-    if (!sid) return { valid: false };
+    if (!sid) return { valid: false, reason: 'session_replaced' };
 
-    const [row] = await db.select({ sessionToken: sessions.sessionToken })
+    const [row] = await db.select({
+      sessionToken: sessions.sessionToken,
+      createdAt: sessions.createdAt,
+      lastActivityAt: sessions.lastActivityAt,
+    })
       .from(sessions)
       .where(eq(sessions.sessionToken, sid))
       .limit(1);
-    return { valid: !!row };
+    if (!row) return { valid: false, reason: 'session_replaced' };
+    if (timeoutCfg.enabled && evaluateSessionTimeout(row, new Date(), timeoutCfg) !== 'valid') {
+      return { valid: false, reason: 'session_expired' };
+    }
+    return { valid: true };
   } catch (error) {
     console.error("[validateOwnSessionAction] Error:", error);
     return { valid: true }; // fail-open: un error de DB no debe expulsar sesiones válidas

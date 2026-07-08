@@ -5,6 +5,7 @@ import * as bcrypt from "bcryptjs"
 import { db } from "@/lib/db"
 import { user, sessions } from "@/lib/db/schema"
 import { eq, sql } from "drizzle-orm"
+import { getSessionTimeoutConfig, isAbsoluteExpired } from "@/lib/db/sessionTimeouts"
 
 const isGoogleOAuthEnabled = process.env.GOOGLE_OAUTH_ENABLED === 'true';
 
@@ -180,11 +181,22 @@ export default {
           await db.insert(sessions).values({
             sessionToken: sid,
             userId: authUser.id as string,
-            expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 días
+            expires: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8h — informativo; el ancla autoritativa es createdAt (v5.29)
           });
           token.sid = sid;
         } catch (e) {
           console.error("[Auth] Error registrando sesión propia:", e);
+        }
+        // v5.29 — ancla del timeout absoluto (8h por defecto, ver SESSION_ABSOLUTE_TIMEOUT_HOURS).
+        token.loginAt = Date.now();
+      } else if (typeof token.loginAt !== 'number') {
+        // Token emitido antes del rollout v5.29 (sin loginAt): gracia — el reloj arranca ahora,
+        // no forzamos un logout inmediato por una columna que no existía al hacer login.
+        token.loginAt = Date.now();
+      } else {
+        const cfg = await getSessionTimeoutConfig();
+        if (cfg.enabled && isAbsoluteExpired(token.loginAt, Date.now(), cfg.absoluteMs)) {
+          return null;
         }
       }
       return token;

@@ -23,6 +23,9 @@ const EDITABLE_FLAGS = {
   LEAGUE_ENGINE_ENABLED: { type: 'boolean' },
   QUALITY_GATE_ENABLED: { type: 'boolean' },
   EMAIL_VERIFICATION_TTL_MINUTES: { type: 'number', min: 5, max: 1440 },
+  SESSION_TIMEOUTS_ENABLED: { type: 'boolean' },
+  SESSION_IDLE_TIMEOUT_MINUTES: { type: 'number', min: 5, max: 1440 },
+  SESSION_ABSOLUTE_TIMEOUT_HOURS: { type: 'number', min: 1, max: 72 },
 } as const;
 
 export type EditableFlagKey = keyof typeof EDITABLE_FLAGS;

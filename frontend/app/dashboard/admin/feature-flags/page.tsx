@@ -15,13 +15,18 @@ import {
   type FeatureFlagRow,
   type FeatureFlagLogRow,
 } from '@/lib/db/actions/featureFlags';
-import { FEATURE_FLAGS_HELP, getFeatureFlagImpact, emailVerificationTtlImpact, type FlagImpactConfig } from '@/lib/constants/featureFlagsHelp';
+import { FEATURE_FLAGS_HELP, getFeatureFlagImpact, getNumericFlagImpact, type FlagImpactConfig } from '@/lib/constants/featureFlagsHelp';
 import FauchardHelpButton from '@/components/admin/fauchard/FauchardHelpButton';
 import FauchardHelpWindow from '@/components/admin/fauchard/FauchardHelpWindow';
 import Button from '@/components/ui/Button';
 import FocusTrap from '@/components/ui/FocusTrap';
 
-const TTL_KEY = 'EMAIL_VERIFICATION_TTL_MINUTES';
+/** Rango de cada flag numérico — debe reflejar EDITABLE_FLAGS en lib/db/actions/featureFlags.ts. */
+const NUMERIC_KEY_RANGES: Record<string, { min: number; max: number }> = {
+  EMAIL_VERIFICATION_TTL_MINUTES: { min: 5, max: 1440 },
+  SESSION_IDLE_TIMEOUT_MINUTES: { min: 5, max: 1440 },
+  SESSION_ABSOLUTE_TIMEOUT_HOURS: { min: 1, max: 72 },
+};
 
 function formatDate(d: Date | string) {
   return new Date(d).toLocaleString('es-CL', { dateStyle: 'medium', timeStyle: 'short' });
@@ -47,7 +52,7 @@ export default function FeatureFlagsPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [helpFocus, setHelpFocus] = useState<string | null>(null);
-  const [ttlDraft, setTtlDraft] = useState<string>('');
+  const [numericDrafts, setNumericDrafts] = useState<Record<string, string>>({});
   const [pendingChange, setPendingChange] = useState<PendingChange | null>(null);
   const [impactConfig, setImpactConfig] = useState<FlagImpactConfig | null>(null);
 
@@ -65,8 +70,11 @@ export default function FeatureFlagsPage() {
     const [res, impactRes] = await Promise.all([getFeatureFlagsAction(), getFlagImpactConfigAction()]);
     if (res.success) {
       setFlags(res.flags);
-      const ttl = res.flags.find((f) => f.key === TTL_KEY);
-      if (ttl) setTtlDraft(ttl.value);
+      const drafts: Record<string, string> = {};
+      for (const f of res.flags) {
+        if (f.valueType === 'number') drafts[f.key] = f.value;
+      }
+      setNumericDrafts(drafts);
     } else {
       showError(res.error);
     }
@@ -102,23 +110,24 @@ export default function FeatureFlagsPage() {
     setPendingChange({ key: flag.key, label: help?.label ?? flag.key, fromValue: flag.value, toValue, impact });
   }, [impactConfig]);
 
-  const requestTtlChange = useCallback(() => {
-    const ttl = flags.find((f) => f.key === TTL_KEY);
-    if (!ttl || ttl.value === ttlDraft) return;
-    const help = FEATURE_FLAGS_HELP.params.find((p) => p.symbol === TTL_KEY);
+  const requestNumericChange = useCallback((key: string) => {
+    const flag = flags.find((f) => f.key === key);
+    const draft = numericDrafts[key];
+    if (!flag || draft === undefined || flag.value === draft) return;
+    const help = FEATURE_FLAGS_HELP.params.find((p) => p.symbol === key);
     setPendingChange({
-      key: TTL_KEY,
-      label: help?.label ?? TTL_KEY,
-      fromValue: ttl.value,
-      toValue: ttlDraft,
-      impact: emailVerificationTtlImpact(ttl.value, ttlDraft),
+      key,
+      label: help?.label ?? key,
+      fromValue: flag.value,
+      toValue: draft,
+      impact: getNumericFlagImpact(key, flag.value, draft),
     });
-  }, [flags, ttlDraft]);
+  }, [flags, numericDrafts]);
 
   const cancelPending = useCallback(() => {
-    if (pendingChange?.key === TTL_KEY) {
-      const ttl = flags.find((f) => f.key === TTL_KEY);
-      if (ttl) setTtlDraft(ttl.value);
+    if (pendingChange && NUMERIC_KEY_RANGES[pendingChange.key]) {
+      const flag = flags.find((f) => f.key === pendingChange.key);
+      if (flag) setNumericDrafts((prev) => ({ ...prev, [pendingChange.key]: flag.value }));
     }
     setPendingChange(null);
   }, [pendingChange, flags]);
@@ -213,6 +222,7 @@ export default function FeatureFlagsPage() {
             <div className="bg-surface border border-divider rounded-2xl divide-y divide-divider">
               {numericFlags.map((flag) => {
                 const help = FEATURE_FLAGS_HELP.params.find((p) => p.symbol === flag.key);
+                const range = NUMERIC_KEY_RANGES[flag.key] ?? { min: 1, max: 999999 };
                 return (
                   <div key={flag.key} className="flex items-start gap-4 p-5">
                     <div className="flex-1 min-w-0">
@@ -238,12 +248,12 @@ export default function FeatureFlagsPage() {
                     </div>
                     <input
                       type="number"
-                      min={5}
-                      max={1440}
-                      value={ttlDraft}
+                      min={range.min}
+                      max={range.max}
+                      value={numericDrafts[flag.key] ?? flag.value}
                       disabled={savingKey === flag.key}
-                      onChange={(e) => setTtlDraft(e.target.value)}
-                      onBlur={requestTtlChange}
+                      onChange={(e) => setNumericDrafts((prev) => ({ ...prev, [flag.key]: e.target.value }))}
+                      onBlur={() => requestNumericChange(flag.key)}
                       className="w-24 bg-surface-off border border-divider rounded-lg px-3 py-2 text-sm text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     />
                   </div>

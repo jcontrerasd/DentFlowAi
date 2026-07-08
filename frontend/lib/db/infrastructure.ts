@@ -7,7 +7,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 /** v5.26 — Índices de rendimiento: cobertura compuesta para Fauchard, UCH polling, crons y quality gate. */
 /** v5.27 — case_quality_assignment.first_viewed_at: marca cuándo el revisor abrió el caso por primera vez (contador nuevo en ImpersonationSelector). */
 /** v5.28 — feature_flag + feature_flag_log: flags administrables desde el panel admin, con seed desde env y auditoría. Se retira AVAILABILITY_MODEL_ENABLED (modelo incondicional). */
-export const INFRA_VERSION = 'v5.28';
+/** v5.29 — sessions.createdAt/lastActivityAt + flags SESSION_TIMEOUTS_ENABLED/SESSION_IDLE_TIMEOUT_MINUTES/SESSION_ABSOLUTE_TIMEOUT_HOURS: timeout de sesión por inactividad (2h deslizante) y absoluto (8h), enforcement server-side. */
+export const INFRA_VERSION = 'v5.29';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -209,6 +210,13 @@ export async function ensureIncrementalInfrastructure(db: any) {
     await ensureFeatureFlagInfrastructure(db);
   } catch (e) {
     console.error("[Infrastructure] Error creando infraestructura de feature flags (v5.28):", e);
+  }
+
+  // v5.29 — Timeout de sesión (inactividad + absoluto).
+  try {
+    await ensureSessionTimeoutInfrastructure(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando infraestructura de timeout de sesión (v5.29):", e);
   }
 
   // v5.19 — user.organization_id pasa a nullable para soportar usuarios sin org (admin, calidad).
@@ -574,6 +582,44 @@ export async function ensureFeatureFlagInfrastructure(db: any) {
   await db.execute(sql`
     INSERT INTO feature_flag (key, value, value_type, description)
     VALUES ('EMAIL_VERIFICATION_TTL_MINUTES', ${ttlSeed}, 'number', 'Minutos de validez del link de verificación de email')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+}
+
+/**
+ * v5.29 — DDL idempotente de columnas de timeout de sesión + seed de flags administrables.
+ * DEFAULT NOW() en las columnas nuevas rellena las filas existentes con la hora de la
+ * migración: ningún usuario con sesión activa queda deslogueado al aplicar esto — el
+ * reloj de cada sesión arranca recién cuando SESSION_TIMEOUTS_ENABLED se enciende.
+ */
+export async function ensureSessionTimeoutInfrastructure(db: any) {
+  await db.execute(sql`
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+  await db.execute(sql`
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS "lastActivityAt" TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+
+  const boolValue = process.env.SESSION_TIMEOUTS_ENABLED === 'true' ? 'true' : 'false';
+  await db.execute(sql`
+    INSERT INTO feature_flag (key, value, value_type, description)
+    VALUES ('SESSION_TIMEOUTS_ENABLED', ${boolValue}, 'boolean', 'Timeout de sesión: inactividad + tiempo máximo absoluto (OWASP)')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+
+  const idleRaw = Number(process.env.SESSION_IDLE_TIMEOUT_MINUTES);
+  const idleSeed = Number.isFinite(idleRaw) && idleRaw > 0 ? String(idleRaw) : '120';
+  await db.execute(sql`
+    INSERT INTO feature_flag (key, value, value_type, description)
+    VALUES ('SESSION_IDLE_TIMEOUT_MINUTES', ${idleSeed}, 'number', 'Minutos de inactividad antes de cerrar la sesión')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+
+  const absRaw = Number(process.env.SESSION_ABSOLUTE_TIMEOUT_HOURS);
+  const absSeed = Number.isFinite(absRaw) && absRaw > 0 ? String(absRaw) : '8';
+  await db.execute(sql`
+    INSERT INTO feature_flag (key, value, value_type, description)
+    VALUES ('SESSION_ABSOLUTE_TIMEOUT_HOURS', ${absSeed}, 'number', 'Horas máximas de sesión desde el login, sin importar actividad')
     ON CONFLICT (key) DO NOTHING;
   `);
 }

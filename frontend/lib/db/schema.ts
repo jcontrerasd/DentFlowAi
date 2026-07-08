@@ -576,6 +576,11 @@ export const sessions = pgTable("sessions", {
   // Fase 5 (ajuste login, TAB_CLOSE_LOGOUT_ENABLED) — último heartbeat del cliente; el cron
   // de limpieza borra filas con lastSeenAt vencido cuando sendBeacon no llegó a disparar.
   lastSeenAt: timestamp("lastSeenAt", { mode: "date" }),
+  // v5.29 — SESSION_TIMEOUTS_ENABLED: createdAt ancla el timeout absoluto (8h), lastActivityAt
+  // el de inactividad (2h, deslizante). Distintas de lastSeenAt (propiedad del heartbeat de 30s
+  // y el TTL de 90s de tab-close-logout) — no mezclar los dos mecanismos.
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  lastActivityAt: timestamp("lastActivityAt", { mode: "date" }).notNull().defaultNow(),
 })
 
 export const verificationToken = pgTable(

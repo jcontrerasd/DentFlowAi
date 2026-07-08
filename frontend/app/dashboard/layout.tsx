@@ -170,16 +170,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return subscribeHubUnreadRefresh(() => debouncedFetchHubUnread());
   }, [userProfile?.role, debouncedFetchHubUnread]);
 
-  // Fase 4 (ajuste login, single session): si otro login reemplazó esta sesión (o el cron de
-  // Fase 5 la expiró por inactividad), el JWT sigue siendo válido pero nuestra fila de control
-  // ya no existe — cerramos sesión client-side y avisamos por qué. Sin excepción para admin
-  // (decisión del plan: simplicidad). No-op (valida true) si los flags de Fase 4/5 están off.
+  // Fase 4 (ajuste login, single session): si otro login reemplazó esta sesión, o venció por
+  // inactividad/tope absoluto (v5.29), el JWT sigue siendo válido pero nuestra fila de control
+  // ya no existe o está vencida — cerramos sesión client-side y avisamos por qué. Sin excepción
+  // para admin (decisión del plan: simplicidad). No-op (valida true) si todos los flags están off.
   useEffect(() => {
     if (loading || !user) return;
-    validateOwnSessionAction().then(({ valid }) => {
+    validateOwnSessionAction().then(({ valid, reason }) => {
       if (!valid) {
         signOut({ redirect: false }).then(() => {
-          router.push('/auth/login?reason=session_replaced');
+          router.push(`/auth/login?reason=${reason ?? 'session_replaced'}`);
         });
       }
     });

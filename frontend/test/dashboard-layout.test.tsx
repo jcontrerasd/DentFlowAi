@@ -1,11 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { pushMock, useAuthMock, getMyInvitationsActionMock, getMyHubUnreadTotalActionMock } = vi.hoisted(() => ({
+const { pushMock, useAuthMock, getMyInvitationsActionMock, getMyHubUnreadTotalActionMock, validateOwnSessionActionMock } = vi.hoisted(() => ({
   pushMock: vi.fn(),
   useAuthMock: vi.fn(),
   getMyInvitationsActionMock: vi.fn(),
   getMyHubUnreadTotalActionMock: vi.fn(),
+  validateOwnSessionActionMock: vi.fn().mockResolvedValue({ valid: true }),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -34,7 +35,7 @@ vi.mock('@/lib/db/actions/hubRead', () => ({
 }));
 
 vi.mock('@/lib/db/actions/impersonation', () => ({
-  validateOwnSessionAction: vi.fn().mockResolvedValue({ valid: true }),
+  validateOwnSessionAction: (...a: unknown[]) => validateOwnSessionActionMock(...a),
 }));
 
 vi.mock('@/components/availability/AvailabilityBadge', () => ({
@@ -74,8 +75,10 @@ describe('DashboardLayout', () => {
     pushMock.mockReset();
     getMyInvitationsActionMock.mockReset();
     getMyHubUnreadTotalActionMock.mockReset();
+    validateOwnSessionActionMock.mockReset();
     getMyInvitationsActionMock.mockResolvedValue([]);
     getMyHubUnreadTotalActionMock.mockResolvedValue({ total: 0 });
+    validateOwnSessionActionMock.mockResolvedValue({ valid: true });
   });
 
   afterEach(() => {
@@ -193,5 +196,24 @@ describe('DashboardLayout', () => {
     // …y al vencer, ambas señales colapsan en exactamente una.
     await vi.advanceTimersByTimeAsync(10);
     expect(getMyHubUnreadTotalActionMock).toHaveBeenCalledTimes(initialCalls + 1);
+  });
+
+  it('v5.29: sesión vencida por timeout redirige a login con reason=session_expired', async () => {
+    validateOwnSessionActionMock.mockResolvedValue({ valid: false, reason: 'session_expired' });
+    useAuthMock.mockReturnValue({
+      user: { email: 'demo@dentflow.ai', id: 'u1' },
+      userProfile: { fullName: 'Demo', role: 'dentista', onboardingStep: 100 },
+      loading: false,
+    });
+
+    render(
+      <DashboardLayout>
+        <div>contenido</div>
+      </DashboardLayout>,
+    );
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith('/auth/login?reason=session_expired');
+    });
   });
 });
