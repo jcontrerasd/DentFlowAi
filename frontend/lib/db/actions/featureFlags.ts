@@ -18,8 +18,6 @@ import type { ActionResult } from '@/lib/types/actions';
 
 /** Única lista de keys editables — cualquier otra key se rechaza. */
 const EDITABLE_FLAGS = {
-  AVAILABILITY_UI_TECNICO_ENABLED: { type: 'boolean' },
-  AVAILABILITY_ADMIN_PANEL_ENABLED: { type: 'boolean' },
   REJECTION_INDIVIDUAL_ENABLED: { type: 'boolean' },
   POOL_PENDIENTE_ENABLED: { type: 'boolean' },
   LEAGUE_ENGINE_ENABLED: { type: 'boolean' },

@@ -13,7 +13,6 @@ import { technicianAvailability, technicianSkill, user, caseAssignment } from '@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { WORK_CATEGORIES, type WorkCategory } from '@/lib/constants/dental';
-import { isAvailabilityUiTecnicoEnabled } from '@/lib/constants/availabilityFlags';
 import { computeLevelForTechnicianAction, type TechnicianLevel } from './noResponseEvents';
 import type { ActionResult } from '@/lib/types/actions';
 import { perfLog, perfStart } from '@/lib/perfLog';
@@ -221,7 +220,7 @@ export async function updateAvailabilityLevelAction(
 
 /**
  * Estado de disponibilidad del técnico autenticado para el badge / panel.
- * `enabled` refleja el flag `AVAILABILITY_UI_TECNICO_ENABLED` + rol técnico.
+ * `enabled` refleja el rol técnico (el modelo de disponibilidad es incondicional).
  */
 export async function getMyAvailabilityStatusAction(): Promise<ActionResult<{
   enabled: boolean;
@@ -233,7 +232,7 @@ export async function getMyAvailabilityStatusAction(): Promise<ActionResult<{
   const emptyLevel: TechnicianLevel = { level: 0, count: 0, nextExitDate: null };
   if (!identity?.id) return { success: false, error: 'No autenticado' };
 
-  const enabled = (await isAvailabilityUiTecnicoEnabled()) && identity.role === 'tecnico';
+  const enabled = identity.role === 'tecnico';
   if (!enabled) {
     return { success: true, enabled: false, availability: null, level: emptyLevel, pendingCount: 0 };
   }

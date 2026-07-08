@@ -72,9 +72,9 @@ Sistema de 3 niveles jerárquicos (global · CAD · 7 categorías). Comportamien
 
 ## Feature flags administrables (v5.28)
 
-6 flags booleanos + `EMAIL_VERIFICATION_TTL_MINUTES` viven en la tabla `feature_flag` (con log de auditoría `feature_flag_log`), editables en `/dashboard/admin/feature-flags` — cambios en segundos, sin deploy.
+4 flags booleanos + `EMAIL_VERIFICATION_TTL_MINUTES` viven en la tabla `feature_flag` (con log de auditoría `feature_flag_log`), editables en `/dashboard/admin/feature-flags` — cambios en segundos, sin deploy.
 
-- `AVAILABILITY_UI_TECNICO_ENABLED`, `AVAILABILITY_ADMIN_PANEL_ENABLED`, `REJECTION_INDIVIDUAL_ENABLED`, `POOL_PENDIENTE_ENABLED`, `LEAGUE_ENGINE_ENABLED`, `QUALITY_GATE_ENABLED`, `EMAIL_VERIFICATION_TTL_MINUTES`.
+- `REJECTION_INDIVIDUAL_ENABLED`, `POOL_PENDIENTE_ENABLED`, `LEAGUE_ENGINE_ENABLED`, `QUALITY_GATE_ENABLED`, `EMAIL_VERIFICATION_TTL_MINUTES`.
 - Lectura server-only vía `lib/featureFlags.ts` (`getFlag`/`getNumericSetting`): caché de 30s por instancia; si la DB no responde o la key no existe, cae a `process.env` (bootstrap/fallback).
 - Escritura: `lib/db/actions/featureFlags.ts` (guard `isSystemAdmin`, whitelist de keys, invalida caché tras cada cambio).
 - `deploy_gui.py` ya no gestiona estos flags — sus valores en `.env.local` son solo el seed inicial de la migración v5.28.

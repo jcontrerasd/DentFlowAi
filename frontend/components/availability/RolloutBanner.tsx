@@ -8,9 +8,9 @@ import { getMyAvailabilityStatusAction } from '@/lib/db/actions/availability';
 
 /**
  * Banner in-app de rollout del modelo de disponibilidad (v5.0, Fase 7).
- * Solo para técnicos con `AVAILABILITY_UI_TECNICO_ENABLED` (gating server-side vía
- * `enabled` en la action). Se descarta con la cookie `availability_banner_dismissed`
- * (no vuelve a aparecer). Link al panel de disponibilidad.
+ * Solo para técnicos (gating server-side vía `enabled` en la action). Se descarta
+ * con la cookie `availability_banner_dismissed` (no vuelve a aparecer). Link al
+ * panel de disponibilidad.
  */
 const COOKIE = 'availability_banner_dismissed';
 

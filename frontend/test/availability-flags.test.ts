@@ -12,16 +12,12 @@ vi.mock('@/lib/db', () => ({
 vi.mock('@/lib/db/schema', () => ({ featureFlag: {} }));
 
 import {
-  isAvailabilityAdminPanelEnabled,
-  isAvailabilityUiTecnicoEnabled,
   isLeagueEngineEnabled,
   isPoolPendienteEnabled,
   isRejectionIndividualEnabled,
 } from '@/lib/constants/availabilityFlags';
 
 const FLAG_VARS = [
-  'AVAILABILITY_UI_TECNICO_ENABLED',
-  'AVAILABILITY_ADMIN_PANEL_ENABLED',
   'REJECTION_INDIVIDUAL_ENABLED',
   'POOL_PENDIENTE_ENABLED',
   'LEAGUE_ENGINE_ENABLED',
@@ -44,22 +40,16 @@ describe('availabilityFlags', () => {
   });
 
   it('todos los flags retornan false por default (sin env vars)', async () => {
-    expect(await isAvailabilityUiTecnicoEnabled()).toBe(false);
-    expect(await isAvailabilityAdminPanelEnabled()).toBe(false);
     expect(await isRejectionIndividualEnabled()).toBe(false);
     expect(await isPoolPendienteEnabled()).toBe(false);
     expect(await isLeagueEngineEnabled()).toBe(false);
   });
 
   it('cada flag retorna true solo cuando su env var es exactamente "true"', async () => {
-    process.env.AVAILABILITY_UI_TECNICO_ENABLED = 'true';
-    process.env.AVAILABILITY_ADMIN_PANEL_ENABLED = 'true';
     process.env.REJECTION_INDIVIDUAL_ENABLED = 'true';
     process.env.POOL_PENDIENTE_ENABLED = 'true';
     process.env.LEAGUE_ENGINE_ENABLED = 'true';
 
-    expect(await isAvailabilityUiTecnicoEnabled()).toBe(true);
-    expect(await isAvailabilityAdminPanelEnabled()).toBe(true);
     expect(await isRejectionIndividualEnabled()).toBe(true);
     expect(await isPoolPendienteEnabled()).toBe(true);
     expect(await isLeagueEngineEnabled()).toBe(true);
@@ -77,8 +67,6 @@ describe('availabilityFlags', () => {
     process.env.POOL_PENDIENTE_ENABLED = 'true';
 
     expect(await isPoolPendienteEnabled()).toBe(true);
-    expect(await isAvailabilityUiTecnicoEnabled()).toBe(false);
-    expect(await isAvailabilityAdminPanelEnabled()).toBe(false);
     expect(await isRejectionIndividualEnabled()).toBe(false);
   });
 });

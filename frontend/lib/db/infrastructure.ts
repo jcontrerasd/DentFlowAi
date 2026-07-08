@@ -556,8 +556,6 @@ export async function ensureFeatureFlagInfrastructure(db: any) {
 
   // Seed idempotente desde env (booleans + TTL numérico).
   const boolSeed: [string, string][] = [
-    ['AVAILABILITY_UI_TECNICO_ENABLED', 'Badge y panel de disponibilidad del técnico'],
-    ['AVAILABILITY_ADMIN_PANEL_ENABLED', 'Pestaña admin "Plazos y sanciones" + observabilidad'],
     ['REJECTION_INDIVIDUAL_ENABLED', 'Botón "Rechazar invitación" en el UCH del técnico'],
     ['POOL_PENDIENTE_ENABLED', 'Cola pendiente_pool cuando no hay técnicos elegibles'],
     ['LEAGUE_ENGINE_ENABLED', 'Motor de ligas: ascensos/descensos automáticos + cron diario'],

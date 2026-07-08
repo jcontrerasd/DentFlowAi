@@ -87,14 +87,6 @@ BEHAVIOR_FLAGS = [
      "Interruptor maestro de correos. ON = se envían de verdad. OFF = se SIMULAN "
      "(se escriben al log, no salen) aunque haya credenciales EmailJS. En staging, "
      "ON con datos clonados de prod implica correos a usuarios reales."),
-    ("AVAILABILITY_UI_TECNICO_ENABLED",
-     "UI técnico (badge+panel)",
-     "Muestra al técnico el badge de disponibilidad en el header y el panel "
-     "/dashboard/profile/availability para prender/apagar su disponibilidad por categoría."),
-    ("AVAILABILITY_ADMIN_PANEL_ENABLED",
-     "Panel admin Fauchard",
-     "Habilita en el admin de Fauchard la pestaña 'Plazos y Sanciones' (umbrales, pesos, "
-     "ventanas) y el dashboard de Observabilidad (métricas con gráficos)."),
     ("REJECTION_INDIVIDUAL_ENABLED",
      "Rechazo individual UCH",
      "Muestra el botón 'Rechazar invitación' en el hilo del caso (UCH) del técnico. "

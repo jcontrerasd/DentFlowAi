@@ -1,9 +1,5 @@
 /**
- * Feature flags del modelo de disponibilidad del técnico (v5.0).
- *
- * Gobiernan el rollout incremental del sistema descrito en
- * [Doc Servicio Orquestado/flujo_tiempos.md](../../../Doc Servicio Orquestado/flujo_tiempos.md)
- * y [Doc Servicio Orquestado/plan_flujo_tiempos.md](../../../Doc Servicio Orquestado/plan_flujo_tiempos.md).
+ * Feature flags del motor de disponibilidad / rechazo individual / ligas.
  *
  * v5.28: la fuente de verdad es la tabla `feature_flag` (editable en
  * /dashboard/admin/feature-flags, efecto en ≤30 s sin redeploy); `process.env`
@@ -11,16 +7,6 @@
  */
 
 import { getFlag } from '@/lib/featureFlags';
-
-/** Muestra badge global en header y panel de disponibilidad al técnico. */
-export function isAvailabilityUiTecnicoEnabled(): Promise<boolean> {
-  return getFlag('AVAILABILITY_UI_TECNICO_ENABLED');
-}
-
-/** Habilita panel admin Fauchard "Plazos y sanciones" + dashboard observabilidad. */
-export function isAvailabilityAdminPanelEnabled(): Promise<boolean> {
-  return getFlag('AVAILABILITY_ADMIN_PANEL_ENABLED');
-}
 
 /** Habilita acción "Rechazar invitación" en UCH del técnico. */
 export function isRejectionIndividualEnabled(): Promise<boolean> {

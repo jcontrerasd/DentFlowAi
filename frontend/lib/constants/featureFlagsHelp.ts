@@ -10,22 +10,6 @@ export const FEATURE_FLAGS_HELP: FauchardHelpSection = {
     'Interruptores que activan o desactivan funciones del sistema en segundos, sin deploy. Cada cambio queda registrado (quién, cuándo, valor anterior y nuevo) en el historial.',
   params: [
     {
-      label: 'Pantallas de disponibilidad para el técnico',
-      symbol: 'AVAILABILITY_UI_TECNICO_ENABLED',
-      description:
-        'Muestra al técnico el badge de disponibilidad en el header y su panel de niveles (global / capacidad CAD / categorías). Es solo la parte visual; el motor de disponibilidad funciona sin ella.',
-      example:
-        'Quieres que el motor filtre por disponibilidad desde el lunes, pero prefieres estrenar la interfaz con los técnicos una semana después, tras enviarles el instructivo. Enciendes el motor hoy y este switch el otro lunes — sin ningún deploy de por medio.',
-    },
-    {
-      label: 'Panel admin "Plazos y sanciones"',
-      symbol: 'AVAILABILITY_ADMIN_PANEL_ENABLED',
-      description:
-        'Muestra en el panel Fauchard del admin la pestaña de plazos/sanciones y el dashboard de observabilidad del modelo de disponibilidad.',
-      example:
-        'Durante la marcha blanca solo tú deberías ver esas herramientas. Las enciendes en staging para probarlas y las mantienes apagadas en producción hasta que el modelo esté estable — cada cambio, un clic.',
-    },
-    {
       label: 'Botón "Rechazar invitación"',
       symbol: 'REJECTION_INDIVIDUAL_ENABLED',
       description:
@@ -101,44 +85,35 @@ export function getFeatureFlagImpact(
   config: FlagImpactConfig | null,
 ): string {
   switch (key) {
-    case 'AVAILABILITY_UI_TECNICO_ENABLED':
-      return direction === 'on'
-        ? 'Los técnicos vuelven a ver el badge de disponibilidad en el header y pueden editar sus niveles (global / CAD / categoría) desde su perfil. No hay parámetros involucrados: es solo la interfaz.'
-        : 'El badge y el panel de disponibilidad desaparecen para todos los técnicos. No se pierde ningún parámetro ni configuración — el motor sigue filtrando por disponibilidad exactamente igual, esto solo oculta la pantalla.';
-
-    case 'AVAILABILITY_ADMIN_PANEL_ENABLED':
-      return direction === 'on'
-        ? 'Aparece en el panel Fauchard la pestaña "Plazos y sanciones" y el dashboard de observabilidad del modelo de disponibilidad, visibles para cualquier admin.'
-        : 'Esas dos pantallas dejan de estar disponibles para todos los admins. No se pierde ningún parámetro configurado — solo el acceso a verlos/editarlos desde esa pestaña (los valores siguen aplicándose en el motor).';
-
     case 'REJECTION_INDIVIDUAL_ENABLED':
       return direction === 'on'
-        ? 'Los técnicos podrán rechazar una asignación explícitamente desde el UCH (no cuenta como sanción); Fauchard invita automáticamente al siguiente candidato del ranking.'
-        : 'El botón de rechazo desaparece: desde ese momento los técnicos solo pueden aceptar la asignación o dejarla expirar — y dejarla expirar sí cuenta como no-respuesta y puede sancionar. No se pierde ningún parámetro configurado.';
+        ? 'Los técnicos vuelven a ver el botón "Rechazar invitación" en el UCH: pueden declinar una asignación de forma explícita y esto no cuenta como sanción. En cuanto rechazan, Fauchard invita automáticamente al siguiente candidato del ranking, así que el caso no se detiene. Ningún caso que ya esté asignado en este momento se ve afectado — el cambio solo rige para invitaciones futuras.'
+        : 'El botón "Rechazar invitación" desaparece del UCH del técnico. A partir de ahora, ante una asignación un técnico solo tiene dos caminos: aceptarla, o no hacer nada hasta que expire el plazo — y dejarla expirar sí cuenta como "no respondió", lo que puede sumar hacia una sanción (rolling 14 días). Es decir, se pierde la vía "limpia" de decir que no, y los técnicos que antes rechazaban explícitamente ahora quedarán expuestos a sanción si simplemente ignoran la invitación. No se pierde ningún parámetro numérico configurado, solo esa opción del flujo.';
 
     case 'POOL_PENDIENTE_ENABLED': {
       const ttl = config ? `${config.tNoEligiblePoolHours} horas` : 'el valor configurado';
       const ciclos = config ? `${config.maxPoolCycles}` : 'el número configurado de';
       return direction === 'on'
-        ? `Se retoma el uso del Tiempo de espera (TTL = ${ttl}) y el máximo de ${ciclos} ciclos de reintento configurados en Plazos y sanciones: los casos sin técnicos elegibles volverán a esperar en cola en vez de fallar de inmediato.`
-        : `El Tiempo de espera (TTL = ${ttl}) y el máximo de ${ciclos} ciclos de reintento configurados en Plazos y sanciones dejan de aplicarse a partir de ahora — no se borran, solo quedan sin uso. Cualquier caso nuevo sin técnicos elegibles fallará de inmediato ("sin asignación") en vez de esperar. Los casos que ya estén en cola en este momento no se ven afectados retroactivamente.`;
+        ? `Se retoma la cola de espera: cuando un caso nuevo no encuentre ningún técnico elegible, en vez de fallar de inmediato entrará a "pendiente_pool" y Fauchard reintentará asignarlo automáticamente hasta el Tiempo de espera (TTL = ${ttl}) o el máximo de ${ciclos} ciclos de reintento, ambos configurados en Plazos y sanciones. El dentista recibe un check-in a mitad de camino del TTL.`
+        : `El Tiempo de espera (TTL = ${ttl}) y el máximo de ${ciclos} ciclos de reintento configurados en Plazos y sanciones dejan de aplicarse a partir de ahora — no se borran de la configuración, solo quedan sin uso mientras el flag esté apagado. Efecto inmediato: cualquier caso nuevo que no encuentre técnico elegible fallará al instante como "sin asignación", en vez de esperar en cola a que alguien quede disponible; el dentista tendría que republicarlo manualmente. Los casos que ya estén esperando en la cola en este momento siguen su curso sin verse afectados retroactivamente — pero ningún caso nuevo podrá entrar a esa cola.`;
     }
 
     case 'LEAGUE_ENGINE_ENABLED': {
       const c = config;
       const list = c
-        ? `calificación mínima ${c.lMinRating.toFixed(2)}⭐ sobre ${c.lCasesEvaluated} casos evaluados, puntualidad mínima ${Math.round(c.lMinPunctuality * 100)}%, ${c.lCasesCompleted} casos completados totales, ${c.lCasesTransition} casos en transición con ${Math.round(c.lPenaltyTransition * 100)}% de penalización, y descenso por calificación ${c.lDescentRating.toFixed(2)}⭐ sostenida ${c.lDescentDays} días`
-        : 'los umbrales configurados en la pestaña Categorías';
+        ? `calificación mínima ${c.lMinRating.toFixed(2)}⭐ sobre ${c.lCasesEvaluated} casos evaluados, puntualidad mínima ${Math.round(c.lMinPunctuality * 100)}%, ${c.lCasesCompleted} casos completados totales, ${c.lCasesTransition} casos en transición con ${Math.round(c.lPenaltyTransition * 100)}% de penalización de score, y descenso por calificación sostenida bajo ${c.lDescentRating.toFixed(2)}⭐ durante ${c.lDescentDays} días`
+        : 'los umbrales configurados en la pestaña Categorías'
+      ;
       return direction === 'on'
-        ? `Se reactiva el cron diario de ligas con los parámetros configurados en Categorías: ${list}.`
-        : `Los parámetros configurados en la pestaña Categorías dejan de aplicarse: ${list}. El cron diario deja de mover ligas — cada técnico conserva la liga que tiene ahora hasta que reactives el motor. No se borra la configuración, solo deja de usarse.`;
+        ? `Se reactiva el cron diario de ligas: a partir de la próxima corrida, Fauchard vuelve a evaluar a cada técnico contra los umbrales configurados en Categorías (${list}) y mueve de categoría (Bronce/Plata/Oro/Élite) a quien corresponda ascender o descender, aplicando la penalización de score durante transiciones.`
+        : `El cron diario de ligas deja de correr, así que ninguno de estos umbrales se vuelve a evaluar mientras el flag esté apagado: ${list}. Efecto inmediato: cada técnico se congela en la categoría que tiene ahora mismo — nadie asciende ni desciende, y la penalización de score por transición deja de aplicarse — hasta que reactives el motor. La configuración de Categorías no se borra, solo queda inerte; al reencender, el cron retoma la evaluación con esos mismos valores.`;
     }
 
     case 'QUALITY_GATE_ENABLED': {
       const hrs = config ? `${config.tQualityReviewHours} horas` : 'el plazo configurado';
       return direction === 'on'
-        ? `Se retoma la revisión de Calidad con el plazo de ${hrs} configurado: las entregas nuevas del técnico pasan primero por un revisor antes de llegar al dentista.`
-        : `El plazo de revisión de Calidad de ${hrs} deja de aplicarse a partir de ahora. Las entregas nuevas del técnico van directo al dentista, sin pasar por revisión. Los casos que ya estén en revisión de Calidad en este momento no se mueven automáticamente — siguen su curso ahí.`;
+        ? `Se retoma la compuerta de Calidad: las entregas nuevas del técnico dejan de ir directo al dentista y pasan primero por un revisor asignado, con un plazo de revisión de ${hrs} (configurado en Plazos y sanciones) antes de continuar el flujo.`
+        : `El plazo de revisión de Calidad de ${hrs} deja de aplicarse a partir de ahora — no se borra de la configuración, solo queda sin uso. Efecto inmediato: toda entrega nueva del técnico salta directo al dentista, sin pasar por un revisor de Calidad ni por ese plazo. Los casos que ya estén en revisión de Calidad en este momento no se mueven automáticamente al apagar el flag — siguen su curso ahí hasta que el revisor los complete; el cambio solo afecta entregas nuevas desde este momento en adelante.`;
     }
 
     default:
@@ -148,5 +123,8 @@ export function getFeatureFlagImpact(
 
 /** Impacto del TTL de verificación de email — depende del valor nuevo, no es on/off. */
 export function emailVerificationTtlImpact(fromMinutes: string, toMinutes: string): string {
-  return `Los links de verificación que se envíen después de este cambio serán válidos por ${toMinutes} minutos (antes: ${fromMinutes}). Los links ya enviados conservan el plazo con el que se generaron — este cambio no los alarga ni los acorta retroactivamente.`;
+  const fromN = Number(fromMinutes);
+  const toN = Number(toMinutes);
+  const direction = toN > fromN ? 'más tiempo' : toN < fromN ? 'menos tiempo' : 'el mismo tiempo';
+  return `Todo link de verificación que se genere después de guardar este cambio será válido por ${toMinutes} minutos (antes: ${fromMinutes}) — es decir, los usuarios que se registren desde ahora tendrán ${direction} para hacer clic antes de que el link expire y tengan que pedir uno nuevo. Los links que ya fueron enviados antes de este cambio conservan el plazo con el que se generaron originalmente: esto no los alarga ni los acorta retroactivamente, así que nadie que ya tenga un correo de verificación en su bandeja se ve afectado.`;
 }

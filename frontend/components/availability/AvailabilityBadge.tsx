@@ -10,8 +10,8 @@ import ResponseStatusStepper from './ResponseStatusStepper';
 
 /**
  * Badge global de disponibilidad en el header (v5.0, §1.6 + §2.6.2).
- * Solo visible para técnicos con AVAILABILITY_UI_TECNICO_ENABLED (gating server-side
- * vía `enabled` en la action). Punto de aviso ámbar/rojo en Nivel 2/3.
+ * Solo visible para técnicos (rol resuelto server-side vía `enabled` en la action).
+ * Punto de aviso ámbar/rojo en Nivel 2/3.
  */
 export default function AvailabilityBadge() {
   const { status, refresh } = useAvailability();

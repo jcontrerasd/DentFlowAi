@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 import { getServerIdentity } from '@/lib/db/actions/impersonation';
 import { getFauchardConfigAction, listAllConfigVersionsAction, getConfigVersionKpisAction } from '@/lib/db/actions/fauchard';
 import type { ConfigVersionKpis } from '@/lib/db/actions/fauchard';
-import { isAvailabilityAdminPanelEnabled } from '@/lib/constants/availabilityFlags';
 import { AlertTriangle, SlidersHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -80,7 +79,6 @@ export default async function AdminFauchardPage() {
 
       <TabContainer
         config={config}
-        showAvailabilityPanel={await isAvailabilityAdminPanelEnabled()}
         versions={versions}
         initialKpisCache={initialKpisCache}
         isSystemAdmin={isSystemAdmin}
@@ -96,13 +94,11 @@ import type { ConfigVersionMeta } from '@/lib/db/actions/fauchard';
 
 function TabContainer({
   config,
-  showAvailabilityPanel,
   versions,
   initialKpisCache,
   isSystemAdmin,
 }: {
   config: any;
-  showAvailabilityPanel: boolean;
   versions: ConfigVersionMeta[];
   initialKpisCache: Record<string, ConfigVersionKpis>;
   isSystemAdmin: boolean;
@@ -112,7 +108,6 @@ function TabContainer({
     <Suspense fallback={null}>
       <TabClient
         config={config}
-        showAvailabilityPanel={showAvailabilityPanel}
         versions={versions}
         initialKpisCache={initialKpisCache}
         isSystemAdmin={isSystemAdmin}
