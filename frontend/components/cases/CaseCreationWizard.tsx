@@ -61,12 +61,24 @@ export interface CaseFiles {
   superior: File | null;
   inferior: File | null;
   bite: File | null;
+  lateralDerecho: File | null;
+  lateralIzquierdo: File | null;
   complementary: File[];
 }
 
 const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_FILE_EXTENSIONS = ['stl', 'ply', 'obj', 'jpg', 'jpeg', 'png'];
 const THREE_D_EXTENSIONS = ['stl', 'ply', 'obj'];
+
+/** Slots de escaneo 3D del wizard, en orden de presentación. */
+export const SCAN_SLOTS = ['superior', 'inferior', 'bite', 'lateralDerecho', 'lateralIzquierdo'] as const;
+const SCAN_SLOT_LABELS: Record<(typeof SCAN_SLOTS)[number], string> = {
+  superior: 'Arcada Superior',
+  inferior: 'Arcada Inferior',
+  bite: 'Registro Mordida',
+  lateralDerecho: 'Lateral Derecho',
+  lateralIzquierdo: 'Lateral Izquierdo',
+};
 
 const isThreeDFile = (fileName: string) => {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? '';
@@ -134,6 +146,8 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
     superior: null,
     inferior: null,
     bite: null,
+    lateralDerecho: null,
+    lateralIzquierdo: null,
     complementary: [],
   });
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
@@ -223,7 +237,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
         return;
       }
 
-      const scanSlots = (['superior', 'inferior', 'bite'] as const).filter(k => k !== key);
+      const scanSlots = SCAN_SLOTS.filter(k => k !== key);
       const isDupeInScans = scanSlots.some(k => {
         const f = files[k];
         return f && f.name === selectedFile.name && f.size === selectedFile.size;
@@ -264,7 +278,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
       if (!ALLOWED_COMPLEMENTARY_EXTS_WIZ.includes(ext)) { errors.push(`${f.name}: formato no permitido`); continue; }
       if (f.size > MAX_UPLOAD_SIZE_BYTES) { errors.push(`${f.name}: supera 20 MB`); continue; }
       const isDupeComp = files.complementary.some(existing => existing.name === f.name && existing.size === f.size);
-      const isDupeScan = (['superior', 'inferior', 'bite'] as const).some(k => {
+      const isDupeScan = SCAN_SLOTS.some(k => {
         const s = files[k]; return s && s.name === f.name && s.size === f.size;
       });
       if (isDupeComp || isDupeScan) { errors.push(`${f.name}: ya está en la lista`); continue; }
@@ -667,11 +681,11 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
             </div>
 
             {(
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {(['superior', 'inferior', 'bite'] as const).map(key => (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {SCAN_SLOTS.map(key => (
                   <div key={key} className="relative">
                     <label className="text-xs font-bold uppercase tracking-widest text-muted mb-2 block text-center">
-                      {key === 'bite' ? 'Registro Mordida' : `Arcada ${key}`}
+                      {SCAN_SLOT_LABELS[key]}
                     </label>
                     <div className={`
                       h-40 border-2 border-dashed rounded-2xl flex flex-col items-center justify-center p-4 transition-all
@@ -715,7 +729,7 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
 
             {/* Generadores de Miniaturas Silenciosos */}
             <div className="hidden pointer-events-none absolute" style={{ width: 1, height: 1, overflow: 'hidden' }}>
-              {(['superior', 'inferior', 'bite'] as const).map(key => {
+              {SCAN_SLOTS.map(key => {
                 const file = files[key];
                 if (file && isThreeDFile(file.name) && !thumbnails[key]) {
                   const tempUrl = URL.createObjectURL(file);

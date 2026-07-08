@@ -16,26 +16,39 @@ import { ErrorBoundary, type FallbackProps } from 'react-error-boundary';
 import {
   dedupeConsecutive,
   dist3,
-  distToSegment,
   capClosedPolyline,
+  closedArcDistancesFrom,
+  closedPerimeter,
+  falloffRadiusForLoop,
+  falloffWeight,
+  spliceClosedPolyline,
   PERSIST_MAX_POINTS,
   PERSIST_RESAMPLE_TARGET,
+  SURFACE_OFFSET_MM,
 } from '@/lib/viewer3d/polylineGeometry';
+import { useToast } from '@/context/ToastContext';
 import {
   installBVHRaycast,
   scheduleBoundsTree,
   closestSurfacePoint,
   pickHomeMesh,
+  ridgePathBetween,
+  snapToRidge,
   wrapClosedPolylineToSurface,
   type SurfaceWrap,
 } from '@/lib/viewer3d/surfaceProjection';
-import PolylineNodeEditor from '@/components/viewer3d/PolylineNodeEditor';
+import PolylineNodeEditor, { type PolylineNodeEditorHandle } from '@/components/viewer3d/PolylineNodeEditor';
 import {
   AlertTriangle,
   Eye,
   EyeOff,
+  Magnet,
   Maximize2,
   MessageSquare,
+  PenLine,
+  Redo2,
+  Undo2,
+  Wand2,
   MessageSquareOff,
   MessageSquarePlus,
   Navigation,
@@ -56,8 +69,37 @@ const SAMPLE_MIN_PX = 5;          // distancia mínima entre muestras durante el
 const CLOSE_SNAP_PX = 12;         // radio de cierre automático sobre el punto inicial
 const CLOSE_ARM_PX = 24;          // hay que alejarse esto del inicio antes de poder cerrar
 const MIN_POINTS_TO_CLOSE = 3;
-const DEDUPE_MIN_DIST = 0.05;     // mm — colapsa muestras casi duplicadas
-const CURVE_GRAB_NODE_RADIUS = 1.2; // mm — distancia para tomar nodo existente al agarrar la curva
+// Pincel de deformación constante en PANTALLA (estilo 3Shape): el radio de
+// influencia en mm se deriva del zoom al iniciar el drag — acercarse permite
+// ajustes finos; alejarse mueve tramos amplios.
+const BRUSH_RADIUS_PX = 26;
+const BRUSH_RADIUS_MIN_MM = 0.4;
+const BRUSH_RADIUS_MAX_MM = 5;
+// Guarda corta de re-proyección DURANTE el drag: evita que un punto salte a un
+// pliegue lejano de la superficie (surco oclusal). El wrap completo al soltar
+// re-converge lo que quede a medio camino.
+const DRAG_PROJECT_MAX_MM = 2.5;
+
+// Imán al filo: radio de búsqueda constante en pantalla (px → mm según zoom).
+const MAGNET_RADIUS_PX = 12;
+const MAGNET_RADIUS_MIN_MM = 0.3;
+const MAGNET_RADIUS_MAX_MM = 1.5;
+
+/** mm de mundo que cubren `px` píxeles a la profundidad de `worldPoint`. */
+function pixelsToWorldAt(camera: THREE.Camera, worldPoint: THREE.Vector3, rectHeight: number, px: number): number {
+  const cam = camera as THREE.PerspectiveCamera;
+  if (!cam.isPerspectiveCamera || rectHeight <= 0) return 0;
+  const dist = cam.position.distanceTo(worldPoint);
+  return ((2 * dist * Math.tan(THREE.MathUtils.degToRad(cam.fov) / 2)) / rectHeight) * px;
+}
+
+// Temps módulo-level para el drag imperativo (cero allocations por pointermove).
+const _dragRaycaster = new THREE.Raycaster();
+(_dragRaycaster as unknown as { firstHitOnly: boolean }).firstHitOnly = true; // three-mesh-bvh
+const _dragNdc = new THREE.Vector2();
+const _dragPlane = new THREE.Plane();
+const _dragVecA = new THREE.Vector3();
+const _dragVecB = new THREE.Vector3();
 
 // Raycast acelerado por BVH para todos los meshes (sin boundsTree cae al nativo —
 // STLThumbnail y demás Canvas no cambian de comportamiento).
@@ -324,10 +366,23 @@ function PolylineRender({ points, color = '#e11d48', opacity = 1, surfaceWrap, o
   // normal (0.12mm). La línea abraza la superficie y respeta la oclusión real.
   const displayPoints = useMemo(() => {
     if (points.length < 2) return null;
-    const wrapped = points.length === 2 ? points : surfaceWrap.wrap(points, 'full');
+    const wrapped = points.length === 2 ? points : surfaceWrap.wrap(points);
     const vecs = wrapped.map(p => new THREE.Vector3(p.x, p.y, p.z));
     return [...vecs, vecs[0]];
   }, [points, surfaceWrap]);
+
+  // Geometría barata para la hit-line: tiene handlers de puntero → se raycastea
+  // en CADA pointermove, y el raycast de Line2 recorre todos los segmentos.
+  // Subsamplear mantiene el orbitar fluido; los 16px de tolerancia absorben la
+  // desviación de la cuerda.
+  const hitPoints = useMemo(() => {
+    if (!displayPoints) return null;
+    const stride = Math.max(1, Math.ceil(displayPoints.length / 120));
+    if (stride === 1) return displayPoints;
+    const sub = displayPoints.filter((_, i) => i % stride === 0);
+    sub.push(displayPoints[0]);
+    return sub;
+  }, [displayPoints]);
 
   // Punto medio para anclar el botón × de eliminar todo el trazado
   const midPoint: Point3D | null = points.length >= 2
@@ -360,9 +415,9 @@ function PolylineRender({ points, color = '#e11d48', opacity = 1, surfaceWrap, o
           />
           {/* Hit-line ancha invisible: clic fácil sobre el lazo sin puntería fina.
               depthWrite=false — si escribiera depth activaría el fantasma encima. */}
-          {onEdit && (
+          {onEdit && hitPoints && (
             <Line
-              points={displayPoints}
+              points={hitPoints}
               color={color}
               lineWidth={16}
               transparent
@@ -520,8 +575,38 @@ export default function DentalViewer3D({
     startScreen: { x: number; y: number };
     lastScreen: { x: number; y: number };
     leftStart: boolean;
-  }>({ phase: 'idle', candidate: null, startScreen: { x: 0, y: 0 }, lastScreen: { x: 0, y: 0 }, leftStart: false });
+    // Para el muestreo por window-pointermove (raycast propio + puente sobre huecos):
+    camera: THREE.Camera | null;
+    canvas: HTMLCanvasElement | null;
+    lastHitMesh: THREE.Mesh | null; // último mesh con impacto — ancla del puente
+  }>({
+    phase: 'idle', candidate: null, startScreen: { x: 0, y: 0 }, lastScreen: { x: 0, y: 0 },
+    leftStart: false, camera: null, canvas: null, lastHitMesh: null,
+  });
   const [isFreehandDragging, setIsFreehandDragging] = useState(false);
+  // Imán al filo: atrae el trazo/arrastre al borde de máxima curvatura cercano.
+  // Ref espejo para los listeners imperativos (window pointermove).
+  const [magnetEnabled, setMagnetEnabled] = useState(true);
+  const magnetRef = useRef(true);
+  const toggleMagnet = useCallback(() => {
+    setMagnetEnabled(v => {
+      magnetRef.current = !v;
+      return !v;
+    });
+  }, []);
+  const { showError } = useToast();
+  // Submodo redibujar (en edición): dibujar encima de un tramo lo reemplaza (splice).
+  const [isRedrawMode, setIsRedrawMode] = useState(false);
+  const redrawRef = useRef(false);
+  const setRedrawMode = useCallback((on: boolean) => {
+    redrawRef.current = on;
+    setIsRedrawMode(on);
+  }, []);
+  // Modo asistido (en trazado): clics ponen anclas sobre el filo y el camino
+  // entre anclas se calcula solo, siguiendo el margen (ridgePathBetween).
+  const [isAssistMode, setIsAssistMode] = useState(false);
+  const assistRef = useRef(false);
+  const assistAnchorsRef = useRef<Array<{ p: Point3D; mesh: THREE.Mesh | null }>>([]);
 
   const setControlsEnabled = useCallback((enabled: boolean) => {
     if (controlsRef.current) controlsRef.current.enabled = enabled;
@@ -542,6 +627,9 @@ export default function DentalViewer3D({
   const cancelDrawing = useCallback(() => {
     syncInProgress([]);
     drawRef.current.leftStart = false;
+    assistAnchorsRef.current = [];
+    assistRef.current = false;
+    setIsAssistMode(false);
     resetStroke();
     setIsPolylineMode(false);
   }, [syncInProgress, resetStroke]);
@@ -560,12 +648,28 @@ export default function DentalViewer3D({
     }
     syncInProgress([]);
     drawRef.current.leftStart = false;
+    assistAnchorsRef.current = [];
+    assistRef.current = false;
+    setIsAssistMode(false);
     resetStroke();
     setIsPolylineMode(false);
   }, [onPolylineComplete, syncInProgress, resetStroke]);
 
   const finalizePolyline = useCallback(() => {
     completeWithPoints(inProgressRef.current);
+  }, [completeWithPoints]);
+
+  /** Cierra el lazo asistido: último ancla → primera por el filo, y completa. */
+  const closeAssistLoop = useCallback(() => {
+    const anchors = assistAnchorsRef.current;
+    if (anchors.length < 3) return;
+    const first = anchors[0];
+    const last = anchors[anchors.length - 1];
+    let closing: Point3D[] = [];
+    if (first.mesh && first.mesh === last.mesh) {
+      closing = ridgePathBetween(first.mesh, last.p, first.p).slice(1, -1);
+    }
+    completeWithPoints([...inProgressRef.current, ...closing]);
   }, [completeWithPoints]);
 
   /** Proyección a px de pantalla del primer punto del trazo (para el cierre automático). */
@@ -583,6 +687,38 @@ export default function DentalViewer3D({
     e.stopPropagation();
     const cursor = { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
     const canvas = e.nativeEvent.target as HTMLCanvasElement;
+
+    // Modo asistido: cada clic pone un ancla (imantada al filo) y el tramo
+    // desde el ancla anterior se calcula solo siguiendo el margen.
+    if (assistRef.current) {
+      const anchors = assistAnchorsRef.current;
+      const proj = projectFirstPointToScreen(e.camera, canvas);
+      if (proj && anchors.length >= 3 && screenDist(cursor, proj) < CLOSE_SNAP_PX) {
+        closeAssistLoop();
+        return;
+      }
+      const mesh = e.object as THREE.Mesh;
+      const local = sceneGroupRef.current.worldToLocal(e.point.clone());
+      let anchor: Point3D = { x: local.x, y: local.y, z: local.z };
+      if (magnetRef.current) {
+        const radius = Math.min(MAGNET_RADIUS_MAX_MM, Math.max(MAGNET_RADIUS_MIN_MM,
+          pixelsToWorldAt(e.camera, e.point, canvas.clientHeight, MAGNET_RADIUS_PX)));
+        const ridge = snapToRidge(mesh, anchor, Math.max(radius, 0.8));
+        if (ridge) anchor = ridge;
+      }
+      const prev = anchors[anchors.length - 1];
+      if (!prev) {
+        syncInProgress([anchor]);
+      } else {
+        const seg = prev.mesh === mesh
+          ? ridgePathBetween(mesh, prev.p, anchor)
+          : [prev.p, anchor];
+        syncInProgress([...inProgressRef.current, ...seg.slice(1)]);
+      }
+      anchors.push({ p: anchor, mesh });
+      return;
+    }
+
     const startProj = projectFirstPointToScreen(e.camera, canvas);
     if (startProj) {
       const toStart = screenDist(cursor, startProj);
@@ -603,43 +739,97 @@ export default function DentalViewer3D({
     drawRef.current.candidate = { x: local.x, y: local.y, z: local.z };
     drawRef.current.startScreen = cursor;
     drawRef.current.lastScreen = cursor;
-  }, [projectFirstPointToScreen, completeWithPoints, setControlsEnabled]);
+    drawRef.current.camera = e.camera;
+    drawRef.current.canvas = canvas;
+    drawRef.current.lastHitMesh = e.object as THREE.Mesh;
+  }, [projectFirstPointToScreen, completeWithPoints, setControlsEnabled, closeAssistLoop, syncInProgress]);
 
-  const handleStrokePointerMove = useCallback((e: ThreeEvent<PointerEvent>) => {
-    const d = drawRef.current;
-    if (d.phase === 'idle' || !sceneGroupRef.current) return;
-    const cursor = { x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY };
-    const canvas = e.nativeEvent.target as HTMLCanvasElement;
+  /**
+   * Muestreo freehand por window-pointermove con raycast PROPIO (estilo drag):
+   * el trazo ya no depende de que el rayo pegue en el mesh. Sobre huecos o
+   * bordes rotos del escaneo, PUENTEA siguiendo un plano ⊥ cámara por el
+   * último punto y re-pegándose a la superficie cercana si existe — el trazo
+   * nunca se corta (comportamiento 3Shape).
+   */
+  useEffect(() => {
+    if (!isPolylineMode && !isRedrawMode) return;
+    const onMove = (ev: PointerEvent) => {
+      const d = drawRef.current;
+      const group = sceneGroupRef.current;
+      if (d.phase === 'idle' || !d.camera || !d.canvas || !group) return;
+      const rect = d.canvas.getBoundingClientRect();
+      const cursor = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
 
-    if (d.phase === 'pending') {
-      if (screenDist(cursor, d.startScreen) <= DRAG_THRESHOLD_PX) return;
-      d.phase = 'dragging';
-      setIsFreehandDragging(true);
-      if (d.candidate) syncInProgress([...inProgressRef.current, d.candidate]);
-      d.candidate = null;
-      d.lastScreen = d.startScreen;
-    }
-
-    if (screenDist(cursor, d.lastScreen) < SAMPLE_MIN_PX) return;
-
-    const startProj = projectFirstPointToScreen(e.camera, canvas);
-    if (startProj) {
-      const toStart = screenDist(cursor, startProj);
-      if (toStart > CLOSE_ARM_PX) d.leftStart = true;
-      else if (d.leftStart && toStart < CLOSE_SNAP_PX && inProgressRef.current.length >= MIN_POINTS_TO_CLOSE) {
-        completeWithPoints(inProgressRef.current);
-        return;
+      if (d.phase === 'pending') {
+        if (screenDist(cursor, d.startScreen) <= DRAG_THRESHOLD_PX) return;
+        d.phase = 'dragging';
+        setIsFreehandDragging(true);
+        if (d.candidate) syncInProgress([...inProgressRef.current, d.candidate]);
+        d.candidate = null;
+        d.lastScreen = d.startScreen;
       }
-    }
 
-    const local = sceneGroupRef.current.worldToLocal(e.point.clone());
-    const p = { x: local.x, y: local.y, z: local.z };
-    const last = inProgressRef.current[inProgressRef.current.length - 1];
-    if (!last || dist3(last, p) > 1e-6) {
-      syncInProgress([...inProgressRef.current, p]);
-    }
-    d.lastScreen = cursor;
-  }, [projectFirstPointToScreen, completeWithPoints, syncInProgress]);
+      if (screenDist(cursor, d.lastScreen) < SAMPLE_MIN_PX) return;
+
+      // Cierre automático solo en modo trazado — un stroke de redibujo es abierto.
+      if (!redrawRef.current) {
+        const startProj = projectFirstPointToScreen(d.camera, d.canvas);
+        if (startProj) {
+          const toStart = screenDist(cursor, startProj);
+          if (toStart > CLOSE_ARM_PX) d.leftStart = true;
+          else if (d.leftStart && toStart < CLOSE_SNAP_PX && inProgressRef.current.length >= MIN_POINTS_TO_CLOSE) {
+            completeWithPoints(inProgressRef.current);
+            return;
+          }
+        }
+      }
+
+      // Raycast propio contra los meshes visibles (BVH-acelerado cuando está listo).
+      _dragNdc.set((cursor.x / rect.width) * 2 - 1, -(cursor.y / rect.height) * 2 + 1);
+      _dragRaycaster.setFromCamera(_dragNdc, d.camera as THREE.PerspectiveCamera);
+      let p: Point3D | null = null;
+      const meshes = [...surfaceMeshesRef.current];
+      if (meshes.length > 0) {
+        const hits = _dragRaycaster.intersectObjects(meshes, false);
+        if (hits.length > 0) {
+          const hitMesh = hits[0].object as THREE.Mesh;
+          const local = group.worldToLocal(hits[0].point.clone());
+          p = { x: local.x, y: local.y, z: local.z };
+          d.lastHitMesh = hitMesh;
+          // Imán al filo: atraer la muestra al borde de curvatura cercano.
+          if (magnetRef.current) {
+            const radius = Math.min(MAGNET_RADIUS_MAX_MM, Math.max(MAGNET_RADIUS_MIN_MM,
+              pixelsToWorldAt(d.camera, hits[0].point, rect.height, MAGNET_RADIUS_PX)));
+            const ridge = snapToRidge(hitMesh, p, radius);
+            if (ridge) p = ridge;
+          }
+        }
+      }
+      if (!p) {
+        // PUENTE: seguir sobre un plano ⊥ cámara por el último punto del trazo
+        // y re-pegar a la superficie cercana si la hay (borde del hueco).
+        const last = inProgressRef.current[inProgressRef.current.length - 1];
+        if (!last) return;
+        _dragVecA.set(last.x, last.y, last.z);
+        group.localToWorld(_dragVecA);
+        (d.camera as THREE.PerspectiveCamera).getWorldDirection(_dragVecB);
+        _dragPlane.setFromNormalAndCoplanarPoint(_dragVecB, _dragVecA);
+        if (!_dragRaycaster.ray.intersectPlane(_dragPlane, _dragVecA)) return;
+        const local = group.worldToLocal(_dragVecA);
+        const snap = d.lastHitMesh
+          ? closestSurfacePoint(d.lastHitMesh, { x: local.x, y: local.y, z: local.z }, DRAG_PROJECT_MAX_MM)
+          : null;
+        p = snap ? snap.point : { x: local.x, y: local.y, z: local.z };
+      }
+      const last = inProgressRef.current[inProgressRef.current.length - 1];
+      if (!last || dist3(last, p) > 1e-6) {
+        syncInProgress([...inProgressRef.current, p]);
+      }
+      d.lastScreen = cursor;
+    };
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [isPolylineMode, isRedrawMode, syncInProgress, projectFirstPointToScreen, completeWithPoints]);
 
   // ── Edición por nodos de un trazado guardado ──────────────────────────────
   const [editingPolylineId, setEditingPolylineId] = useState<string | null>(null);
@@ -647,6 +837,35 @@ export default function DentalViewer3D({
   const editingPointsRef = useRef<Point3D[]>([]);
   const nodeDragRef = useRef<number | null>(null);
   const [isNodeDragging, setIsNodeDragging] = useState(false);
+  // Historial de edición (Ctrl+Z / Ctrl+Shift+Z). Cap 30 estados.
+  const editHistoryRef = useRef<{ past: Point3D[][]; future: Point3D[][] }>({ past: [], future: [] });
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const pushEditHistory = useCallback(() => {
+    const h = editHistoryRef.current;
+    h.past.push(editingPointsRef.current.map(p => ({ ...p })));
+    if (h.past.length > 30) h.past.shift();
+    h.future = [];
+    setHistoryVersion(v => v + 1);
+  }, []);
+  const resetEditHistory = useCallback(() => {
+    editHistoryRef.current = { past: [], future: [] };
+    setHistoryVersion(v => v + 1);
+  }, []);
+  // Contexto del drag imperativo: TODO lo necesario para deformar con falloff
+  // por pointermove sin pasar por React (el commit a estado ocurre al soltar).
+  const nodeEditorRef = useRef<PolylineNodeEditorHandle | null>(null);
+  const dragCtxRef = useRef<{
+    snapshot: Point3D[];      // puntos al iniciar el drag — deformación NO acumulativa
+    grabIndex: number;
+    arcDists: number[];       // distancia por arco de cada punto al agarrado
+    radius: number;           // radio de influencia del falloff
+    affected: number[];       // índices dentro del radio (estáticos durante el drag)
+    homeMesh: THREE.Mesh | null;
+    display: Float32Array;    // (N+1)*3 posiciones con offset por normal (loop cerrado)
+    camera: THREE.Camera;     // para el raycast propio por window-pointermove
+    canvas: HTMLElement;
+    magnetRadius: number;     // radio del imán al filo (mm, según zoom al iniciar)
+  } | null>(null);
 
   // Gating del build BVH: solo cuando hay trazados o modo trazado/edición activo.
   // Visores sin trazados no pagan CPU (0.5-2s por malla grande) ni memoria del BVH.
@@ -666,12 +885,9 @@ export default function DentalViewer3D({
   // memos downstream cuando se registra un mesh o termina un build de BVH.
   const surfaceWrap = useMemo<SurfaceWrap>(() => ({
     version: surfaceVersion,
-    wrap: (pts, quality) => {
+    wrap: (pts) => {
       const meshes = [...surfaceMeshesRef.current];
-      const home = pickHomeMesh(pts, meshes);
-      return quality === 'drag'
-        ? wrapClosedPolylineToSurface(pts, home, { spacing: 0.7, iterations: 1 })
-        : wrapClosedPolylineToSurface(pts, home);
+      return wrapClosedPolylineToSurface(pts, pickHomeMesh(pts, meshes));
     },
   }), [surfaceVersion]);
 
@@ -679,6 +895,24 @@ export default function DentalViewer3D({
     editingPointsRef.current = pts;
     setEditingPoints(pts);
   }, []);
+
+  const undoEdit = useCallback(() => {
+    const h = editHistoryRef.current;
+    const prev = h.past.pop();
+    if (!prev) return;
+    h.future.push(editingPointsRef.current.map(p => ({ ...p })));
+    syncEditingPoints(prev);
+    setHistoryVersion(v => v + 1);
+  }, [syncEditingPoints]);
+
+  const redoEdit = useCallback(() => {
+    const h = editHistoryRef.current;
+    const next = h.future.pop();
+    if (!next) return;
+    h.past.push(editingPointsRef.current.map(p => ({ ...p })));
+    syncEditingPoints(next);
+    setHistoryVersion(v => v + 1);
+  }, [syncEditingPoints]);
 
   const stopEditingPolyline = useCallback((save: boolean) => {
     if (save && editingPolylineId && onPolylineUpdate && editingPointsRef.current.length >= 2) {
@@ -692,102 +926,206 @@ export default function DentalViewer3D({
     setEditingPolylineId(null);
     syncEditingPoints([]);
     nodeDragRef.current = null;
+    dragCtxRef.current = null;
     setIsNodeDragging(false);
+    setRedrawMode(false);
+    resetEditHistory();
     setControlsEnabled(true);
-  }, [editingPolylineId, onPolylineUpdate, syncEditingPoints, setControlsEnabled]);
+  }, [editingPolylineId, onPolylineUpdate, syncEditingPoints, setControlsEnabled, setRedrawMode, resetEditHistory]);
 
   const startEditingPolyline = useCallback((pl: { id: string; points: Point3D[] }) => {
     if (isPolylineMode) cancelDrawing();
     setIsAnnotateMode(false);
     setEditingPolylineId(pl.id);
+    // Editar sobre la polilínea DENSA guardada (0.3mm): la deformación con
+    // falloff mueve una vecindad continua — estilo 3Shape — no un vértice.
     syncEditingPoints(pl.points.map(p => ({ ...p })));
-  }, [isPolylineMode, cancelDrawing, syncEditingPoints]);
+    resetEditHistory();
+  }, [isPolylineMode, cancelDrawing, syncEditingPoints, resetEditHistory]);
 
-  const handleNodePointerDown = useCallback((index: number, e: ThreeEvent<PointerEvent>) => {
-    if (e.nativeEvent.button !== 0) return;
-    e.stopPropagation();
-    setControlsEnabled(false);
-    document.body.style.cursor = 'grabbing';
-    nodeDragRef.current = index;
-    setIsNodeDragging(true);
-  }, [setControlsEnabled]);
+  /**
+   * Prepara el contexto del drag imperativo: snapshot de puntos, vecindad de
+   * falloff y buffer de display (puntos densos + offset por normal). Un solo
+   * cálculo por drag; los pointermove posteriores solo tocan `affected`.
+   */
+  const beginNodeDrag = useCallback((grabIndex: number, camera: THREE.Camera, canvas: HTMLElement) => {
+    const pts = editingPointsRef.current;
+    const n = pts.length;
+    if (n === 0) return;
+    const arcDists = closedArcDistancesFrom(pts, grabIndex);
+    // Radio de influencia constante en pantalla: mm por pixel a la profundidad
+    // del punto agarrado × radio del pincel en px. Zoom in → radio chico →
+    // ajustes finos; zoom out → radio amplio. Fallback al radio por perímetro.
+    let radius = falloffRadiusForLoop(closedPerimeter(pts));
+    let magnetRadius = MAGNET_RADIUS_MIN_MM;
+    const rect = canvas.getBoundingClientRect();
+    if (sceneGroupRef.current) {
+      _dragVecA.set(pts[grabIndex].x, pts[grabIndex].y, pts[grabIndex].z);
+      sceneGroupRef.current.localToWorld(_dragVecA);
+      const brushMm = pixelsToWorldAt(camera, _dragVecA, rect.height, BRUSH_RADIUS_PX);
+      if (brushMm > 0) {
+        radius = Math.min(BRUSH_RADIUS_MAX_MM, Math.max(BRUSH_RADIUS_MIN_MM, brushMm));
+      }
+      const magnetMm = pixelsToWorldAt(camera, _dragVecA, rect.height, MAGNET_RADIUS_PX);
+      if (magnetMm > 0) {
+        magnetRadius = Math.min(MAGNET_RADIUS_MAX_MM, Math.max(MAGNET_RADIUS_MIN_MM, magnetMm));
+      }
+    }
+    const affected: number[] = [];
+    for (let j = 0; j < n; j++) {
+      if (arcDists[j] < radius) affected.push(j);
+    }
+    const homeMesh = pickHomeMesh(pts, [...surfaceMeshesRef.current]);
+    const display = new Float32Array((n + 1) * 3);
+    for (let j = 0; j < n; j++) {
+      const hit = homeMesh ? closestSurfacePoint(homeMesh, pts[j]) : null;
+      const o = j * 3;
+      display[o] = hit ? hit.point.x + hit.normal.x * SURFACE_OFFSET_MM : pts[j].x;
+      display[o + 1] = hit ? hit.point.y + hit.normal.y * SURFACE_OFFSET_MM : pts[j].y;
+      display[o + 2] = hit ? hit.point.z + hit.normal.z * SURFACE_OFFSET_MM : pts[j].z;
+    }
+    display[n * 3] = display[0];
+    display[n * 3 + 1] = display[1];
+    display[n * 3 + 2] = display[2];
+    dragCtxRef.current = {
+      snapshot: pts.map(p => ({ ...p })),
+      grabIndex,
+      arcDists,
+      radius,
+      affected,
+      homeMesh,
+      display,
+      camera,
+      canvas,
+      magnetRadius,
+    };
+    pushEditHistory(); // estado previo al drag — Ctrl+Z lo restaura
+    nodeEditorRef.current?.beginDragDisplay(display);
+  }, [pushEditHistory]);
 
-  // Cursor sobre el lazo (curva o nodo): bloquear la cámara para que un clic
-  // levemente desviado no rote el modelo — comportamiento estándar CAD.
+  // Cursor sobre el lazo: bloquear la cámara para que un clic levemente
+  // desviado no rote el modelo — comportamiento estándar CAD.
   const handleEditHoverChange = useCallback((hovering: boolean) => {
     if (nodeDragRef.current !== null) return;
     setControlsEnabled(!hovering);
     document.body.style.cursor = hovering ? 'grab' : '';
   }, [setControlsEnabled]);
 
-  // Los puntos tomados de la curva de display flotan +0.12mm sobre el mesh
-  // (offset por normal); antes de convertirlos en nodos crudos se devuelven
-  // a la superficie contra el mesh dueño del trazado en edición.
-  const snapToEditingSurface = useCallback((p: Point3D): Point3D => {
-    const home = pickHomeMesh(editingPointsRef.current, [...surfaceMeshesRef.current]);
-    if (!home) return p;
-    const hit = closestSurfacePoint(home, p);
-    return hit ? hit.point : p;
-  }, []);
-
-  // Agarrar la curva en cualquier punto: toma el nodo más cercano si está a
-  // mano; si no, inserta un nodo nuevo justo donde se agarró y lo arrastra.
+  // Agarrar la traza en cualquier punto: con la polilínea densa (0.3mm), el
+  // punto más cercano al cursor ES el agarre — sin nodos ni inserciones.
   const handleCurvePointerDown = useCallback((worldPoint: THREE.Vector3, e: ThreeEvent<PointerEvent>) => {
     if (e.nativeEvent.button !== 0 || !sceneGroupRef.current) return;
     e.stopPropagation();
     setControlsEnabled(false);
     document.body.style.cursor = 'grabbing';
     const local = sceneGroupRef.current.worldToLocal(worldPoint.clone());
-    const p = snapToEditingSurface({ x: local.x, y: local.y, z: local.z });
     const pts = editingPointsRef.current;
     let nearest = 0;
     let nearestDist = Infinity;
-    pts.forEach((q, i) => {
-      const d = dist3(p, q);
+    for (let i = 0; i < pts.length; i++) {
+      const d = dist3({ x: local.x, y: local.y, z: local.z }, pts[i]);
       if (d < nearestDist) { nearestDist = d; nearest = i; }
-    });
-    if (nearestDist <= CURVE_GRAB_NODE_RADIUS) {
-      nodeDragRef.current = nearest;
-    } else {
-      let seg = 0;
-      let segDist = Infinity;
-      for (let i = 0; i < pts.length; i++) {
-        const d = distToSegment(p, pts[i], pts[(i + 1) % pts.length]);
-        if (d < segDist) { segDist = d; seg = i; }
-      }
-      syncEditingPoints([...pts.slice(0, seg + 1), p, ...pts.slice(seg + 1)]);
-      nodeDragRef.current = seg + 1;
     }
+    nodeDragRef.current = nearest;
+    beginNodeDrag(nearest, e.camera, e.nativeEvent.target as HTMLElement);
     setIsNodeDragging(true);
-  }, [setControlsEnabled, syncEditingPoints, snapToEditingSurface]);
+  }, [setControlsEnabled, beginNodeDrag]);
 
-  // El mesh dental entrega el punto de superficie: el nodo activo se re-proyecta ahí.
-  // Si el rayo no toca el mesh, no llega evento y el nodo conserva su última posición válida.
-  const handleNodeDragMove = useCallback((e: ThreeEvent<PointerEvent>) => {
+  /**
+   * Aplica la deformación con falloff (estilo 3Shape) hacia `targetLocal`:
+   * el punto agarrado sigue al cursor; los vecinos dentro del radio se mueven
+   * con peso cos² desde el SNAPSHOT (no acumulativo) y se re-pegan a la
+   * superficie. Cero setState — solo se muta el buffer de la línea; el commit
+   * a React ocurre al soltar.
+   */
+  const applyDragFalloff = useCallback((targetLocal: Point3D) => {
+    const ctx = dragCtxRef.current;
     const i = nodeDragRef.current;
-    if (i === null || !sceneGroupRef.current) return;
-    const local = sceneGroupRef.current.worldToLocal(e.point.clone());
-    const pts = editingPointsRef.current.slice();
-    pts[i] = { x: local.x, y: local.y, z: local.z };
-    syncEditingPoints(pts);
-  }, [syncEditingPoints]);
-
-  const handleInsertNode = useCallback((segmentIndex: number) => {
+    if (!ctx || i === null) return;
+    const grab = ctx.snapshot[ctx.grabIndex];
+    const dx = targetLocal.x - grab.x;
+    const dy = targetLocal.y - grab.y;
+    const dz = targetLocal.z - grab.z;
     const pts = editingPointsRef.current;
-    const a = pts[segmentIndex];
-    const b = pts[(segmentIndex + 1) % pts.length];
-    if (!a || !b) return;
-    // El midpoint de una cuerda cae dentro/fuera del mesh — snapearlo a superficie.
-    const mid = snapToEditingSurface({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
-    const next = [...pts.slice(0, segmentIndex + 1), mid, ...pts.slice(segmentIndex + 1)];
-    syncEditingPoints(next);
-  }, [syncEditingPoints, snapToEditingSurface]);
+    const n = pts.length;
+    for (const j of ctx.affected) {
+      const w = falloffWeight(ctx.arcDists[j], ctx.radius);
+      const cand = {
+        x: ctx.snapshot[j].x + dx * w,
+        y: ctx.snapshot[j].y + dy * w,
+        z: ctx.snapshot[j].z + dz * w,
+      };
+      // Guarda corta: re-pegar a la superficie solo si está cerca — un surco
+      // profundo a 8mm "robaría" el punto y la línea saltaría a pliegues.
+      const hit = ctx.homeMesh ? closestSurfacePoint(ctx.homeMesh, cand, DRAG_PROJECT_MAX_MM) : null;
+      const p = hit ? hit.point : cand;
+      pts[j] = p;
+      const o = j * 3;
+      ctx.display[o] = p.x + (hit ? hit.normal.x * SURFACE_OFFSET_MM : 0);
+      ctx.display[o + 1] = p.y + (hit ? hit.normal.y * SURFACE_OFFSET_MM : 0);
+      ctx.display[o + 2] = p.z + (hit ? hit.normal.z * SURFACE_OFFSET_MM : 0);
+    }
+    // Mantener el cierre del lazo (el último vértice duplica al primero).
+    ctx.display[n * 3] = ctx.display[0];
+    ctx.display[n * 3 + 1] = ctx.display[1];
+    ctx.display[n * 3 + 2] = ctx.display[2];
+    nodeEditorRef.current?.updateDragDisplay(ctx.display);
+  }, []);
 
-  const handleDeleteNode = useCallback((index: number) => {
-    const pts = editingPointsRef.current;
-    if (pts.length <= 3) return;
-    syncEditingPoints(pts.filter((_, i) => i !== index));
-  }, [syncEditingPoints]);
+  /**
+   * Drag por window-pointermove con raycast PROPIO contra el mesh dueño:
+   * - nunca se congela si el cursor sale del diente (fallback: plano ⊥ cámara
+   *   por el punto de agarre + re-pegado a superficie), y
+   * - nunca salta a la otra arcada (solo se raycastea el home mesh).
+   */
+  useEffect(() => {
+    if (!isNodeDragging) return;
+    const onMove = (ev: PointerEvent) => {
+      const ctx = dragCtxRef.current;
+      const group = sceneGroupRef.current;
+      if (!ctx || !group) return;
+      const rect = ctx.canvas.getBoundingClientRect();
+      _dragNdc.set(
+        ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+        -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      _dragRaycaster.setFromCamera(_dragNdc, ctx.camera as THREE.PerspectiveCamera);
+      let target: Point3D | null = null;
+      if (ctx.homeMesh) {
+        const hits = _dragRaycaster.intersectObject(ctx.homeMesh, false);
+        if (hits.length > 0) {
+          const local = group.worldToLocal(hits[0].point.clone());
+          target = { x: local.x, y: local.y, z: local.z };
+        }
+      }
+      if (!target) {
+        // Cursor fuera del mesh: seguir sobre un plano ⊥ cámara por el punto
+        // de agarre y re-pegar a la superficie más cercana si está a mano.
+        const grab = ctx.snapshot[ctx.grabIndex];
+        _dragVecA.set(grab.x, grab.y, grab.z);
+        group.localToWorld(_dragVecA);
+        (ctx.camera as THREE.PerspectiveCamera).getWorldDirection(_dragVecB);
+        _dragPlane.setFromNormalAndCoplanarPoint(_dragVecB, _dragVecA);
+        if (_dragRaycaster.ray.intersectPlane(_dragPlane, _dragVecA)) {
+          const local = group.worldToLocal(_dragVecA);
+          const snap = ctx.homeMesh
+            ? closestSurfacePoint(ctx.homeMesh, { x: local.x, y: local.y, z: local.z })
+            : null;
+          target = snap ? snap.point : { x: local.x, y: local.y, z: local.z };
+        }
+      }
+      if (!target) return;
+      // Imán al filo: el target del cursor se atrae al borde de curvatura
+      // cercano ANTES del falloff — toda la vecindad sigue el filo.
+      if (magnetRef.current && ctx.homeMesh) {
+        const ridge = snapToRidge(ctx.homeMesh, target, ctx.magnetRadius);
+        if (ridge) target = ridge;
+      }
+      applyDragFalloff(target);
+    };
+    window.addEventListener('pointermove', onMove);
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [isNodeDragging, applyDragFalloff]);
 
   // Soltar nodo (pointerup global) + Esc descarta la edición.
   useEffect(() => {
@@ -795,13 +1133,37 @@ export default function DentalViewer3D({
     const release = () => {
       if (nodeDragRef.current !== null) {
         nodeDragRef.current = null;
+        // ÚNICO commit a React del drag imperativo: el editor re-renderiza
+        // con el pipeline completo sobre los puntos deformados.
+        if (dragCtxRef.current) {
+          dragCtxRef.current = null;
+          syncEditingPoints(editingPointsRef.current.slice());
+        }
         setIsNodeDragging(false);
         setControlsEnabled(true);
         document.body.style.cursor = '';
       }
     };
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === 'Escape') stopEditingPolyline(false);
+      if (ev.key === 'Escape') {
+        if (redrawRef.current) {
+          // Salir solo del submodo redibujar (descartando el stroke en curso).
+          syncInProgress([]);
+          resetStroke();
+          setRedrawMode(false);
+        } else {
+          stopEditingPolyline(false);
+        }
+        return;
+      }
+      if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z') {
+        ev.preventDefault();
+        if (ev.shiftKey) redoEdit();
+        else undoEdit();
+      } else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'y') {
+        ev.preventDefault();
+        redoEdit();
+      }
     };
     window.addEventListener('pointerup', release);
     window.addEventListener('pointercancel', release);
@@ -813,7 +1175,37 @@ export default function DentalViewer3D({
       setControlsEnabled(true);
       document.body.style.cursor = '';
     };
-  }, [editingPolylineId, stopEditingPolyline, setControlsEnabled]);
+  }, [editingPolylineId, stopEditingPolyline, setControlsEnabled, syncEditingPoints,
+      syncInProgress, resetStroke, setRedrawMode, undoEdit, redoEdit]);
+
+  // Cierre del stroke de redibujo: al soltar, empalmar en el lazo (splice).
+  useEffect(() => {
+    if (!isRedrawMode) return;
+    const settle = () => {
+      const d = drawRef.current;
+      if (d.phase === 'dragging') {
+        const stroke = dedupeConsecutive(inProgressRef.current, 0.3);
+        const spliced = stroke.length >= 2
+          ? spliceClosedPolyline(editingPointsRef.current, stroke, 2.5)
+          : null;
+        if (spliced) {
+          pushEditHistory();
+          syncEditingPoints(capClosedPolyline(spliced, PERSIST_MAX_POINTS, PERSIST_RESAMPLE_TARGET));
+        } else if (stroke.length >= 2) {
+          showError('El trazo debe empezar y terminar sobre la línea');
+        }
+      }
+      d.candidate = null;
+      if (d.phase !== 'idle') resetStroke();
+      syncInProgress([]);
+    };
+    window.addEventListener('pointerup', settle);
+    window.addEventListener('pointercancel', settle);
+    return () => {
+      window.removeEventListener('pointerup', settle);
+      window.removeEventListener('pointercancel', settle);
+    };
+  }, [isRedrawMode, syncEditingPoints, syncInProgress, resetStroke, pushEditHistory, showError]);
 
   // Cierre del gesto (pointerup global: cubre soltar fuera del mesh o del canvas) + Esc.
   useEffect(() => {
@@ -907,14 +1299,42 @@ export default function DentalViewer3D({
       case 'superior': return '#f8fafc';
       case 'inferior': return '#cbd5e1';
       case 'bite': return '#fbbf24';
+      case 'lateralderecho': return '#7dd3fc';
+      case 'lateralizquierdo': return '#a5b4fc';
       default: return '#94a3b8';
     }
   };
 
-  const MODEL_LOAD_PRIORITY: Record<string, number> = { superior: 0, inferior: 1, bite: 2 };
+  const LAYER_LABELS: Record<string, string> = {
+    superior: 'Superior',
+    inferior: 'Inferior',
+    bite: 'Mordida',
+    lateralderecho: 'Lateral Derecho',
+    lateralizquierdo: 'Lateral Izquierdo',
+  };
+  const getLayerLabel = (subType: string) => {
+    const known = LAYER_LABELS[subType.toLowerCase()];
+    if (known) return known;
+    // Fallback genérico: separa camelCase/snake_case y capitaliza cada palabra.
+    return subType
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .split(' ')
+      .filter(Boolean)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  const MODEL_LOAD_PRIORITY: Record<string, number> = {
+    superior: 0,
+    inferior: 1,
+    bite: 2,
+    lateralderecho: 3,
+    lateralizquierdo: 4,
+  };
   const validModels = models
     .filter(m => !!m.url)
-    .sort((a, b) => (MODEL_LOAD_PRIORITY[a.subType.toLowerCase()] ?? 3) - (MODEL_LOAD_PRIORITY[b.subType.toLowerCase()] ?? 3));
+    .sort((a, b) => (MODEL_LOAD_PRIORITY[a.subType.toLowerCase()] ?? 5) - (MODEL_LOAD_PRIORITY[b.subType.toLowerCase()] ?? 5));
 
   return (
     <div 
@@ -973,15 +1393,15 @@ export default function DentalViewer3D({
                           const local = sceneGroupRef.current.worldToLocal(e.point.clone());
                           onAnnotate?.({ x: local.x, y: local.y, z: local.z });
                           setIsAnnotateMode(false);
-                        } else if (isPolylineMode) {
+                        } else if (isPolylineMode || (editingPolylineId && isRedrawMode)) {
                           handleStrokePointerDown(e);
                         }
                       }}
-                      onPointerMove={isPolylineMode ? handleStrokePointerMove : (editingPolylineId ? handleNodeDragMove : undefined)}
                       onDoubleClick={(e: ThreeEvent<MouseEvent>) => {
                         if (isPolylineMode) {
                           e.stopPropagation();
-                          finalizePolyline();
+                          if (isAssistMode) closeAssistLoop();
+                          else finalizePolyline();
                         }
                       }}
                       onMeshReady={handleMeshReady}
@@ -1018,14 +1438,12 @@ export default function DentalViewer3D({
 
                 {editingPolylineId && editingPoints.length > 0 && (
                   <PolylineNodeEditor
+                    ref={nodeEditorRef}
                     points={editingPoints}
                     surfaceWrap={surfaceWrap}
                     isNodeDragging={isNodeDragging}
-                    onNodePointerDown={handleNodePointerDown}
                     onCurvePointerDown={handleCurvePointerDown}
                     onHoverChange={handleEditHoverChange}
-                    onInsertNode={handleInsertNode}
-                    onDeleteNode={handleDeleteNode}
                   />
                 )}
 
@@ -1097,7 +1515,7 @@ export default function DentalViewer3D({
                         m.visible ? 'bg-primary-hl text-foreground' : 'hover:bg-surface-off text-muted'
                       }`}
                     >
-                      <span className="text-xs uppercase font-bold tracking-tight truncate">{m.subType}</span>
+                      <span className="text-xs uppercase font-bold tracking-tight truncate">{getLayerLabel(m.subType)}</span>
                       {m.visible ? <Eye className="w-3 h-3 shrink-0" /> : <EyeOff className="w-3 h-3 shrink-0 opacity-50" />}
                     </button>
                     {m.visible && (
@@ -1161,9 +1579,38 @@ export default function DentalViewer3D({
                     {polylines.map((pl, idx) => (
                       <div key={pl.id} className="rounded-lg overflow-hidden">
                         {editingPolylineId === pl.id ? (
-                          <div className="flex items-center gap-1.5 px-2 py-1.5 bg-primary-hl">
+                          <div className="flex items-center gap-1 px-2 py-1.5 bg-primary-hl">
                             <Pencil className="w-3 h-3 text-primary shrink-0" />
-                            <span className="text-xs text-primary font-medium flex-1">Editando zona {idx + 1}</span>
+                            <span className="text-xs text-primary font-medium flex-1">Zona {idx + 1}</span>
+                            <button
+                              onClick={undoEdit}
+                              disabled={editHistoryRef.current.past.length === 0}
+                              aria-label="Deshacer"
+                              title="Deshacer (Ctrl+Z)"
+                              className="p-1 rounded text-primary hover:bg-primary/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                            >
+                              <Undo2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={redoEdit}
+                              disabled={editHistoryRef.current.future.length === 0}
+                              aria-label="Rehacer"
+                              title="Rehacer (Ctrl+Shift+Z)"
+                              className="p-1 rounded text-primary hover:bg-primary/10 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                            >
+                              <Redo2 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={() => setRedrawMode(!isRedrawMode)}
+                              aria-pressed={isRedrawMode}
+                              aria-label="Redibujar tramo"
+                              title="Redibujar tramo: dibuja encima de la sección a corregir"
+                              className={`p-1 rounded transition-colors ${
+                                isRedrawMode ? 'bg-primary text-inverse' : 'text-primary hover:bg-primary/10'
+                              }`}
+                            >
+                              <PenLine className="w-3 h-3" />
+                            </button>
                             <button
                               onClick={() => stopEditingPolyline(true)}
                               className="text-xs text-primary font-semibold hover:text-primary/80 px-1.5 py-0.5 rounded transition-colors"
@@ -1172,12 +1619,20 @@ export default function DentalViewer3D({
                             </button>
                             <button
                               onClick={() => stopEditingPolyline(false)}
-                              className="text-xs text-muted hover:text-foreground px-1.5 py-0.5 rounded transition-colors"
+                              className="text-xs text-muted hover:text-foreground px-1 py-0.5 rounded transition-colors"
                             >
-                              Descartar
+                              <X className="w-3 h-3" />
                             </button>
                           </div>
-                        ) : confirmingPolylineId === pl.id ? (
+                        ) : null}
+                        {editingPolylineId === pl.id && (
+                          <p className="text-[10px] text-muted px-2 pt-1 leading-snug">
+                            {isRedrawMode
+                              ? 'Dibuja sobre la línea el tramo corregido · Esc sale del redibujo'
+                              : 'Toma la traza y arrástrala para moldearla · Ctrl+Z deshace · Esc descarta'}
+                          </p>
+                        )}
+                        {editingPolylineId === pl.id ? null : confirmingPolylineId === pl.id ? (
                           <div className="flex items-center gap-1.5 px-2 py-1.5 bg-error-hl">
                             <span className="text-xs text-error font-medium flex-1">¿Eliminar zona {idx + 1}?</span>
                             <button
@@ -1242,9 +1697,54 @@ export default function DentalViewer3D({
                   </div>
                 )}
 
+                {/* Imán al filo: activo en dibujo y edición */}
+                {(isPolylineMode || editingPolylineId) && (
+                  <button
+                    onClick={toggleMagnet}
+                    aria-pressed={magnetEnabled}
+                    title={magnetEnabled ? 'Desactivar imán al filo' : 'Activar imán al filo'}
+                    className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-xs font-semibold ${
+                      magnetEnabled ? 'bg-primary-hl text-primary' : 'hover:bg-surface-off text-muted'
+                    }`}
+                  >
+                    <Magnet className="w-3 h-3 shrink-0" />
+                    Imán al filo
+                    <span className="ml-auto text-[10px] font-bold uppercase">{magnetEnabled ? 'ON' : 'OFF'}</span>
+                  </button>
+                )}
+
+                {/* Modo asistido: anclas + camino automático por el filo */}
+                {isPolylineMode && (
+                  <button
+                    onClick={() => {
+                      setIsAssistMode(v => {
+                        assistRef.current = !v;
+                        if (!v) {
+                          // Al activar: descartar cualquier trazo libre en curso.
+                          syncInProgress([]);
+                          assistAnchorsRef.current = [];
+                          resetStroke();
+                        }
+                        return !v;
+                      });
+                    }}
+                    aria-pressed={isAssistMode}
+                    title="Delimitado asistido: clic marca anclas y el camino sigue el filo"
+                    className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-xs font-semibold ${
+                      isAssistMode ? 'bg-primary-hl text-primary' : 'hover:bg-surface-off text-muted'
+                    }`}
+                  >
+                    <Wand2 className="w-3 h-3 shrink-0" />
+                    Asistido
+                    <span className="ml-auto text-[10px] font-bold uppercase">{isAssistMode ? 'ON' : 'OFF'}</span>
+                  </button>
+                )}
+
                 {isPolylineMode && (
                   <p className="text-[10px] text-muted px-2 pt-0.5 leading-snug">
-                    Arrastra para dibujar libre · clic para puntos · acércate al inicio para cerrar · Esc cancela
+                    {isAssistMode
+                      ? 'Clic marca anclas sobre el filo · el camino se completa solo · clic en la 1ª ancla o doble clic cierra · Esc cancela'
+                      : 'Arrastra para dibujar libre · clic para puntos · acércate al inicio para cerrar · Esc cancela'}
                   </p>
                 )}
               </div>

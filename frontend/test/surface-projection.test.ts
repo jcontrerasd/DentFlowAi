@@ -4,6 +4,8 @@ import {
   ensureBoundsTree,
   closestSurfacePoint,
   pickHomeMesh,
+  ridgePathBetween,
+  snapToRidge,
   wrapClosedPolylineToSurface,
 } from '@/lib/viewer3d/surfaceProjection';
 import type { Point3D } from '@/lib/viewer3d/polylineGeometry';
@@ -85,6 +87,101 @@ describe('pickHomeMesh', () => {
     const plane = makePlaneMesh();
     expect(pickHomeMesh([], [plane])).toBeNull();
     expect(pickHomeMesh([p(0, 0, 0)], [])).toBeNull();
+  });
+});
+
+/**
+ * Techo a dos aguas: caballete a lo largo del eje Y en x=0 con z=5; los planos
+ * bajan a z=0 en x=±5. Malla non-indexed (sopa, como STL real).
+ */
+function makeGableRoofMesh(): THREE.Mesh {
+  const positions: number[] = [];
+  const steps = 10;
+  const cell = 10 / steps;
+  const zAt = (x: number) => 5 - Math.abs(x);
+  for (let i = 0; i < steps; i++) {
+    for (let j = 0; j < steps; j++) {
+      const x0 = -5 + i * cell;
+      const x1 = x0 + cell;
+      const y0 = -5 + j * cell;
+      const y1 = y0 + cell;
+      positions.push(
+        x0, y0, zAt(x0), x1, y0, zAt(x1), x1, y1, zAt(x1),
+        x0, y0, zAt(x0), x1, y1, zAt(x1), x0, y1, zAt(x0),
+      );
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+  ensureBoundsTree(geometry);
+  return mesh;
+}
+
+describe('snapToRidge', () => {
+  it('atrae un punto cercano al caballete hacia el filo', () => {
+    const mesh = makeGableRoofMesh();
+    // Punto sobre la ladera derecha, a 1.2mm del caballete (x=0)
+    const start = p(1.2, 0, 5 - 1.2);
+    const out = snapToRidge(mesh, start, 2.5);
+    expect(out).not.toBeNull();
+    // Se acercó claramente al caballete y sigue sobre la superficie
+    expect(Math.abs(out!.x)).toBeLessThan(0.7);
+    expect(out!.z).toBeCloseTo(5 - Math.abs(out!.x), 1);
+  });
+
+  it('devuelve null sobre una superficie lisa (sin filo distinguible)', () => {
+    const mesh = makePlaneMesh();
+    expect(snapToRidge(mesh, p(2, 2, 0), 2)).toBeNull();
+  });
+
+  it('devuelve null lejos de cualquier filo (ladera plana del techo)', () => {
+    const mesh = makeGableRoofMesh();
+    // A 4mm del caballete con radio 1: el vecindario es un solo plano
+    expect(snapToRidge(mesh, p(4, 0, 1), 1)).toBeNull();
+  });
+
+  it('devuelve null sin BVH construido', () => {
+    const geometry = new THREE.PlaneGeometry(10, 10).toNonIndexed();
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+    expect(snapToRidge(mesh, p(0, 0, 0), 2)).toBeNull();
+  });
+});
+
+describe('ridgePathBetween', () => {
+  it('el camino entre dos puntos cercanos al caballete corre POR el caballete', () => {
+    const mesh = makeGableRoofMesh();
+    // Ambos puntos sobre la ladera derecha a 1mm del filo: la recta entre
+    // ellos es un camino válido (misma ladera), pero el filo es más barato.
+    const a = p(1, -4, 4);
+    const b = p(1, 4, 4);
+    const path = ridgePathBetween(mesh, a, b);
+    expect(path.length).toBeGreaterThan(2);
+    // Los puntos intermedios del camino están pegados al caballete (x ≈ 0)
+    const middle = path.slice(2, -2);
+    expect(middle.length).toBeGreaterThan(0);
+    for (const q of middle) {
+      expect(Math.abs(q.x)).toBeLessThan(0.6);
+    }
+    // Extremos exactos en las anclas
+    expect(path[0]).toEqual(a);
+    expect(path[path.length - 1]).toEqual(b);
+  });
+
+  it('sin BVH devuelve la recta [a, b]', () => {
+    const geometry = new THREE.PlaneGeometry(10, 10).toNonIndexed();
+    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
+    const path = ridgePathBetween(mesh, p(0, 0, 0), p(5, 0, 0));
+    expect(path).toEqual([p(0, 0, 0), p(5, 0, 0)]);
+  });
+
+  it('sobre un plano liso devuelve un camino casi recto', () => {
+    const mesh = makePlaneMesh();
+    const path = ridgePathBetween(mesh, p(-4, 0, 0), p(4, 0, 0));
+    // Sin filo que seguir, el camino no se desvía significativamente
+    for (const q of path) {
+      expect(Math.abs(q.y)).toBeLessThan(1.5);
+    }
   });
 });
 

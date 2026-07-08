@@ -161,6 +161,208 @@ export function capClosedPolyline(points: Point3D[], max: number, target: number
   return resampleClosedToCount(points, target);
 }
 
+// ── Camino de menor costo en grafo (para la propuesta automática de margen) ─
+
+/**
+ * A-star / Dijkstra genérico sobre un grafo no dirigido. `edges` = [i, j, peso].
+ * `heuristic(n)` es una cota inferior opcional del costo restante hasta `end`
+ * (sin ella degenera a Dijkstra). Devuelve la secuencia de nodos start→end,
+ * o null si no hay camino.
+ */
+export function shortestPathInGraph(
+  nodeCount: number,
+  edges: Array<[number, number, number]>,
+  start: number,
+  end: number,
+  heuristic?: (node: number) => number,
+): number[] | null {
+  if (start < 0 || end < 0 || start >= nodeCount || end >= nodeCount) return null;
+  if (start === end) return [start];
+
+  // Adyacencia compacta
+  const adj: Array<Array<[number, number]>> = Array.from({ length: nodeCount }, () => []);
+  for (const [i, j, w] of edges) {
+    if (i < 0 || j < 0 || i >= nodeCount || j >= nodeCount || w < 0) continue;
+    adj[i].push([j, w]);
+    adj[j].push([i, w]);
+  }
+
+  const dist = new Float64Array(nodeCount).fill(Infinity);
+  const prev = new Int32Array(nodeCount).fill(-1);
+  const done = new Uint8Array(nodeCount);
+  dist[start] = 0;
+
+  // Heap binario mínimo de [prioridad, nodo]
+  const heapP: number[] = [heuristic ? heuristic(start) : 0];
+  const heapN: number[] = [start];
+  const heapPush = (p: number, n: number) => {
+    heapP.push(p); heapN.push(n);
+    let i = heapP.length - 1;
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (heapP[parent] <= heapP[i]) break;
+      [heapP[parent], heapP[i]] = [heapP[i], heapP[parent]];
+      [heapN[parent], heapN[i]] = [heapN[i], heapN[parent]];
+      i = parent;
+    }
+  };
+  const heapPop = (): number => {
+    const top = heapN[0];
+    const lastP = heapP.pop()!;
+    const lastN = heapN.pop()!;
+    if (heapP.length > 0) {
+      heapP[0] = lastP; heapN[0] = lastN;
+      let i = 0;
+      for (;;) {
+        const l = i * 2 + 1;
+        const r = l + 1;
+        let smallest = i;
+        if (l < heapP.length && heapP[l] < heapP[smallest]) smallest = l;
+        if (r < heapP.length && heapP[r] < heapP[smallest]) smallest = r;
+        if (smallest === i) break;
+        [heapP[smallest], heapP[i]] = [heapP[i], heapP[smallest]];
+        [heapN[smallest], heapN[i]] = [heapN[i], heapN[smallest]];
+        i = smallest;
+      }
+    }
+    return top;
+  };
+
+  while (heapN.length > 0) {
+    const u = heapPop();
+    if (done[u]) continue;
+    done[u] = 1;
+    if (u === end) break;
+    for (const [v, w] of adj[u]) {
+      if (done[v]) continue;
+      const nd = dist[u] + w;
+      if (nd < dist[v]) {
+        dist[v] = nd;
+        prev[v] = u;
+        heapPush(nd + (heuristic ? heuristic(v) : 0), v);
+      }
+    }
+  }
+
+  if (!done[end]) return null;
+  const path: number[] = [];
+  for (let u = end; u !== -1; u = prev[u]) path.push(u);
+  path.reverse();
+  return path[0] === start ? path : null;
+}
+
+// ── Redibujar tramo (splice estilo 3Shape) ──────────────────────────────────
+
+/**
+ * Empalma un trazo abierto `stroke` en el lazo cerrado `loop`: los extremos del
+ * stroke se anclan a los puntos del lazo más cercanos (deben estar a ≤
+ * maxSnapDist), y de los dos arcos entre esas anclas se REEMPLAZA el más
+ * cercano al stroke — el usuario dibuja encima del tramo que quiere corregir.
+ * Devuelve el lazo nuevo, o null si el stroke no empalma.
+ */
+export function spliceClosedPolyline(
+  loop: Point3D[],
+  stroke: Point3D[],
+  maxSnapDist: number,
+): Point3D[] | null {
+  if (loop.length < 3 || stroke.length < 2) return null;
+  const nearestIdx = (q: Point3D) => {
+    let bi = 0;
+    let bd = Infinity;
+    for (let i = 0; i < loop.length; i++) {
+      const d = dist3(q, loop[i]);
+      if (d < bd) { bd = d; bi = i; }
+    }
+    return { i: bi, d: bd };
+  };
+  const a = nearestIdx(stroke[0]);
+  const b = nearestIdx(stroke[stroke.length - 1]);
+  if (a.d > maxSnapDist || b.d > maxSnapDist || a.i === b.i) return null;
+
+  // Los dos arcos del lazo entre las anclas (ambos van de a.i hacia b.i).
+  const arcForward: number[] = [];
+  for (let i = a.i; ; i = (i + 1) % loop.length) {
+    arcForward.push(i);
+    if (i === b.i) break;
+  }
+  const arcBackward: number[] = [];
+  for (let i = a.i; ; i = (i - 1 + loop.length) % loop.length) {
+    arcBackward.push(i);
+    if (i === b.i) break;
+  }
+
+  // Reemplazar el arco más cercano al stroke (distancia media de ~10 muestras).
+  const avgDistToStroke = (arc: number[]): number => {
+    const samples = Math.min(10, arc.length);
+    let sum = 0;
+    for (let k = 0; k < samples; k++) {
+      const idx = arc[Math.floor((k * (arc.length - 1)) / Math.max(1, samples - 1))];
+      let best = Infinity;
+      for (const q of stroke) {
+        const d = dist3(loop[idx], q);
+        if (d < best) best = d;
+      }
+      sum += best;
+    }
+    return sum / samples;
+  };
+  const replaceForward = avgDistToStroke(arcForward) <= avgDistToStroke(arcBackward);
+  const kept = replaceForward ? arcBackward : arcForward; // arco conservado: a.i → b.i
+
+  // Lazo nuevo: stroke (≈ a.i → b.i) + arco conservado de regreso (b.i → a.i).
+  const result: Point3D[] = stroke.map(p => ({ ...p }));
+  for (let k = kept.length - 1; k >= 0; k--) {
+    result.push({ ...loop[kept[k]] });
+  }
+  return dedupeConsecutive(result, 0.05);
+}
+
+// ── Deformación con falloff (edición estilo 3Shape) ─────────────────────────
+
+/**
+ * Distancia mínima por arco (por el camino más corto del lazo cerrado) de cada
+ * punto al punto `fromIndex`. Base de la deformación local: los vecinos dentro
+ * del radio de influencia se mueven con peso decreciente.
+ */
+export function closedArcDistancesFrom(points: Point3D[], fromIndex: number): number[] {
+  const n = points.length;
+  const out = new Array<number>(n).fill(0);
+  if (n < 2) return out;
+  // Acumular hacia adelante y hacia atrás desde fromIndex; quedarse con el mínimo.
+  let acc = 0;
+  for (let k = 1; k < n; k++) {
+    const i = (fromIndex + k) % n;
+    const prev = (fromIndex + k - 1) % n;
+    acc += dist3(points[prev], points[i]);
+    out[i] = acc;
+  }
+  acc = 0;
+  for (let k = 1; k < n; k++) {
+    const i = (fromIndex - k + n * 2) % n;
+    const next = (fromIndex - k + 1 + n * 2) % n;
+    acc += dist3(points[next], points[i]);
+    if (acc < out[i]) out[i] = acc;
+  }
+  return out;
+}
+
+/**
+ * Peso de deformación cos⁴(π·d / 2R): 1 en d=0, 0 en d≥R, C¹ suave.
+ * Perfil AFILADO: a mitad del radio el peso ya cae a 0.25 — el punto agarrado
+ * responde 1:1 y los costados apenas acompañan (ajuste fino estilo 3Shape).
+ */
+export function falloffWeight(distance: number, radius: number): number {
+  if (radius <= 0 || distance >= radius) return 0;
+  if (distance <= 0) return 1;
+  const c = Math.cos((Math.PI * distance) / (2 * radius));
+  return c * c * c * c;
+}
+
+/** Radio de influencia adaptativo al tamaño del lazo: clamp(perímetro·8%, 2, 6) mm. */
+export function falloffRadiusForLoop(perimeter: number): number {
+  return Math.min(6, Math.max(2, perimeter * 0.08));
+}
+
 /**
  * Media móvil circular de vectores con renormalización (ventana impar, ej. 3).
  * Suaviza normales por-cara de STL antes del offset — elimina jitter por facetado.
