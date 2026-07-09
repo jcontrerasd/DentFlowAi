@@ -30,6 +30,7 @@ import { guardTextOrFail } from '@/lib/contactGuard/guardOrFail';
 import { notifyUser } from '@/lib/services/notifications';
 import { getServerIdentity } from './impersonation';
 import { logCaseEvent } from './cases';
+import { getActiveConfig } from './fauchard';
 
 /** Datos mínimos del caso para los guards de Calidad. */
 type CaseGuardRow = {
@@ -317,7 +318,7 @@ export async function sendToDentistAction(caseId: string): Promise<ActionResult>
  * (el caso continúa; al entregar se degradará a flujo legacy directo al dentista).
  */
 export async function assignQualityReviewerAction(caseId: string, tx?: any): Promise<{ success: boolean; assigned: boolean; reviewerId?: string; error?: string }> {
-  if (!isQualityGateEnabled()) return { success: true, assigned: false };
+  if (!(await isQualityGateEnabled())) return { success: true, assigned: false };
 
   const run = async (client: any) => {
     const caseRow = await loadCaseGuardRow(client, caseId);
@@ -325,16 +326,28 @@ export async function assignQualityReviewerAction(caseId: string, tx?: any): Pro
     if (caseRow.service_type !== 'solo_diseno') return { success: true, assigned: false };
     if (caseRow.quality_reviewer_id) return { success: true, assigned: true, reviewerId: caseRow.quality_reviewer_id };
 
-    // Round-robin equitativo: menos asignaciones activas; desempate por asignado hace más tiempo (o nunca).
+    // Reparto ponderado: una entrega real esperando revisión (enRevisionCalidad) pesa 1.0;
+    // un caso reservado (asignado pero el técnico aún no entrega) pesa qualityReservedCaseWeight (configurable en
+    // Fauchard → Selección y Asignación). Desempate por asignado hace más tiempo (o nunca).
+    const config = await getActiveConfig();
+    const reservedWeight = Number(config.qualityReservedCaseWeight);
+
     const [candidate]: any = await client.execute(sql`
       SELECT u.id AS id,
-             COUNT(cqa.id) FILTER (WHERE cqa.status = 'active') AS active_load,
+             COALESCE(SUM(
+               CASE
+                 WHEN cqa.status = 'active' AND cc.status = ${CASE_STATUSES.EN_REVISION_CALIDAD} THEN 1.0
+                 WHEN cqa.status = 'active' THEN ${reservedWeight}
+                 ELSE 0
+               END
+             ), 0) AS weighted_load,
              MAX(cqa.assigned_at) AS last_assigned
       FROM "user" u
       LEFT JOIN case_quality_assignment cqa ON cqa.calidad_user_id = u.id
+      LEFT JOIN clinical_case cc ON cc.id = cqa.clinical_case_id
       WHERE u.role = 'calidad'
       GROUP BY u.id
-      ORDER BY active_load ASC, last_assigned ASC NULLS FIRST
+      ORDER BY weighted_load ASC, last_assigned ASC NULLS FIRST
       LIMIT 1
     `);
     if (!candidate?.id) return { success: true, assigned: false };
@@ -381,7 +394,7 @@ export async function submitQualityRatingAction(data: {
   rating: number;
   comment?: string;
 }): Promise<ActionResult> {
-  if (!isQualityGateEnabled()) return { success: false, error: 'Compuerta de Calidad desactivada' };
+  if (!(await isQualityGateEnabled())) return { success: false, error: 'Compuerta de Calidad desactivada' };
 
   const identity = await getServerIdentity();
   if (!identity?.id) return { success: false, error: 'No autorizado' };

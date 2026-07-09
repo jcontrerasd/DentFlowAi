@@ -230,4 +230,63 @@ describe('DashboardHome', () => {
       expect(screen.getByText(/Tu perfil técnico está incompleto/i)).toBeInTheDocument();
     });
   });
+
+  it('al volver a la pestaña, visibilitychange + focus disparan un solo refetch', async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: 'd1' },
+      userProfile: { id: 'd1', role: 'dentista', organization: { id: 'org-1' } },
+    });
+    const realNow = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(realNow);
+
+    render(<DashboardHome />);
+    await waitFor(() => {
+      expect(getDashboardMetricsActionMock).toHaveBeenCalledTimes(1);
+    });
+    getDashboardMetricsActionMock.mockClear();
+    listCasesByOrganizationMock.mockClear();
+
+    // Pasar el gate de 5s y simular el retorno a la pestaña: ambos eventos en ráfaga.
+    nowSpy.mockReturnValue(realNow + 6_000);
+    fireEvent(document, new Event('visibilitychange'));
+    fireEvent(window, new Event('focus'));
+
+    await waitFor(() => {
+      expect(getDashboardMetricsActionMock).toHaveBeenCalledTimes(1);
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getDashboardMetricsActionMock).toHaveBeenCalledTimes(1);
+    expect(listCasesByOrganizationMock).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockRestore();
+  });
+
+  it('gate de 5s: dos visibilitychange dentro de la ventana → un solo refetch', async () => {
+    useAuthMock.mockReturnValue({
+      user: { id: 'd1' },
+      userProfile: { id: 'd1', role: 'dentista', organization: { id: 'org-1' } },
+    });
+    const realNow = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(realNow);
+
+    render(<DashboardHome />);
+    await waitFor(() => {
+      expect(getDashboardMetricsActionMock).toHaveBeenCalledTimes(1);
+    });
+    getDashboardMetricsActionMock.mockClear();
+
+    nowSpy.mockReturnValue(realNow + 6_000);
+    fireEvent(document, new Event('visibilitychange'));
+    await waitFor(() => {
+      expect(getDashboardMetricsActionMock).toHaveBeenCalledTimes(1);
+    });
+
+    // Segundo evento 1s después: dentro de la ventana de 5s → el gate lo descarta.
+    nowSpy.mockReturnValue(realNow + 7_000);
+    fireEvent(document, new Event('visibilitychange'));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getDashboardMetricsActionMock).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockRestore();
+  });
 });

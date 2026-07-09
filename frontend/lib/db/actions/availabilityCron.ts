@@ -2,8 +2,7 @@
 
 /**
  * Mantenimiento periódico del modelo de disponibilidad (v5.0/v5.1, §5 y §7).
- * Invocado por el cron `/api/cron/process-availability` (cada hora). Todo inerte
- * con `AVAILABILITY_MODEL_ENABLED` apagado.
+ * Invocado por el cron `/api/cron/process-availability` (cada hora).
  *
  * Hace tres cosas idempotentes:
  *  1. Expira no-respuestas fuera de la ventana rolling → el nivel cae solo
@@ -18,7 +17,6 @@
 import { db } from '@/lib/db';
 import { technicianAvailability, user } from '@/lib/db/schema';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
 import { getActiveConfig } from './fauchard';
 import { expireEventsOutsideWindowAction } from './noResponseEvents';
 import { notifyUser } from '../../services/notifications';
@@ -32,10 +30,6 @@ export type AvailabilityMaintenanceResult = {
 };
 
 export async function processAvailabilityMaintenanceAction(): Promise<ActionResult<AvailabilityMaintenanceResult>> {
-  if (!isAvailabilityEnabled()) {
-    return { success: true, windowExpired: 0, autoOffPreventive: 0, remindersSent: 0, skipped: true };
-  }
-
   try {
     const config = await getActiveConfig();
     const autoOffThresholdMs = Date.now() - config.inactivityAutoOffDays * 86_400_000;

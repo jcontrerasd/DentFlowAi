@@ -126,6 +126,17 @@ export default function FauchardFiltersPanel({ initialFocusKey = null }: { initi
             paramNumber={fauchardParamNumber('loadReferenceMin')}
             flash={flashed.has('loadReferenceMin')}
           />
+          <Slider
+            label="Peso de Casos Reservados (Calidad)"
+            value={draft.qualityReservedCaseWeight}
+            min={0} max={1} step={0.05}
+            onChange={(e) => setParam('qualityReservedCaseWeight', parseFloat(e.target.value))}
+            valueSuffix="× carga real"
+            tooltip={fauchardParamTooltip('qualityReservedCaseWeight')}
+            onHelp={() => openHelp('qualityReservedCaseWeight')}
+            paramNumber={fauchardParamNumber('qualityReservedCaseWeight')}
+            flash={flashed.has('qualityReservedCaseWeight')}
+          />
         </Section>
 
         {/* Plazos de respuesta */}

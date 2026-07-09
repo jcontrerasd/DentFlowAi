@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { clinicalCase, caseAssignment, user } from '@/lib/db/schema';
 import { eq, and, inArray, ne } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
-import { logCaseEvent } from './cases';
+import { logCaseEvent, closeCaseQualityAssignment } from './cases';
 import { assignQualityReviewerAction } from './quality';
 import { notifyUser } from '../../services/notifications';
 import { INTERNAL_CASE_STATUSES, CASE_STATUSES } from '@/lib/constants/dental';
@@ -251,6 +251,8 @@ export async function expireDentistComparativeWindowAction(caseId: string): Prom
         })
         .where(eq(clinicalCase.id, caseId));
 
+      await closeCaseQualityAssignment(tx, caseId);
+
       for (const row of affected) {
         await notifyUser(row.technicianId, 'PROPUESTA_RECHAZADA_DENTISTA', { caseId, caseNumber: cCase.caseNumber });
       }
@@ -324,7 +326,8 @@ export async function startWorkAction(caseId: string): Promise<ActionResult> {
     await db.update(clinicalCase)
       .set({
         status: CASE_STATUSES.EN_EJECUCION,
-        internalStatus: INTERNAL_CASE_STATUSES.EN_EJECUCION_DISENO,
+        // Desde aquí `status` es la única fuente de verdad del ciclo; internalStatus solo aplica durante la orquestación de asignación.
+        internalStatus: null,
         currentResponsibility: 'tecnico',
         workStartedAt: now,
         workDeadline,

@@ -74,10 +74,14 @@ function LoginContent() {
     }
   }, [searchParams]);
 
-  // Fase 4 (ajuste login): dashboard/layout.tsx redirige aquí cuando otro login reemplazó esta sesión.
+  // Fase 4 (ajuste login): dashboard/layout.tsx redirige aquí cuando otro login reemplazó esta
+  // sesión, o (v5.29) cuando venció por inactividad o tiempo máximo.
   useEffect(() => {
-    if (searchParams.get('reason') === 'session_replaced') {
+    const reason = searchParams.get('reason');
+    if (reason === 'session_replaced') {
       setError('Tu sesión fue cerrada porque iniciaste sesión en otro dispositivo o navegador.');
+    } else if (reason === 'session_expired') {
+      setError('Tu sesión expiró por inactividad o por alcanzar el tiempo máximo permitido. Inicia sesión nuevamente.');
     }
   }, [searchParams]);
 

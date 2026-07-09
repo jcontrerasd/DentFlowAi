@@ -3,6 +3,7 @@ import {
   processPendingDataExportsAction,
   purgeExpiredDataExportsAction,
 } from '@/lib/db/actions/dataExport';
+import { requireCronAuth } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,11 +16,8 @@ export const dynamic = 'force-dynamic';
  * 2. Purga ZIPs vencidos (expiresAt <= now): borra objeto GCS + marca status='expired'.
  */
 async function handle(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = requireCronAuth(req);
+  if (authError) return authError;
 
   const processResult = await processPendingDataExportsAction();
   if (!processResult.success) {

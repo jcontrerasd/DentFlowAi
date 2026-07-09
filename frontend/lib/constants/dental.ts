@@ -27,27 +27,40 @@ export const CASE_STATUSES = {
   RECHAZADO: 'rechazado',
 } as const;
 
-/** Estados internos granulares — solo visible para admin y sistema */
+/**
+ * Estados internos granulares — solo visible para admin y sistema.
+ * Invariante: `internalStatus` solo es no-null mientras Fauchard orquesta la asignación
+ * (caso_recibido → … → asignacionPendiente / pendiente_pool / fallo). Desde `startWorkAction`
+ * en adelante se pone en null y `status` es la única fuente de verdad del ciclo.
+ * Los fallos de asignación se escriben espejados en `status` e `internalStatus`.
+ */
 export const INTERNAL_CASE_STATUSES = {
   CASO_RECIBIDO: 'caso_recibido',
   CLASIFICANDO: 'clasificando',
   SELECCIONANDO_TECNICOS: 'seleccionandoTecnicos',
   ASIGNACION_PENDIENTE: 'asignacionPendiente',
+  /** @deprecated nunca se escribe en runtime */
   EVALUANDO_OFERTAS: 'evaluandoOfertas',
+  /** @deprecated nunca se escribe en runtime */
   PROPUESTA_GENERADA: 'propuestaGenerada',
+  /** @deprecated nunca se escribe en runtime */
   PROPUESTA_PRESENTADA: 'propuestaPresentada',
   ACEPTADA_CONFIGURANDO: 'aceptadaConfigurando',
+  /** @deprecated ya no se escribe — desde el inicio del trabajo internalStatus es null y el ciclo vive en `status` */
   EN_EJECUCION_DISENO: 'enEjecucionDiseno',
-  /** Entrega en revisión de Calidad antes de llegar al dentista */
+  /** @deprecated nunca se escribe en internalStatus — la etapa de Calidad vive en `status` (CASE_STATUSES.EN_REVISION_CALIDAD) */
   EN_REVISION_CALIDAD: 'enRevisionCalidad',
-  /** Calidad certificó; el técnico decide cuándo enviar al dentista */
+  /** @deprecated nunca se escribe en internalStatus — vive en `status` (CASE_STATUSES.CERTIFICADO_CALIDAD) */
   CERTIFICADO_CALIDAD: 'certificadoCalidad',
+  /** @deprecated nunca se escribe en runtime */
   EN_REVISION_DISENO: 'enRevisionDiseno',
+  /** @deprecated nunca se escribe en runtime */
   CAMBIOS_SOLICITADOS: 'cambiosSolicitados',
   SIN_ASIGNACION_FALLO: 'sin_asignacion_fallo',
-  /** @deprecated legacy */
+  /** Fallo al agotar ciclos de la cola pendiente_pool (poolQueue) */
   SIN_COTIZACIONES_FALLO: 'sin_cotizaciones_fallo',
   PROPUESTA_EXPIRADA: 'propuestaExpirada',
+  /** @deprecated nunca se escribe en runtime */
   RECHAZADA_POR_DENTISTA: 'rechazadaPorDentista',
   /** Dentista rechazó todas las cotizaciones en bloque comparativo */
   RECHAZADO_TODAS_OFERTAS: 'rechazadoTodasOfertas',

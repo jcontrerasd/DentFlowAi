@@ -7,10 +7,11 @@ import { createClinicalCaseAction, getUploadUrlAction } from '@/lib/db/actions/c
 import { registerFileAction } from '@/lib/db/actions/files';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
-import { CaseCreationWizard, CaseFormData, CaseFiles } from '@/components/cases/CaseCreationWizard';
+import { CaseCreationWizard, CaseFormData, CaseFiles, SCAN_SLOTS } from '@/components/cases/CaseCreationWizard';
 import { logError } from '@/lib/logger';
 import { isContactGuardError } from '@/lib/contactGuard/clientHelpers';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
+import { uploadWithProgress } from '@/lib/uploadWithProgress';
 
 export default function NewCasePage() {
   const router = useRouter();
@@ -20,11 +21,13 @@ export default function NewCasePage() {
   const [error, setError] = useState<string | null>(null);
   const [guardBlock, setGuardBlock] = useState<string | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>('');
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   const handleCreateCase = async (formData: CaseFormData, files: CaseFiles, thumbnails: Record<string, string>) => {
 
     setLoading(true);
     setError(null);
+    setUploadProgress(0);
     try {
       // Prioridad absoluta al ID detectado en la sesión o fallback al perfil
       const doctorId = user?.id || (user as any).uid || (user as any).sub;
@@ -59,16 +62,26 @@ export default function NewCasePage() {
 
       // 2. Subir archivos a GCS vía Signed URLs.
       type UploadEntry = {
-        key: 'superior' | 'inferior' | 'bite' | 'designFile';
+        key: (typeof SCAN_SLOTS)[number] | 'designFile';
         file: File;
         category: 'scan' | 'design_upload';
         subType: string;
         folder: 'scans' | 'design';
       };
 
-      const uploads: UploadEntry[] = (['superior', 'inferior', 'bite'] as const)
+      const uploads: UploadEntry[] = SCAN_SLOTS
         .filter((k) => !!files[k])
         .map((k) => ({ key: k, file: files[k] as File, category: 'scan' as const, subType: k, folder: 'scans' as const }));
+
+      // Progreso agregado: estimado sobre el tamaño original de cada archivo (antes de gzip).
+      const totalBytes = uploads.reduce((sum, u) => sum + u.file.size, 0)
+        + (files.complementary ?? []).reduce((sum, f) => sum + f.size, 0);
+      const loadedByKey: Record<string, number> = {};
+      const reportProgress = () => {
+        if (totalBytes <= 0) return;
+        const loaded = Object.values(loadedByKey).reduce((sum, v) => sum + v, 0);
+        setUploadProgress(Math.min(99, (loaded / totalBytes) * 100));
+      };
 
       for (const entry of uploads) {
         const { key, file, category, subType, folder } = entry;
@@ -87,19 +100,24 @@ export default function NewCasePage() {
           throw new Error(`Error de permisos: No se pudo generar la ruta de subida para ${key}.`);
         }
 
-        // Subida directa via PUT (Arreglado vía CORS anteriormente)
-        const uploadRes = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: uploadBody,
-          headers: {
+        // Subida directa via PUT, con seguimiento de progreso (XHR — fetch no expone upload progress).
+        await uploadWithProgress(
+          uploadUrl,
+          uploadBody,
+          {
             'Content-Type': file.type,
             ...(contentEncoding ? { 'Content-Encoding': contentEncoding } : {}),
           },
-        });
-
-        if (!uploadRes.ok) {
+          (loadedBytes) => {
+            // El progreso reportado es sobre el body comprimido; lo acotamos al tamaño original para no pasarse.
+            loadedByKey[key] = Math.min(loadedBytes, file.size);
+            reportProgress();
+          },
+        ).catch(() => {
           throw new Error(`Fallo en la subida: El servidor de almacenamiento rechazó el archivo ${key}.`);
-        }
+        });
+        loadedByKey[key] = file.size;
+        reportProgress();
 
         // 3. ¿Tiene miniatura generada?
         let thumbnailPath = null;
@@ -119,11 +137,9 @@ export default function NewCasePage() {
           }
         }
 
-        // 4. Registrar archivo en DB PostgreSQL
+        // 4. Registrar archivo en DB PostgreSQL (org/uploader los deriva el servidor)
         await registerFileAction({
           caseId: caseId,
-          organizationId: orgId,
-          uploaderId: doctorId,
           filename: file.name,
           category,
           subType,
@@ -137,15 +153,25 @@ export default function NewCasePage() {
 
       // Subir archivos complementarios (sin gzip, sin thumbnail)
       for (const file of (files.complementary ?? [])) {
+        const complementaryKey = `complementary:${file.name}:${file.size}`;
         const gcsPath = `organizations/${orgId}/cases/${caseId}/complementary/${Date.now()}_${file.name}`;
         const uploadUrl = await getUploadUrlAction(gcsPath, file.type, undefined);
         if (!uploadUrl) throw new Error(`No se pudo obtener URL de subida para ${file.name}`);
-        const res = await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
-        if (!res.ok) throw new Error(`Fallo al subir ${file.name}`);
+        await uploadWithProgress(
+          uploadUrl,
+          file,
+          { 'Content-Type': file.type },
+          (loadedBytes) => {
+            loadedByKey[complementaryKey] = loadedBytes;
+            reportProgress();
+          },
+        ).catch(() => {
+          throw new Error(`Fallo al subir ${file.name}`);
+        });
+        loadedByKey[complementaryKey] = file.size;
+        reportProgress();
         await registerFileAction({
           caseId,
-          organizationId: orgId,
-          uploaderId: doctorId,
           filename: file.name,
           category: 'complementary',
           subType: 'general',
@@ -155,6 +181,7 @@ export default function NewCasePage() {
         });
       }
 
+      setUploadProgress(100);
       showSuccess(`Caso ${newCase?.caseNumber ?? ''} creado exitosamente`.trim());
       router.push('/dashboard/cases');
     } catch (err: any) {
@@ -174,6 +201,7 @@ export default function NewCasePage() {
       }
     } finally {
       setLoading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -220,7 +248,7 @@ export default function NewCasePage() {
       )}
 
       <div className="bg-surface shadow-sm border border-divider p-8 md:p-12 rounded-[2.5rem] border border-slate-200 dark:border-divider/30 shadow-2xl">
-        <CaseCreationWizard onComplete={handleCreateCase} loading={loading} />
+        <CaseCreationWizard onComplete={handleCreateCase} loading={loading} uploadProgress={uploadProgress} />
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ import { user, verificationToken, passwordResetToken } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { sendCriticalAuthEmail } from "@/lib/services/notifications";
 import { checkAndRecordAuthRateLimit } from "@/lib/db/rateLimit";
+import { getNumericSetting } from "@/lib/featureFlags";
 
 const MAX_AUTH_EMAILS_PER_HOUR = 5;
 
@@ -27,9 +28,8 @@ const RESET_COOLDOWN_MS = 60_000;
 // (15 min, ver VERIFY_WINDOW_SECONDS en app/auth/register/page.tsx) — si el link sigue
 // vivo más tiempo que la espera del wizard, alguien podría confirmar una cuenta mucho
 // después de que la pantalla ya dijo "venció".
-function getVerificationTtlMinutes(): number {
-  const raw = Number(process.env.EMAIL_VERIFICATION_TTL_MINUTES);
-  return Number.isFinite(raw) && raw > 0 ? raw : 15;
+function getVerificationTtlMinutes(): Promise<number> {
+  return getNumericSetting('EMAIL_VERIFICATION_TTL_MINUTES', 15);
 }
 
 // ─── Verificación de email (Fase 3) ──────────────────────────────────────────
@@ -55,7 +55,8 @@ export async function requestEmailVerificationAction(email: string): Promise<{ s
       .from(verificationToken)
       .where(eq(verificationToken.identifier, cleanEmail))
       .limit(1);
-    const verificationTtlMs = getVerificationTtlMinutes() * 60_000;
+    const verificationTtlMinutes = await getVerificationTtlMinutes();
+    const verificationTtlMs = verificationTtlMinutes * 60_000;
     if (recent && recent.expires.getTime() - Date.now() > (verificationTtlMs - VERIFICATION_COOLDOWN_MS)) {
       return { success: true };
     }
@@ -76,7 +77,7 @@ export async function requestEmailVerificationAction(email: string): Promise<{ s
     await sendCriticalAuthEmail({
       toEmail: cleanEmail,
       subject: 'DentFlowAi: verifica tu correo electrónico',
-      body: `Hola${existingUser.fullName ? ' ' + existingUser.fullName : ''},\n\nConfirma tu correo para activar tu cuenta en DentFlowAi:\n\n${link}\n\nEste enlace vence en ${getVerificationTtlMinutes()} minutos. Si no creaste esta cuenta, ignora este correo.`,
+      body: `Hola${existingUser.fullName ? ' ' + existingUser.fullName : ''},\n\nConfirma tu correo para activar tu cuenta en DentFlowAi:\n\n${link}\n\nEste enlace vence en ${verificationTtlMinutes} minutos. Si no creaste esta cuenta, ignora este correo.`,
     });
 
     return { success: true };

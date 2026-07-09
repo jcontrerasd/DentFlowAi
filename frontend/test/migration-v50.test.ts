@@ -119,14 +119,7 @@ describe.runIf(runIntegration)('migración v5.0', () => {
       ON CONFLICT (user_id, work_type) DO NOTHING
     `);
 
-    const prev = process.env.AVAILABILITY_MODEL_ENABLED;
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
-    try {
-      await forceInfra();
-    } finally {
-      if (prev === undefined) delete process.env.AVAILABILITY_MODEL_ENABLED;
-      else process.env.AVAILABILITY_MODEL_ENABLED = prev;
-    }
+    await forceInfra();
 
     const [skilled]: any = await db.execute(sql`
       SELECT level_global, level_cad, level_cam FROM technician_availability WHERE user_id = ${TECH_WITH_SKILL}

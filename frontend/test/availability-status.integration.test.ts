@@ -20,11 +20,7 @@ import { getResponseHistoryAction } from '@/lib/db/actions/noResponseEvents';
 const runIntegration = process.env.RUN_DB_INTEGRATION_TESTS === 'true';
 
 describe.runIf(runIntegration)('disponibilidad — estado e historial (Fase 4)', () => {
-  let prevFlag: string | undefined;
-
   beforeAll(async () => {
-    prevFlag = process.env.AVAILABILITY_UI_TECNICO_ENABLED;
-    process.env.AVAILABILITY_UI_TECNICO_ENABLED = 'true';
     await ensureInfrastructure(db);
     await db.execute(sql`INSERT INTO organization (id, name, rut, type, is_active) VALUES (${ORG}, 'F4 Org', 'rut-f4', 'clinica', true) ON CONFLICT (id) DO NOTHING`);
     await db.execute(sql`INSERT INTO "user" (id, email, role, organization_id, is_active) VALUES (${TECH}, ${TECH + '@t.local'}, 'tecnico', ${ORG}, true) ON CONFLICT (id) DO NOTHING`);
@@ -40,8 +36,6 @@ describe.runIf(runIntegration)('disponibilidad — estado e historial (Fase 4)',
   afterAll(async () => {
     await db.execute(sql`DELETE FROM "user" WHERE id = ${TECH}`);
     await db.execute(sql`DELETE FROM organization WHERE id = ${ORG}`);
-    if (prevFlag === undefined) delete process.env.AVAILABILITY_UI_TECNICO_ENABLED;
-    else process.env.AVAILABILITY_UI_TECNICO_ENABLED = prevFlag;
   });
 
   it('getMyAvailabilityStatusAction: enabled + nivel 2 por 2 activas en ventana', async () => {

@@ -87,20 +87,6 @@ BEHAVIOR_FLAGS = [
      "Interruptor maestro de correos. ON = se envían de verdad. OFF = se SIMULAN "
      "(se escriben al log, no salen) aunque haya credenciales EmailJS. En staging, "
      "ON con datos clonados de prod implica correos a usuarios reales."),
-    ("AVAILABILITY_MODEL_ENABLED",
-     "Modelo disponibilidad",
-     "Switch maestro v5.0. ON = Fauchard usa disponibilidad declarada (AND triple) + "
-     "score con sanción rolling + cola + countdown de revisión. OFF = comportamiento "
-     "anterior (exclusión binaria a 3 no-respuestas). Si está OFF, los demás flags v5.0 "
-     "quedan inertes."),
-    ("AVAILABILITY_UI_TECNICO_ENABLED",
-     "UI técnico (badge+panel)",
-     "Muestra al técnico el badge de disponibilidad en el header y el panel "
-     "/dashboard/profile/availability para prender/apagar su disponibilidad por categoría."),
-    ("AVAILABILITY_ADMIN_PANEL_ENABLED",
-     "Panel admin Fauchard",
-     "Habilita en el admin de Fauchard la pestaña 'Plazos y Sanciones' (umbrales, pesos, "
-     "ventanas) y el dashboard de Observabilidad (métricas con gráficos)."),
     ("REJECTION_INDIVIDUAL_ENABLED",
      "Rechazo individual UCH",
      "Muestra el botón 'Rechazar invitación' en el hilo del caso (UCH) del técnico. "
@@ -109,7 +95,7 @@ BEHAVIOR_FLAGS = [
     ("POOL_PENDIENTE_ENABLED",
      "Cola pendiente_pool",
      "Cuando Fauchard no encuentra técnicos elegibles, el caso entra a una cola de espera "
-     "(TTL + check-in al dentista) en vez de fallar de inmediato. Requiere AVAILABILITY_MODEL_ENABLED."),
+     "(TTL + check-in al dentista) en vez de fallar de inmediato."),
     ("LEAGUE_ENGINE_ENABLED",
      "Motor de ligas (Fase 2)",
      "Movimiento automático entre ligas (ascenso/transición/descenso) + cron diario. "

@@ -60,6 +60,19 @@ import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt, getCaseReviewDeadl
 
 
 /**
+ * Cierra el case_quality_assignment activo del caso — llamar en cada punto donde el caso
+ * llega a un estado terminal (completado/cerrado/cancelado/rechazado). Sin esto, el registro
+ * queda `active` para siempre y sesga el reparto round-robin de `assignQualityReviewerAction`.
+ * Inerte si el caso nunca tuvo revisor de Calidad asignado.
+ */
+export async function closeCaseQualityAssignment(client: any, caseId: string): Promise<void> {
+  await client.execute(sql`
+    UPDATE case_quality_assignment SET status = 'completed'
+    WHERE clinical_case_id = ${caseId} AND status = 'active'
+  `);
+}
+
+/**
  * Registra un evento en la tabla clinical_case_event.
  * Esta función es el motor central del Hub Clínico Unificado (UCH).
  */
@@ -498,7 +511,7 @@ export async function listCasesByOrganization(
     // Calidad: marca por caso "por calificar" (completado sin review dimension='quality' del revisor).
     const isCalidad = role === 'calidad';
     let qualityRatedCaseIds = new Set<string>();
-    if (isCalidad && isQualityGateEnabled()) {
+    if (isCalidad && (await isQualityGateEnabled())) {
       const completedIds = results
         .filter((c: any) => c.status === 'completado')
         .map((c: any) => c.id);
@@ -736,7 +749,7 @@ export async function getCaseDetails(caseId: string) {
     // Calculamos qualityGateActive ANTES de anonimizar qualityReviewerId.
     // El técnico necesita saber si su entrega va a Calidad, pero sin ver la identidad del revisor.
     const qualityGateActive =
-      isQualityGateEnabled() &&
+      (await isQualityGateEnabled()) &&
       cCase.serviceType === 'solo_diseno' &&
       !!(cCase as any).qualityReviewerId;
 
@@ -1050,7 +1063,7 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
   // Lazy quality assignment: si el flag está on pero quality_reviewer_id quedó NULL,
   // intentar asignar ANTES de abrir la transacción principal para evitar deadlock.
   // (Dentro de la tx principal se volvería a leer el valor ya persistido.)
-  if (isQualityGateEnabled()) {
+  if (await isQualityGateEnabled()) {
     try {
       const { assignQualityReviewerAction } = await import('./quality');
       await assignQualityReviewerAction(caseId);
@@ -1095,7 +1108,7 @@ export async function submitReviewAction(caseId: string, notes: string, files: s
 
       const effectiveReviewerId = (caseRow?.quality_reviewer_id as string | null) ?? null;
 
-      const useQualityGate = isQualityGateEnabled()
+      const useQualityGate = (await isQualityGateEnabled())
         && caseRow?.service_type === 'solo_diseno'
         && !!effectiveReviewerId;
       const targetStatus = useQualityGate ? 'enRevisionCalidad' : 'enRevision';
@@ -1414,7 +1427,9 @@ export async function approveWorkAction(
           isSystemAdmin ? undefined : eq(clinicalCase.organizationId, orgId as string)
         ))
         .returning();
-      
+
+      await closeCaseQualityAssignment(tx, caseId);
+
       if (updatedCase && updatedCase.assignedTechnicianId) {
         await notifyUser(updatedCase.assignedTechnicianId, 'TRABAJO_APROBADO', { caseId });
       }
@@ -1423,7 +1438,7 @@ export async function approveWorkAction(
       // debe calificar al técnico. La señal "por calificar" persiste en sus superficies
       // hasta que envíe la nota; esta notificación lo avisa al cierre. Gateada por el flag
       // (sin Quality Gate no hay quality_reviewer_id asignado).
-      if (isQualityGateEnabled() && updatedCase?.qualityReviewerId) {
+      if ((await isQualityGateEnabled()) && updatedCase?.qualityReviewerId) {
         await notifyUser(updatedCase.qualityReviewerId, 'CALIDAD_POR_CALIFICAR', {
           caseId,
           caseNumber: updatedCase.caseNumber,
@@ -1652,6 +1667,10 @@ export async function resolveFlowRequestAction(caseId: string, approve: boolean)
         lastActivityAt: new Date()
       })
       .where(eq(clinicalCase.id, caseId));
+
+    if (newStatus === 'cancelado') {
+      await closeCaseQualityAssignment(db, caseId);
+    }
 
     const outcomeAction =
       newStatus === 'pausado' ? CASE_EVENTS.CASO_PAUSADO : CASE_EVENTS.CASO_CANCELADO;

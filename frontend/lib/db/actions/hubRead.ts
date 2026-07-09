@@ -28,6 +28,7 @@ const HUB_UNREAD_BATCH_MAX_CASES = 80;
 const HUB_UNREAD_TOTAL_CASE_SCAN = 120;
 
 type Identity = NonNullable<Awaited<ReturnType<typeof getServerIdentity>>>;
+type EventRow = typeof clinicalCaseEvent.$inferSelect;
 
 async function userHasCaseHubAccess(
   identity: Identity,
@@ -151,30 +152,27 @@ function toUnreadEvents<T extends { type: string; action: string; userId: string
   }));
 }
 
-async function unreadTotalForCase(
+const PER_CASE_EVENT_CAP = Math.min(4000, HUB_UNREAD_EVENTS_CAP);
+
+/**
+ * Cuenta no-leídos de un caso a partir de eventos ya cargados en memoria (sin queries).
+ * La lógica de visibilidad (`filterCaseEventsForUchViewer`) y de conteo por carril
+ * (`totalUchHubUnread`) se mantiene idéntica al camino por-caso original.
+ *
+ * `eventsDescCapped` son los eventos del caso en orden descendente por fecha, ya
+ * acotados a los {PER_CASE_EVENT_CAP} más recientes (mismo cap que el findMany previo).
+ */
+function countUnreadForCaseFromEvents(
   identity: Identity,
-  caseId: string,
   meta: { assignedTechnicianId: string | null; doctorId: string | null; status?: string | null },
   readRow: { lastReadTechHubAt: Date | null; lastReadNegHubAt: Date | null } | undefined,
-): Promise<number> {
+  eventsDescCapped: EventRow[],
+  currentInvitationId: string | null,
+): number {
   if (isHubInboxSuppressedForCompletedCase(meta.status)) return 0;
 
-  let currentInvitationId: string | null = null;
-  if (identity.role === 'tecnico') {
-    const [myInv] = await db
-      .select({ id: caseAssignment.id })
-      .from(caseAssignment)
-      .where(and(eq(caseAssignment.clinicalCaseId, caseId), eq(caseAssignment.technicianId, identity.id as string)))
-      .limit(1);
-    currentInvitationId = myInv?.id ?? null;
-  }
-
-  const events = await db.query.clinicalCaseEvent.findMany({
-    where: eq(clinicalCaseEvent.clinicalCaseId, caseId),
-    orderBy: [desc(clinicalCaseEvent.createdAt)],
-    limit: Math.min(4000, HUB_UNREAD_EVENTS_CAP),
-  });
-  events.reverse();
+  // A cronológico ascendente (el filtro/conteo asumen ese orden).
+  const events = [...eventsDescCapped].reverse();
 
   const filtered = filterCaseEventsForUchViewer(
     events,
@@ -216,8 +214,30 @@ export async function getHubUnreadCountsForCasesAction(
     .from(clinicalCase)
     .where(inArray(clinicalCase.id, unique));
 
+  // Asignaciones del técnico para TODOS los casos en una sola query (antes: 1 por caso,
+  // tanto para el chequeo de acceso como para el invitationId del carril técnico).
+  const myAssignmentByCase = new Map<string, string>();
+  if (identity.role === 'tecnico') {
+    const rows = await db
+      .select({ id: caseAssignment.id, clinicalCaseId: caseAssignment.clinicalCaseId })
+      .from(caseAssignment)
+      .where(
+        and(
+          eq(caseAssignment.technicianId, identity.id as string),
+          inArray(caseAssignment.clinicalCaseId, unique),
+        ),
+      );
+    for (const r of rows) if (!myAssignmentByCase.has(r.clinicalCaseId)) myAssignmentByCase.set(r.clinicalCaseId, r.id);
+  }
+
   const allowed: typeof caseRows = [];
   for (const c of caseRows) {
+    // Técnico (no admin): acceso resuelto en memoria con el set precargado — misma
+    // regla que userCanAccessClinicalCase (asignado O con asignación al caso).
+    if (canActAsTecnico(identity.role as string) && identity.role !== 'admin') {
+      if (c.assignedTechnicianId === identity.id || myAssignmentByCase.has(c.id)) allowed.push(c);
+      continue;
+    }
     if (await userHasCaseHubAccess(identity, c.id, c)) allowed.push(c);
   }
   if (allowed.length === 0) return { byCaseId: {}, total: 0 };
@@ -246,31 +266,45 @@ export async function getHubUnreadCountsForCasesAction(
 
   const metaById = new Map(allowed.map((c) => [c.id, c]));
 
+  // Eventos de TODOS los casos permitidos en una sola query (antes: 1 findMany por caso).
+  // Se agrupan en memoria y se acotan a los {PER_CASE_EVENT_CAP} más recientes por caso,
+  // preservando el mismo cap del findMany original.
+  const allEvents = await db.query.clinicalCaseEvent.findMany({
+    where: inArray(clinicalCaseEvent.clinicalCaseId, allowedIds),
+    orderBy: [desc(clinicalCaseEvent.createdAt)],
+  });
+  const eventsByCase = new Map<string, EventRow[]>();
+  for (const e of allEvents) {
+    const bucket = eventsByCase.get(e.clinicalCaseId);
+    if (bucket) {
+      if (bucket.length < PER_CASE_EVENT_CAP) bucket.push(e);
+    } else {
+      eventsByCase.set(e.clinicalCaseId, [e]);
+    }
+  }
+
   const byCaseId: Record<string, number> = {};
   let total = 0;
 
-  const chunkSize = 10;
-  for (let i = 0; i < allowedIds.length; i += chunkSize) {
-    const chunk = allowedIds.slice(i, i + chunkSize);
-    const counts = await Promise.all(
-      chunk.map(async (cid) => {
-        const meta = metaById.get(cid)!;
-        const uch = await unreadTotalForCase(identity, cid, meta, readMap.get(cid));
-        const bump = responsibilityAttentionBump({
-          viewerRole: identity.role as string,
-          viewerId: identity.id as string,
-          currentResponsibility: meta.currentResponsibility,
-          assignedTechnicianId: meta.assignedTechnicianId,
-          caseStatus: meta.status,
-        });
-        const n = uch + bump;
-        return { cid, n };
-      }),
+  for (const cid of allowedIds) {
+    const meta = metaById.get(cid)!;
+    const uch = countUnreadForCaseFromEvents(
+      identity,
+      meta,
+      readMap.get(cid),
+      eventsByCase.get(cid) ?? [],
+      myAssignmentByCase.get(cid) ?? null,
     );
-    for (const { cid, n } of counts) {
-      byCaseId[cid] = n;
-      total += n;
-    }
+    const bump = responsibilityAttentionBump({
+      viewerRole: identity.role as string,
+      viewerId: identity.id as string,
+      currentResponsibility: meta.currentResponsibility,
+      assignedTechnicianId: meta.assignedTechnicianId,
+      caseStatus: meta.status,
+    });
+    const n = uch + bump;
+    byCaseId[cid] = n;
+    total += n;
   }
 
   perfLog('getHubUnreadCounts.total', Date.now() - t0, { caseCount: unique.length, total });

@@ -10,6 +10,7 @@ import {
   Users,
   LayoutGrid,
   DollarSign,
+  ToggleLeft,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -100,6 +101,23 @@ const SECTIONS: { group: string; cards: SectionCard[] }[] = [
         chipText: 'text-error',
         chevron: 'group-hover:text-error',
         glow: 'bg-error-hl group-hover:bg-error-hl',
+      },
+    ],
+  },
+  {
+    group: 'Sistema',
+    cards: [
+      {
+        href: '/dashboard/admin/feature-flags',
+        title: 'Feature Flags',
+        desc: 'Activa o desactiva funciones del sistema en segundos, con historial de quién cambió qué y cuándo.',
+        icon: ToggleLeft,
+        accent: 'hover:bg-primary/5',
+        border: 'hover:border-primary/30',
+        chip: 'bg-primary-hl',
+        chipText: 'text-primary',
+        chevron: 'group-hover:text-primary',
+        glow: 'bg-primary/5 group-hover:bg-primary-hl',
       },
     ],
   },

@@ -2,13 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
 import { getUsersByRoleAction } from '@/lib/db/actions/user';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Search, X, ChevronDown, ShieldAlert, GraduationCap, Microscope, UserPlus, Inbox, ClipboardCheck, ShieldCheck } from 'lucide-react';
 
 export default function ImpersonationSelector({ onOpenChange, collapsed }: { onOpenChange?: (open: boolean) => void; collapsed?: boolean }) {
   const { user, userProfile, isSimulating, startSimulation, stopSimulation, simulatedProfile } = useAuth();
+  const { showError } = useToast();
   const [isOpen, setIsOpen] = useState(false);
+
+  const handleStartSimulation = async (userId: string) => {
+    try {
+      await startSimulation(userId);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'No se pudo iniciar la simulación');
+    }
+  };
 
   const setIsOpenWithCallback = (val: boolean) => {
     setIsOpen(val);
@@ -138,7 +148,7 @@ export default function ImpersonationSelector({ onOpenChange, collapsed }: { onO
                     {filteredUsers.map(u => (
                       <button
                         key={u.id}
-                        onClick={() => startSimulation(u.id)}
+                        onClick={() => handleStartSimulation(u.id)}
                         className="w-full flex items-center gap-3 p-3 rounded-2xl hover:bg-surface-off text-left transition-all group relative overflow-hidden"
                       >
                          <div className={`w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center text-muted group-hover:scale-110 transition-transform ${u.role === 'tecnico' ? 'group-hover:text-orange-400' : u.role === 'calidad' ? 'group-hover:text-amber-400' : 'group-hover:text-primary'}`}>

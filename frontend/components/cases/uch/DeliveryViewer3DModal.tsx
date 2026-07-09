@@ -11,6 +11,7 @@ import {
   deleteDeliveryAnnotationAction,
   createPolylineAnnotationAction,
   deletePolylineAnnotationAction,
+  updatePolylineAnnotationAction,
   listDeliveryAnnotationsAction,
 } from '@/lib/db/actions/annotations';
 import { useToast } from '@/context/ToastContext';
@@ -273,6 +274,15 @@ export default function DeliveryViewer3DModal({
     }
   };
 
+  const handlePolylineUpdate = async (id: string, points: Point3D[]) => {
+    const result = await updatePolylineAnnotationAction(id, points);
+    if (result.success) {
+      setAnnotations((prev) => prev.map((a) => (a.id === id ? { ...a, coordinates: points } : a)));
+    } else {
+      showError(result.error ?? 'Error al actualizar trazado');
+    }
+  };
+
   const handleApproveClick = async () => {
     if (approveStep === 'choose') {
       setApproveStep('confirm');
@@ -349,6 +359,7 @@ export default function DeliveryViewer3DModal({
               onAnnotate={canAnnotate ? handleAnnotate : undefined}
               onDeleteAnnotation={canAnnotate ? handleDeleteAnnotation : undefined}
               onPolylineComplete={canAnnotate ? handlePolylineComplete : undefined}
+              onPolylineUpdate={canAnnotate ? handlePolylineUpdate : undefined}
               onDeletePolyline={canAnnotate ? handleDeletePolyline : undefined}
               canAnnotate={canAnnotate}
               onToggleLayer={(subType) =>

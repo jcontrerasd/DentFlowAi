@@ -28,7 +28,7 @@ import { isCompletedOnTime } from '@/lib/cases/workDeadline';
 
 /** Surface server-only del flag del motor para Client Components (banner/UI admin). */
 export async function getLeagueEngineEnabledAction(): Promise<{ enabled: boolean }> {
-  return { enabled: isLeagueEngineEnabled() };
+  return { enabled: await isLeagueEngineEnabled() };
 }
 
 /**
@@ -158,7 +158,7 @@ export async function evaluateTechnicianAscentAction(
   config?: FauchardConfigRow,
   metrics?: LeagueMetrics
 ): Promise<{ success: boolean; data?: AscentResult; error?: string }> {
-  if (!isLeagueEngineEnabled()) return { success: true, data: { action: 'skipped' } };
+  if (!(await isLeagueEngineEnabled())) return { success: true, data: { action: 'skipped' } };
   try {
     const cfg = config ?? (await getActiveConfig());
 
@@ -259,7 +259,7 @@ export async function evaluateTechnicianDescentAction(
   config?: FauchardConfigRow,
   metrics?: LeagueMetrics
 ): Promise<{ success: boolean; data?: DescentResult; error?: string }> {
-  if (!isLeagueEngineEnabled()) return { success: true, data: { action: 'skipped' } };
+  if (!(await isLeagueEngineEnabled())) return { success: true, data: { action: 'skipped' } };
   try {
     const cfg = config ?? (await getActiveConfig());
 

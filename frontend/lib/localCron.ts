@@ -13,7 +13,7 @@
 import { processLeagueMaintenanceAction } from '@/lib/db/actions/leagueCron';
 import { processPendingPoolReevaluationAction } from '@/lib/db/actions/poolQueue';
 import { processPendingDataExportsAction, purgeExpiredDataExportsAction } from '@/lib/db/actions/dataExport';
-import { isAvailabilityEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
+import { isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
 
 declare global {
   var __localCronStarted: boolean | undefined;
@@ -38,7 +38,7 @@ export function startLocalCronScheduler(): void {
   };
 
   const runPoolReevaluation = async () => {
-    if (!isAvailabilityEnabled() || !isPoolPendienteEnabled()) return;
+    if (!(await isPoolPendienteEnabled())) return;
     try {
       const res = await processPendingPoolReevaluationAction();
       if (res.success && (res.assigned ?? 0) > 0) {

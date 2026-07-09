@@ -22,6 +22,8 @@ type Props = {
   isDeleting: boolean;
   isCloning: boolean;
   savingChanges: boolean;
+  /** Progreso de subida de archivos 0-100 mientras savingChanges es true; null si no aplica. */
+  savingProgress?: number | null;
   onEdit: () => void;
   onCancelEdit: () => void;
   onSave: () => void;
@@ -68,6 +70,7 @@ function ManagementIconButton({
   tooltip,
   enabled,
   loading,
+  progress,
   onClick,
   accent,
   active,
@@ -76,15 +79,17 @@ function ManagementIconButton({
   tooltip: string;
   enabled: boolean;
   loading?: boolean;
+  progress?: number | null;
   onClick: () => void;
   accent?: 'teal' | 'red' | 'slate';
   active?: boolean;
 }) {
   const disabled = !enabled || loading;
+  const showProgress = loading && typeof progress === 'number';
   return (
     <span
-      className={`inline-flex shrink-0${disabled ? ' cursor-default' : ''}`}
-      title={tooltip}
+      className={`relative inline-flex shrink-0${disabled ? ' cursor-default' : ''}`}
+      title={showProgress ? `${tooltip} — ${Math.round(progress as number)}%` : tooltip}
     >
       <button
         type="button"
@@ -93,7 +98,25 @@ function ManagementIconButton({
         onClick={onClick}
         className={`${iconBtnClass(enabled, accent, active)}${disabled ? ' pointer-events-none' : ''}`}
       >
-        {loading ? (
+        {showProgress ? (
+          <span className="relative inline-flex items-center justify-center w-6 h-6">
+            <svg className="w-6 h-6 -rotate-90" viewBox="0 0 24 24">
+              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2.5" className="opacity-20" />
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeDasharray={`${2 * Math.PI * 10}`}
+                strokeDashoffset={`${2 * Math.PI * 10 * (1 - (progress as number) / 100)}`}
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className="absolute text-[8px] font-black">{Math.round(progress as number)}</span>
+          </span>
+        ) : loading ? (
           <span className="inline-block w-4 h-4 border-2 border-current/20 border-t-current rounded-full animate-spin" />
         ) : (
           <Icon className="w-5 h-5" strokeWidth={2} />
@@ -114,6 +137,7 @@ export default function CaseDetailManagementBar({
   isDeleting,
   isCloning,
   savingChanges,
+  savingProgress,
   onEdit,
   onCancelEdit,
   onSave,
@@ -167,6 +191,7 @@ export default function CaseDetailManagementBar({
               tooltip="Guardar Cambios"
               enabled={actions.save.enabled}
               loading={savingChanges}
+              progress={savingProgress}
               onClick={onSave}
               accent="teal"
             />

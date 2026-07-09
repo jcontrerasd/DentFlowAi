@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cleanupAbandonedUnverifiedAccountsAction } from '@/lib/db/actions/user';
+import { requireCronAuth } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,11 +13,8 @@ export const dynamic = 'force-dynamic';
  * el onboarding — evita acumular usuarios huérfanos de inscripciones abandonadas.
  */
 async function handle(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = requireCronAuth(req);
+  if (authError) return authError;
 
   if (process.env.EMAIL_VERIFICATION_ENABLED !== 'true') {
     return NextResponse.json({ ok: true, skipped: true });

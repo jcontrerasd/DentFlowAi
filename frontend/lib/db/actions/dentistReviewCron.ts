@@ -2,7 +2,7 @@
 
 /**
  * Escalación del countdown de revisión del dentista (v5.0/v5.2, §4.2). Invocado por
- * el cron `/api/cron/process-availability` (cada hora). Inerte con el flag off.
+ * el cron `/api/cron/process-availability` (cada hora).
  *
  * Política explícita: **sin auto-acción** (no auto-aprueba ni auto-rechaza). Solo
  * notifica al dentista:
@@ -15,7 +15,6 @@
 import { db } from '@/lib/db';
 import { clinicalCase, fauchardConfig } from '@/lib/db/schema';
 import { and, eq, inArray, isNotNull } from 'drizzle-orm';
-import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
 import { CASE_STATUSES } from '@/lib/constants/dental';
 import { notifyUser } from '../../services/notifications';
 import type { ActionResult } from '@/lib/types/actions';
@@ -27,10 +26,6 @@ export type DentistReviewEscalationResult = {
 };
 
 export async function processDentistReviewDeadlinesAction(): Promise<ActionResult<DentistReviewEscalationResult>> {
-  if (!isAvailabilityEnabled()) {
-    return { success: true, remindersSent: 0, overdueNotified: 0, skipped: true };
-  }
-
   try {
     const [active] = await db
       .select({ hours: fauchardConfig.tDentistReviewHours })

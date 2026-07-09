@@ -15,6 +15,7 @@ const KEY_LABELS: Record<DraftKey, string> = {
   wQualityDays: 'Ventana histórica (días)', dBonusMaxDays: 'Bono máx (días)', loadReferenceMin: 'Carga de Trabajo (Min)',
   tCooldownMinutes: 'Cooldown (min)', dInactivityDays: 'Inactividad (días)',
   maxAssignmentAttempts: 'Intentos máx. asignación', tQuoteMinutes: 'Tiempo respuesta asignación (min)',
+  qualityReservedCaseWeight: 'Peso Casos Reservados (Calidad)',
   tDentistReviewHours: 'Revisión dentista (h)', tNoEligiblePoolHours: 'Espera pool (h)', maxPoolCycles: 'Ciclos de espera', replacementCutoffMinutes: 'Margen reemplazo (min)',
   noResponseWindowDays: 'Ventana no-resp (días)', noResponseRehabilitationDays: 'Rehabilitación (días)',
   level1Threshold: 'Umbral Nivel 1', level2Threshold: 'Umbral Nivel 2', level3Threshold: 'Umbral Nivel 3',

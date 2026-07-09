@@ -10,7 +10,6 @@
 import { db } from '@/lib/db';
 import { caseAssignment, clinicalCase, fauchardConfig } from '@/lib/db/schema';
 import { eq, and, inArray, max } from 'drizzle-orm';
-import { isAvailabilityEnabled } from '@/lib/constants/availabilityFlags';
 import { isQualityGateEnabled } from '@/lib/constants/qualityFlags';
 
 /** Etapa 1 — plazo para que invitados envíen cotización (`enEvaluacion`). */
@@ -93,12 +92,10 @@ export function getCaseProposalDeadlineAt(
  * Etapa 3 (v5.0) — plazo del dentista para revisar una entrega del técnico
  * (`enRevision`). Wall-clock: `last_revision_submitted_at + tDentistReviewHours`.
  * Cada nueva entrega reinicia `last_revision_submitted_at` (§4.2), así que el
- * countdown se recalcula solo. Devuelve null si el modelo está apagado o no hay
- * entrega registrada. Self-contained: lee la config anclada al caso o la activa.
+ * countdown se recalcula solo. Devuelve null si no hay entrega registrada.
+ * Self-contained: lee la config anclada al caso o la activa.
  */
 export async function getCaseReviewDeadlineAt(caseId: string): Promise<Date | null> {
-  if (!isAvailabilityEnabled()) return null;
-
   const [row] = await db
     .select({
       submittedAt: clinicalCase.lastRevisionSubmittedAt,
@@ -132,7 +129,7 @@ export async function getCaseReviewDeadlineAt(caseId: string): Promise<Date | nu
  * si el flag de Calidad está off o no hay entrega registrada. Lee config anclada o activa.
  */
 export async function getCaseQualityReviewDeadlineAt(caseId: string): Promise<Date | null> {
-  if (!isQualityGateEnabled()) return null;
+  if (!(await isQualityGateEnabled())) return null;
 
   const [row] = await db
     .select({

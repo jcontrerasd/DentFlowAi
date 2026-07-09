@@ -4,17 +4,15 @@
  * Disponibilidad declarada del técnico (v5.0) — modelo de 3 niveles con regla
  * de elegibilidad AND triple. Ver Doc Servicio Orquestado/flujo_tiempos.md §1.
  *
- * Todo el sistema vive detrás de `AVAILABILITY_MODEL_ENABLED`; estas actions son
- * la fuente de verdad del estado, pero Fauchard solo las consulta cuando el flag
- * está on (ver fauchard.ts).
+ * Estas actions son la fuente de verdad del estado de disponibilidad;
+ * Fauchard las consulta en cada corrida (ver fauchard.ts / assignment.ts).
  */
 
 import { db } from '@/lib/db';
 import { technicianAvailability, technicianSkill, user, caseAssignment } from '@/lib/db/schema';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 import { WORK_CATEGORIES, type WorkCategory } from '@/lib/constants/dental';
-import { isAvailabilityUiTecnicoEnabled } from '@/lib/constants/availabilityFlags';
 import { computeLevelForTechnicianAction, type TechnicianLevel } from './noResponseEvents';
 import type { ActionResult } from '@/lib/types/actions';
 import { perfLog, perfStart } from '@/lib/perfLog';
@@ -190,9 +188,7 @@ export async function updateAvailabilityLevelAction(
 
     // Sincronización con el campo legacy `user.is_available`: el switch global v5.0 y
     // el toggle legacy del perfil deben reflejar el mismo estado. Mantenerlos espejados
-    // evita que diverjan entre las superficies (badge del header / panel / perfil) y que
-    // Fauchard lea estados contradictorios según el flag activo (`AVAILABILITY_MODEL_ENABLED`
-    // lee levelGlobal; con el flag off el filtro legacy lee `user.is_available`).
+    // evita que diverjan entre las superficies (badge del header / panel / perfil).
     if (target.kind === 'global') {
       await db
         .update(user)
@@ -224,7 +220,7 @@ export async function updateAvailabilityLevelAction(
 
 /**
  * Estado de disponibilidad del técnico autenticado para el badge / panel.
- * `enabled` refleja el flag `AVAILABILITY_UI_TECNICO_ENABLED` + rol técnico.
+ * `enabled` refleja el rol técnico (el modelo de disponibilidad es incondicional).
  */
 export async function getMyAvailabilityStatusAction(): Promise<ActionResult<{
   enabled: boolean;
@@ -236,7 +232,7 @@ export async function getMyAvailabilityStatusAction(): Promise<ActionResult<{
   const emptyLevel: TechnicianLevel = { level: 0, count: 0, nextExitDate: null };
   if (!identity?.id) return { success: false, error: 'No autenticado' };
 
-  const enabled = isAvailabilityUiTecnicoEnabled() && identity.role === 'tecnico';
+  const enabled = identity.role === 'tecnico';
   if (!enabled) {
     return { success: true, enabled: false, availability: null, level: emptyLevel, pendingCount: 0 };
   }
@@ -274,5 +270,40 @@ export async function computeEligibleAction(
   const eligible = Boolean(row.levelGlobal && row.levelCad && row[catKey]);
   perfLog('computeEligible.query', Date.now() - t0, { userId, categoria, eligible });
   return eligible;
+}
+
+/**
+ * Versión en lote de `computeEligibleAction` — una sola query para N técnicos.
+ * Evalúa el AND triple (`levelGlobal ∧ levelCad ∧ cat<cat><cap>`) en memoria.
+ *
+ * Devuelve el set de técnicos elegibles (de los que ya tienen fila) y la lista de
+ * los que carecen de fila (`missing`), para que el caller aplique el self-heal
+ * `ensureTechnicianAvailabilityAction` 1-a-1 solo sobre ellos (caso raro) y preserve
+ * la paridad exacta con el filtro por-técnico.
+ */
+export async function computeEligibleBatch(
+  userIds: string[],
+  categoria: WorkCategory,
+  capacidad: Capacity,
+): Promise<{ eligible: Set<string>; missing: string[] }> {
+  const eligible = new Set<string>();
+  const missing: string[] = [];
+  if (userIds.length === 0) return { eligible, missing };
+
+  const t0 = perfStart();
+  const rows = await db
+    .select()
+    .from(technicianAvailability)
+    .where(inArray(technicianAvailability.userId, userIds));
+  const catKey = categorySetKey(categoria, capacidad);
+  const byId = new Map(rows.map((r) => [r.userId, r]));
+
+  for (const id of userIds) {
+    const row = byId.get(id);
+    if (!row) { missing.push(id); continue; }
+    if (row.levelGlobal && row.levelCad && row[catKey]) eligible.add(id);
+  }
+  perfLog('computeEligible.batch', Date.now() - t0, { candidates: userIds.length, eligible: eligible.size, missing: missing.length });
+  return { eligible, missing };
 }
 

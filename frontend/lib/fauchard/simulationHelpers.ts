@@ -22,7 +22,6 @@ type FunnelMetaContext = {
   workTypeLabel: string;
   leagueLabel: string;
   minSkill: number;
-  availabilityEnabled: boolean;
 };
 
 function buildFunnelMetaContext(scenario: SimulationScenario): FunnelMetaContext {
@@ -33,7 +32,6 @@ function buildFunnelMetaContext(scenario: SimulationScenario): FunnelMetaContext
     workTypeLabel: WORK_TYPE_LABELS[scenario.workType] ?? scenario.workType,
     leagueLabel,
     minSkill: MIN_SKILL_FOR_CATEGORY[leagueLabel] ?? 1,
-    availabilityEnabled: false,
   };
 }
 
@@ -63,9 +61,7 @@ const FUNNEL_STAGE_FIX_HINTS: Record<FunnelStageId, (ctx: FunnelMetaContext) => 
   insufficient_skill: (ctx) =>
     `En perfil técnico → Matriz de skills, declara «${ctx.workTypeLabel}» con designLevel ≥ ${ctx.minSkill}.`,
   availability_filter: (ctx) =>
-    ctx.availabilityEnabled
-      ? `Activa switch global, CAD y el toggle de «${ctx.categoryLabel}» en Perfil → Disponibilidad.`
-      : 'Etapa inactiva: AVAILABILITY_MODEL_ENABLED está apagado.',
+    `Activa switch global, CAD y el toggle de «${ctx.categoryLabel}» en Perfil → Disponibilidad.`,
   eligible: () => 'Técnicos que pasaron todos los filtros del motor.',
 };
 
@@ -84,9 +80,8 @@ const FUNNEL_STAGE_REASONS: Partial<Record<FunnelStageId, ExclusionReason>> = {
 export function getFunnelStageMeta(
   id: FunnelStageId,
   scenario: SimulationScenario,
-  availabilityEnabled = false,
 ): { label: string; fixHint: string; reason?: ExclusionReason } {
-  const ctx = { ...buildFunnelMetaContext(scenario), availabilityEnabled };
+  const ctx = buildFunnelMetaContext(scenario);
   return {
     label: FUNNEL_STAGE_LABELS[id](ctx),
     fixHint: FUNNEL_STAGE_FIX_HINTS[id](ctx),
@@ -186,7 +181,7 @@ function buildFailedCriterion(
         criterionName,
         count,
         whatFailed: `${techWord} de ${universe} no tiene activa la disponibilidad CAD en la categoría «${labels.categoryLabel}».`,
-        howToFix: `En Perfil → Disponibilidad, activa el switch global, CAD y el toggle de «${labels.categoryLabel}» (solo aplica si AVAILABILITY_MODEL_ENABLED está activo).`,
+        howToFix: `En Perfil → Disponibilidad, activa el switch global, CAD y el toggle de «${labels.categoryLabel}».`,
       };
     case 'insufficient_skill':
       return {

@@ -1,42 +1,21 @@
 /**
- * Feature flags del modelo de disponibilidad del técnico (v5.0).
+ * Feature flags del motor de disponibilidad / rechazo individual / ligas.
  *
- * Gobiernan el rollout incremental del sistema descrito en
- * [Doc Servicio Orquestado/flujo_tiempos.md](../../../Doc Servicio Orquestado/flujo_tiempos.md)
- * y [Doc Servicio Orquestado/plan_flujo_tiempos.md](../../../Doc Servicio Orquestado/plan_flujo_tiempos.md).
- *
- * Patrón: cada helper lee `process.env.X === 'true'`. Default: `false` (apagado).
- *
- * Cambiar un flag requiere reiniciar el proceso (no es hot reload).
+ * v5.28: la fuente de verdad es la tabla `feature_flag` (editable en
+ * /dashboard/admin/feature-flags, efecto en ≤30 s sin redeploy); `process.env`
+ * queda como seed inicial y fallback. Ver `lib/featureFlags.ts`.
  */
 
-function flag(name: string): boolean {
-  return process.env[name] === 'true';
-}
-
-/** Master switch — habilita filtro AND triple en Fauchard, score con αN y cola pendiente_pool. */
-export function isAvailabilityEnabled(): boolean {
-  return flag('AVAILABILITY_MODEL_ENABLED');
-}
-
-/** Muestra badge global en header y panel de disponibilidad al técnico. */
-export function isAvailabilityUiTecnicoEnabled(): boolean {
-  return flag('AVAILABILITY_UI_TECNICO_ENABLED');
-}
-
-/** Habilita panel admin Fauchard "Plazos y sanciones" + dashboard observabilidad. */
-export function isAvailabilityAdminPanelEnabled(): boolean {
-  return flag('AVAILABILITY_ADMIN_PANEL_ENABLED');
-}
+import { getFlag } from '@/lib/featureFlags';
 
 /** Habilita acción "Rechazar invitación" en UCH del técnico. */
-export function isRejectionIndividualEnabled(): boolean {
-  return flag('REJECTION_INDIVIDUAL_ENABLED');
+export function isRejectionIndividualEnabled(): Promise<boolean> {
+  return getFlag('REJECTION_INDIVIDUAL_ENABLED');
 }
 
 /** Activa cola pendiente_pool cuando Fauchard encuentra 0 elegibles. */
-export function isPoolPendienteEnabled(): boolean {
-  return flag('POOL_PENDIENTE_ENABLED');
+export function isPoolPendienteEnabled(): Promise<boolean> {
+  return getFlag('POOL_PENDIENTE_ENABLED');
 }
 
 /**
@@ -46,6 +25,6 @@ export function isPoolPendienteEnabled(): boolean {
  * gating de selección por liga se comporta como hoy.
  * Ver [Doc/DentFlowAI_Diseño_Funcional_Liga.md](../../../Doc/DentFlowAI_Diseño_Funcional_Liga.md).
  */
-export function isLeagueEngineEnabled(): boolean {
-  return flag('LEAGUE_ENGINE_ENABLED');
+export function isLeagueEngineEnabled(): Promise<boolean> {
+  return getFlag('LEAGUE_ENGINE_ENABLED');
 }

@@ -20,13 +20,11 @@ type Space = 'parametros' | 'categorias' | 'historial' | 'versiones';
 
 export function TabClient({
   config,
-  showAvailabilityPanel = false,
   versions = [],
   initialKpisCache = {},
   isSystemAdmin = false,
 }: {
   config: any;
-  showAvailabilityPanel?: boolean;
   versions?: ConfigVersionMeta[];
   initialKpisCache?: Record<string, ConfigVersionKpis>;
   isSystemAdmin?: boolean;
@@ -109,11 +107,9 @@ export function TabClient({
                   <div className="bg-surface/20 border border-divider rounded-2xl p-4 md:p-5 shadow-inner">
                     <FauchardFiltersPanel initialFocusKey={focusPanel === 'filters' ? focusKey : null} />
                   </div>
-                  {showAvailabilityPanel && (
-                    <div className="bg-surface/20 border border-divider rounded-2xl p-4 md:p-5 shadow-inner">
-                      <PlazosYSancionesPanel initialFocusKey={focusPanel === 'plazos' ? focusKey : null} />
-                    </div>
-                  )}
+                  <div className="bg-surface/20 border border-divider rounded-2xl p-4 md:p-5 shadow-inner">
+                    <PlazosYSancionesPanel initialFocusKey={focusPanel === 'plazos' ? focusKey : null} />
+                  </div>
                 </div>
 
                 <aside className="w-full xl:w-[min(360px,32%)] xl:shrink-0 xl:sticky xl:top-3 self-stretch xl:self-start">

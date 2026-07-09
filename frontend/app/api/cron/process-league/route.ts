@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processLeagueMaintenanceAction } from '@/lib/db/actions/leagueCron';
+import { requireCronAuth } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,11 +13,8 @@ export const dynamic = 'force-dynamic';
  * Inerte si `LEAGUE_ENGINE_ENABLED` está apagado (la action retorna skipped).
  */
 async function handle(req: NextRequest) {
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const authError = requireCronAuth(req);
+  if (authError) return authError;
 
   const res = await processLeagueMaintenanceAction();
   if (!res.success) {

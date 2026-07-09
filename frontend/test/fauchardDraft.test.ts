@@ -17,6 +17,7 @@ function baseDraft(overrides: Partial<Draft> = {}): Draft {
     dInactivityDays: 14,
     maxAssignmentAttempts: 3,
     tQuoteMinutes: 30,
+    qualityReservedCaseWeight: 0.4,
     tDentistReviewHours: 48,
     tNoEligiblePoolHours: 24,
     maxPoolCycles: 3,

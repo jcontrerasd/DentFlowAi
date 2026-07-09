@@ -33,11 +33,8 @@ async function getRow() {
 }
 
 describe.runIf(runIntegration)('countdown revisión dentista (H2)', () => {
-  let prevFlag: string | undefined;
 
   beforeAll(async () => {
-    prevFlag = process.env.AVAILABILITY_MODEL_ENABLED;
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
     await ensureInfrastructure(db);
     // Asegura tDentistReviewHours=48 en la config activa para aritmética determinista.
     await db.execute(sql`UPDATE fauchard_config SET t_dentist_review_hours=48 WHERE is_active=true`);
@@ -52,7 +49,6 @@ describe.runIf(runIntegration)('countdown revisión dentista (H2)', () => {
     await db.execute(sql`DELETE FROM clinical_case WHERE id=${CASE}`);
     await db.execute(sql`DELETE FROM "user" WHERE id=${DOCTOR}`);
     await db.execute(sql`DELETE FROM organization WHERE id=${ORG}`);
-    if (prevFlag === undefined) delete process.env.AVAILABILITY_MODEL_ENABLED; else process.env.AVAILABILITY_MODEL_ENABLED = prevFlag;
   });
 
   it('getCaseReviewDeadlineAt = última entrega + tDentistReviewHours', async () => {
@@ -102,12 +98,4 @@ describe.runIf(runIntegration)('countdown revisión dentista (H2)', () => {
     expect(row.review_overdue_notified_at).toBeNull();
   });
 
-  it('inerte con el flag apagado', async () => {
-    process.env.AVAILABILITY_MODEL_ENABLED = 'false';
-    expect(await getCaseReviewDeadlineAt(CASE)).toBeNull();
-    const r = await processDentistReviewDeadlinesAction();
-    expect(r.success).toBe(true);
-    if (r.success) expect(r.skipped).toBe(true);
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
-  });
 });

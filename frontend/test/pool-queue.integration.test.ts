@@ -45,14 +45,11 @@ async function seedPooled(startedHoursAgo: number, cycle: number, checkinSent: b
 }
 
 describe.runIf(runIntegration)('cola pendiente_pool (auditoría Fase 2/6)', () => {
-  let prevModel: string | undefined;
   let prevPool: string | undefined;
   let urgencyId: string;
 
   beforeAll(async () => {
-    prevModel = process.env.AVAILABILITY_MODEL_ENABLED;
     prevPool = process.env.POOL_PENDIENTE_ENABLED;
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
     process.env.POOL_PENDIENTE_ENABLED = 'true';
     await ensureInfrastructure(db);
     await db.execute(sql`INSERT INTO organization (id,name,rut,type,is_active) VALUES (${ORG},'Pool Org','rut-pool','clinica',true) ON CONFLICT (id) DO NOTHING`);
@@ -69,7 +66,6 @@ describe.runIf(runIntegration)('cola pendiente_pool (auditoría Fase 2/6)', () =
     await db.execute(sql`DELETE FROM clinical_case WHERE id=${CASE}`);
     await db.execute(sql`DELETE FROM "user" WHERE id=${DOCTOR}`);
     await db.execute(sql`DELETE FROM organization WHERE id=${ORG}`);
-    if (prevModel === undefined) delete process.env.AVAILABILITY_MODEL_ENABLED; else process.env.AVAILABILITY_MODEL_ENABLED = prevModel;
     if (prevPool === undefined) delete process.env.POOL_PENDIENTE_ENABLED; else process.env.POOL_PENDIENTE_ENABLED = prevPool;
   });
 

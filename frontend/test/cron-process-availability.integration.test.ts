@@ -33,11 +33,8 @@ async function seed(id: string, daysSinceLogin: number) {
 }
 
 describe.runIf(runIntegration)('process-availability — mantenimiento (Fase 6)', () => {
-  let prevFlag: string | undefined;
 
   beforeAll(async () => {
-    prevFlag = process.env.AVAILABILITY_MODEL_ENABLED;
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
     await ensureInfrastructure(db);
     await seed(OLD, 40);
     await seed(MID, 12);
@@ -48,8 +45,6 @@ describe.runIf(runIntegration)('process-availability — mantenimiento (Fase 6)'
     await db.execute(sql`DELETE FROM technician_availability WHERE user_id IN (${OLD}, ${MID}, ${FRESH})`);
     await db.execute(sql`DELETE FROM "user" WHERE id IN (${OLD}, ${MID}, ${FRESH})`);
     await db.execute(sql`DELETE FROM organization WHERE id = ${ORG}`);
-    if (prevFlag === undefined) delete process.env.AVAILABILITY_MODEL_ENABLED;
-    else process.env.AVAILABILITY_MODEL_ENABLED = prevFlag;
   });
 
   it('auto-OFF preventivo apaga el switch del técnico muy inactivo', async () => {
@@ -76,11 +71,4 @@ describe.runIf(runIntegration)('process-availability — mantenimiento (Fase 6)'
     expect(new Date(mid2.inactivity_reminder_sent_at).getTime()).toBe(new Date(before).getTime());
   });
 
-  it('inerte con el flag apagado', async () => {
-    process.env.AVAILABILITY_MODEL_ENABLED = 'false';
-    const res = await processAvailabilityMaintenanceAction();
-    expect(res.success).toBe(true);
-    if (res.success) expect(res.skipped).toBe(true);
-    process.env.AVAILABILITY_MODEL_ENABLED = 'true';
-  });
 });

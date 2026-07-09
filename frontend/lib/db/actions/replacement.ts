@@ -52,7 +52,7 @@ export async function tryReplaceAfterRejectAction(
 
     if (!next) {
       const reason = prior.length >= maxAttempts ? 'max_attempts' : 'no_candidate';
-      if (isPoolPendienteEnabled()) {
+      if (await isPoolPendienteEnabled()) {
         const [cCase] = await db.select({ internalStatus: clinicalCase.internalStatus })
           .from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
         if (cCase && cCase.internalStatus !== POOL_INTERNAL_STATUS) {
@@ -60,8 +60,12 @@ export async function tryReplaceAfterRejectAction(
         }
         return { success: true, replaced: false, reason, pooled: true };
       }
+      // El fallo vive en `status` (Republicar, republishCaseAction y el monitor leen ese campo).
       await db.update(clinicalCase)
-        .set({ internalStatus: INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO })
+        .set({
+          status: INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO,
+          internalStatus: INTERNAL_CASE_STATUSES.SIN_ASIGNACION_FALLO,
+        })
         .where(eq(clinicalCase.id, caseId));
       return { success: true, replaced: false, reason };
     }

@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createInflightDedup } from '@/lib/inflightDedup';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
@@ -21,6 +22,7 @@ import {
 } from 'lucide-react';
 import { creationInstructionsText } from '@/lib/cases/instructions';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
+import { uploadWithProgress } from '@/lib/uploadWithProgress';
 import {
   getCaseDetails,
   updateClinicalCaseAction,
@@ -47,13 +49,14 @@ import CheckInDentistaModal from '@/components/cases/CheckInDentistaModal';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
 import Link from 'next/link';
+import { SCAN_SLOTS } from '@/components/cases/CaseCreationWizard';
 import { startWorkAction } from '@/lib/db/actions/proposal';
 import {
   certifyQualityAction,
   requestQualityRevisionAction,
   sendToDentistAction,
 } from '@/lib/db/actions/quality';
-import { createAnnotationAction, deleteAnnotationAction, createPolylineAnnotationAction, deletePolylineAnnotationAction } from '@/lib/db/actions/annotations';
+import { createAnnotationAction, deleteAnnotationAction, createPolylineAnnotationAction, deletePolylineAnnotationAction, updatePolylineAnnotationAction } from '@/lib/db/actions/annotations';
 import { registerFileAction, logFileDownloadAction, deleteCaseFileAction } from '@/lib/db/actions/files';
 import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/context/ToastContext';
@@ -288,6 +291,24 @@ function CaseDetailPageContent() {
     setClinicalCase((prev: any) => mergeClinicalCaseUpdate(prev, rest));
   }, []);
 
+  // Refetch centralizado del caso tras mutaciones. Deduplica por id: si ya hay un
+  // refresh in-flight, los callers concurrentes comparten esa misma promesa.
+  // Ventana conocida: un refresh que arrancó antes del commit de otra mutación
+  // podría ingerir estado previo a ella; cada caller espera su mutación antes de
+  // refrescar, así que en la práctica la ventana es de decenas de ms.
+  const refreshCaseDedupRef = useRef(createInflightDedup<any | null>());
+  const refreshCase = useCallback(async (): Promise<any | null> => {
+    if (!id) return null;
+    return refreshCaseDedupRef.current(String(id), async () => {
+      const c = await getCaseDetails(id as string);
+      if (c && !(c as any)._error) {
+        ingestCasePayloadFromServer(c);
+        return c;
+      }
+      return null;
+    });
+  }, [id, ingestCasePayloadFromServer]);
+
   useEffect(() => {
     setServerClockAnchor(null);
   }, [id]);
@@ -359,6 +380,8 @@ function CaseDetailPageContent() {
   const [stagedAnnotationRemovals, setStagedAnnotationRemovals] = useState<Set<string>>(new Set());
   const [stagedPolylineAdds, setStagedPolylineAdds] = useState<StagedPolylineAdd[]>([]);
   const [stagedPolylineRemovals, setStagedPolylineRemovals] = useState<Set<string>>(new Set());
+  // Ediciones de nodos de trazados ya persistidos (id → puntos nuevos); staged igual que adds/removals.
+  const [stagedPolylineUpdates, setStagedPolylineUpdates] = useState<Map<string, Array<{ x: number; y: number; z: number }>>>(new Map());
   const [newAnnotationText, setNewAnnotationText] = useState('');
   const [savingAnnotation, setSavingAnnotation] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -395,6 +418,7 @@ function CaseDetailPageContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any | null>(null);
   const [savingChanges, setSavingChanges] = useState(false);
+  const [savingProgress, setSavingProgress] = useState<number | null>(null);
   const [draftListPriceSale, setDraftListPriceSale] = useState<number | null>(null);
   const [draftListPriceChecked, setDraftListPriceChecked] = useState(false);
 
@@ -641,8 +665,7 @@ function CaseDetailPageContent() {
         showSuccessToastMessage(data.approved ? "Solicitud aprobada" : "Solicitud rechazada");
       }
       // Refrescar datos
-      const updatedCase = await getCaseDetails(id as string);
-      if (updatedCase && !(updatedCase as any)._error) ingestCasePayloadFromServer(updatedCase);
+      await refreshCase();
       await loadCaseEvents();
       dispatchDashboardMetricsRefresh();
       return true;
@@ -1003,7 +1026,23 @@ function CaseDetailPageContent() {
       setStagedPolylineAdds(prev => prev.filter(s => s.tempId !== id));
     } else {
       setStagedPolylineRemovals(prev => new Set([...prev, id]));
+      setStagedPolylineUpdates(prev => {
+        if (!prev.has(id)) return prev;
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
     }
+  };
+
+  const handlePolylineUpdate = (id: string, points: Array<{ x: number; y: number; z: number }>) => {
+    if (stagedPolylineAdds.some(s => s.tempId === id)) {
+      // Trazado aún no persistido: mutar el staged add directamente.
+      setStagedPolylineAdds(prev => prev.map(s => (s.tempId === id ? { ...s, points } : s)));
+    } else {
+      setStagedPolylineUpdates(prev => new Map(prev).set(id, points));
+    }
+    showSuccessToastMessage('Edición pendiente — usa Grabar para confirmar');
   };
 
   const handleSaveChanges = async (): Promise<boolean> => {
@@ -1022,10 +1061,19 @@ function CaseDetailPageContent() {
     }
 
     setSavingChanges(true);
+    setSavingProgress(stagedFileAdds.length > 0 ? 0 : null);
     try {
       const uploaderId = user.id || (user as any).uid;
 
       // 1) Subir archivos staged a GCS y registrar en DB.
+      const totalStagedBytes = stagedFileAdds.reduce((sum, s) => sum + s.size, 0);
+      const loadedByStagedId: Record<string, number> = {};
+      const reportStagedProgress = () => {
+        if (totalStagedBytes <= 0) return;
+        const loaded = Object.values(loadedByStagedId).reduce((sum, v) => sum + v, 0);
+        setSavingProgress(Math.min(99, (loaded / totalStagedBytes) * 100));
+      };
+
       for (const staged of stagedFileAdds) {
         const folder = staged.category === 'design_upload' ? 'design' : staged.category === 'complementary' ? 'complementary' : 'scans';
         const gcsPath = `organizations/${clinicalCase.organizationId}/cases/${id}/${folder}/${Date.now()}_${staged.filename}`;
@@ -1038,20 +1086,25 @@ function CaseDetailPageContent() {
         );
         if (!uploadUrl) throw new Error(`No se pudo obtener URL de subida para ${staged.filename}`);
 
-        const res = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: uploadBody,
-          headers: {
+        await uploadWithProgress(
+          uploadUrl,
+          uploadBody,
+          {
             'Content-Type': staged.mimeType,
             ...(contentEncoding ? { 'Content-Encoding': contentEncoding } : {}),
           },
+          (loadedBytes) => {
+            loadedByStagedId[staged.tempId] = Math.min(loadedBytes, staged.size);
+            reportStagedProgress();
+          },
+        ).catch(() => {
+          throw new Error(`Fallo en la subida de ${staged.filename}`);
         });
-        if (!res.ok) throw new Error(`Fallo en la subida de ${staged.filename}`);
+        loadedByStagedId[staged.tempId] = staged.size;
+        reportStagedProgress();
 
         await registerFileAction({
           caseId: id as string,
-          organizationId: clinicalCase.organizationId,
-          uploaderId,
           filename: staged.filename,
           category: staged.category,
           subType: staged.subType,
@@ -1060,6 +1113,7 @@ function CaseDetailPageContent() {
           gcsPath,
         });
       }
+      if (stagedFileAdds.length > 0) setSavingProgress(100);
 
       // 2) Borrar archivos marcados (cascada implícita de anotaciones).
       const annotationIdsKilledByCascade = new Set<string>();
@@ -1096,10 +1150,17 @@ function CaseDetailPageContent() {
         });
       }
 
-      // 4b) Borrar y crear polilíneas staged.
+      // 4b) Borrar, actualizar y crear polilíneas staged.
       for (const polyId of stagedPolylineRemovals) {
         if (annotationIdsKilledByCascade.has(polyId)) continue;
         await deletePolylineAnnotationAction(polyId);
+      }
+      for (const [polyId, points] of stagedPolylineUpdates) {
+        if (annotationIdsKilledByCascade.has(polyId) || stagedPolylineRemovals.has(polyId)) continue;
+        const updateResult = await updatePolylineAnnotationAction(polyId, points);
+        if (!updateResult.success) {
+          throw new Error(updateResult.error || 'No se pudo actualizar un trazado');
+        }
       }
       for (const staged of stagedPolylineAdds) {
         await createPolylineAnnotationAction({ caseId: id as string, points: staged.points });
@@ -1117,9 +1178,8 @@ function CaseDetailPageContent() {
       }
 
       // 6) Refetch + regenerar signed URLs (visor 3D / descargas) + revoke previews + limpiar staging.
-      const refreshed = await getCaseDetails(id as string);
-      if (refreshed && !(refreshed as any)._error) {
-        ingestCasePayloadFromServer(refreshed);
+      const refreshed = await refreshCase();
+      if (refreshed) {
         // Sincronizar editForm con los valores del servidor (solo si estaba activo).
         if (editForm) {
           setEditForm({
@@ -1171,6 +1231,7 @@ function CaseDetailPageContent() {
       setStagedAnnotationRemovals(new Set());
       setStagedPolylineAdds([]);
       setStagedPolylineRemovals(new Set());
+      setStagedPolylineUpdates(new Map());
 
       if (clinicalCase.status !== 'borrador') {
         setIsEditing(false);
@@ -1183,6 +1244,7 @@ function CaseDetailPageContent() {
       return false;
     } finally {
       setSavingChanges(false);
+      setSavingProgress(null);
     }
   };
 
@@ -1211,6 +1273,7 @@ function CaseDetailPageContent() {
     setStagedAnnotationRemovals(new Set());
     setStagedPolylineAdds([]);
     setStagedPolylineRemovals(new Set());
+    setStagedPolylineUpdates(new Map());
     setSelectedCoords(null);
     setNewAnnotationText('');
     setIsEditing(false);
@@ -1232,9 +1295,8 @@ function CaseDetailPageContent() {
         }
         return;
       }
-      const updatedCase = await getCaseDetails(id as string);
-      if (updatedCase && !(updatedCase as any)._error) ingestCasePayloadFromServer(updatedCase);
-      else setClinicalCase((prev: any) => ({ ...prev, status: 'enEvaluacion', publishedAt: new Date() }));
+      const updatedCase = await refreshCase();
+      if (!updatedCase) setClinicalCase((prev: any) => ({ ...prev, status: 'enEvaluacion', publishedAt: new Date() }));
       const inPool = (updatedCase as { internalStatus?: string } | null)?.internalStatus === POOL_INTERNAL_STATUS;
       const assigned = (updatedCase as { internalStatus?: string } | null)?.internalStatus === INTERNAL_CASE_STATUSES.ASIGNACION_PENDIENTE;
       showSuccessToastMessage(
@@ -1327,7 +1389,7 @@ function CaseDetailPageContent() {
     }
   };
 
-  const MAX_CLINICAL_FILES = 3;
+  const MAX_CLINICAL_FILES = 5;
   const ALLOWED_CLINICAL_EXTS = ['stl', 'ply', 'obj', 'jpg', 'jpeg', 'png'];
 
   const MAX_COMPLEMENTARY_FILES = 10;
@@ -1336,7 +1398,6 @@ function CaseDetailPageContent() {
 
   const uploadComplementaryFiles = async (files: File[], subType: 'general' | 'revision_reference' | 'quality_reference') => {
     if (!clinicalCase || !user) return;
-    const uploaderId = (user as any).id || (user as any).uid;
     const folder = subType === 'general' ? 'complementary'
       : subType === 'revision_reference' ? 'revision-attachments'
       : 'quality-attachments';
@@ -1351,8 +1412,6 @@ function CaseDetailPageContent() {
       if (!res.ok) throw new Error(`Fallo en la subida de ${file.name}`);
       await registerFileAction({
         caseId: id as string,
-        organizationId: clinicalCase.organizationId,
-        uploaderId,
         filename: file.name,
         category: 'complementary',
         subType,
@@ -1768,9 +1827,9 @@ function CaseDetailPageContent() {
         .map((f: any) => f.subType),
       ...stagedFileAdds.map(s => s.subType),
     ]);
-    const slot = (['superior', 'inferior', 'bite'] as const).find(s => !usedSubTypes.has(s));
+    const slot = SCAN_SLOTS.find(s => !usedSubTypes.has(s));
     if (!slot) {
-      showErrorToast('No hay slots disponibles (superior/inferior/bite ocupados).');
+      showErrorToast('No hay slots disponibles (superior/inferior/bite/lateralDerecho/lateralIzquierdo ocupados).');
       return;
     }
     const subType: string = slot;
@@ -1868,10 +1927,13 @@ function CaseDetailPageContent() {
   const displayedPolylines = useMemo(() => {
     const existing = (localAnnotations ?? [])
       .filter((a: any) => Array.isArray(a.coordinates) && !stagedPolylineRemovals.has(a.id))
-      .map((a: any) => ({ id: a.id, points: a.coordinates as Array<{ x: number; y: number; z: number }> }));
+      .map((a: any) => ({
+        id: a.id,
+        points: stagedPolylineUpdates.get(a.id) ?? (a.coordinates as Array<{ x: number; y: number; z: number }>),
+      }));
     const added = stagedPolylineAdds.map(s => ({ id: s.tempId, points: s.points }));
     return [...added, ...existing];
-  }, [localAnnotations, stagedPolylineRemovals, stagedPolylineAdds]);
+  }, [localAnnotations, stagedPolylineRemovals, stagedPolylineAdds, stagedPolylineUpdates]);
 
   /**
    * Modelos para el visor 3D: existentes (signed URL) menos removals + staged adds (blob URL).
@@ -2008,7 +2070,8 @@ function CaseDetailPageContent() {
     (stagedAnnotationAdds.length > 0 ||
       stagedAnnotationRemovals.size > 0 ||
       stagedPolylineAdds.length > 0 ||
-      stagedPolylineRemovals.size > 0);
+      stagedPolylineRemovals.size > 0 ||
+      stagedPolylineUpdates.size > 0);
 
   const isFormDirty =
     (canEditForm && clinicalCase
@@ -2321,6 +2384,7 @@ function CaseDetailPageContent() {
                 isDeleting={isDeleting}
                 isCloning={isCloning}
                 savingChanges={savingChanges}
+                savingProgress={savingProgress}
                 onRepublicar={() => setRepublicarOpen(true)}
                 onEdit={handleStartEdit}
                 onCancelEdit={handleCancelEdit}
@@ -2538,8 +2602,7 @@ function CaseDetailPageContent() {
           caseId={id as string}
           startedAt={clinicalCase?.pendingPoolStartedAt}
           onCancelled={async () => {
-            const refreshed = await getCaseDetails(id as string);
-            if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+            await refreshCase();
             await loadCaseEvents();
             showSuccessToastMessage('Publicación cancelada. El caso quedó cerrado.');
             dispatchDashboardMetricsRefresh();
@@ -2555,8 +2618,7 @@ function CaseDetailPageContent() {
         caseId={id as string}
         caseLabel={clinicalCase?.caseNumber ? `#${clinicalCase.caseNumber}` : undefined}
         onDone={async () => {
-          const refreshed = await getCaseDetails(id as string);
-          if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+          await refreshCase();
           await loadCaseEvents();
           showSuccessToastMessage('Caso republicado. Estamos buscando técnicos disponibles.');
           dispatchDashboardMetricsRefresh();
@@ -2570,8 +2632,7 @@ function CaseDetailPageContent() {
         caseId={id as string}
         caseLabel={clinicalCase?.caseNumber ? `#${clinicalCase.caseNumber}` : undefined}
         onCancelled={async () => {
-          const refreshed = await getCaseDetails(id as string);
-          if (refreshed && !(refreshed as any)._error) ingestCasePayloadFromServer(refreshed);
+          await refreshCase();
           await loadCaseEvents();
           showSuccessToastMessage('Publicación cancelada. El caso quedó cerrado.');
           dispatchDashboardMetricsRefresh();
@@ -2651,6 +2712,7 @@ function CaseDetailPageContent() {
                   onDeleteAnnotation={canEditForm ? handleDeleteAnnotation : undefined}
                   polylines={displayedPolylines}
                   onPolylineComplete={canEditForm ? handlePolylineComplete : undefined}
+                  onPolylineUpdate={canEditForm ? handlePolylineUpdate : undefined}
                   onDeletePolyline={canEditForm ? handleDeletePolyline : undefined}
                   canAnnotate={canEditForm}
                 >
@@ -2934,12 +2996,11 @@ function CaseDetailPageContent() {
                   myInvitation={myInvitation}
                   techOfferRejectedView={techOfferRejectedView}
                   onInvitationUpdate={async () => {
-                    const [invRes, c] = await Promise.all([
+                    const [invRes] = await Promise.all([
                       getMyInvitationForCaseAction(id as string),
-                      getCaseDetails(id as string),
+                      refreshCase(),
                     ]);
                     setMyInvitation(invRes.data);
-                    if (c && !(c as any)._error) ingestCasePayloadFromServer(c);
                     await loadCaseEvents();
                   }}
                   onClose={() => setIsHubOpen(false)}

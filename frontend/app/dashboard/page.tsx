@@ -153,20 +153,17 @@ export default function DashboardHome() {
     void fetchDashboardData({ silent });
   }, [userProfile, featuredQueryKey, fetchDashboardData]);
 
+  // Solo visibilitychange (sin focus): al volver a la pestaña ambos eventos
+  // disparan casi simultáneos y duplicaban el fetch. Mismo patrón que cases/page.tsx.
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState === 'visible' && userProfile) {
         void fetchDashboardData({ silent: true });
       }
     };
-    const onFocus = () => {
-      if (userProfile) void fetchDashboardData({ silent: true });
-    };
     document.addEventListener('visibilitychange', onVis);
-    window.addEventListener('focus', onFocus);
     return () => {
       document.removeEventListener('visibilitychange', onVis);
-      window.removeEventListener('focus', onFocus);
     };
   }, [userProfile, fetchDashboardData]);
 

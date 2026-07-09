@@ -39,8 +39,8 @@ import {
   parseAssignmentWeights,
 } from '@/lib/fauchard/assignmentScore';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
-import { isAvailabilityEnabled, isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
-import { computeEligibleAction, ensureTechnicianAvailabilityAction } from './availability';
+import { isPoolPendienteEnabled } from '@/lib/constants/availabilityFlags';
+import { computeEligibleAction, computeEligibleBatch, ensureTechnicianAvailabilityAction } from './availability';
 import { computeLevelForTechnicianAction } from './noResponseEvents';
 import {
   getActiveConfig,
@@ -147,6 +147,26 @@ export async function deriveScenarioFromCase(caseId: string): Promise<ResolvedSc
 interface BatchFilterSets {
   cooldownSet: Set<string>;
   skillSet: Set<string>;
+  /** Técnicos elegibles por disponibilidad (AND triple), precalculado en lote. */
+  eligibleSet?: Set<string>;
+}
+
+/**
+ * Precalcula en lote el set de técnicos elegibles por disponibilidad (AND triple).
+ * Para técnicos sin fila de disponibilidad (raro) aplica el self-heal
+ * `ensureTechnicianAvailabilityAction` 1-a-1 y reevalúa, preservando la paridad
+ * exacta con el antiguo filtro por-técnico.
+ */
+async function prefetchEligibleSet(
+  techIds: string[],
+  category: ResolvedScenario['category'],
+): Promise<Set<string>> {
+  const { eligible, missing } = await computeEligibleBatch(techIds, category, 'cad');
+  for (const id of missing) {
+    await ensureTechnicianAvailabilityAction(id);
+    if (await computeEligibleAction(id, category, 'cad')) eligible.add(id);
+  }
+  return eligible;
 }
 
 async function checkTechnicianPassesFilters(
@@ -208,7 +228,10 @@ async function checkTechnicianPassesFilters(
     if (!skill) return { ok: false, reason: 'insufficient_skill' };
   }
 
-  if (isAvailabilityEnabled()) {
+  if (batch?.eligibleSet) {
+    // Elegibilidad precalculada en lote (self-heal de filas faltantes ya aplicado por el caller).
+    if (!batch.eligibleSet.has(tech.id)) return { ok: false, reason: 'availability_filter' };
+  } else {
     const t0avail = perfStart();
     await ensureTechnicianAvailabilityAction(tech.id);
     if (!(await computeEligibleAction(tech.id, scenario.category, 'cad'))) {
@@ -269,6 +292,7 @@ export async function buildEligiblePoolForScenario(
   const batch: BatchFilterSets = {
     cooldownSet: new Set(recentAssignments.map(r => r.technicianId)),
     skillSet: new Set(eligibleSkills.map(s => s.userId)),
+    eligibleSet: await prefetchEligibleSet(techIds, scenario.category),
   };
 
   for (const mode of ['strict', 'expand'] as const) {
@@ -341,6 +365,7 @@ export async function evaluateTechniciansForScenario(
   const evalBatch: BatchFilterSets = {
     cooldownSet: new Set(recentAssignments.map(r => r.technicianId)),
     skillSet: new Set(eligibleSkills.map(s => s.userId)),
+    eligibleSet: await prefetchEligibleSet(universeIds, scenario.category),
   };
 
   const excluded: Record<ExclusionReason, number> = {
@@ -404,7 +429,6 @@ export async function buildFunnelStagesForScenario(
   const leagueFilterMode = leagueMode ?? 'expand';
 
   const simScenario = scenarioToSimulationScenario(scenario);
-  const availabilityOn = isAvailabilityEnabled();
   const now = new Date();
   const inactivityThreshold = new Date(now.getTime() - config.dInactivityDays * 86400000);
   const cooldownThreshold = new Date(now.getTime() - config.tCooldownMinutes * 60000);
@@ -456,7 +480,6 @@ export async function buildFunnelStagesForScenario(
   type StageDef = {
     id: import('@/lib/fauchard/simulationTypes').FunnelStageId;
     filter: (tech: TechRow) => boolean;
-    skipped?: boolean;
   };
 
   const stageDefs: StageDef[] = [
@@ -494,18 +517,10 @@ export async function buildFunnelStagesForScenario(
     },
   ];
 
-  if (availabilityOn) {
-    stageDefs.push({
-      id: 'availability_filter',
-      filter: () => true,
-    });
-  } else {
-    stageDefs.push({
-      id: 'availability_filter',
-      filter: () => true,
-      skipped: true,
-    });
-  }
+  stageDefs.push({
+    id: 'availability_filter',
+    filter: () => true,
+  });
 
   stageDefs.push({ id: 'eligible', filter: () => true });
 
@@ -513,7 +528,7 @@ export async function buildFunnelStagesForScenario(
   let remaining: TechRow[] = [...universe];
 
   for (const def of stageDefs) {
-    const meta = getFunnelStageMeta(def.id, simScenario, availabilityOn);
+    const meta = getFunnelStageMeta(def.id, simScenario);
 
     if (def.id === 'universe') {
       stages.push({
@@ -526,20 +541,7 @@ export async function buildFunnelStagesForScenario(
       continue;
     }
 
-    if (def.id === 'availability_filter' && def.skipped) {
-      stages.push({
-        id: 'availability_filter',
-        label: `${meta.label} (inactiva)`,
-        countAfter: remaining.length,
-        dropped: 0,
-        fixHint: meta.fixHint,
-        reason: meta.reason,
-        skipped: true,
-      });
-      continue;
-    }
-
-    if (def.id === 'availability_filter' && availabilityOn) {
+    if (def.id === 'availability_filter') {
       const next: TechRow[] = [];
       const t0avail = perfStart();
       for (const tech of remaining) {
@@ -689,7 +691,6 @@ async function rankPool(
   const techIds = pool.map((t) => t.id);
   const data = await bulkAssignmentData(techIds, config, workType);
   const weights = parseAssignmentWeights(config);
-  const availabilityOn = isAvailabilityEnabled();
   // Piso del divisor de carga: configurable vía fauchard_config.loadReferenceMin (default 5).
   const loadBaseline = config.loadReferenceMin ?? 5;
   const maxLoad = Math.max(loadBaseline, ...Array.from(data.activeLoads.values()), 1);
@@ -715,11 +716,8 @@ async function rankPool(
     const designLevel = skillRow?.designLevel ?? 0;
     const activeLoad = data.activeLoads.get(tech.id) ?? 0;
 
-    let sanctionLevel = 0 as 0 | 1 | 2 | 3;
-    if (availabilityOn) {
-      const lvl = await computeLevelForTechnicianAction(tech.id);
-      sanctionLevel = lvl.level;
-    }
+    const lvl = await computeLevelForTechnicianAction(tech.id);
+    const sanctionLevel: 0 | 1 | 2 | 3 = lvl.level;
 
     const daysSinceAssignment = tech.lastInvitedAt
       ? Math.floor((now - new Date(tech.lastInvitedAt).getTime()) / 86400000)
@@ -842,7 +840,7 @@ export async function runAssignmentAction(caseId: string): Promise<{
     const config = await getConfigForCase(caseId);
 
     if (!ranked.length) {
-      if (isAvailabilityEnabled() && isPoolPendienteEnabled()) {
+      if (await isPoolPendienteEnabled()) {
         const [cCase] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
         const wasAlreadyInPool = cCase?.internalStatus === POOL_INTERNAL_STATUS;
         if (!wasAlreadyInPool) {
@@ -1024,10 +1022,17 @@ export async function acceptAssignmentAction(assignmentId: string): Promise<Acti
     const proposedDeliveryDays = computeProposedDeliveryDays(cCase.publishedAt, cCase.desiredDeliveryAt);
 
     await db.transaction(async (tx) => {
-      await tx
+      // Guard de atomicidad: el UPDATE solo procede si la asignación SIGUE pendiente.
+      // Cierra el TOCTOU entre el `select` de validación y esta escritura (aceptación
+      // concurrente, expiración o reemplazo simultáneo).
+      const accepted = await tx
         .update(caseAssignment)
         .set({ status: 'accepted', respondedAt: now, updatedAt: now })
-        .where(eq(caseAssignment.id, assignmentId));
+        .where(and(eq(caseAssignment.id, assignmentId), eq(caseAssignment.status, 'pending')))
+        .returning({ id: caseAssignment.id });
+      if (accepted.length === 0) {
+        throw new Error('ASSIGNMENT_NOT_PENDING');
+      }
 
       await tx
         .update(clinicalCase)
@@ -1060,6 +1065,9 @@ export async function acceptAssignmentAction(assignmentId: string): Promise<Acti
 
     return { success: true };
   } catch (error) {
+    if (error instanceof Error && error.message === 'ASSIGNMENT_NOT_PENDING') {
+      return { success: false, error: 'Esta asignación ya no está pendiente' };
+    }
     console.error('[acceptAssignmentAction]', error);
     return { success: false, error: String(error) };
   }

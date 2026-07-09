@@ -18,11 +18,11 @@ interface AvailabilityToggleProps {
 /**
  * Disponibilidad en el perfil del técnico.
  *
- * Cuando el modelo v5.0 está habilitado (`AVAILABILITY_UI_TECNICO_ENABLED`, surface
- * vía `getMyAvailabilityStatusAction().enabled`) renderiza el switch global v5.0 con
- * estado en vivo, de modo que el perfil, el badge del header y el panel de
- * disponibilidad comparten una única fuente de verdad (`technician_availability`).
- * Con el flag off cae al toggle legacy (`user.is_available`).
+ * Para técnicos (`getMyAvailabilityStatusAction().enabled`) renderiza el switch
+ * global v5.0 con estado en vivo, de modo que el perfil, el badge del header y
+ * el panel de disponibilidad comparten una única fuente de verdad
+ * (`technician_availability`). Fuera de ese caso cae al toggle legacy
+ * (`user.is_available`).
  */
 export default function AvailabilityToggle({ initialValue, suspendedUntil }: AvailabilityToggleProps) {
   const { status, refresh } = useAvailability();

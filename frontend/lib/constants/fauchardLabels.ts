@@ -15,6 +15,7 @@ export const KEY_LABELS: Record<string, string> = {
   dInactivityDays: 'Inactividad Máxima (días)',
   maxAssignmentAttempts: 'Intentos máximos de asignación',
   tQuoteMinutes: 'Tiempo para responder asignación (min)',
+  qualityReservedCaseWeight: 'Peso de Casos Reservados (Calidad)',
   tDentistReviewHours: 'Revisión del dentista (h)',
   tNoEligiblePoolHours: 'Espera pool sin elegibles (h)',
   maxPoolCycles: 'Ciclos de espera pool',

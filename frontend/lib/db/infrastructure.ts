@@ -6,7 +6,10 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 /** v5.25 — data_export_request: solicitudes asíncronas de exportación de datos (portabilidad, Ley 21.719). */
 /** v5.26 — Índices de rendimiento: cobertura compuesta para Fauchard, UCH polling, crons y quality gate. */
 /** v5.27 — case_quality_assignment.first_viewed_at: marca cuándo el revisor abrió el caso por primera vez (contador nuevo en ImpersonationSelector). */
-export const INFRA_VERSION = 'v5.27';
+/** v5.28 — feature_flag + feature_flag_log: flags administrables desde el panel admin, con seed desde env y auditoría. Se retira AVAILABILITY_MODEL_ENABLED (modelo incondicional). */
+/** v5.29 — sessions.createdAt/lastActivityAt + flags SESSION_TIMEOUTS_ENABLED/SESSION_IDLE_TIMEOUT_MINUTES/SESSION_ABSOLUTE_TIMEOUT_HOURS: timeout de sesión por inactividad (2h deslizante) y absoluto (8h), enforcement server-side. */
+/** v5.30 — fauchard_config.quality_reserved_case_weight: peso configurable de casos "reservados" (sin entrega aún) en el reparto round-robin de revisores de Calidad; case_quality_assignment.status ahora se cierra a 'completed' al terminar el caso. */
+export const INFRA_VERSION = 'v5.30';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -201,6 +204,27 @@ export async function ensureIncrementalInfrastructure(db: any) {
     await ensureQualityGateInfrastructure(db);
   } catch (e) {
     console.error("[Infrastructure] Error creando infraestructura de Calidad (v5.19):", e);
+  }
+
+  // v5.28 — Feature flags administrables desde el panel admin.
+  try {
+    await ensureFeatureFlagInfrastructure(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando infraestructura de feature flags (v5.28):", e);
+  }
+
+  // v5.29 — Timeout de sesión (inactividad + absoluto).
+  try {
+    await ensureSessionTimeoutInfrastructure(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando infraestructura de timeout de sesión (v5.29):", e);
+  }
+
+  // v5.30 — Peso configurable de reparto de Calidad + cierre de case_quality_assignment.
+  try {
+    await ensureQualityLoadWeightInfrastructure(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando infraestructura de peso de reparto de Calidad (v5.30):", e);
   }
 
   // v5.19 — user.organization_id pasa a nullable para soportar usuarios sin org (admin, calidad).
@@ -509,6 +533,114 @@ export async function ensureQualityGateInfrastructure(db: any) {
     );
     CREATE INDEX IF NOT EXISTS cqa_case_idx ON case_quality_assignment(clinical_case_id);
     CREATE INDEX IF NOT EXISTS cqa_calidad_status_idx ON case_quality_assignment(calidad_user_id, status);
+  `);
+}
+
+/**
+ * v5.28 — DDL idempotente de feature flags administrables + seed desde env.
+ * El seed toma el valor actual de `process.env` (ON CONFLICT DO NOTHING), así el
+ * corte a DB es transparente: el día de la migración cada flag conserva el valor
+ * que tenía en el ambiente. Después, la fuente de verdad es la tabla (env queda
+ * como fallback de arranque/DB caída — ver lib/featureFlags.ts).
+ */
+export async function ensureFeatureFlagInfrastructure(db: any) {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS feature_flag (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      value_type TEXT NOT NULL DEFAULT 'boolean',
+      description TEXT,
+      updated_by TEXT REFERENCES "user"(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS feature_flag_key_uidx ON feature_flag(key);`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS feature_flag_log (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      flag_key TEXT NOT NULL,
+      changed_by TEXT NOT NULL REFERENCES "user"(id),
+      old_value TEXT,
+      new_value TEXT,
+      changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS ffl_flag_key_idx ON feature_flag_log(flag_key);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS ffl_changed_by_idx ON feature_flag_log(changed_by);`);
+
+  // Seed idempotente desde env (booleans + TTL numérico).
+  const boolSeed: [string, string][] = [
+    ['REJECTION_INDIVIDUAL_ENABLED', 'Botón "Rechazar invitación" en el UCH del técnico'],
+    ['POOL_PENDIENTE_ENABLED', 'Cola pendiente_pool cuando no hay técnicos elegibles'],
+    ['LEAGUE_ENGINE_ENABLED', 'Motor de ligas: ascensos/descensos automáticos + cron diario'],
+    ['QUALITY_GATE_ENABLED', 'Revisión de calidad de casos completados'],
+  ];
+  for (const [key, description] of boolSeed) {
+    const value = process.env[key] === 'true' ? 'true' : 'false';
+    await db.execute(sql`
+      INSERT INTO feature_flag (key, value, value_type, description)
+      VALUES (${key}, ${value}, 'boolean', ${description})
+      ON CONFLICT (key) DO NOTHING;
+    `);
+  }
+  const ttlRaw = Number(process.env.EMAIL_VERIFICATION_TTL_MINUTES);
+  const ttlSeed = Number.isFinite(ttlRaw) && ttlRaw > 0 ? String(ttlRaw) : '15';
+  await db.execute(sql`
+    INSERT INTO feature_flag (key, value, value_type, description)
+    VALUES ('EMAIL_VERIFICATION_TTL_MINUTES', ${ttlSeed}, 'number', 'Minutos de validez del link de verificación de email')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+}
+
+/**
+ * v5.29 — DDL idempotente de columnas de timeout de sesión + seed de flags administrables.
+ * DEFAULT NOW() en las columnas nuevas rellena las filas existentes con la hora de la
+ * migración: ningún usuario con sesión activa queda deslogueado al aplicar esto — el
+ * reloj de cada sesión arranca recién cuando SESSION_TIMEOUTS_ENABLED se enciende.
+ */
+export async function ensureSessionTimeoutInfrastructure(db: any) {
+  await db.execute(sql`
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+  await db.execute(sql`
+    ALTER TABLE sessions ADD COLUMN IF NOT EXISTS "lastActivityAt" TIMESTAMPTZ NOT NULL DEFAULT NOW();
+  `);
+
+  const boolValue = process.env.SESSION_TIMEOUTS_ENABLED === 'true' ? 'true' : 'false';
+  await db.execute(sql`
+    INSERT INTO feature_flag (key, value, value_type, description)
+    VALUES ('SESSION_TIMEOUTS_ENABLED', ${boolValue}, 'boolean', 'Timeout de sesión: inactividad + tiempo máximo absoluto (OWASP)')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+
+  const idleRaw = Number(process.env.SESSION_IDLE_TIMEOUT_MINUTES);
+  const idleSeed = Number.isFinite(idleRaw) && idleRaw > 0 ? String(idleRaw) : '120';
+  await db.execute(sql`
+    INSERT INTO feature_flag (key, value, value_type, description)
+    VALUES ('SESSION_IDLE_TIMEOUT_MINUTES', ${idleSeed}, 'number', 'Minutos de inactividad antes de cerrar la sesión')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+
+  const absRaw = Number(process.env.SESSION_ABSOLUTE_TIMEOUT_HOURS);
+  const absSeed = Number.isFinite(absRaw) && absRaw > 0 ? String(absRaw) : '8';
+  await db.execute(sql`
+    INSERT INTO feature_flag (key, value, value_type, description)
+    VALUES ('SESSION_ABSOLUTE_TIMEOUT_HOURS', ${absSeed}, 'number', 'Horas máximas de sesión desde el login, sin importar actividad')
+    ON CONFLICT (key) DO NOTHING;
+  `);
+}
+
+/**
+ * v5.30 — Columna `quality_reserved_case_weight` en fauchard_config: pondera los casos
+ * "reservados" (asignados a un revisor de Calidad pero sin entrega aún) frente a 1.0 de
+ * una entrega real esperando revisión, en el reparto round-robin de assignQualityReviewerAction.
+ */
+export async function ensureQualityLoadWeightInfrastructure(db: any) {
+  await db.execute(sql`
+    ALTER TABLE fauchard_config
+      ADD COLUMN IF NOT EXISTS quality_reserved_case_weight NUMERIC(4,3) NOT NULL DEFAULT 0.400;
   `);
 }
 
@@ -1425,9 +1557,7 @@ export async function ensureInfrastructure(db: any) {
     // ─────────────────────────────────────────────────────────────────────────
     // v5.0 — Modelo de disponibilidad del técnico, sanción rolling y cola pool.
     // Ver Doc Servicio Orquestado/{flujo_tiempos,plan_flujo_tiempos}.md.
-    // Todas las tablas/columnas se crean siempre (idempotente); el comportamiento
-    // queda inerte hasta encender AVAILABILITY_MODEL_ENABLED. El único paso gated
-    // es el backfill de technician_availability (más abajo).
+    // Todas las tablas/columnas se crean siempre (idempotente).
     // ─────────────────────────────────────────────────────────────────────────
 
     // 1) Disponibilidad declarada (modelo aplanado: 1 fila por técnico).
@@ -1673,24 +1803,20 @@ export async function ensureInfrastructure(db: any) {
         WHERE is_active = TRUE;
     `);
 
-    // 7) Backfill de disponibilidad — SOLO si el modelo está habilitado.
-    //    Evita correr el INSERT masivo en cada deploy con el feature apagado.
+    // 7) Backfill de disponibilidad. Idempotente (ON CONFLICT DO NOTHING).
     //    Inferencia CAD/CAM desde technician_skill; categorías todo ON; caso
     //    degenerado (sin skills) → global ON, CAD/CAM OFF.
-    if (process.env.AVAILABILITY_MODEL_ENABLED === 'true') {
-      await db.execute(sql`
-        INSERT INTO technician_availability (user_id, level_global, level_cad, level_cam)
-        SELECT
-          u.id,
-          TRUE,
-          EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.design_level > 0),
-          EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.fabrication_level > 0)
-        FROM "user" u
-        WHERE u.role = 'tecnico'
-        ON CONFLICT (user_id) DO NOTHING;
-      `);
-      console.log("[DB] v5.0 backfill de technician_availability ejecutado (flag ON).");
-    }
+    await db.execute(sql`
+      INSERT INTO technician_availability (user_id, level_global, level_cad, level_cam)
+      SELECT
+        u.id,
+        TRUE,
+        EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.design_level > 0),
+        EXISTS (SELECT 1 FROM technician_skill ts WHERE ts.user_id = u.id AND ts.fabrication_level > 0)
+      FROM "user" u
+      WHERE u.role = 'tecnico'
+      ON CONFLICT (user_id) DO NOTHING;
+    `);
 
     // v5.9 — Asignación directa: case_invitation → case_assignment + columnas renombradas
     await migrateCaseInvitationToAssignment(db);

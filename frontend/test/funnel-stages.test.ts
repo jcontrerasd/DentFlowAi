@@ -148,7 +148,7 @@ describe('markFunnelBottlenecks', () => {
 
 describe('getFunnelStageMeta', () => {
   it('parametriza labels con categoría y workType', () => {
-    const avail = getFunnelStageMeta('availability_filter', scenario, true);
+    const avail = getFunnelStageMeta('availability_filter', scenario);
     expect(avail.label).toMatch(/Coronas/);
     expect(avail.fixHint).toMatch(/Disponibilidad/i);
 

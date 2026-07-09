@@ -28,7 +28,7 @@ No ejecutar `npm run validate:full` salvo pedido explícito. Usar solo lo necesa
 ## Restricciones críticas
 <important>NUNCA acceder a la DB desde componentes — solo Server Actions en frontend/lib/db/actions/</important>
 <important>getServerIdentity() es el único resolver de identidad — soporta impersonación admin</important>
-<important>Migraciones en runtime vía infrastructure.ts (INFRA_VERSION actual: v5.25) — NO usar drizzle-kit push en producción</important>
+<important>Migraciones en runtime vía infrastructure.ts (INFRA_VERSION actual: v5.28) — NO usar drizzle-kit push en producción</important>
 <important>Leer frontend/AGENTS.md antes de escribir código Next.js</important>
 
 ## Roles del sistema
@@ -47,6 +47,7 @@ BORRADOR → EN EVALUACIÓN → ESPERANDO INICIO → EN EJECUCIÓN → EN REVISI
 [terminal negativo] → RECHAZADO | CERRADO
 ```
 Durante `enEvaluacion`, `internalStatus` puede ser `asignacionPendiente` o `pendiente_pool`.
+**Invariante:** `internalStatus` solo es no-null mientras Fauchard orquesta la asignación; `startWorkAction` lo pone en `null` y desde ahí `status` es la única fuente de verdad. Los fallos (`sin_asignacion_fallo`/`sin_cotizaciones_fallo`) se escriben espejados en `status` e `internalStatus`.
 
 ## Motor Fauchard (asignación directa)
 
@@ -57,9 +58,9 @@ Durante `enEvaluacion`, `internalStatus` puede ser `asignacionPendiente` o `pend
 
 **Config:** Global: `getActiveConfig()` · Por caso: `getConfigForCase(caseId)` (usa `fauchard_config_id` anclado si existe).
 
-## Modelo de disponibilidad (flag `AVAILABILITY_MODEL_ENABLED`)
+## Modelo de disponibilidad
 
-Sistema de 3 niveles jerárquicos (global · CAD/CAM · 7 categorías). Sin el flag, Fauchard usa `user.is_available`.
+Sistema de 3 niveles jerárquicos (global · CAD · 7 categorías). Comportamiento único del motor — el flag `AVAILABILITY_MODEL_ENABLED` fue retirado del sistema (ya no existe).
 
 - **Elegibilidad AND triple** sin caché — `computeEligibleAction` en cada corrida.
 - **Sanción rolling 14d** (`noResponseEvents.ts`): nivel 1 warning · nivel 2 penalización score · nivel 3 auto-OFF.
@@ -69,6 +70,15 @@ Sistema de 3 niveles jerárquicos (global · CAD/CAM · 7 categorías). Sin el f
 ## Motor de ligas (flag `LEAGUE_ENGINE_ENABLED`)
 
 4 categorías fijas (Bronce/Plata/Oro/Élite). Gating por liga en `runAssignmentAction`. Ascenso/descenso automático via `processLeagueMaintenanceAction`. Cron diario: `/api/cron/process-league`.
+
+## Feature flags administrables (v5.28)
+
+4 flags booleanos + `EMAIL_VERIFICATION_TTL_MINUTES` viven en la tabla `feature_flag` (con log de auditoría `feature_flag_log`), editables en `/dashboard/admin/feature-flags` — cambios en segundos, sin deploy.
+
+- `REJECTION_INDIVIDUAL_ENABLED`, `POOL_PENDIENTE_ENABLED`, `LEAGUE_ENGINE_ENABLED`, `QUALITY_GATE_ENABLED`, `EMAIL_VERIFICATION_TTL_MINUTES`.
+- Lectura server-only vía `lib/featureFlags.ts` (`getFlag`/`getNumericSetting`): caché de 30s por instancia; si la DB no responde o la key no existe, cae a `process.env` (bootstrap/fallback).
+- Escritura: `lib/db/actions/featureFlags.ts` (guard `isSystemAdmin`, whitelist de keys, invalida caché tras cada cambio).
+- `deploy_gui.py` ya no gestiona estos flags — sus valores en `.env.local` son solo el seed inicial de la migración v5.28.
 
 ## UCH — Reglas de Diseño
 
@@ -104,6 +114,15 @@ Modera campos libres (notas, trackingId) — bloquea intentos de saltarse el mar
 - Buckets: `dentflowai-assets-prod` / `dentflowai-assets-dev`.
 - Proxy local (`app/api/local-gcs-proxy/route.ts`) descomprime gzip (fake-gcs no hace decompressive transcoding).
 
+## Notificaciones por email (EmailJS)
+
+`lib/services/notifications.ts`. Tres flags en `.env.local`:
+- `NOTIFICATIONS_LIVE` — compuerta de envío real de correos de negocio; si no es `true`, se loguean como `[STUB-EMAIL]`. En prod `deploy_gui.py` la fuerza a `true`.
+- `EMAIL_OVERRIDE_TO` — redirige el envío real a esa dirección (asunto: `[→ destinatario-original]`). Vacío en prod.
+- `NEXT_PUBLIC_DEMO_EMAIL_PREVIEW` — modal en pantalla con el correo que se enviaría; independiente de los otros dos y muestra el destinatario original. Apagar en prod.
+
+**Excepciones al gate y al override:** `sendCriticalAuthEmail` (verificación/reset) y los tipos sin categoría (`DATOS_EXPORTACION_LISTA`, legal) se envían aunque `NOTIFICATIONS_LIVE` esté off; los de auth además **ignoran** `EMAIL_OVERRIDE_TO` y llegan al destinatario real.
+
 ## Sistema de tema
 
 `components/theme/ThemeProvider.tsx` + tokens en `app/theme.css`. No usar `next-themes`.
@@ -112,9 +131,9 @@ Modera campos libres (notas, trackingId) — bloquea intentos de saltarse el mar
 
 `docker compose up -d` levanta PostgreSQL 16 (puerto 5432) y fake-gcs-server (puerto 4443). `.env.local` apunta a localhost.
 
-## GUI de Deploy
+## Deploy
 
-`frontend/deploy_gui.py` — Python/Tkinter. STAGING: desde `develop` o `v2`. PRODUCTION: solo desde `main`. `deploy.sh` no recorta comentarios inline de `.env.local`; la GUI sí.
+`frontend/deploy_gui.py` (Python/Tkinter) es la **herramienta oficial y única** de deploy — `deploy.sh` ya no existe; no usar `gcloud` manual. STAGING: desde `develop` o `v2`. PRODUCTION: solo desde `main`. Los flags v5.0 y `NOTIFICATIONS_LIVE` se confirman por checkbox en cada deploy (en prod la GUI fuerza `NOTIFICATIONS_LIVE=true`). La GUI sí recorta comentarios inline de `.env.local`.
 
 ## Flujo Git
 

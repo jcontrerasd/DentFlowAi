@@ -52,7 +52,7 @@ Estado deshabilitado: `disabled:opacity-50 disabled:pointer-events-none`.
 
 ## Badge global de disponibilidad
 
-- `AvailabilityBadge.tsx` — pill en el header. Solo rol `tecnico`; oculto si `AVAILABILITY_UI_TECNICO_ENABLED` está off.
+- `AvailabilityBadge.tsx` — pill en el header. Solo rol `tecnico`; siempre visible (el modelo de disponibilidad es incondicional).
 - El switch global y `user.is_available` se **espejan en la capa de escritura**: `updateAvailabilityLevelAction` también escribe `user.is_available`; `toggleAvailabilityAction` también escribe `technician_availability.level_global`.
 - OFF con asignaciones pendientes → `BulkRejectDialog`. ON desde Nivel 3 → `ReactivationModal`.
 

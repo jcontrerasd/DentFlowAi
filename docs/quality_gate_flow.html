@@ -1,0 +1,152 @@
+<title>Control de calidad: encendido vs apagado</title>
+<style>
+.viz-root{
+  --surface-1:#fcfcfb; --page:#f9f9f7; --text-primary:#0b0b0b; --text-secondary:#52514e;
+  --muted:#898781; --grid:#e1e0d9; --border:rgba(11,11,11,0.10);
+  --blue:#2a78d6; --good:#0ca30c; --critical:#d03b3b;
+  font-family: system-ui,-apple-system,"Segoe UI",sans-serif;
+  color: var(--text-primary);
+  background: var(--page);
+}
+@media (prefers-color-scheme: dark){
+  .viz-root{
+    --surface-1:#1a1a19; --page:#0d0d0d; --text-primary:#ffffff; --text-secondary:#c3c2b7;
+    --muted:#898781; --grid:#2c2c2a; --border:rgba(255,255,255,0.10);
+    --blue:#3987e5; --good:#0ca30c; --critical:#e66767;
+  }
+}
+.viz-root{ padding: 32px 20px 60px; max-width: 900px; margin: 0 auto; }
+h1{ font-size: 21px; margin: 0 0 6px; }
+.sub{ color: var(--text-secondary); font-size: 14.5px; margin: 0 0 30px; line-height:1.55; max-width: 620px; }
+
+.chart{ display:flex; flex-direction:column; align-items:center; }
+
+.node{
+  border-radius: 12px; padding: 14px 22px; text-align:center; font-size:14.5px;
+  border: 1px solid var(--border); background: var(--surface-1); max-width: 360px;
+}
+.node.start{ font-weight:700; background: var(--surface-1); }
+.node .small{ display:block; font-size:12.5px; color: var(--text-secondary); margin-top:3px; font-weight:400; }
+
+.diamond{
+  width: 260px; height: 260px; display:flex; align-items:center; justify-content:center;
+  position: relative; margin: 0;
+}
+.diamond .shape{
+  position:absolute; inset:0; background: var(--surface-1); border: 1.5px solid var(--border);
+  transform: rotate(45deg); border-radius: 14px;
+}
+.diamond .label{
+  position:relative; z-index:1; text-align:center; font-size:14.5px; font-weight:700;
+  padding: 0 50px; line-height:1.4;
+}
+
+.vline{ width:2px; height:28px; background: var(--muted); }
+
+.branches{ display:flex; width:100%; justify-content:center; gap:0; margin-top:0; }
+.branch-col{ flex:1; max-width: 400px; display:flex; flex-direction:column; align-items:center; }
+
+.hline-wrap{ display:flex; width:100%; align-items:center; justify-content:center; }
+.hline{ height:2px; background: var(--muted); flex:1; max-width: 210px; }
+
+.pill{
+  font-size:12.5px; font-weight:700; padding:5px 14px; border-radius:999px; margin: 12px 0;
+}
+.pill.on{ background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+.pill.off{ background: color-mix(in srgb, var(--critical) 18%, transparent); color: var(--critical); }
+
+.branch-flow{ display:flex; flex-direction:column; align-items:center; gap:0; width:100%; }
+
+.step{
+  border-radius: 12px; padding: 13px 18px; text-align:center; font-size:13.5px; line-height:1.45;
+  border: 1px solid var(--border); background: var(--surface-1); width: 92%;
+}
+.step b{ font-weight:700; }
+
+.end{
+  border-radius: 12px; padding: 13px 18px; text-align:center; font-size:13.5px; font-weight:700;
+  width: 92%; margin-top:0;
+}
+.end.on{ background: color-mix(in srgb, var(--good) 12%, var(--surface-1)); border:1px solid color-mix(in srgb, var(--good) 40%, transparent); color: var(--good); }
+.end.off{ background: color-mix(in srgb, var(--critical) 12%, var(--surface-1)); border:1px solid color-mix(in srgb, var(--critical) 40%, transparent); color: var(--critical); }
+
+.legend{
+  display:flex; gap:24px; flex-wrap:wrap; margin-top: 34px; padding-top:18px;
+  border-top: 1px solid var(--grid); font-size:13px; color: var(--text-secondary); justify-content:center;
+}
+.legend .item{ display:flex; align-items:center; gap:8px; }
+.dot{ width:10px; height:10px; border-radius:50%; }
+
+.note{
+  margin-top:26px; padding:16px 18px; border-radius:12px; background: var(--surface-1);
+  border: 1px solid var(--border); font-size:13.5px; color: var(--text-secondary); line-height:1.6;
+  max-width: 700px; margin-left:auto; margin-right:auto;
+}
+.note b{ color: var(--text-primary); }
+
+@media (max-width: 720px){
+  .branches{ flex-direction: column; align-items:center; }
+  .hline{ display:none; }
+  .branch-col{ margin-bottom: 20px; }
+}
+</style>
+
+<div class="viz-root">
+  <h1>¿Qué pasa cuando el diseño de un técnico está listo?</h1>
+  <p class="sub">
+    Este interruptor decide si, antes de que el dentista vea el diseño terminado, alguien
+    del equipo de Calidad lo revisa primero. No cambia qué técnico recibe el caso — solo
+    cambia qué pasa al final, cuando la entrega ya está lista.
+  </p>
+
+  <div class="chart">
+    <div class="node start">El técnico termina el diseño y lo entrega</div>
+    <div class="vline"></div>
+
+    <div class="diamond">
+      <div class="shape"></div>
+      <div class="label">¿Está activado<br>el control de calidad?</div>
+    </div>
+
+    <div class="branches">
+      <div class="branch-col">
+        <div class="hline-wrap"><div class="hline"></div></div>
+        <div class="pill on">SÍ — activado</div>
+        <div class="branch-flow">
+          <div class="step">Se le asigna un revisor de Calidad al caso</div>
+          <div class="vline"></div>
+          <div class="step">El revisor mira el diseño: <b>lo aprueba</b> o le <b>pide correcciones</b> al técnico</div>
+          <div class="vline"></div>
+          <div class="step">Una vez aprobado, el técnico lo envía al dentista</div>
+          <div class="vline"></div>
+          <div class="end on">El dentista recibe un diseño ya revisado por Calidad</div>
+        </div>
+      </div>
+
+      <div class="branch-col">
+        <div class="hline-wrap"><div class="hline"></div></div>
+        <div class="pill off">NO — apagado</div>
+        <div class="branch-flow">
+          <div class="step">No se asigna ningún revisor</div>
+          <div class="vline"></div>
+          <div class="step">No hay ninguna revisión intermedia</div>
+          <div class="vline"></div>
+          <div class="step">El diseño pasa directo del técnico al dentista</div>
+          <div class="vline"></div>
+          <div class="end off">El dentista recibe el diseño sin pasar por Calidad</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="item"><span class="dot" style="background:var(--good)"></span>Camino cuando está activado</div>
+    <div class="item"><span class="dot" style="background:var(--critical)"></span>Camino cuando está apagado</div>
+  </div>
+
+  <div class="note">
+    <b>Un detalle importante:</b> si alguien apaga el interruptor mientras un caso ya está
+    siendo revisado por Calidad, ese caso <b>no se salta la revisión</b> — termina su camino
+    normal. El cambio solo aplica a los diseños que se entreguen <i>a partir de ese momento</i>.
+  </div>
+</div>

@@ -33,7 +33,7 @@ export type LeagueMaintenanceResult = {
 };
 
 export async function processLeagueMaintenanceAction(): Promise<ActionResult<LeagueMaintenanceResult>> {
-  if (!isLeagueEngineEnabled()) {
+  if (!(await isLeagueEngineEnabled())) {
     return { success: true, evaluated: 0, ascended: 0, consolidated: 0, descended: 0, watchArmed: 0, skipped: true };
   }
 

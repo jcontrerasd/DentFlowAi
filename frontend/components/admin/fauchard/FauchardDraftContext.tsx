@@ -23,7 +23,7 @@ export const EDITABLE_KEYS = [
   // Exclusión
   'tCooldownMinutes', 'dInactivityDays',
   // Asignación
-  'maxAssignmentAttempts', 'tQuoteMinutes',
+  'maxAssignmentAttempts', 'tQuoteMinutes', 'qualityReservedCaseWeight',
   // v5.0 — plazos
   'tDentistReviewHours', 'tNoEligiblePoolHours', 'maxPoolCycles', 'replacementCutoffMinutes',
   // v5.0 — sanción rolling
@@ -47,6 +47,7 @@ const DRAFT_DEFAULTS: Partial<Record<DraftKey, number>> = {
   level1Threshold: 1,
   level2Threshold: 2,
   level3Threshold: 3,
+  qualityReservedCaseWeight: 0.4,
 };
 
 function toDraft(initialConfig: Record<string, unknown>): Draft {
@@ -73,6 +74,9 @@ export function computeDraftErrors(d: Draft): DraftError[] {
   }
   if (d.maxAssignmentAttempts < 1 || d.maxAssignmentAttempts > 10) {
     errs.push({ rule: 'assignment', message: 'Los intentos máximos de asignación deben estar entre 1 y 10.' });
+  }
+  if (d.qualityReservedCaseWeight < 0 || d.qualityReservedCaseWeight > 1) {
+    errs.push({ rule: 'qualityLoad', message: 'El peso de casos reservados de Calidad debe estar entre 0.0 y 1.0.' });
   }
   return errs;
 }

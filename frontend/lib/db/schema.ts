@@ -361,6 +361,8 @@ export const fauchardConfig = pgTable("fauchard_config", {
   dInactivityDays: integer("d_inactivity_days").default(15).notNull(),
   // Selección — asignación directa (v5.9)
   maxAssignmentAttempts: integer("max_assignment_attempts").default(3).notNull(),
+  // Reparto de revisores de Calidad (v5.30): peso de un caso "reservado" (sin entrega aún) frente a 1.0 de una entrega real pendiente de revisión.
+  qualityReservedCaseWeight: numeric("quality_reserved_case_weight", { precision: 4, scale: 3 }).default('0.400').notNull(),
   // Legacy — mantener columnas hasta migración admin completa
   nInvited: integer("n_invited").default(5).notNull(),
   nFloor: integer("n_floor").default(3).notNull(),
@@ -421,6 +423,36 @@ export const fauchardConfigLog = pgTable("fauchard_config_log", {
 }, (table) => [
   index("acl_config_idx").on(table.configId),
   index("acl_changed_by_idx").on(table.changedBy),
+]);
+
+// v5.28 — Feature flags administrables desde el panel admin. Key-value simple
+// (sin copy-on-write: no se ancla por caso). `value` guarda 'true'/'false' o un
+// número como texto según `valueType`. Env queda como seed inicial y fallback.
+export const featureFlag = pgTable("feature_flag", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  key: text("key").notNull(),
+  value: text("value").notNull(),
+  /** 'boolean' | 'number' */
+  valueType: text("value_type").notNull().default('boolean'),
+  description: text("description"),
+  updatedBy: text("updated_by").references(() => user.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("feature_flag_key_uidx").on(table.key),
+]);
+
+// v5.28 — Log inmutable de cambios de feature flags (espejo de fauchard_config_log)
+export const featureFlagLog = pgTable("feature_flag_log", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  flagKey: text("flag_key").notNull(),
+  changedBy: text("changed_by").notNull().references(() => user.id),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  changedAt: timestamp("changed_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  index("ffl_flag_key_idx").on(table.flagKey),
+  index("ffl_changed_by_idx").on(table.changedBy),
 ]);
 
 // Asignación directa Fauchard (1 técnico por intento; aceptar/rechazar, sin cotización)
@@ -546,6 +578,11 @@ export const sessions = pgTable("sessions", {
   // Fase 5 (ajuste login, TAB_CLOSE_LOGOUT_ENABLED) — último heartbeat del cliente; el cron
   // de limpieza borra filas con lastSeenAt vencido cuando sendBeacon no llegó a disparar.
   lastSeenAt: timestamp("lastSeenAt", { mode: "date" }),
+  // v5.29 — SESSION_TIMEOUTS_ENABLED: createdAt ancla el timeout absoluto (8h), lastActivityAt
+  // el de inactividad (2h, deslizante). Distintas de lastSeenAt (propiedad del heartbeat de 30s
+  // y el TTL de 90s de tab-close-logout) — no mezclar los dos mecanismos.
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  lastActivityAt: timestamp("lastActivityAt", { mode: "date" }).notNull().defaultNow(),
 })
 
 export const verificationToken = pgTable(

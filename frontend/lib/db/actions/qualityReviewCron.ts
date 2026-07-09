@@ -27,7 +27,7 @@ export type QualityReviewEscalationResult = {
 };
 
 export async function processQualityReviewDeadlinesAction(): Promise<ActionResult<QualityReviewEscalationResult>> {
-  if (!isQualityGateEnabled()) {
+  if (!(await isQualityGateEnabled())) {
     return { success: true, remindersSent: 0, overdueNotified: 0, skipped: true };
   }
 
