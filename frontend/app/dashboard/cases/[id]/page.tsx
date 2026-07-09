@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { creationInstructionsText } from '@/lib/cases/instructions';
 import { maybeGzipForUpload } from '@/lib/uploadCompression';
+import { uploadWithProgress } from '@/lib/uploadWithProgress';
 import {
   getCaseDetails,
   updateClinicalCaseAction,
@@ -417,6 +418,7 @@ function CaseDetailPageContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<any | null>(null);
   const [savingChanges, setSavingChanges] = useState(false);
+  const [savingProgress, setSavingProgress] = useState<number | null>(null);
   const [draftListPriceSale, setDraftListPriceSale] = useState<number | null>(null);
   const [draftListPriceChecked, setDraftListPriceChecked] = useState(false);
 
@@ -1059,10 +1061,19 @@ function CaseDetailPageContent() {
     }
 
     setSavingChanges(true);
+    setSavingProgress(stagedFileAdds.length > 0 ? 0 : null);
     try {
       const uploaderId = user.id || (user as any).uid;
 
       // 1) Subir archivos staged a GCS y registrar en DB.
+      const totalStagedBytes = stagedFileAdds.reduce((sum, s) => sum + s.size, 0);
+      const loadedByStagedId: Record<string, number> = {};
+      const reportStagedProgress = () => {
+        if (totalStagedBytes <= 0) return;
+        const loaded = Object.values(loadedByStagedId).reduce((sum, v) => sum + v, 0);
+        setSavingProgress(Math.min(99, (loaded / totalStagedBytes) * 100));
+      };
+
       for (const staged of stagedFileAdds) {
         const folder = staged.category === 'design_upload' ? 'design' : staged.category === 'complementary' ? 'complementary' : 'scans';
         const gcsPath = `organizations/${clinicalCase.organizationId}/cases/${id}/${folder}/${Date.now()}_${staged.filename}`;
@@ -1075,15 +1086,22 @@ function CaseDetailPageContent() {
         );
         if (!uploadUrl) throw new Error(`No se pudo obtener URL de subida para ${staged.filename}`);
 
-        const res = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: uploadBody,
-          headers: {
+        await uploadWithProgress(
+          uploadUrl,
+          uploadBody,
+          {
             'Content-Type': staged.mimeType,
             ...(contentEncoding ? { 'Content-Encoding': contentEncoding } : {}),
           },
+          (loadedBytes) => {
+            loadedByStagedId[staged.tempId] = Math.min(loadedBytes, staged.size);
+            reportStagedProgress();
+          },
+        ).catch(() => {
+          throw new Error(`Fallo en la subida de ${staged.filename}`);
         });
-        if (!res.ok) throw new Error(`Fallo en la subida de ${staged.filename}`);
+        loadedByStagedId[staged.tempId] = staged.size;
+        reportStagedProgress();
 
         await registerFileAction({
           caseId: id as string,
@@ -1095,6 +1113,7 @@ function CaseDetailPageContent() {
           gcsPath,
         });
       }
+      if (stagedFileAdds.length > 0) setSavingProgress(100);
 
       // 2) Borrar archivos marcados (cascada implícita de anotaciones).
       const annotationIdsKilledByCascade = new Set<string>();
@@ -1225,6 +1244,7 @@ function CaseDetailPageContent() {
       return false;
     } finally {
       setSavingChanges(false);
+      setSavingProgress(null);
     }
   };
 
@@ -2364,6 +2384,7 @@ function CaseDetailPageContent() {
                 isDeleting={isDeleting}
                 isCloning={isCloning}
                 savingChanges={savingChanges}
+                savingProgress={savingProgress}
                 onRepublicar={() => setRepublicarOpen(true)}
                 onEdit={handleStartEdit}
                 onCancelEdit={handleCancelEdit}

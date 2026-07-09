@@ -8,7 +8,8 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 /** v5.27 — case_quality_assignment.first_viewed_at: marca cuándo el revisor abrió el caso por primera vez (contador nuevo en ImpersonationSelector). */
 /** v5.28 — feature_flag + feature_flag_log: flags administrables desde el panel admin, con seed desde env y auditoría. Se retira AVAILABILITY_MODEL_ENABLED (modelo incondicional). */
 /** v5.29 — sessions.createdAt/lastActivityAt + flags SESSION_TIMEOUTS_ENABLED/SESSION_IDLE_TIMEOUT_MINUTES/SESSION_ABSOLUTE_TIMEOUT_HOURS: timeout de sesión por inactividad (2h deslizante) y absoluto (8h), enforcement server-side. */
-export const INFRA_VERSION = 'v5.29';
+/** v5.30 — fauchard_config.quality_reserved_case_weight: peso configurable de casos "reservados" (sin entrega aún) en el reparto round-robin de revisores de Calidad; case_quality_assignment.status ahora se cierra a 'completed' al terminar el caso. */
+export const INFRA_VERSION = 'v5.30';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -217,6 +218,13 @@ export async function ensureIncrementalInfrastructure(db: any) {
     await ensureSessionTimeoutInfrastructure(db);
   } catch (e) {
     console.error("[Infrastructure] Error creando infraestructura de timeout de sesión (v5.29):", e);
+  }
+
+  // v5.30 — Peso configurable de reparto de Calidad + cierre de case_quality_assignment.
+  try {
+    await ensureQualityLoadWeightInfrastructure(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando infraestructura de peso de reparto de Calidad (v5.30):", e);
   }
 
   // v5.19 — user.organization_id pasa a nullable para soportar usuarios sin org (admin, calidad).
@@ -621,6 +629,18 @@ export async function ensureSessionTimeoutInfrastructure(db: any) {
     INSERT INTO feature_flag (key, value, value_type, description)
     VALUES ('SESSION_ABSOLUTE_TIMEOUT_HOURS', ${absSeed}, 'number', 'Horas máximas de sesión desde el login, sin importar actividad')
     ON CONFLICT (key) DO NOTHING;
+  `);
+}
+
+/**
+ * v5.30 — Columna `quality_reserved_case_weight` en fauchard_config: pondera los casos
+ * "reservados" (asignados a un revisor de Calidad pero sin entrega aún) frente a 1.0 de
+ * una entrega real esperando revisión, en el reparto round-robin de assignQualityReviewerAction.
+ */
+export async function ensureQualityLoadWeightInfrastructure(db: any) {
+  await db.execute(sql`
+    ALTER TABLE fauchard_config
+      ADD COLUMN IF NOT EXISTS quality_reserved_case_weight NUMERIC(4,3) NOT NULL DEFAULT 0.400;
   `);
 }
 

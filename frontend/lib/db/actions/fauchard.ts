@@ -76,6 +76,8 @@ export interface FauchardConfigRow {
   inactivityAutoOffDays: number;
   inactivityReminderDays: number;
   alphaNoResponse: string;
+  /** v5.30 — Peso de un caso "reservado" (sin entrega aún) frente a 1.0 de una entrega real, en el reparto de revisores de Calidad. */
+  qualityReservedCaseWeight: string;
   changeReason: string | null;
 }
 
@@ -632,6 +634,12 @@ export async function updateFauchardParamsAction(
         const v = parseInt(String(params.maxAssignmentAttempts), 10);
         if (isNaN(v) || v < 1 || v > 10) {
           throw new Error('Intentos máximos de asignación (maxAssignmentAttempts) debe estar entre 1 y 10');
+        }
+      }
+      if (params.qualityReservedCaseWeight !== undefined) {
+        const v = parseFloat(String(params.qualityReservedCaseWeight));
+        if (isNaN(v) || v < 0 || v > 1) {
+          throw new Error('Peso de casos reservados (qualityReservedCaseWeight) debe estar entre 0.0 y 1.0');
         }
       }
       if (params.tQuoteMinutes !== undefined && (params.tQuoteMinutes < 1 || params.tQuoteMinutes > 1440)) {

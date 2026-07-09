@@ -361,6 +361,8 @@ export const fauchardConfig = pgTable("fauchard_config", {
   dInactivityDays: integer("d_inactivity_days").default(15).notNull(),
   // Selección — asignación directa (v5.9)
   maxAssignmentAttempts: integer("max_assignment_attempts").default(3).notNull(),
+  // Reparto de revisores de Calidad (v5.30): peso de un caso "reservado" (sin entrega aún) frente a 1.0 de una entrega real pendiente de revisión.
+  qualityReservedCaseWeight: numeric("quality_reserved_case_weight", { precision: 4, scale: 3 }).default('0.400').notNull(),
   // Legacy — mantener columnas hasta migración admin completa
   nInvited: integer("n_invited").default(5).notNull(),
   nFloor: integer("n_floor").default(3).notNull(),

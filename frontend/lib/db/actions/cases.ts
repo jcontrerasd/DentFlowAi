@@ -60,6 +60,19 @@ import { getCaseQuoteDeadlineAtBatch, getCaseQuoteDeadlineAt, getCaseReviewDeadl
 
 
 /**
+ * Cierra el case_quality_assignment activo del caso — llamar en cada punto donde el caso
+ * llega a un estado terminal (completado/cerrado/cancelado/rechazado). Sin esto, el registro
+ * queda `active` para siempre y sesga el reparto round-robin de `assignQualityReviewerAction`.
+ * Inerte si el caso nunca tuvo revisor de Calidad asignado.
+ */
+export async function closeCaseQualityAssignment(client: any, caseId: string): Promise<void> {
+  await client.execute(sql`
+    UPDATE case_quality_assignment SET status = 'completed'
+    WHERE clinical_case_id = ${caseId} AND status = 'active'
+  `);
+}
+
+/**
  * Registra un evento en la tabla clinical_case_event.
  * Esta función es el motor central del Hub Clínico Unificado (UCH).
  */
@@ -1414,7 +1427,9 @@ export async function approveWorkAction(
           isSystemAdmin ? undefined : eq(clinicalCase.organizationId, orgId as string)
         ))
         .returning();
-      
+
+      await closeCaseQualityAssignment(tx, caseId);
+
       if (updatedCase && updatedCase.assignedTechnicianId) {
         await notifyUser(updatedCase.assignedTechnicianId, 'TRABAJO_APROBADO', { caseId });
       }
@@ -1652,6 +1667,10 @@ export async function resolveFlowRequestAction(caseId: string, approve: boolean)
         lastActivityAt: new Date()
       })
       .where(eq(clinicalCase.id, caseId));
+
+    if (newStatus === 'cancelado') {
+      await closeCaseQualityAssignment(db, caseId);
+    }
 
     const outcomeAction =
       newStatus === 'pausado' ? CASE_EVENTS.CASO_PAUSADO : CASE_EVENTS.CASO_CANCELADO;

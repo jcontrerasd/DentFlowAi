@@ -22,11 +22,10 @@ import { UCH_PAYLOAD_PRESENTATION_FAUCHARD } from '@/lib/uchPresentation';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { notifyUser } from '../../services/notifications';
 import { getServerIdentity } from './impersonation';
-import { logCaseEvent } from './cases';
+import { logCaseEvent, closeCaseQualityAssignment } from './cases';
 import type { ActionResult } from '@/lib/types/actions';
 
 /** Motivo terminal cuando se agotan los ciclos sin atraer técnicos. */
-const POOL_FAIL_REASON = 'no_eligible_pool_timeout';
 
 type PoolConfig = { ttlHours: number; maxCycles: number };
 
@@ -104,6 +103,8 @@ export async function cancelPendingPoolAction(caseId: string): Promise<ActionRes
         updatedAt: new Date(),
       })
       .where(eq(clinicalCase.id, caseId));
+
+    await closeCaseQualityAssignment(db, caseId);
 
     await logCaseEvent({
       caseId,
@@ -226,7 +227,7 @@ export async function processPendingPoolExpirationAction(): Promise<ActionResult
           .update(clinicalCase)
           .set({
             status: INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO,
-            internalStatus: POOL_FAIL_REASON,
+            internalStatus: INTERNAL_CASE_STATUSES.SIN_COTIZACIONES_FALLO,
             updatedAt: new Date(),
           })
           .where(eq(clinicalCase.id, c.id));

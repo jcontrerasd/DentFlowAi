@@ -159,10 +159,19 @@ export const FILTERS_HELP: FauchardHelpSection = {
         'Con 5, un técnico con 1 caso activo tiene L = 1/5 = 0.20 (penalización leve) y con 5 casos llega a L = 1.0 (máxima). Si lo subes a 20, ese mismo técnico con 5 casos solo tendría L = 5/20 = 0.25: la carga influye mucho menos en el ranking.',
       links: [{ key: 'alphaLoad' }],
     },
+    {
+      label: 'Peso de Casos Reservados (Calidad)',
+      symbol: 'qualityReservedCaseWeight',
+      description:
+        'Cuánto pesa, en el reparto de casos entre revisores de Calidad, un caso que ya tiene revisor asignado pero donde el técnico todavía no entrega nada — frente a un caso con una entrega real esperando revisión, que siempre pesa 1.0. En 0, los casos reservados no cuentan nada (riesgo: un revisor puede acumular muchos casos "en espera" sin que el reparto lo note). En 1, pesan igual que una entrega real.',
+      example:
+        'Con 0.40, un revisor con 3 entregas reales pendientes y 2 casos reservados tiene carga = 3×1.0 + 2×0.40 = 3.8. Otro revisor con 0 entregas reales pero 10 casos reservados tiene carga = 10×0.40 = 4.0 — el sistema ya lo ve como más cargado, aunque hoy no tenga nada urgente por revisar.',
+    },
   ],
   notes: [
     'Cooldown e Inactividad Máxima son filtros de exclusión: se aplican ANTES de calcular el score. Un técnico que no los cumple ni siquiera entra al ranking.',
     'Carga de Trabajo (Min) no es un filtro: alimenta el factor Carga (L) del score. No excluye a nadie, solo regula cuánto penaliza estar ocupado.',
+    'Peso de Casos Reservados (Calidad) es independiente del score de asignación de técnicos: solo afecta a qué revisor de Calidad (rol `calidad`) se le asigna un caso nuevo.',
   ],
 };
 

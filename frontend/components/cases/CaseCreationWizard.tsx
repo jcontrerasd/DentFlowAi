@@ -94,13 +94,15 @@ const isAllowedExtension = (fileName: string) => {
 interface CaseCreationWizardProps {
   onComplete: (data: CaseFormData, files: CaseFiles, thumbnails: Record<string, string>) => Promise<void>;
   loading: boolean;
+  /** Progreso de subida 0-100; null/undefined mientras no hay subida en curso. */
+  uploadProgress?: number | null;
   initialData?: Partial<CaseFormData>;
 }
 
 
 const DRAFT_KEY = 'df_case_wizard_draft';
 
-export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComplete, loading, initialData }) => {
+export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComplete, loading, uploadProgress, initialData }) => {
   const [step, setStep] = useState(1);
 
   const getInitialFormData = (): CaseFormData => {
@@ -786,6 +788,21 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
               </div>
             )}
 
+            {loading && typeof uploadProgress === 'number' && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-muted">
+                  <span>Subiendo archivos...</span>
+                  <span className="text-primary">{Math.round(uploadProgress)}%</span>
+                </div>
+                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary rounded-full transition-[width] duration-200 ease-out"
+                    style={{ width: `${Math.min(100, Math.max(0, uploadProgress))}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="pt-6 flex justify-between items-center">
               <button onClick={prevStep} className="flex items-center gap-2 text-muted font-bold hover:text-primary transition-colors">
                 <ChevronLeft size={20} /> Atrás
@@ -803,7 +820,9 @@ export const CaseCreationWizard: React.FC<CaseCreationWizardProps> = ({ onComple
                 ) : (
                   <Save size={16} className="font-black" />
                 )}
-                {loading ? 'Guardando...' : (initialData ? 'Guardar Cambios' : 'Guardar Caso')}
+                {loading
+                  ? (typeof uploadProgress === 'number' ? `Guardando... ${Math.round(uploadProgress)}%` : 'Guardando...')
+                  : (initialData ? 'Guardar Cambios' : 'Guardar Caso')}
               </button>
             </div>
           </motion.div>

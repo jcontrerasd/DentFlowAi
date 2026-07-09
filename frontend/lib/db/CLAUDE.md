@@ -42,7 +42,7 @@ Campos clave:
 - `proposedPrice`, `proposedDeliveryDays`: acuerdo final (v2: desde catálogo en `acceptAssignmentAction`; legacy: cotización)
 - `workDeadline`: fecha de entrega comprometida = `desiredDeliveryAt` (fallback: `publishedAt + deadlineDays`). Helper: `lib/cases/workDeadline.ts`
 - `fauchardConfigId`: config Fauchard anclada al publicar (copy-on-write admin)
-- `internalStatus`: estados internos granulares para el motor (no visible al usuario)
+- `internalStatus`: estados internos granulares para el motor (no visible al usuario). **Invariante:** solo es no-null mientras Fauchard orquesta la asignación (`caso_recibido → … → asignacionPendiente / pendiente_pool / fallo`); `startWorkAction` lo pone en `null` y desde ahí `status` es la única fuente de verdad del ciclo. Los fallos de asignación se escriben espejados en `status` e `internalStatus`.
 - `derivedWorkType`, `derivedCategory`, `replacesMissingTeeth` (v5.13): clasificación Fauchard
 
 ### `case_assignment` (v2 activo — alias Drizzle `caseInvitation`)

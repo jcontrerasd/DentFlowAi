@@ -47,6 +47,7 @@ BORRADOR → EN EVALUACIÓN → ESPERANDO INICIO → EN EJECUCIÓN → EN REVISI
 [terminal negativo] → RECHAZADO | CERRADO
 ```
 Durante `enEvaluacion`, `internalStatus` puede ser `asignacionPendiente` o `pendiente_pool`.
+**Invariante:** `internalStatus` solo es no-null mientras Fauchard orquesta la asignación; `startWorkAction` lo pone en `null` y desde ahí `status` es la única fuente de verdad. Los fallos (`sin_asignacion_fallo`/`sin_cotizaciones_fallo`) se escriben espejados en `status` e `internalStatus`.
 
 ## Motor Fauchard (asignación directa)
 
