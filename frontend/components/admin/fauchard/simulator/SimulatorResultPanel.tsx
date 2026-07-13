@@ -60,7 +60,7 @@ export default function SimulatorResultPanel({
       {result.pricePreview && <SimulatorPriceResultCard preview={result.pricePreview} />}
 
       {(activeStep === 'filtros' || activeStep === 'caso' || activeStep === 'clasificacion') && (
-        <SimulatorFunnelSummary result={result} showFunnelChart={activeStep !== 'filtros'} />
+        <SimulatorFunnelSummary result={result} highlighted={activeStep === 'filtros'} />
       )}
 
       {(activeStep === 'ranking' || activeStep === 'asignacion') && (

@@ -48,7 +48,7 @@ export default function SimulatorPoolEmptyExplanation({
             onClick={() => (onViewDetail ? onViewDetail() : setExpanded((v) => !v))}
             className="text-[10px] font-bold uppercase text-primary hover:underline shrink-0"
           >
-            {onViewDetail ? 'Ver embudo en Filtros' : expanded ? 'Ocultar' : 'Ver detalle'}
+            {onViewDetail ? 'Ver parámetros de exclusión' : expanded ? 'Ocultar' : 'Ver detalle'}
           </button>
         </div>
         {expanded && !onViewDetail && result.funnel.stages?.length > 0 && (

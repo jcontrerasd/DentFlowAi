@@ -7,11 +7,11 @@ import SimulatorFilterFunnel from './SimulatorFilterFunnel';
 
 export default function SimulatorFunnelSummary({
   result,
-  showFunnelChart = true,
+  highlighted = false,
 }: {
   result: SimulationResult;
-  /** En paso Filtros el embudo vive solo en el panel izquierdo. */
-  showFunnelChart?: boolean;
+  /** Resalta la tarjeta del embudo cuando el usuario está parado en el paso Filtros. */
+  highlighted?: boolean;
 }) {
   return (
     <div className="space-y-6">
@@ -32,34 +32,36 @@ export default function SimulatorFunnelSummary({
         />
       </div>
 
-      {showFunnelChart && (
-        <div className="rounded-[2rem] border border-divider bg-surface/20 p-6 space-y-4">
-          <div className="flex items-center gap-3">
-            <Filter className="w-5 h-5 text-primary" />
-            <h4 className="text-sm font-bold uppercase tracking-wider text-foreground">Embudo de filtros</h4>
-          </div>
-          {result.funnel.stages?.length > 0 ? (
-            <SimulatorFilterFunnel
-              stages={result.funnel.stages}
-              universe={result.funnel.universe}
-              poolEmpty={result.poolEmpty}
-              compact
-            />
-          ) : (
-            <SimulatorExclusionChips excluded={result.funnel.excluded} />
-          )}
-          {result.funnel.stages?.length > 0 && (
-            <details className="group">
-              <summary className="text-[10px] font-bold uppercase tracking-wider text-faint cursor-pointer list-none">
-                Chips por primer fallo
-              </summary>
-              <div className="mt-3">
-                <SimulatorExclusionChips excluded={result.funnel.excluded} />
-              </div>
-            </details>
-          )}
+      <div
+        className={`rounded-[2rem] border p-6 space-y-4 transition-colors ${
+          highlighted ? 'border-primary bg-primary/5' : 'border-divider bg-surface/20'
+        }`}
+      >
+        <div className="flex items-center gap-3">
+          <Filter className={`w-5 h-5 ${highlighted ? 'text-primary' : 'text-primary'}`} />
+          <h4 className="text-sm font-bold uppercase tracking-wider text-foreground">Embudo de filtros</h4>
         </div>
-      )}
+        {result.funnel.stages?.length > 0 ? (
+          <SimulatorFilterFunnel
+            stages={result.funnel.stages}
+            universe={result.funnel.universe}
+            poolEmpty={result.poolEmpty}
+            compact
+          />
+        ) : (
+          <SimulatorExclusionChips excluded={result.funnel.excluded} />
+        )}
+        {result.funnel.stages?.length > 0 && (
+          <details className="group">
+            <summary className="text-[10px] font-bold uppercase tracking-wider text-faint cursor-pointer list-none">
+              Chips por primer fallo
+            </summary>
+            <div className="mt-3">
+              <SimulatorExclusionChips excluded={result.funnel.excluded} />
+            </div>
+          </details>
+        )}
+      </div>
     </div>
   );
 }

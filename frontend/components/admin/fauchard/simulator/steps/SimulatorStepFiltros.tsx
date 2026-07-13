@@ -1,10 +1,8 @@
-import { Filter } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { PARAM_GROUPS_BY_STEP } from '../simulatorConstants';
 import type { SimulationResult } from '@/lib/fauchard/simulationTypes';
 import { buildPoolEmptyExplanation } from '@/lib/fauchard/simulationHelpers';
 import SimulatorActiveConfigRows from '../shared/SimulatorActiveConfigRows';
-import SimulatorFilterFunnel from '../results/SimulatorFilterFunnel';
-import SimulatorExclusionChips from '../shared/SimulatorExclusionChips';
 
 export default function SimulatorStepFiltros({
   currentConfig,
@@ -26,46 +24,15 @@ export default function SimulatorStepFiltros({
         />
       </div>
 
-      {result ? (
-        <div className="p-6 rounded-[2rem] border border-divider bg-surface/20 space-y-5">
-          <div className="flex items-center gap-3">
-            <Filter className={`w-5 h-5 ${result.poolEmpty ? 'text-error' : 'text-primary'}`} />
-            <div>
-              <h4 className="text-sm font-bold text-foreground">Embudo de filtrado</h4>
-              {poolEmptyExplanation && (
-                <p className="text-xs text-muted mt-0.5">{poolEmptyExplanation.summaryLine}</p>
-              )}
-            </div>
-          </div>
-
-          {result.funnel.stages?.length > 0 && (
-            <SimulatorFilterFunnel
-              stages={result.funnel.stages}
-              universe={result.funnel.universe}
-              poolEmpty={result.poolEmpty}
-            />
-          )}
-
-          {!result.poolEmpty && (
-            <details className="group">
-              <summary className="text-xs font-bold uppercase tracking-wider text-muted cursor-pointer list-none flex items-center gap-1">
-                Detalle por motivo (primer fallo)
-              </summary>
-              <div className="mt-3">
-                <SimulatorExclusionChips excluded={result.funnel.excluded} />
-              </div>
-            </details>
-          )}
-        </div>
-      ) : (
-        <div className="p-10 rounded-[2.5rem] border-2 border-dashed border-divider text-center space-y-3">
-          <Filter className="w-8 h-8 text-muted opacity-50 mx-auto" />
-          <h4 className="text-sm font-bold text-foreground">Embudo de filtros</h4>
-          <p className="text-muted opacity-50 text-xs max-w-sm mx-auto">
-            Ejecuta la simulación para ver cuántos técnicos pasan cada filtro en orden hasta los elegibles.
-          </p>
-        </div>
-      )}
+      <div className="p-6 rounded-[2rem] border border-dashed border-divider bg-surface/20 flex items-center gap-3">
+        <ArrowRight className="w-5 h-5 text-primary shrink-0" />
+        <p className="text-xs text-muted leading-relaxed">
+          {result
+            ? poolEmptyExplanation?.summaryLine ??
+              'El embudo de filtros con el resultado de la simulación está en el panel de la derecha.'
+            : 'Ejecuta la simulación para ver el embudo de filtros en el panel de la derecha.'}
+        </p>
+      </div>
     </div>
   );
 }

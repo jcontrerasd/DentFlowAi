@@ -81,22 +81,24 @@ export default function SimulatorRankingTable({
       </div>
 
       <div className="rounded-[2rem] border border-divider bg-surface/20 overflow-hidden">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="bg-surface border-b border-divider text-xs font-bold uppercase tracking-wider text-muted">
-              <th className="px-6 py-5">#</th>
-              <th className="px-6 py-5">Técnico</th>
-              <th className="px-6 py-5">Score</th>
-              <th className="px-6 py-5">Q/P/E/B/L/N</th>
-              <th className="px-6 py-5">Carga</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-800/50">
-            {displayRanked.map((d) => (
-              <RankingRow key={d.technicianId} row={d} />
-            ))}
-          </tbody>
-        </table>
+        <div className="overflow-y-auto max-h-[480px]">
+          <table className="w-full text-left">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-surface border-b border-divider text-xs font-bold uppercase tracking-wider text-muted">
+                <th className="px-6 py-5">#</th>
+                <th className="px-6 py-5">Técnico</th>
+                <th className="px-6 py-5">Score</th>
+                <th className="px-6 py-5">Q/P/E/B/L/N</th>
+                <th className="px-6 py-5">Carga</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/50">
+              {displayRanked.map((d) => (
+                <RankingRow key={d.technicianId} row={d} />
+              ))}
+            </tbody>
+          </table>
+        </div>
         {displayRanked.length === 0 && (
           <p className="p-6 text-center text-muted text-sm">Sin filas que mostrar con el filtro actual.</p>
         )}

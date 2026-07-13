@@ -23,7 +23,7 @@ export default function SimulatorFilterFunnel({
   return (
     <ol
       className="space-y-1 list-none m-0 p-0"
-      aria-label="Embudo secuencial de filtrado de técnicos"
+      aria-label="Embudo de filtros"
     >
       {stages.map((stage, index) => {
         const isEligible = stage.id === 'eligible';
