@@ -9,7 +9,9 @@ import { invalidateContactGuardCache } from "@/lib/contactGuard/cache";
 /** v5.28 — feature_flag + feature_flag_log: flags administrables desde el panel admin, con seed desde env y auditoría. Se retira AVAILABILITY_MODEL_ENABLED (modelo incondicional). */
 /** v5.29 — sessions.createdAt/lastActivityAt + flags SESSION_TIMEOUTS_ENABLED/SESSION_IDLE_TIMEOUT_MINUTES/SESSION_ABSOLUTE_TIMEOUT_HOURS: timeout de sesión por inactividad (2h deslizante) y absoluto (8h), enforcement server-side. */
 /** v5.30 — fauchard_config.quality_reserved_case_weight: peso configurable de casos "reservados" (sin entrega aún) en el reparto round-robin de revisores de Calidad; case_quality_assignment.status ahora se cierra a 'completed' al terminar el caso. */
-export const INFRA_VERSION = 'v5.30';
+/** v5.31 — cancellation_reason + clinical_case.closure_cause: cancelación unilateral del dentista (gratis antes de aceptación, 100% del valor comprometido después). Reemplaza el flujo de pausa/mutuo acuerdo, retirado. */
+/** v5.32 — withdrawal_reason + columnas de retiro en case_assignment/clinical_case/fauchard_config: retiro unilateral del técnico con posta, reasignación diferida a la decisión del dentista. */
+export const INFRA_VERSION = 'v5.32';
 const globalForInfra = global as unknown as {
   infrastructureChecked: string | undefined
 };
@@ -225,6 +227,20 @@ export async function ensureIncrementalInfrastructure(db: any) {
     await ensureQualityLoadWeightInfrastructure(db);
   } catch (e) {
     console.error("[Infrastructure] Error creando infraestructura de peso de reparto de Calidad (v5.30):", e);
+  }
+
+  // v5.31 — Cancelación del dentista (catálogo de motivos + closure_cause).
+  try {
+    await ensureCancellationInfrastructure(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando infraestructura de cancelación (v5.31):", e);
+  }
+
+  // v5.32 — Retiro del técnico (catálogo de motivos + reasignación diferida).
+  try {
+    await ensureWithdrawalInfrastructure(db);
+  } catch (e) {
+    console.error("[Infrastructure] Error creando infraestructura de retiro del técnico (v5.32):", e);
   }
 
   // v5.19 — user.organization_id pasa a nullable para soportar usuarios sin org (admin, calidad).
@@ -641,6 +657,67 @@ export async function ensureQualityLoadWeightInfrastructure(db: any) {
   await db.execute(sql`
     ALTER TABLE fauchard_config
       ADD COLUMN IF NOT EXISTS quality_reserved_case_weight NUMERIC(4,3) NOT NULL DEFAULT 0.400;
+  `);
+}
+
+/** v5.31 — Cancelación del dentista: catálogo de motivos + closure_cause + status 'cancelled' de asignación. */
+export async function ensureCancellationInfrastructure(db: any) {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS cancellation_reason (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      code TEXT NOT NULL,
+      label TEXT NOT NULL,
+      description TEXT,
+      sort_order INTEGER NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS cancellation_reason_code_uidx ON cancellation_reason(code);
+    INSERT INTO cancellation_reason (code, label, sort_order) VALUES
+      ('cxl_001', 'Ya no necesito el trabajo', 1),
+      ('cxl_002', 'Error en la solicitud', 2),
+      ('cxl_003', 'Cambio de plan de tratamiento', 3),
+      ('cxl_004', 'Otro', 4)
+    ON CONFLICT (code) DO NOTHING;
+
+    ALTER TABLE clinical_case
+      ADD COLUMN IF NOT EXISTS closure_cause TEXT;
+  `);
+}
+
+/** v5.32 — Retiro del técnico: catálogo de motivos + columnas de asignación/caso + plazo de decisión del dentista. */
+export async function ensureWithdrawalInfrastructure(db: any) {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS withdrawal_reason (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      code TEXT NOT NULL,
+      label TEXT NOT NULL,
+      description TEXT,
+      sort_order INTEGER NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS withdrawal_reason_code_uidx ON withdrawal_reason(code);
+    INSERT INTO withdrawal_reason (code, label, sort_order) VALUES
+      ('wdr_001', 'Sobrecarga de trabajo', 1),
+      ('wdr_002', 'Problema técnico con archivos', 2),
+      ('wdr_003', 'Emergencia personal', 3),
+      ('wdr_004', 'Otro', 4)
+    ON CONFLICT (code) DO NOTHING;
+
+    ALTER TABLE case_assignment
+      ADD COLUMN IF NOT EXISTS withdrawal_reason_id UUID REFERENCES withdrawal_reason(id) ON DELETE RESTRICT,
+      ADD COLUMN IF NOT EXISTS withdrawal_comment TEXT,
+      ADD COLUMN IF NOT EXISTS withdrawn_at TIMESTAMPTZ;
+
+    ALTER TABLE clinical_case
+      ADD COLUMN IF NOT EXISTS withdrawal_pending_since TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS pact_days_snapshot INTEGER;
+
+    ALTER TABLE fauchard_config
+      ADD COLUMN IF NOT EXISTS t_withdrawal_decision_hours INTEGER NOT NULL DEFAULT 24;
   `);
 }
 

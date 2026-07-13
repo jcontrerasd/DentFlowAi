@@ -4,12 +4,14 @@ import { UCH_AUDIT_MATRIX } from '@/lib/constants/uchAuditMatrix';
 import { buildUchTimelineRows, primaryUchActionId } from '@/components/cases/uch/buildUchTimelineRows';
 
 describe('UCH audit matrix', () => {
-  it('cataloga solicitudes de flujo y cierres por acuerdo', () => {
+  it('cataloga cancelación del dentista y retiro del técnico', () => {
     const actions = UCH_AUDIT_MATRIX.map((r) => r.action);
-    expect(actions).toContain(CASE_EVENTS.SOLICITUD_CAMBIO_FLUJO);
-    expect(actions).toContain(CASE_EVENTS.SOLICITUD_CAMBIO_FLUJO_RECHAZADA);
-    expect(actions).toContain(CASE_EVENTS.CASO_PAUSADO);
     expect(actions).toContain(CASE_EVENTS.CASO_CANCELADO);
+    expect(actions).toContain(CASE_EVENTS.ASIGNACION_ANULADA);
+    expect(actions).toContain(CASE_EVENTS.RETIRO_TECNICO);
+    expect(actions).toContain(CASE_EVENTS.REASIGNACION_REQUERIDA);
+    expect(actions).toContain(CASE_EVENTS.REASIGNACION_CONTINUADA);
+    expect(actions).toContain(CASE_EVENTS.FECHA_FIRME_ACTUALIZADA);
   });
 
   it('primaryUchActionId respeta prioridad delivery > case_actions', () => {

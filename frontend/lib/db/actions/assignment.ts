@@ -60,7 +60,7 @@ import {
   isCompletedOnTime,
 } from '@/lib/cases/workDeadline';
 
-export type AssignmentStatus = 'pending' | 'accepted' | 'rejected' | 'expired';
+export type AssignmentStatus = 'pending' | 'accepted' | 'rejected' | 'expired' | 'cancelled' | 'withdrawn';
 
 const ACTIVE_CASE_STATUSES = [
   CASE_STATUSES.ACEPTADA_PENDIENTE_INICIO,
@@ -1018,8 +1018,17 @@ export async function acceptAssignmentAction(assignmentId: string): Promise<Acti
     }
 
     const now = new Date();
+    // v5.32 — re-anclaje: si el técnico anterior se retiró, la fecha comprometida
+    // se recalcula desde ESTA aceptación, con el mismo plazo pactado originalmente
+    // (publishedAt→desiredDeliveryAt). Así el reemplazo nunca hereda un plazo vencido.
+    const pactDays = cCase.pactDaysSnapshot;
+    const effectiveDesiredDeliveryAt = pactDays != null
+      ? new Date(now.getTime() + pactDays * 86_400_000)
+      : cCase.desiredDeliveryAt;
+    const newDeadlineDays = pactDays != null ? deriveDeadlineDays(effectiveDesiredDeliveryAt, now.getTime()) : null;
+
     const proposedPrice = cCase.listPriceSale ? parseFloat(String(cCase.listPriceSale)) : null;
-    const proposedDeliveryDays = computeProposedDeliveryDays(cCase.publishedAt, cCase.desiredDeliveryAt);
+    const proposedDeliveryDays = computeProposedDeliveryDays(cCase.publishedAt, effectiveDesiredDeliveryAt);
 
     await db.transaction(async (tx) => {
       // Guard de atomicidad: el UPDATE solo procede si la asignación SIGUE pendiente.
@@ -1027,7 +1036,12 @@ export async function acceptAssignmentAction(assignmentId: string): Promise<Acti
       // concurrente, expiración o reemplazo simultáneo).
       const accepted = await tx
         .update(caseAssignment)
-        .set({ status: 'accepted', respondedAt: now, updatedAt: now })
+        .set({
+          status: 'accepted',
+          respondedAt: now,
+          updatedAt: now,
+          ...(newDeadlineDays != null ? { deadlineDays: newDeadlineDays } : {}),
+        })
         .where(and(eq(caseAssignment.id, assignmentId), eq(caseAssignment.status, 'pending')))
         .returning({ id: caseAssignment.id });
       if (accepted.length === 0) {
@@ -1044,6 +1058,7 @@ export async function acceptAssignmentAction(assignmentId: string): Promise<Acti
           proposedPrice,
           proposedDeliveryDays,
           proposedDeliveryHours: 0,
+          ...(pactDays != null ? { desiredDeliveryAt: effectiveDesiredDeliveryAt, pactDaysSnapshot: null } : {}),
           updatedAt: now,
           lastActivityAt: now,
         })
@@ -1059,8 +1074,27 @@ export async function acceptAssignmentAction(assignmentId: string): Promise<Acti
       payload: { assignmentId, visibleTo: 'tecnico' },
     });
 
+    if (pactDays != null) {
+      await logCaseEvent({
+        caseId: row.clinicalCaseId,
+        userId: identity.id,
+        type: 'sistema',
+        action: CASE_EVENTS.FECHA_FIRME_ACTUALIZADA,
+        content: 'Un técnico aceptó continuar con el caso. Nueva fecha comprometida.',
+        payload: { visibleTo: 'dentista', deliveryDate: effectiveDesiredDeliveryAt, ...UCH_PAYLOAD_PRESENTATION_FAUCHARD },
+      });
+    }
+
     if (cCase.doctorId) {
       await notifyUser(cCase.doctorId, 'ASIGNACION_ACEPTADA', { caseId: row.clinicalCaseId });
+      if (pactDays != null) {
+        await notifyUser(cCase.doctorId, 'FECHA_FIRME_ACTUALIZADA', {
+          caseId: row.clinicalCaseId,
+          deliveryDate: effectiveDesiredDeliveryAt instanceof Date
+            ? effectiveDesiredDeliveryAt.toLocaleDateString('es-CL')
+            : String(effectiveDesiredDeliveryAt),
+        });
+      }
     }
 
     return { success: true };
@@ -1100,6 +1134,38 @@ export async function expirePendingAssignmentsForCase(caseId: string): Promise<n
   }
 
   return expired.length;
+}
+
+/**
+ * Anula asignaciones pendientes por cancelación del dentista (v5.31).
+ * A diferencia de `expirePendingAssignmentsForCase`, NO penaliza al técnico:
+ * la falta de respuesta no fue suya, fue el dentista quien cerró el caso.
+ */
+export async function voidPendingAssignmentsForCase(caseId: string): Promise<number> {
+  const now = new Date();
+  const voided = await db
+    .update(caseAssignment)
+    .set({ status: 'cancelled', updatedAt: now })
+    .where(
+      and(
+        eq(caseAssignment.clinicalCaseId, caseId),
+        eq(caseAssignment.status, 'pending'),
+      ),
+    )
+    .returning({ id: caseAssignment.id, technicianId: caseAssignment.technicianId });
+
+  for (const row of voided) {
+    await logCaseEvent({
+      caseId,
+      userId: row.technicianId,
+      type: 'sistema',
+      action: CASE_EVENTS.ASIGNACION_ANULADA,
+      content: 'La asignación ya no está disponible.',
+      payload: { assignmentId: row.id, visibleTo: 'tecnico', ...UCH_PAYLOAD_PRESENTATION_FAUCHARD },
+    });
+  }
+
+  return voided.length;
 }
 
 export async function batchExpireAssignmentsForCases(caseIds: string[]): Promise<void> {

@@ -10,7 +10,6 @@ export type DentistKpiId =
   | 'enRevision'
   | 'completado'
   | 'cerrado'
-  | 'pausado'
   | 'otros';
 
 /** KPIs de estado del técnico (excluye total). */
@@ -99,11 +98,8 @@ export function classifyDentistCaseKpi(status: string): DentistKpiId {
     case CASE_STATUSES.COMPLETADO:
       return 'completado';
     case CASE_STATUSES.CERRADO:
-    case CASE_STATUSES.CANCELADO:
     case CASE_STATUSES.RECHAZADO:
       return 'cerrado';
-    case CASE_STATUSES.PAUSADO:
-      return 'pausado';
     default:
       if (process.env.NODE_ENV === 'development') {
         console.warn('[classifyDentistCaseKpi] status desconocido:', status);
@@ -167,8 +163,7 @@ export function classifyTechnicianCaseKpi(input: TechnicianCaseKpiInput): TechKp
   if (invitationStatus === null) {
     if (
       caseStatus === CASE_STATUSES.CERRADO ||
-      caseStatus === CASE_STATUSES.RECHAZADO ||
-      caseStatus === CASE_STATUSES.CANCELADO
+      caseStatus === CASE_STATUSES.RECHAZADO
     ) {
       return 'ofertaNoSeleccionada';
     }

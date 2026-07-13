@@ -122,15 +122,6 @@ export function getDentistCardZone(input: DentistCardInput): DentistCardZone {
         ctaLabel: 'Ver detalle',
         ctaVariant: 'neutral',
       };
-    case 'pausado':
-      return {
-        icon: Clock,
-        iconClass: 'text-warning',
-        primary: 'Pausado',
-        secondary: joinSecondary([material]),
-        ctaLabel: 'Ver caso',
-        ctaVariant: 'neutral',
-      };
     default:
       return {
         icon: Activity,

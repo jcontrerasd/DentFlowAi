@@ -15,7 +15,7 @@ import { creationInstructionsText, latestRejectedDeliveryReviewComment } from '@
 import { tecnicoSeesVisibleToTecnicoEvent } from '@/lib/uchEventVisibility';
 import UchDealSummary from '@/components/cases/uch/UchDealSummary';
 import { buildUchTimelineRows, primaryUchActionId } from '@/components/cases/uch/buildUchTimelineRows';
-import { computeIncludeCaseActionTimeline } from '@/components/cases/uch/uchHubActionVisibility';
+import { computeIncludeCaseActionTimeline, computeWithdrawActionState } from '@/components/cases/uch/uchHubActionVisibility';
 import type { UchActionRowId, UchCaseEventLite } from '@/components/cases/uch/uchTimelineTypes';
 import UchEventBubble from '@/components/cases/uch/UchEventBubble';
 import UchDeliveryPanel from '@/components/cases/uch/UchDeliveryPanel';
@@ -321,14 +321,14 @@ export default function UnifiedCaseHub({
       'ASIGNACION_ENVIADA', 'ASIGNACION_RECIBIDA', 'ASIGNACION_ACEPTADA',
       'ASIGNACION_RECHAZADA', 'ASIGNACION_EXPIRADA', 'ASIGNACION_REASIGNADA',
       'OFERTA_RECHAZADA_POR_TECNICO', 'TRABAJO_INICIADO',
-      'ASIGNACION_CALIDAD',
-      'SOLICITUD_CAMBIO_FLUJO', 'SOLICITUD_CAMBIO_FLUJO_RECHAZADA',
-      'CASO_PAUSADO', 'CASO_CANCELADO', 'CREACION', 'CASO_CREADO', 'CASO_COPIA',
+      'ASIGNACION_CALIDAD', 'ASIGNACION_ANULADA',
+      'CASO_CANCELADO', 'CREACION', 'CASO_CREADO', 'CASO_COPIA',
+      'RETIRO_TECNICO', 'REASIGNACION_REQUERIDA', 'REASIGNACION_CONTINUADA', 'FECHA_FIRME_ACTUALIZADA',
     ],
     entrega: [
       'REVISION_ENVIADA', 'REVISION_SOLICITADA', 'TRABAJO_APROBADO',
       'REVISION_ENVIADA_CALIDAD', 'REVISION_SOLICITADA_CALIDAD', 'CALIDAD_CERTIFICADA',
-      'COMENTARIO_TECNICO', 'REANUDADO',
+      'COMENTARIO_TECNICO',
     ],
     calificacion: [
       'CALIFICACION_ENVIADA',
@@ -684,7 +684,14 @@ export default function UnifiedCaseHub({
     includeDelivery,
     timelineEvents: filteredEvents as { action: string }[],
     proposalExpiresAt: clinicalCase?.proposalExpiresAt,
-  });
+  }) || computeWithdrawActionState({
+    actingAsTecnico,
+    viewingAsAdmin,
+    caseStatus,
+    currentUserId: currentUser?.id,
+    clinicalCase,
+    myInvitation,
+  }).visible;
 
   const primaryAction = useMemo(
     () => primaryUchActionId({ includeDelivery, includeCaseActions }),
@@ -735,8 +742,6 @@ export default function UnifiedCaseHub({
       uchDeadlineDepMs(clinicalCase?.proposalExpiresAt),
       uchDeadlineDepMs(clinicalCase?.updatedAt),
       uchDeadlineDepMs(clinicalCase?.workDeadline),
-      clinicalCase?.pendingActionRequest ?? '',
-      clinicalCase?.pendingActionActor ?? '',
     ],
   );
 

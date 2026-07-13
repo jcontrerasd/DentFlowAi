@@ -98,6 +98,7 @@ export async function cancelPendingPoolAction(caseId: string): Promise<ActionRes
       .set({
         status: CASE_STATUSES.CERRADO,
         internalStatus: null,
+        closureCause: 'cancelacion_dentista_sin_cobro',
         pendingPoolStartedAt: null,
         pendingPoolCheckinSentAt: null,
         updatedAt: new Date(),

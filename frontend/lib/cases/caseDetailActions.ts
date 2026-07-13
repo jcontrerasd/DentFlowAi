@@ -1,5 +1,4 @@
 import {
-  CASE_STATUSES,
   INTERNAL_CASE_STATUSES,
   isDraftCaseStatus,
   isTerminalCaseStatus,
@@ -14,7 +13,8 @@ export type CaseDetailActionKey =
   | 'archive'
   | 'unarchive'
   | 'createCopy'
-  | 'republicar';
+  | 'republicar'
+  | 'cancel';
 
 export type CaseDetailActionState = {
   visible: boolean;
@@ -101,6 +101,7 @@ function dentistActions(input: GetCaseDetailActionStateInput): CaseDetailActions
     republicar: isNoQuotesFailed(input.status)
       ? action(true)
       : hidden(),
+    cancel: !draft && !terminal ? action(true) : hidden(),
   };
 }
 
@@ -110,7 +111,7 @@ function technicianCanArchive(input: GetCaseDetailActionStateInput): boolean {
     return true;
   }
   if (
-    input.status === CASE_STATUSES.COMPLETADO &&
+    isTerminalCaseStatus(input.status) &&
     input.assignedTechnicianId &&
     input.viewerId &&
     input.assignedTechnicianId === input.viewerId
@@ -139,6 +140,7 @@ function adminActions(input: GetCaseDetailActionStateInput): CaseDetailActionsMa
     ),
     createCopy: action(terminal, 'Solo en casos finalizados (completado, rechazado o cerrado)'),
     republicar: isNoQuotesFailed(input.status) ? action(true) : hidden(),
+    cancel: !isDraftCaseStatus(input.status) && !terminal ? action(true) : hidden(),
   };
 }
 
@@ -160,6 +162,7 @@ function technicianActions(input: GetCaseDetailActionStateInput): CaseDetailActi
     ),
     createCopy: hidden(),
     republicar: hidden(),
+    cancel: hidden(),
   };
 }
 

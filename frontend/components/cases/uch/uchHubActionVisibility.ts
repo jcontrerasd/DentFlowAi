@@ -15,9 +15,8 @@ export type ComputeIncludeCaseActionTimelineInput = {
   caseStatus: string;
   clinicalCase: {
     assignedTechnicianId?: string | null;
-    pendingActionRequest?: string | null;
-    pendingActionActor?: string | null;
     workStartedAt?: string | Date | null;
+    currentResponsibility?: string | null;
   } | null | undefined;
   currentUserId?: string;
   myInvitation: InvitationItem | null | undefined;
@@ -44,9 +43,6 @@ export function computeIncludeCaseActionTimeline(p: ComputeIncludeCaseActionTime
     ) {
       return true;
     }
-    if (p.clinicalCase?.pendingActionRequest && p.clinicalCase.pendingActionActor !== p.currentUserId) {
-      return true;
-    }
     if (p.caseStatus === 'completado') return true;
     return false;
   }
@@ -69,4 +65,44 @@ export function computeIncludeCaseActionTimeline(p: ComputeIncludeCaseActionTime
   if (p.caseStatus === 'enRevision') return false;
 
   return false;
+}
+
+export type ComputeWithdrawActionStateInput = {
+  actingAsTecnico: boolean;
+  viewingAsAdmin?: boolean;
+  caseStatus: string;
+  currentUserId?: string;
+  clinicalCase: {
+    assignedTechnicianId?: string | null;
+    currentResponsibility?: string | null;
+  } | null | undefined;
+  myInvitation: InvitationItem | null | undefined;
+};
+
+const WITHDRAW_ELIGIBLE_STATUSES = new Set([
+  'aceptadaPendienteInicio', 'enEjecucion', 'enRevisionCalidad', 'certificadoCalidad', 'enRevision', 'cambiosEnProceso',
+]);
+
+/**
+ * v5.32 — "Retirarme del caso": visible para el técnico ganador de un caso activo
+ * con asignación aceptada; habilitado solo mientras tiene la posta (`currentResponsibility`).
+ */
+export function computeWithdrawActionState(p: ComputeWithdrawActionStateInput): {
+  visible: boolean;
+  enabled: boolean;
+  disabledReason?: string;
+} {
+  if (p.viewingAsAdmin || !p.actingAsTecnico) return { visible: false, enabled: false };
+
+  const isAssignedWinner = !!(p.currentUserId && p.clinicalCase?.assignedTechnicianId === p.currentUserId);
+  if (!isAssignedWinner) return { visible: false, enabled: false };
+  if (p.myInvitation?.status !== 'accepted') return { visible: false, enabled: false };
+  if (!WITHDRAW_ELIGIBLE_STATUSES.has(p.caseStatus)) return { visible: false, enabled: false };
+
+  const hasPosta = p.clinicalCase?.currentResponsibility === 'tecnico';
+  return {
+    visible: true,
+    enabled: hasPosta,
+    disabledReason: hasPosta ? undefined : 'El caso está en manos de Calidad o del dentista',
+  };
 }

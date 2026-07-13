@@ -18,7 +18,7 @@ describe('classifyDentistCaseKpi', () => {
     expect(classifyDentistCaseKpi(CASE_STATUSES.PROPUESTA_LISTA)).toBe('propuestaLista');
     expect(classifyDentistCaseKpi(CASE_STATUSES.CAMBIOS_EN_PROCESO)).toBe('enRevision');
     expect(classifyDentistCaseKpi(CASE_STATUSES.RECHAZADO)).toBe('cerrado');
-    expect(classifyDentistCaseKpi(CASE_STATUSES.PAUSADO)).toBe('pausado');
+    expect(classifyDentistCaseKpi(CASE_STATUSES.CERRADO)).toBe('cerrado');
   });
 
   it('desconocido → otros', () => {

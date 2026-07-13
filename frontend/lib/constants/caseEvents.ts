@@ -53,14 +53,20 @@ export const CASE_EVENTS = {
   CALIFICACION_ENVIADA: 'CALIFICACION_ENVIADA',
   /** Calificación del revisor de Calidad al técnico (dimension='quality'); privada del equipo QA, no visible al técnico ni dentista. */
   CALIFICACION_ENVIADA_CALIDAD: 'CALIFICACION_ENVIADA_CALIDAD',
-  REANUDADO: 'REANUDADO',
 
-  /** Mutuo acuerdo: pausa o cancelación aprobada */
-  CASO_PAUSADO: 'CASO_PAUSADO',
+  /** v5.31 — Cancelación unilateral del dentista (gratis o con cobro 100%, ver clinical_case.closure_cause). */
   CASO_CANCELADO: 'CASO_CANCELADO',
-  /** Solicitud de pausa/cancelación pendiente de respuesta */
-  SOLICITUD_CAMBIO_FLUJO: 'SOLICITUD_CAMBIO_FLUJO',
-  SOLICITUD_CAMBIO_FLUJO_RECHAZADA: 'SOLICITUD_CAMBIO_FLUJO_RECHAZADA',
+  /** v5.31 — Asignación pendiente anulada por cancelación del dentista (sin sanción al técnico). */
+  ASIGNACION_ANULADA: 'ASIGNACION_ANULADA',
+
+  /** v5.32 — Retiro unilateral del técnico de un caso ya aceptado (posta en sus manos). */
+  RETIRO_TECNICO: 'RETIRO_TECNICO',
+  /** v5.32 — El caso quedó sin técnico tras un retiro; requiere decisión del dentista. */
+  REASIGNACION_REQUERIDA: 'REASIGNACION_REQUERIDA',
+  /** v5.32 — El dentista decidió continuar (o venció el plazo de decisión): Fauchard busca reemplazo. */
+  REASIGNACION_CONTINUADA: 'REASIGNACION_CONTINUADA',
+  /** v5.32 — Al aceptar el técnico de reemplazo, se re-ancla la fecha comprometida. */
+  FECHA_FIRME_ACTUALIZADA: 'FECHA_FIRME_ACTUALIZADA',
 
   // Comunicación
   COMENTARIO_TECNICO: 'COMENTARIO_TECNICO',

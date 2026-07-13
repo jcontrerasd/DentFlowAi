@@ -22,8 +22,6 @@ export const CASE_STATUSES = {
   CAMBIOS_EN_PROCESO: 'cambiosEnProceso',
   COMPLETADO: 'completado',
   CERRADO: 'cerrado',
-  PAUSADO: 'pausado',
-  CANCELADO: 'cancelado',
   RECHAZADO: 'rechazado',
 } as const;
 
@@ -64,6 +62,8 @@ export const INTERNAL_CASE_STATUSES = {
   RECHAZADA_POR_DENTISTA: 'rechazadaPorDentista',
   /** Dentista rechazó todas las cotizaciones en bloque comparativo */
   RECHAZADO_TODAS_OFERTAS: 'rechazadoTodasOfertas',
+  /** v5.32 — el técnico se retiró; el caso espera la decisión del dentista (continuar o cancelar). */
+  RETIRO_PENDIENTE: 'retiro_pendiente',
 } as const;
 
 /** WorkTypes canónicos v5.13 (derivación de casos) + legacy (skills históricos). */
@@ -251,7 +251,7 @@ export function isActiveCaseStatus(status: string | null | undefined): boolean {
 }
 
 /** Invitación del técnico en estado que permite archivar su vista. */
-export const TECH_ARCHIVE_INVITATION_STATUSES = ['rejected', 'expired', 'withdrawn'] as const;
+export const TECH_ARCHIVE_INVITATION_STATUSES = ['rejected', 'expired', 'withdrawn', 'cancelled'] as const;
 
 export type CaseStatus = typeof CASE_STATUSES[keyof typeof CASE_STATUSES];
 export type InternalCaseStatus = typeof INTERNAL_CASE_STATUSES[keyof typeof INTERNAL_CASE_STATUSES];

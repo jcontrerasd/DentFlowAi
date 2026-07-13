@@ -14,6 +14,7 @@ import { startWorkAction } from '@/lib/db/actions/proposal';
 import { acceptAssignmentAction } from '@/lib/db/actions/assignment';
 import { getRejectionUiEnabledAction } from '@/lib/db/actions/rejection';
 import UchRejectInvitationDialog from '@/components/cases/uch/UchRejectInvitationDialog';
+import UchWithdrawFromCaseDialog from '@/components/cases/uch/UchWithdrawFromCaseDialog';
 import { quoteDisplayFromInvitation } from '@/lib/uchQuoteDisplay';
 import type { InvitationItem } from '@/lib/db/actions/invitations';
 import type { ServerClockAnchor } from '@/lib/deadlineMs';
@@ -21,6 +22,7 @@ import { dispatchDashboardMetricsRefresh } from '@/lib/dashboard/dashboardRefres
 import { CaseDesiredDeliveryChip } from '@/components/cases/CaseDesiredDeliveryChip';
 import { POOL_INTERNAL_STATUS } from '@/lib/availabilityScore';
 import { INTERNAL_CASE_STATUSES } from '@/lib/constants/dental';
+import { computeWithdrawActionState } from '@/components/cases/uch/uchHubActionVisibility';
 
 export type UchFauchardActionsPanelProps = {
   caseId: string;
@@ -69,6 +71,7 @@ export default function UchFauchardActionsPanel({
 }: UchFauchardActionsPanelProps) {
   const [rejectionEnabled, setRejectionEnabled] = useState(false);
   const [showRejectAssignment, setShowRejectAssignment] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
   const [acceptStep, setAcceptStep] = useState<'choose' | 'confirm'>('choose');
 
@@ -144,12 +147,48 @@ export default function UchFauchardActionsPanel({
     );
   }
 
+  const withdrawState = computeWithdrawActionState({
+    actingAsTecnico,
+    caseStatus,
+    currentUserId,
+    clinicalCase,
+    myInvitation,
+  });
+
   if (!actingAsTecnico || !myInvitation) return null;
 
   return (
     <div className="space-y-3">
       {clinicalCase?.desiredDeliveryAt && (
         <CaseDesiredDeliveryChip value={clinicalCase.desiredDeliveryAt} className="w-full justify-center" />
+      )}
+
+      {withdrawState.visible && (
+        <div className="rounded-xl border border-error/20 bg-surface p-4 space-y-2">
+          <div className="flex items-center gap-2">
+            <Ban className="w-4 h-4 text-error flex-shrink-0" />
+            <span className="text-[10px] font-black text-error uppercase tracking-widest">
+              Retirarme del caso
+            </span>
+          </div>
+          <p className="text-[10px] text-muted leading-relaxed">
+            Renuncias a tu compensación y el caso vuelve a Fauchard para buscar un reemplazo.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowWithdraw(true)}
+            disabled={!withdrawState.enabled}
+            data-testid="uch-withdraw-open"
+            className="w-full py-2 border border-error/20 text-error hover:bg-error-hl text-[10px] font-black uppercase rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            title={withdrawState.disabledReason}
+          >
+            <Ban className="w-3.5 h-3.5" />
+            Retirarme del caso
+          </button>
+          {!withdrawState.enabled && withdrawState.disabledReason && (
+            <p className="text-[9px] text-faint">{withdrawState.disabledReason}</p>
+          )}
+        </div>
       )}
 
       {canAcceptAssignment && (
@@ -305,6 +344,22 @@ export default function UchFauchardActionsPanel({
             onRejected={async () => {
               setShowRejectAssignment(false);
               showSuccess('Asignación rechazada.');
+              dispatchDashboardMetricsRefresh();
+              await onInvitationUpdate?.();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showWithdraw && (
+          <UchWithdrawFromCaseDialog
+            isOpen={showWithdraw}
+            caseId={caseId}
+            onClose={() => setShowWithdraw(false)}
+            onWithdrawn={async () => {
+              setShowWithdraw(false);
+              showSuccess('Te retiraste del caso.');
               dispatchDashboardMetricsRefresh();
               await onInvitationUpdate?.();
             }}

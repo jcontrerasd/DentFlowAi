@@ -6,8 +6,7 @@ export function isCaseAttentionSuppressedByStatus(caseStatus: string | null | un
   return (
     s === CASE_STATUSES.COMPLETADO ||
     s === CASE_STATUSES.RECHAZADO ||
-    s === CASE_STATUSES.CERRADO ||
-    s === CASE_STATUSES.CANCELADO
+    s === CASE_STATUSES.CERRADO
   );
 }
 

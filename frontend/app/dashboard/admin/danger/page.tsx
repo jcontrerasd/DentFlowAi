@@ -252,6 +252,8 @@ const PURGE_INVENTORY: { table: string; desc: string; mode: PurgeMode }[] = [
   { table: 'technician_availability', desc: 'Disponibilidad declarada del técnico (v5.0)', mode: 'never' },
   { table: 'invitation_rejection_reason', desc: 'Catálogo: motivos de rechazo individual (v5.0)', mode: 'never' },
   { table: 'bulk_rejection_reason', desc: 'Catálogo: motivos de rechazo masivo (v5.0)', mode: 'never' },
+  { table: 'cancellation_reason', desc: 'Catálogo: motivos de cancelación del dentista (v5.31)', mode: 'never' },
+  { table: 'withdrawal_reason', desc: 'Catálogo: motivos de retiro del técnico (v5.32)', mode: 'never' },
   { table: 'fauchard_config', desc: 'Configuración del motor Fauchard', mode: 'never' },
   { table: 'fauchard_config_log', desc: 'Historial de cambios de config Fauchard', mode: 'never' },
   { table: 'vita_shade', desc: 'Catálogo UI: colores VITA', mode: 'never' },

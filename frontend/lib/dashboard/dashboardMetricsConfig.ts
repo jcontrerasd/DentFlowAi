@@ -23,7 +23,6 @@ const DENTIST_KPI_IDS: DentistKpiId[] = [
   'enRevision',
   'completado',
   'cerrado',
-  'pausado',
   'otros',
 ];
 

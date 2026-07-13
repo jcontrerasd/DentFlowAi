@@ -4,6 +4,7 @@ import {
   processPendingPoolCheckInAction,
   processPendingPoolExpirationAction,
 } from '@/lib/db/actions/poolQueue';
+import { processWithdrawalDecisionTimeoutsAction } from '@/lib/db/actions/withdrawal';
 import { requireCronAuth } from '@/lib/cronAuth';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,7 @@ export const dynamic = 'force-dynamic';
  * 1. Reevaluación: intenta asignar si ya hay técnicos elegibles.
  * 2. Check-in al dentista al 50% del TTL del ciclo.
  * 3. Expiración del ciclo: re-encola o falla a `sin_cotizaciones_fallo`.
+ * 4. Timeout de decisión tras retiro del técnico (v5.32): continúa por defecto.
  * Inerte con `POOL_PENDIENTE_ENABLED` apagado (Fauchard no encola casos).
  */
 async function handle(req: NextRequest) {
@@ -40,6 +42,12 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: expiration.error }, { status: 500 });
   }
 
+  const withdrawalTimeouts = await processWithdrawalDecisionTimeoutsAction();
+  if (!withdrawalTimeouts.success) {
+    console.error('[cron/process-pool-queue] Error (withdrawal timeouts):', withdrawalTimeouts.error);
+    return NextResponse.json({ error: withdrawalTimeouts.error }, { status: 500 });
+  }
+
   return NextResponse.json({
     ok: true,
     assigned: reevaluation.assigned,
@@ -47,6 +55,7 @@ async function handle(req: NextRequest) {
     checkInsSent: checkIn.notified,
     requeued: expiration.requeued,
     failed: expiration.failed,
+    withdrawalTimeoutsProcessed: withdrawalTimeouts.processed,
     timestamp: new Date().toISOString(),
   });
 }

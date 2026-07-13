@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   Eye,
   FileText,
-  Pause,
   X,
 } from 'lucide-react';
 import { maskCaseStatusForViewer, type CaseViewerRole } from '@/lib/cases/qualityStatusMasking';
@@ -38,7 +37,6 @@ export const STATUS_MAP: Record<string, StatusConfig> = {
   cambiosEnProceso: { label: 'Cambios', icon: AlertCircle, className: ATTENTION },
   completado: { label: 'Completado', icon: CheckCircle2, className: SUCCESS },
   cerrado: { label: 'Cerrado', icon: X, className: NEUTRAL },
-  pausado: { label: 'Pausado', icon: Pause, className: ATTENTION },
   cancelado: { label: 'Cancelado', icon: X, className: NEGATIVE },
   rechazado: { label: 'Rechazado', icon: X, className: NEGATIVE },
 };

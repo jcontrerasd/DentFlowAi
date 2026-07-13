@@ -1,6 +1,6 @@
 'use server';
 import { db } from '@/lib/db';
-import { vitaShade, restorationType, dentalMaterial, urgencyLevel, invitationRejectionReason, bulkRejectionReason, qualityDerivationReason } from '@/lib/db/schema';
+import { vitaShade, restorationType, dentalMaterial, urgencyLevel, invitationRejectionReason, bulkRejectionReason, qualityDerivationReason, cancellationReason, withdrawalReason } from '@/lib/db/schema';
 import { asc, eq } from 'drizzle-orm';
 import { getServerIdentity } from './impersonation';
 
@@ -13,6 +13,8 @@ const TABLE_CODE_PREFIX: Record<CatalogTableKey, string> = {
   invitation_rejection_reason: 'rej',
   bulk_rejection_reason: 'brej',
   quality_derivation_reason: 'qdr',
+  cancellation_reason: 'cxl',
+  withdrawal_reason: 'wdr',
 };
 
 export type CatalogOption = {
@@ -31,7 +33,9 @@ export type CatalogTableKey =
   | 'urgency_level'
   | 'invitation_rejection_reason'
   | 'bulk_rejection_reason'
-  | 'quality_derivation_reason';
+  | 'quality_derivation_reason'
+  | 'cancellation_reason'
+  | 'withdrawal_reason';
 
 const TABLE_MAP = {
   vita_shade: vitaShade,
@@ -41,6 +45,8 @@ const TABLE_MAP = {
   invitation_rejection_reason: invitationRejectionReason,
   bulk_rejection_reason: bulkRejectionReason,
   quality_derivation_reason: qualityDerivationReason,
+  cancellation_reason: cancellationReason,
+  withdrawal_reason: withdrawalReason,
 } as const;
 
 function resolveTable(key: CatalogTableKey) {

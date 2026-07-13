@@ -100,8 +100,12 @@ export const clinicalCase = pgTable("clinical_case", {
 	/** Instrucciones especiales del solicitante al crear/editar el caso; no se sobrescriben con comentarios de revisión. */
 	specialInstructions: text("special_instructions"),
 	labNotes: text("lab_notes"),
-	pendingActionRequest: text("pending_action_request"),
-	pendingActionActor: text("pending_action_actor"),
+	/** v5.31 — causa de cierre anticipado (cancelación). NULL para cierres normales/legacy. */
+	closureCause: text("closure_cause"),
+	/** v5.32 — timestamp de inicio de la ventana de decisión tras retiro del técnico (internalStatus retiro_pendiente). */
+	withdrawalPendingSince: timestamp("withdrawal_pending_since", { withTimezone: true, mode: 'date' }),
+	/** v5.32 — días pactados originalmente (publishedAt→desiredDeliveryAt), capturados al retirarse el técnico para re-anclar la fecha firme al aceptar el reemplazo. */
+	pactDaysSnapshot: integer("pact_days_snapshot"),
 	caseNumber: text("case_number"),
 	commercialVersion: integer("commercial_version").default(1).notNull(),
 	changeSummary: text("change_summary"),
@@ -390,6 +394,8 @@ export const fauchardConfig = pgTable("fauchard_config", {
   tNoEligiblePoolHours: integer("t_no_eligible_pool_hours").default(24).notNull(),
   maxPoolCycles: integer("max_pool_cycles").default(2).notNull(),
   replacementCutoffMinutes: integer("replacement_cutoff_minutes").default(10).notNull(),
+  /** v5.32 — plazo para que el dentista decida (continuar/cancelar) tras el retiro del técnico. */
+  tWithdrawalDecisionHours: integer("t_withdrawal_decision_hours").default(24).notNull(),
   // Sanción por no-respuesta (días).
   noResponseWindowDays: integer("no_response_window_days").default(14).notNull(),
   noResponseRehabilitationDays: integer("no_response_rehabilitation_days").default(30).notNull(),
@@ -476,6 +482,10 @@ export const caseAssignment = pgTable("case_assignment", {
   rejectedAt: timestamp("rejected_at", { withTimezone: true, mode: 'date' }),
   bulkRejectionReasonId: uuid("bulk_rejection_reason_id").references(() => bulkRejectionReason.id, { onDelete: 'restrict' }),
   bulkRejectionComment: text("bulk_rejection_comment"),
+  /** v5.32 — retiro del técnico de un caso ya aceptado (posta en sus manos). */
+  withdrawalReasonId: uuid("withdrawal_reason_id").references(() => withdrawalReason.id, { onDelete: 'restrict' }),
+  withdrawalComment: text("withdrawal_comment"),
+  withdrawnAt: timestamp("withdrawn_at", { withTimezone: true, mode: 'date' }),
   isReassignment: boolean("is_reassignment").default(false).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
@@ -968,6 +978,34 @@ export const bulkRejectionReason = pgTable("bulk_rejection_reason", {
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("bulk_rejection_reason_code_uidx").on(table.code),
+]);
+
+/** v5.31 — Catálogo de motivos de cancelación de caso por el dentista. Code opaco `cxl_NNN`. */
+export const cancellationReason = pgTable("cancellation_reason", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  code: text().notNull(),
+  label: text().notNull(),
+  description: text(),
+  sortOrder: integer("sort_order").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("cancellation_reason_code_uidx").on(table.code),
+]);
+
+/** v5.32 — Catálogo de motivos de retiro del técnico de un caso aceptado. Code opaco `wdr_NNN`. */
+export const withdrawalReason = pgTable("withdrawal_reason", {
+  id: uuid().default(sql`uuid_generate_v4()`).primaryKey().notNull(),
+  code: text().notNull(),
+  label: text().notNull(),
+  description: text(),
+  sortOrder: integer("sort_order").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'date' }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("withdrawal_reason_code_uidx").on(table.code),
 ]);
 
 /** v5.19 — Catálogo de motivos de derivación entre revisores de Calidad. Code opaco `qdr_NNN`. */

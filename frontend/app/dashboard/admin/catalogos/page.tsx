@@ -25,6 +25,8 @@ const TABS: TabDef[] = [
   { key: 'urgency_level', label: 'Urgencias' },
   { key: 'invitation_rejection_reason', label: 'Motivos de rechazo individual' },
   { key: 'bulk_rejection_reason', label: 'Motivos de rechazo masivo' },
+  { key: 'cancellation_reason', label: 'Motivos de cancelación (dentista)' },
+  { key: 'withdrawal_reason', label: 'Motivos de retiro (técnico)' },
 ];
 
 export default function AdminCatalogosPage() {

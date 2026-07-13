@@ -7,7 +7,7 @@ import {
 import { eq, and, inArray } from 'drizzle-orm';
 
 // Server Actions reales
-import { createClinicalCaseAction, submitReviewAction, approveWorkAction, resumeWorkAction } from '@/lib/db/actions/cases';
+import { createClinicalCaseAction, submitReviewAction, approveWorkAction, requestRevisionAction } from '@/lib/db/actions/cases';
 import { submitCaseToFauchardAction, submitQuoteAction, evaluateQuotesAction, sendInvitationsAction } from '@/lib/db/actions/fauchard';
 import {
   acceptProposalAction,
@@ -507,7 +507,7 @@ describe('SUITE C — Iteration: Request Adjustments', () => {
   it('C2: Dentista pide ajustes → técnico corrige → aprobación', async () => {
     // Dentista pide ajustes
     mockAs(dentistId, 'dentista');
-    await resumeWorkAction(caseId, 'Ajustar contacto oclusal en pieza 21', true);
+    await requestRevisionAction(caseId, 'Ajustar contacto oclusal en pieza 21');
 
     const [c1] = await db.select().from(clinicalCase).where(eq(clinicalCase.id, caseId)).limit(1);
     expect(c1.status).toBe('enEjecucion');

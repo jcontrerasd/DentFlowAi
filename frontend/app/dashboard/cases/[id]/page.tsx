@@ -33,7 +33,6 @@ import {
   submitReviewAction,
   approveWorkAction,
   requestRevisionAction,
-  resolveFlowRequestAction,
   getCaseEventsAction,
   archiveCaseForUserAction,
   unarchiveCaseForUserAction,
@@ -43,6 +42,8 @@ import {
 import { getCaseDetailActionState } from '@/lib/cases/caseDetailActions';
 import { isActiveCaseStatus, isTerminalCaseStatus } from '@/lib/constants/dental';
 import CaseDetailManagementBar from '@/components/cases/CaseDetailManagementBar';
+import CancelCaseModal from '@/components/cases/CancelCaseModal';
+import WithdrawalDecisionModal from '@/components/cases/WithdrawalDecisionModal';
 import RepublicarModal from '@/components/cases/RepublicarModal';
 import PendingPoolBanner from '@/components/cases/PendingPoolBanner';
 import CheckInDentistaModal from '@/components/cases/CheckInDentistaModal';
@@ -388,6 +389,9 @@ function CaseDetailPageContent() {
   const [isCloning, setIsCloning] = useState(false);
   const [isDownloadingCase, setIsDownloadingCase] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [withdrawalDecisionOpen, setWithdrawalDecisionOpen] = useState(false);
+  const [withdrawalDecisionDismissed, setWithdrawalDecisionDismissed] = useState(false);
   // Cumplimiento legal (Ley 21.719 / Ley 20.584): declaración del dentista de contar con el
   // consentimiento del paciente, requerida para publicar. Se reinicia cada vez que se abre el modal.
   const [patientConsentChecked, setPatientConsentChecked] = useState(false);
@@ -423,9 +427,6 @@ function CaseDetailPageContent() {
   const [draftListPriceChecked, setDraftListPriceChecked] = useState(false);
 
   const [revisionNotes, setRevisionNotes] = useState('');
-  const [, setIsRequestingFlowChange] = useState(false);
-  const [flowChangeReason, setFlowChangeReason] = useState('');
-  const [flowChangeType, setFlowChangeType] = useState<'pausa' | 'cancelacion' | null>(null);
   const [technicalComment, setTechnicalComment] = useState('');
   const [pendingDeliveryFiles, setPendingDeliveryFiles] = useState<File[]>([]);
   const [, setIsUploadingDelivery] = useState(false);
@@ -660,9 +661,6 @@ function CaseDetailPageContent() {
         showSuccessToastMessage('Entrega enviada al solicitante');
       } else if (action === 'rate_work') {
         showSuccessToastMessage("Funcionalidad de valoración en desarrollo.");
-      } else if (action === 'resolve_flow') {
-        await resolveFlowRequestAction(id as string, data.approved);
-        showSuccessToastMessage(data.approved ? "Solicitud aprobada" : "Solicitud rechazada");
       }
       // Refrescar datos
       await refreshCase();
@@ -1357,36 +1355,6 @@ function CaseDetailPageContent() {
 
   const handleOpacityChange = (subType: string, opacity: number) => {
     setLayerOpacity(prev => ({ ...prev, [subType]: opacity }));
-  };
-
-  const handleResolveFlowRequest = async (approve: boolean) => {
-    setActionLoading(true);
-    try {
-      const res = await resolveFlowRequestAction(id as string, approve);
-      if (res.success) {
-        if (res.action === 'approved') {
-          setClinicalCase((prev: any) => ({
-            ...prev,
-            status: res.status,
-            pendingActionRequest: null,
-            pendingActionActor: null
-          }));
-        } else {
-          setClinicalCase((prev: any) => ({
-            ...prev,
-            pendingActionRequest: null,
-            pendingActionActor: null
-          }));
-        }
-        showSuccessToastMessage('Solicitud procesada');
-      } else {
-        showErrorToast(res.error || 'Error al procesar la solicitud');
-      }
-    } catch (error) {
-      showErrorToast('Error de conexión');
-    } finally {
-      setActionLoading(false);
-    }
   };
 
   const MAX_CLINICAL_FILES = 5;
@@ -2134,6 +2102,14 @@ function CaseDetailPageContent() {
   const showPageEvalBanner =
     showCaseToolbar && clinicalCase?.status === 'enEvaluacion' && !isPendingPool;
 
+  // v5.32 — el técnico se retiró; el dentista debe decidir continuar o cancelar.
+  const isWithdrawalPending = clinicalCase?.internalStatus === INTERNAL_CASE_STATUSES.RETIRO_PENDIENTE;
+  const showWithdrawalBanner = isWithdrawalPending && actingAsDentista && !viewingAsAdmin;
+  const withdrawalEstimatedDateLabel = clinicalCase?.withdrawalPendingSince && clinicalCase?.pactDaysSnapshot
+    ? new Date(new Date(clinicalCase.withdrawalPendingSince).getTime() + clinicalCase.pactDaysSnapshot * 86_400_000)
+        .toLocaleDateString('es-CL')
+    : undefined;
+
   // Check-in al dentista: el cron marca pendingPoolCheckinSentAt al 50% del TTL;
   // al entrar al caso le mostramos el modal una vez por sesión.
   useEffect(() => {
@@ -2141,6 +2117,12 @@ function CaseDetailPageContent() {
       setCheckInOpen(true);
     }
   }, [showPendingPoolBanner, clinicalCase?.pendingPoolCheckinSentAt, checkInDismissed]);
+
+  useEffect(() => {
+    if (showWithdrawalBanner && !withdrawalDecisionDismissed) {
+      setWithdrawalDecisionOpen(true);
+    }
+  }, [showWithdrawalBanner, withdrawalDecisionDismissed]);
 
   const isEditingStatus = fieldsEditable && editForm ? editForm.status : caseStatus;
 
@@ -2403,6 +2385,8 @@ function CaseDetailPageContent() {
                   setIsDeleting(true);
                   setIsPublishing(false);
                 }}
+                onCancelClick={() => setIsCancelModalOpen(true)}
+                isCancelling={isCancelModalOpen}
                 onArchive={async () => {
                   const res = await archiveCaseForUserAction(id as string);
                   if (res.success) {
@@ -2568,6 +2552,7 @@ function CaseDetailPageContent() {
               onSave={() => undefined}
               onPublishClick={() => undefined}
               onDeleteClick={() => undefined}
+              onCancelClick={() => undefined}
               onArchive={async () => {
                 const res = await archiveCaseForUserAction(id as string);
                 if (res.success) {
@@ -2611,6 +2596,50 @@ function CaseDetailPageContent() {
         />
       )}
 
+      {/* v5.32 — Banner: técnico retirado, caso requiere reasignación */}
+      {showWithdrawalBanner && (
+        <div
+          data-testid="withdrawal-pending-banner"
+          className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-warning/20 bg-warning-hl px-4 py-3"
+        >
+          <div className="space-y-0.5 flex-1">
+            <p className="text-sm font-bold text-foreground">El caso requiere reasignación</p>
+            <p className="text-[11px] text-faint">
+              Producto de una contingencia técnica.
+              {withdrawalEstimatedDateLabel ? ` Nueva fecha estimada: ${withdrawalEstimatedDateLabel}.` : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWithdrawalDecisionOpen(true)}
+            className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-warning/30 text-warning text-[10px] font-black uppercase tracking-wider hover:bg-warning/20 transition-colors"
+          >
+            Decidir ahora
+          </button>
+        </div>
+      )}
+
+      {/* v5.32 — Modal de decisión: continuar buscando reemplazo o cancelar sin costo */}
+      <WithdrawalDecisionModal
+        isOpen={withdrawalDecisionOpen}
+        onClose={() => { setWithdrawalDecisionOpen(false); setWithdrawalDecisionDismissed(true); }}
+        caseId={id as string}
+        estimatedDateLabel={withdrawalEstimatedDateLabel}
+        onContinued={async () => {
+          await refreshCase();
+          await loadCaseEvents();
+          showSuccessToastMessage('Buscando un técnico de reemplazo.');
+          dispatchDashboardMetricsRefresh();
+        }}
+        onCancelled={async () => {
+          await refreshCase();
+          await loadCaseEvents();
+          showSuccessToastMessage('Caso cancelado sin costo.');
+          dispatchDashboardMetricsRefresh();
+        }}
+        onError={(msg) => showErrorToast(msg)}
+      />
+
       {/* v5.0 — Modal republicar caso sin cotizaciones */}
       <RepublicarModal
         isOpen={republicarOpen}
@@ -2638,6 +2667,27 @@ function CaseDetailPageContent() {
           dispatchDashboardMetricsRefresh();
         }}
         onError={(msg) => showErrorToast(msg)}
+      />
+
+      {/* v5.31 — Cancelación unilateral del dentista */}
+      <CancelCaseModal
+        isOpen={isCancelModalOpen}
+        onClose={() => setIsCancelModalOpen(false)}
+        caseId={id as string}
+        hasAcceptedTechnician={[
+          'aceptadaPendienteInicio', 'enEjecucion', 'enRevisionCalidad', 'certificadoCalidad', 'enRevision', 'cambiosEnProceso',
+        ].includes(String(caseStatus))}
+        committedValue={(() => {
+          const sale = clinicalCase?.listPriceSale;
+          const n = sale != null ? parseFloat(String(sale)) : NaN;
+          return Number.isFinite(n) ? n : null;
+        })()}
+        onCancelled={async () => {
+          await refreshCase();
+          await loadCaseEvents();
+          showSuccessToastMessage('Caso cancelado.');
+          dispatchDashboardMetricsRefresh();
+        }}
       />
 
       {/* Estado en evaluación (asignación directa) — oculto en pendiente_pool */}
@@ -2948,21 +2998,6 @@ function CaseDetailPageContent() {
 
         <div className="lg:col-span-4 flex flex-col gap-4 relative z-[200]">
           {/* PANEL DE EVALUACIÓN Y CIERRE (DENTISTA) REMOVIDO PARA MOVER A PANEL LATERAL */}
-
-          {/* RESPUESTA A SOLICITUDES (DENTISTA) */}
-          {actingAsDentista && clinicalCase?.pendingActionRequest && clinicalCase.pendingActionActor !== user?.id && (
-            <section className="bg-warning border border-warning/20 rounded-[1.2rem] p-5 space-y-4">
-              <div className="flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-warning" />
-                <h3 className="text-foreground font-bold uppercase text-xs">Solicitud del Técnico</h3>
-              </div>
-              <p className="text-[11px] text-muted">El técnico ha solicitado **{clinicalCase.pendingActionRequest === 'pausa' ? 'PAUSAR' : 'CANCELAR'}** el trabajo.</p>
-              <div className="flex gap-3">
-                <button onClick={() => handleResolveFlowRequest(false)} className="flex-1 py-3 bg-surface-2 text-foreground text-[10px] font-bold rounded-xl uppercase">Rechazar</button>
-                <button onClick={() => handleResolveFlowRequest(true)} className="flex-1 py-3 bg-warning text-inverse text-[10px] font-bold rounded-xl uppercase">Aprobar Solicitud</button>
-              </div>
-            </section>
-          )}
 
           <div className="relative space-y-6">
             {uchPanelMounted && clinicalCase && (
@@ -3431,6 +3466,14 @@ function CaseDetailPageContent() {
                 <h3 className="text-xl text-foreground font-bold tracking-tight">Publicar Caso</h3>
                 <p className="text-xs text-faint mt-0.5">DentFlowAi asignará un laboratorio según el precio de lista fijado</p>
               </div>
+            </div>
+
+            <div className="flex items-start gap-3 rounded-2xl border border-warning/20 bg-warning-hl px-4 py-3">
+              <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-warning leading-relaxed">
+                Un técnico puede aceptar en minutos. Si cancelas después de eso, se cobra el 100% del valor comprometido.
+                Revisa que el caso esté completo y preciso antes de publicar: el técnico hará exactamente lo solicitado.
+              </p>
             </div>
 
             {isFormDirty && (

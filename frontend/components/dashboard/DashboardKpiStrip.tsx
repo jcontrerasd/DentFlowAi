@@ -32,8 +32,8 @@ export default function DashboardKpiStrip({
     'ofertaNoSeleccionada', // técnico — cotización múltiple v1
   ]);
 
-  // 'otros' y 'pausado' son válidos pero residuales: solo aparecen si hay casos.
-  const HIDE_WHEN_ZERO = new Set(['otros', 'pausado']);
+  // 'otros' es válido pero residual: solo aparece si hay casos.
+  const HIDE_WHEN_ZERO = new Set(['otros']);
 
   const visibleDefs = defs.filter((d) => {
     if (LEGACY_ONLY.has(d.id)) return (metrics[d.id] ?? 0) > 0;

@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Archive,
   ArchiveRestore,
+  Ban,
   Copy,
   Download,
   Edit,
@@ -32,6 +33,9 @@ type Props = {
   onArchive: () => void;
   onUnarchive: () => void;
   onCreateCopy: () => void;
+  /** v5.31 — cancelar caso activo (gratis o con cobro, según estado). */
+  onCancelClick: () => void;
+  isCancelling?: boolean;
   /** v5.0 — republicar caso que agotó el pool (sin_cotizaciones_fallo). */
   onRepublicar?: () => void;
   isRepublishing?: boolean;
@@ -146,6 +150,8 @@ export default function CaseDetailManagementBar({
   onArchive,
   onUnarchive,
   onCreateCopy,
+  onCancelClick,
+  isCancelling,
   onRepublicar,
   isRepublishing,
   onDownloadCase,
@@ -159,6 +165,7 @@ export default function CaseDetailManagementBar({
   const showArchiveGroup =
     actions.archive.visible || actions.unarchive.visible || actions.createCopy.visible;
   const showRepublicar = actions.republicar?.visible && !!onRepublicar;
+  const showCancel = actions.cancel?.visible;
 
   return (
     <div
@@ -235,7 +242,21 @@ export default function CaseDetailManagementBar({
         </>
       )}
 
-      {(showDraftGroup || showRepublicar) && showArchiveGroup && <BarSeparator />}
+      {showCancel && (
+        <>
+          {(showDraftGroup || showRepublicar) && <BarSeparator />}
+          <ManagementIconButton
+            icon={Ban}
+            tooltip="Cancelar Caso"
+            enabled={actions.cancel.enabled}
+            onClick={onCancelClick}
+            accent="red"
+            active={isCancelling}
+          />
+        </>
+      )}
+
+      {(showDraftGroup || showRepublicar || showCancel) && showArchiveGroup && <BarSeparator />}
 
       {showArchiveGroup && (
         <>

@@ -38,10 +38,11 @@ export const UCH_AUDIT_MATRIX: readonly UchAuditMatrixRow[] = [
   { id: 'revision_enviada', action: CASE_EVENTS.REVISION_ENVIADA, actorRole: 'tecnico', visibleTo: 'ambos', phase: 'diseno', copyHint: 'Entrega para revisión' },
   { id: 'revision_solicitada', action: CASE_EVENTS.REVISION_SOLICITADA, actorRole: 'dentista', visibleTo: 'ambos', phase: 'diseno', copyHint: 'Solicitud de ajustes' },
   { id: 'trabajo_aprobado', action: CASE_EVENTS.TRABAJO_APROBADO, actorRole: 'dentista', visibleTo: 'ambos', phase: 'diseno', copyHint: 'Diseño aprobado' },
-  { id: 'solicitud_flujo', action: CASE_EVENTS.SOLICITUD_CAMBIO_FLUJO, actorRole: 'cualquiera', visibleTo: 'ambos', phase: 'todos', copyHint: 'Solicitud pausa/cancelación' },
-  { id: 'solicitud_flujo_rechazo', action: CASE_EVENTS.SOLICITUD_CAMBIO_FLUJO_RECHAZADA, actorRole: 'cualquiera', visibleTo: 'ambos', phase: 'todos', copyHint: 'Solicitud no aceptada' },
-  { id: 'caso_pausado', action: CASE_EVENTS.CASO_PAUSADO, actorRole: 'cualquiera', visibleTo: 'ambos', phase: 'todos', copyHint: 'Caso pausado por acuerdo' },
-  { id: 'caso_cancelado', action: CASE_EVENTS.CASO_CANCELADO, actorRole: 'cualquiera', visibleTo: 'ambos', phase: 'todos', copyHint: 'Caso cancelado por acuerdo' },
-  { id: 'reanudado', action: CASE_EVENTS.REANUDADO, actorRole: 'cualquiera', visibleTo: 'ambos', phase: 'diseno', copyHint: 'Caso reanudado' },
+  { id: 'caso_cancelado', action: CASE_EVENTS.CASO_CANCELADO, actorRole: 'dentista', visibleTo: 'ambos', phase: 'todos', copyHint: 'Caso cancelado por el dentista' },
+  { id: 'asignacion_anulada', action: CASE_EVENTS.ASIGNACION_ANULADA, actorRole: 'sistema', visibleTo: 'tecnico', phase: 'todos', copyHint: 'Asignación anulada por cancelación' },
+  { id: 'retiro_tecnico', action: CASE_EVENTS.RETIRO_TECNICO, actorRole: 'tecnico', visibleTo: 'tecnico', phase: 'todos', copyHint: 'Técnico se retiró del caso' },
+  { id: 'reasignacion_requerida', action: CASE_EVENTS.REASIGNACION_REQUERIDA, actorRole: 'sistema', visibleTo: 'dentista', phase: 'todos', copyHint: 'Requiere reasignación por contingencia técnica' },
+  { id: 'reasignacion_continuada', action: CASE_EVENTS.REASIGNACION_CONTINUADA, actorRole: 'cualquiera', visibleTo: 'dentista', phase: 'todos', copyHint: 'Se continúa buscando reemplazo' },
+  { id: 'fecha_firme_actualizada', action: CASE_EVENTS.FECHA_FIRME_ACTUALIZADA, actorRole: 'sistema', visibleTo: 'dentista', phase: 'todos', copyHint: 'Fecha comprometida re-anclada' },
 ] as const;
 

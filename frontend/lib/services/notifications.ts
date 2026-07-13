@@ -179,6 +179,13 @@ export const NOTIFICATION_CATEGORY_MAP: Partial<Record<NotificationType, EmailNo
   CALIDAD_POR_CALIFICAR:          'calificacion_pendiente',
   // Admin
   SIN_COTIZACIONES_FALLO:         'alertas_operativas',
+  // v5.31 — Cancelación
+  CASO_CANCELADO_DENTISTA_TECNICO: 'progreso_caso',
+  ASIGNACION_ANULADA:              'progreso_caso',
+  // v5.32 — Retiro y reasignación
+  RETIRO_DECISION_REQUERIDA:       'gestion_busqueda',
+  REASIGNACION_CONTINUADA_TIMEOUT: 'gestion_busqueda',
+  FECHA_FIRME_ACTUALIZADA:         'actividad_caso',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -227,7 +234,19 @@ export type NotificationType =
   /** Calidad (origen): el destino rechazó la derivación. */
   | 'DERIVACION_CALIDAD_RECHAZADA'
   /** Portabilidad (Ley 21.719): el ZIP con los datos del usuario está listo para descargar. */
-  | 'DATOS_EXPORTACION_LISTA';
+  | 'DATOS_EXPORTACION_LISTA'
+  // ─── v5.31 — Cancelación unilateral del dentista ───
+  /** Técnico: el dentista cerró el caso tras haber aceptado el trabajo; compensación registrada. */
+  | 'CASO_CANCELADO_DENTISTA_TECNICO'
+  /** Técnico: su asignación pendiente fue anulada porque el dentista canceló el caso (sin sanción). */
+  | 'ASIGNACION_ANULADA'
+  // ─── v5.32 — Retiro del técnico + reasignación diferida ───
+  /** Dentista: el técnico se retiró; debe decidir continuar (nueva fecha estimada) o cancelar sin costo. */
+  | 'RETIRO_DECISION_REQUERIDA'
+  /** Dentista: venció el plazo de decisión sin respuesta; Fauchard continúa buscando reemplazo. */
+  | 'REASIGNACION_CONTINUADA_TIMEOUT'
+  /** Dentista: el técnico de reemplazo aceptó; la fecha comprometida quedó re-anclada. */
+  | 'FECHA_FIRME_ACTUALIZADA';
 
 const baseUrl = () => process.env.NEXT_PUBLIC_APP_URL || '';
 
@@ -262,6 +281,11 @@ const NOTIFICATION_CHANNELS: Partial<Record<NotificationType, NotificationChanne
   CALIDAD_POR_CALIFICAR: { email: true, inApp: true },
   // Portabilidad legal — email obligatorio, nunca in-app ni desactivable por preferencias
   DATOS_EXPORTACION_LISTA: { email: true, inApp: false },
+  CASO_CANCELADO_DENTISTA_TECNICO: { email: true, inApp: true },
+  ASIGNACION_ANULADA: { email: false, inApp: true },
+  RETIRO_DECISION_REQUERIDA: { email: true, inApp: true },
+  REASIGNACION_CONTINUADA_TIMEOUT: { email: true, inApp: true },
+  FECHA_FIRME_ACTUALIZADA: { email: true, inApp: true },
 };
 
 export function channelsForNotification(type: NotificationType): NotificationChannels {
@@ -389,6 +413,28 @@ const TEMPLATES: Record<NotificationType, { subject: string; body: (data: any) =
   DATOS_EXPORTACION_LISTA: {
     subject: 'Tus datos personales están listos para descargar',
     body: (data) => `Hola ${data.name},\n\nTu solicitud de exportación de datos (Ley 21.719 — derecho de acceso y portabilidad) está lista.\n\nDescarga tu archivo aquí:\n${data.downloadUrl}\n\nEste enlace estará disponible hasta el ${data.expiresAt}. Después de esa fecha el archivo será eliminado de forma permanente.\n\nSi no solicitaste esta descarga, puedes ignorar este correo.`,
+  },
+  // ─── v5.31 — Cancelación unilateral del dentista ───
+  CASO_CANCELADO_DENTISTA_TECNICO: {
+    subject: 'Fauchard: el dentista cerró el caso',
+    body: (data) => `Hola,\n\nEl dentista cerró el caso ${data.caseNumber || data.caseId}. Ya habías aceptado este trabajo, así que tu compensación queda registrada íntegramente.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  ASIGNACION_ANULADA: {
+    subject: 'Fauchard: una asignación ya no está disponible',
+    body: (data) => `Hola,\n\nLa asignación del caso ${data.caseNumber || data.caseId} ya no está disponible; el dentista canceló el caso antes de que respondieras. No cuenta como no-respuesta en tu historial.\n\nVer casos: ${baseUrl()}/dashboard/cases?preset=nuevas`,
+  },
+  // ─── v5.32 — Retiro del técnico + reasignación diferida ───
+  RETIRO_DECISION_REQUERIDA: {
+    subject: 'Fauchard: tu caso requiere reasignación',
+    body: (data) => `Hola,\n\nTu caso ${data.caseNumber || data.caseId} requiere reasignación producto de una contingencia técnica. Nueva fecha estimada: ${data.estimatedDate}. Puedes continuar buscando un reemplazo o cancelar sin costo.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  REASIGNACION_CONTINUADA_TIMEOUT: {
+    subject: 'Fauchard: seguimos buscando reemplazo para tu caso',
+    body: (data) => `Hola,\n\nNo recibimos respuesta a tiempo, así que seguimos buscando un técnico de reemplazo para tu caso ${data.caseNumber || data.caseId}.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
+  },
+  FECHA_FIRME_ACTUALIZADA: {
+    subject: 'Fauchard: nueva fecha comprometida para tu caso',
+    body: (data) => `Hola,\n\nUn técnico aceptó continuar con tu caso ${data.caseNumber || data.caseId}. Nueva fecha comprometida: ${data.deliveryDate}.\n\nVer caso: ${baseUrl()}/dashboard/cases/${data.caseId}`,
   },
 };
 

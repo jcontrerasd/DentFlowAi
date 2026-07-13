@@ -120,8 +120,6 @@ export const DENTIST_FILTERABLE_CASE_STATUSES: string[] = [
   CASE_STATUSES.CAMBIOS_EN_PROCESO,
   CASE_STATUSES.COMPLETADO,
   CASE_STATUSES.CERRADO,
-  CASE_STATUSES.PAUSADO,
-  CASE_STATUSES.CANCELADO,
   CASE_STATUSES.RECHAZADO,
 ];
 
@@ -159,9 +157,7 @@ export const DENTIST_STATUS_FILTER_MAIN_TIMELINE: string[] = [
 /** Estados fuera del camino lineal (segunda fila en UI timeline). */
 export const DENTIST_STATUS_FILTER_EXCEPTIONS: string[] = [
   CASE_STATUSES.CAMBIOS_EN_PROCESO,
-  CASE_STATUSES.PAUSADO,
   CASE_STATUSES.CERRADO,
-  CASE_STATUSES.CANCELADO,
   CASE_STATUSES.RECHAZADO,
 ];
 
@@ -386,7 +382,6 @@ export function filtersFromDashboardMetricId(
     enRevision: [CASE_STATUSES.EN_REVISION, CASE_STATUSES.CAMBIOS_EN_PROCESO],
     completado: [CASE_STATUSES.COMPLETADO],
     cerrado: [CASE_STATUSES.CERRADO],
-    pausado: [CASE_STATUSES.PAUSADO],
   };
   const statuses = dentistKpiToStatuses[metricId];
   if (!statuses?.length) {
